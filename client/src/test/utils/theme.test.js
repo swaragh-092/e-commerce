@@ -4,6 +4,7 @@ import {
   buildStorefrontTheme,
   resolveStorefrontThemeState,
 } from '../../utils/theme';
+import { resolveDesignTokens } from '../../utils/designTokens';
 
 describe('theme and button color system', () => {
   describe('resolveStorefrontThemeState', () => {
@@ -39,7 +40,10 @@ describe('theme and button color system', () => {
 
       expect(vars['--store-btn-danger-bg']).toBe('#dc3545');
       expect(vars['--store-btn-primary-bg']).toBe('#0f766e');
+      // Legacy alias keeps the brand secondary colour; the new neutral role is
+      // available under --store-btn-neutral-* and --store-btn-secondary-solid-*.
       expect(vars['--store-btn-secondary-bg']).toBe('#f97316');
+      expect(vars['--store-btn-neutral-bg']).toBe(vars['--store-color-neutral']);
       expect(vars['--store-btn-success-bg']).toBe('#059669');
       expect(vars['--store-btn-warning-bg']).toBe('#d97706');
       expect(vars['--store-btn-info-bg']).toBe('#0284c7');
@@ -106,7 +110,7 @@ describe('theme and button color system', () => {
       // Destructive button overrides remain strictly locked to fixed Safety Red (#dc3545)
       expect(buttonOverrides.containedError.backgroundColor).toBe('#dc3545');
       expect(buttonOverrides.containedError['&:hover'].backgroundColor).toBe('#b91c1c');
-      expect(buttonOverrides.outlinedError.borderColor).toBe('#dc3545');
+      expect(buttonOverrides.outlinedError.border).toBe('1px solid #dc3545');
       expect(buttonOverrides.outlinedError.color).toBe('#dc3545');
       expect(buttonOverrides.textError.color).toBe('#dc3545');
 
@@ -124,7 +128,7 @@ describe('theme and button color system', () => {
 
       const buttonOverrides = theme.components.MuiButton.styleOverrides;
       expect(buttonOverrides.containedError.backgroundColor).toBe('#dc3545'); // Destructive remains Safety Red
-      expect(buttonOverrides.outlinedError.borderColor).toBe('#e11d48');
+      expect(buttonOverrides.outlinedError.border).toBe('1px solid #e11d48');
       expect(buttonOverrides.outlinedError.color).toBe('#e11d48');
       expect(buttonOverrides.textError.color).toBe('#e11d48');
 
@@ -153,8 +157,9 @@ describe('theme and button color system', () => {
       });
 
       const softOverrides = themeSoft.components.MuiButton.styleOverrides;
-      expect(softOverrides.containedPrimary.backgroundColor).toBe('#4f46e522');
-      expect(softOverrides.containedPrimary.color).toBe('#4f46e5');
+      const softTokens = resolveDesignTokens({ primaryColor: '#4f46e5', buttonStyle: 'soft' });
+      expect(softOverrides.containedPrimary.backgroundColor).toBe(softTokens.buttons.primary.soft.default.bg);
+      expect(softOverrides.containedPrimary.color).toBe(softTokens.buttons.primary.soft.default.fg);
     });
 
     it('sets 9999px border radius for pill buttonStyle', () => {

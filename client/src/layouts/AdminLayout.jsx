@@ -831,9 +831,13 @@ const AdminLayout = () => {
         component="main"
         sx={{
           flexGrow: 1,
-          p: isDesignerCanvasRoute ? { xs: 1, sm: 1.5 } : { xs: 2, sm: 3 },
+          p: isDesignerCanvasRoute ? 0 : { xs: 2, sm: 3 },
           bgcolor: 'background.default',
-          minHeight: '100vh',
+          minHeight: isDesignerCanvasRoute ? 0 : '100vh',
+          height: isDesignerCanvasRoute ? '100dvh' : undefined,
+          display: isDesignerCanvasRoute ? 'flex' : undefined,
+          flexDirection: isDesignerCanvasRoute ? 'column' : undefined,
+          overflow: isDesignerCanvasRoute ? 'hidden' : undefined,
           width: { xs: '100%', md: `calc(100% - ${desktopDrawerWidth}px)` },
           maxWidth: { xs: '100%', md: 'none' },
           transition: theme.transitions.create(['width', 'margin'], {
@@ -842,7 +846,7 @@ const AdminLayout = () => {
           }),
         }}
       >
-        <Toolbar />
+        <Toolbar sx={{ flexShrink: 0 }} />
         <UnitCatalogProvider><Outlet /></UnitCatalogProvider>
       </Box>
     </Box>

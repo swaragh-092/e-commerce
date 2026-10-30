@@ -19,6 +19,7 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import {
   Box,
+  Button,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
@@ -67,6 +68,14 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', relo
   const [localDevice, setLocalDevice] = useState('desktop');
   const [iframeKey, setIframeKey] = useState(0); // bump to force iframe reload
   const [ready, setReady]       = useState(false);
+  const [loadTimedOut, setLoadTimedOut] = useState(false);
+
+  useEffect(() => {
+    setLoadTimedOut(false);
+    if (ready) return undefined;
+    const timer = window.setTimeout(() => setLoadTimedOut(true), 10000);
+    return () => window.clearTimeout(timer);
+  }, [ready, iframeKey, path]);
 
   const device = controlledDevice || localDevice;
   const cfg = DEVICES[device] || DEVICES.desktop;
@@ -160,7 +169,7 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', relo
   const needsScale   = cfg.width !== null;
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, height: frameHeight === '100%' ? '100%' : undefined, minHeight: 0 }}>
       {/* ── Toolbar ── */}
       {showToolbar && (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
@@ -205,7 +214,9 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', relo
       <Box
         sx={{
           width: '100%',
-          overflowX: 'auto',
+          overflowX: 'hidden',
+          flex: frameHeight === '100%' ? 1 : undefined,
+          minHeight: 0,
           borderRadius: 2,
           border: '1px solid',
           borderColor: 'divider',
@@ -217,14 +228,13 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', relo
           sx={{
             mx: needsScale ? 'auto' : 0,
             width: outerWidth,
-            maxWidth: needsScale ? outerWidth : '100%',
+            maxWidth: '100%',
             height: outerHeight,
             position: 'relative',
             overflow: 'hidden',
             borderRadius: needsScale ? 3 : 0,
             boxShadow: needsScale ? '0 4px 24px rgba(0,0,0,0.12)' : 'none',
-            my: needsScale ? 1.5 : 0,
-            transition: 'width 0.3s ease, height 0.3s ease',
+            my: needsScale && frameHeight !== '100%' ? 1.5 : 0,
           }}
         >
           {!ready && (
@@ -240,7 +250,15 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', relo
                 borderRadius: 2,
               }}
             >
-              <Typography variant="caption" color="text.secondary">Loading storefront…</Typography>
+              <Box sx={{ p: 2, textAlign: 'center', maxWidth: 320 }}>
+                <Typography variant="body2" color="text.secondary">
+                  {loadTimedOut ? 'The preview is taking longer than expected.' : 'Loading storefront…'}
+                </Typography>
+                {loadTimedOut && <Box sx={{ mt: 1.5, display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 1 }}>
+                  <Button size="small" variant="outlined" onClick={handleRefresh}>Retry preview</Button>
+                  <Button size="small" component="a" href={iframeSrc} target="_blank" rel="noopener noreferrer">Open preview</Button>
+                </Box>}
+              </Box>
             </Box>
           )}
           <iframe

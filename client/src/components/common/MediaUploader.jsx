@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useRef } from 'react';
+import React, { useCallback, useState, useRef, useEffect } from 'react';
 import { 
   Box, 
   Typography, 
@@ -23,6 +23,8 @@ const MediaUploader = ({ onUploadSuccess, onAllUploadsComplete, multiple = true,
   const abortControllerRef = useRef(null);
   const { notify } = useNotification();
 
+  useEffect(() => () => abortControllerRef.current?.abort(), []);
+
   const handleUpload = async (file, signal) => {
     if (!ALLOWED_MIMES.includes(file.type)) {
       notify(`Invalid file type for ${file.name}. JPEG, PNG, WebP, or GIF only.`, 'error');
@@ -35,6 +37,7 @@ const MediaUploader = ({ onUploadSuccess, onAllUploadsComplete, multiple = true,
 
     try {
       const res = await mediaService.uploadMedia(file, uploadType, signal);
+      if (signal?.aborted) return null;
       if (res?.success && res?.data?.media) {
         onUploadSuccess(res.data.media);
         return res.data.media;
@@ -43,7 +46,7 @@ const MediaUploader = ({ onUploadSuccess, onAllUploadsComplete, multiple = true,
         return null;
       }
     } catch (err) {
-      if (err.name === 'AbortError' || err.code === 'ERR_CANCELED') {
+      if (signal?.aborted || err.name === 'AbortError' || err.code === 'ERR_CANCELED') {
         return null; // Silent return on cancel
       }
       notify(`Upload failed for ${file.name}: ` + (err.response?.data?.error?.message || err.message), 'error');

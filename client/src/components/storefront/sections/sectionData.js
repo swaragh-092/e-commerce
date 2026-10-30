@@ -15,15 +15,21 @@ export const buildSectionRendererData = ({
   brandsLoading = false,
   pricingEnabled = true,
 } = {}) => {
-  const sectionItems = arr(section.items);
-  const sectionSlides = arr(section.slides);
-  const heroSlides = sectionSlides.length
-    ? sectionSlides
+  const hasCustomItems = Array.isArray(section.items);
+  const hasCustomSlides = Array.isArray(section.slides);
+  const hasCustomBanners = Array.isArray(section.banners);
+
+  const heroSlides = hasCustomSlides
+    ? section.slides
     : arr(homepage.heroSlides, arr(demoContent.heroSlides));
-  const valueProps = sectionItems.length
-    ? sectionItems
+  const valueProps = hasCustomItems
+    ? section.items
     : arr(homepage.valueProps, arr(demoContent.valueProps));
-  const promoBanners = arr(homepage.promoBanners, arr(demoContent.promoBanners));
+  const promoBanners = hasCustomItems
+    ? section.items
+    : hasCustomBanners
+      ? section.banners
+      : arr(homepage.promoBanners, arr(demoContent.promoBanners));
   const sectionLoading = section.type === 'brand-showcase' ? brandsLoading : loading;
   const productsBySection = resolvedData.products || resolvedData.productsBySection || {};
 
@@ -31,9 +37,9 @@ export const buildSectionRendererData = ({
     slides: heroSlides,
     heroSlides,
     valueProps,
-    items: sectionItems.length ? sectionItems : undefined,
+    items: hasCustomItems ? section.items : undefined,
     categories: arr(resolvedData.categories),
-    configuredTiles: sectionItems.length ? sectionItems : arr(homepage.categoryTiles),
+    configuredTiles: hasCustomItems ? section.items : arr(homepage.categoryTiles),
     promoBanners,
     banners: promoBanners,
     products: productsBySection[section.id] || resolvedData.productsList || [],

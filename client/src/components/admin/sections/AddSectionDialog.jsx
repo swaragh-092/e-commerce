@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import {
   Box, Card, Dialog, DialogTitle, DialogContent, DialogActions, Button,
   FormControl, InputLabel, Select, MenuItem, Stack, TextField, Typography, Chip,
@@ -23,6 +23,8 @@ const generateId = (type, existingIds) => {
 };
 
 const AddSectionDialog = ({ open, onClose, onAdd, existingIds = [], sectionPresets = {}, insertLabel = 'last section' }) => {
+  const typeLabelId = useId();
+  const variantLabelId = useId();
   const [type, setType] = useState('');
   const [variant, setVariant] = useState('');
   const [title, setTitle] = useState('');
@@ -95,8 +97,8 @@ const AddSectionDialog = ({ open, onClose, onAdd, existingIds = [], sectionPrese
           </Box>
 
           <FormControl size="small" fullWidth>
-            <InputLabel>Section Type</InputLabel>
-            <Select value={type} label="Section Type" onChange={(e) => { setType(e.target.value); setVariant(''); }}>
+            <InputLabel id={typeLabelId}>Section Type</InputLabel>
+            <Select labelId={typeLabelId} value={type} label="Section Type" onChange={(e) => { setType(e.target.value); setVariant(''); }}>
               {sectionOptions.map((opt) => (
                 <MenuItem key={opt.type} value={opt.type}>
                   <Stack direction="row" alignItems="center" spacing={1}>
@@ -116,8 +118,8 @@ const AddSectionDialog = ({ open, onClose, onAdd, existingIds = [], sectionPrese
 
           {variants.length > 0 && (
             <FormControl size="small" fullWidth>
-              <InputLabel>Variant</InputLabel>
-              <Select value={variant} label="Variant" onChange={(e) => setVariant(e.target.value)}>
+              <InputLabel id={variantLabelId}>Variant</InputLabel>
+              <Select labelId={variantLabelId} value={variant} label="Variant" onChange={(e) => setVariant(e.target.value)}>
                 <MenuItem value="">Default</MenuItem>
                 {variants.map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
               </Select>

@@ -14,11 +14,13 @@ const internalLink = Joi.string().pattern(/^\/(?!\/)/).max(500).messages({
 const dataUri = Joi.string().pattern(/^data:image\//).max(100000);
 const previewImageUrl = Joi.alternatives().try(safeUrl, dataUri).allow('', null);
 const linkUrl = Joi.alternatives().try(safeUrl, internalLink).allow('', null);
+const fontDataUri = Joi.string().pattern(/^data:font\//).max(100000);
+const fontUrl = Joi.alternatives().try(safeUrl, internalLink, fontDataUri).allow('', null);
 const safeText = Joi.string().max(500).allow('', null);
 
 const THEME_MODES = ['light', 'dark'];
 const HEADER_STYLES = ['gradient', 'solid', 'glass'];
-const BUTTON_STYLES = ['solid', 'soft', 'outline'];
+const BUTTON_STYLES = ['solid', 'soft', 'outline', 'pill'];
 const CARD_STYLES = ['elevated', 'outlined', 'flat'];
 const BG_STYLES = ['softGradient', 'solid'];
 const FONT_WEIGHTS = ['300', '400', '500', '600', '700', '800', '900'];
@@ -34,7 +36,74 @@ const darkPaletteSchema = Joi.object({
   backgroundColor: hexColor,
   surfaceColor: hexColor,
   textColor: hexColor,
+  errorColor: hexColor,
+  cancelButtonColor: hexColor,
+  warningColor: hexColor,
+  successColor: hexColor,
+  infoColor: hexColor,
 }).unknown(false);
+
+const typographyScaleSchema = Joi.object({
+  preset: Joi.string().valid('compact', 'default', 'editorial', 'display', 'goldenRatio', 'minorThird', 'custom'),
+  fluid: Joi.boolean(),
+  h1: Joi.string().max(50).allow('', null),
+  h2: Joi.string().max(50).allow('', null),
+  h3: Joi.string().max(50).allow('', null),
+  h4: Joi.string().max(50).allow('', null),
+  h5: Joi.string().max(50).allow('', null),
+  h6: Joi.string().max(50).allow('', null),
+  body1: Joi.string().max(50).allow('', null),
+  body2: Joi.string().max(50).allow('', null),
+  fluidConfig: Joi.object({
+    bodyMin: Joi.string().max(20).allow('', null),
+    bodyMax: Joi.string().max(20).allow('', null),
+    h1Min: Joi.string().max(20).allow('', null),
+    h1Max: Joi.string().max(20).allow('', null),
+    h2Min: Joi.string().max(20).allow('', null),
+    h2Max: Joi.string().max(20).allow('', null),
+    h3Min: Joi.string().max(20).allow('', null),
+    h3Max: Joi.string().max(20).allow('', null),
+    h4Min: Joi.string().max(20).allow('', null),
+    h4Max: Joi.string().max(20).allow('', null),
+    h5Min: Joi.string().max(20).allow('', null),
+    h5Max: Joi.string().max(20).allow('', null),
+    h6Min: Joi.string().max(20).allow('', null),
+    h6Max: Joi.string().max(20).allow('', null),
+    minVw: Joi.alternatives().try(Joi.string().max(20), Joi.number()).allow('', null),
+    maxVw: Joi.alternatives().try(Joi.string().max(20), Joi.number()).allow('', null),
+  }).unknown(false),
+}).unknown(false);
+
+const mobileOverridesSchema = Joi.object({
+  primaryColor: hexColor,
+  backgroundColor: hexColor,
+  surfaceColor: hexColor,
+  textColor: hexColor,
+  bodyFontSize: Joi.string().max(30).allow('', null),
+  headingScale: Joi.string().max(20).allow('', null),
+  sectionPadding: Joi.string().max(30).allow('', null),
+  containerPadding: Joi.string().max(30).allow('', null),
+}).unknown(false);
+
+const customFontsSchema = Joi.object({
+  bodyUrl: fontUrl,
+  bodyFamily: Joi.string().max(100).allow('', null),
+  bodyFormat: Joi.string().valid('woff2', 'woff', 'ttf', 'otf'),
+  headingUrl: fontUrl,
+  headingFamily: Joi.string().max(100).allow('', null),
+  headingFormat: Joi.string().valid('woff2', 'woff', 'ttf', 'otf'),
+}).unknown(false);
+
+const variableFontAxesSchema = Joi.object().pattern(
+  Joi.string().max(10),
+  Joi.object({
+    enabled: Joi.boolean(),
+    value: Joi.number(),
+    default: Joi.number(),
+    min: Joi.number(),
+    max: Joi.number(),
+  }).unknown(false)
+).max(20);
 
 const themeDesignSchema = Joi.object({
   mode: Joi.string().valid(...THEME_MODES),
@@ -48,14 +117,30 @@ const themeDesignSchema = Joi.object({
   headingFont: Joi.string().max(100).allow('', null),
   headingWeight: Joi.string().valid(...FONT_WEIGHTS).allow('', null),
   bodyWeight: Joi.string().valid(...FONT_WEIGHTS).allow('', null),
+  errorColor: hexColor,
+  cancelButtonColor: hexColor,
+  warningColor: hexColor,
+  successColor: hexColor,
+  infoColor: hexColor,
   lineHeight: Joi.string().max(10).allow('', null),
+  lineHeightH1: Joi.string().max(10).allow('', null),
+  lineHeightH2: Joi.string().max(10).allow('', null),
+  lineHeightH3: Joi.string().max(10).allow('', null),
+  lineHeightH4: Joi.string().max(10).allow('', null),
+  lineHeightH5: Joi.string().max(10).allow('', null),
+  lineHeightH6: Joi.string().max(10).allow('', null),
   letterSpacing: Joi.string().max(10).allow('', null),
   headingLetterSpacing: Joi.string().max(10).allow('', null),
+  fontVariationSettings: Joi.string().max(200).allow('', null),
   borderRadius: Joi.string().max(10).allow('', null),
   headerStyle: Joi.string().valid(...HEADER_STYLES),
   buttonStyle: Joi.string().valid(...BUTTON_STYLES),
   cardStyle: Joi.string().valid(...CARD_STYLES),
   backgroundStyle: Joi.string().valid(...BG_STYLES),
+  typographyScale: typographyScaleSchema,
+  mobileOverrides: mobileOverridesSchema,
+  customFonts: customFontsSchema,
+  variableFontAxes: variableFontAxesSchema,
 }).unknown(false);
 
 const navSchema = Joi.object({

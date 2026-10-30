@@ -1,9 +1,12 @@
 import platformFeatures from '../../../shared/platform-features.json';
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { ThemeProvider, createTheme, CssBaseline, Box, CircularProgress } from '@mui/material';
 import settingsService from '../services/settingsService';
 import { DEFAULT_STORE_NAME } from '../utils/store';
-import { buildCriticalThemeCss, buildStorefrontCssVariables, buildStorefrontTheme, resolveStorefrontThemeState } from '../utils/theme';
+import { buildCriticalThemeCss, buildStorefrontCssVariables, buildStorefrontTheme } from '../utils/theme';
+import { resolveDesignTokens } from '../utils/designTokens';
+import { adminTheme } from '../theme/adminTheme';
 
 export const SettingsContext = createContext(null);
 // Separate context for components that ONLY need the resolved design tokens
@@ -47,6 +50,8 @@ export const DEFAULT_FALLBACK_FEATURES = {
 };
 
 export const SettingsProvider = ({ children }) => {
+  const location = useLocation();
+  const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
   const [settings, setSettings] = useState(null);
   const [mode, setMode] = useState('ecommerce');           // APP_MODE from server
   const [features, setFeatures] = useState(null);         // fully resolved feature map
@@ -207,16 +212,26 @@ export const SettingsProvider = ({ children }) => {
     fetchSettings();
   }, []);
 
-  const { isDark } = resolveStorefrontThemeState(t, customerDarkMode);
-  const themeConfig = useMemo(
-    () => createTheme(buildStorefrontTheme(t, customerDarkMode)),
+  const storefrontTokens = useMemo(
+    () => resolveDesignTokens(t, customerDarkMode),
     [t, customerDarkMode]
   );
-  // Resolved design tokens — used by the new DesignTokensContext.
-  // Recomputed only when the theme object or dark-mode toggles.
+  const isDark = isAdminRoute ? false : storefrontTokens.isDark;
+  const themeConfig = useMemo(
+    () => (isAdminRoute ? adminTheme : createTheme(buildStorefrontTheme(t, customerDarkMode))),
+    [isAdminRoute, t, customerDarkMode]
+  );
+  // Resolved design tokens — used by DesignTokensContext subscribers.
+  // Admin routes deliberately receive the stable admin theme, never merchant
+  // storefront tokens, so saved storefront styling cannot leak into admin UI.
   const designTokens = useMemo(
-    () => ({ cssVariables: buildStorefrontCssVariables(t, customerDarkMode), themeObj: t }),
-    [t, customerDarkMode]
+    () => ({
+      cssVariables: isAdminRoute ? {} : buildStorefrontCssVariables(t, customerDarkMode),
+      tokens: storefrontTokens,
+      themeObj: t,
+      isAdminRoute,
+    }),
+    [isAdminRoute, storefrontTokens, t, customerDarkMode]
   );
 
   // Memoize the SettingsContext value object — without this, every
@@ -238,7 +253,10 @@ export const SettingsProvider = ({ children }) => {
   );
 
   // Expose resolved storefront design tokens as CSS custom properties for custom CSS and widgets.
+  // Admin routes must not receive merchant tokens: the admin theme is stable and
+  // independent from storefront design settings.
   useEffect(() => {
+    if (isAdminRoute) return undefined;
     const vars = buildStorefrontCssVariables(t, customerDarkMode);
     const root = document.documentElement;
     Object.entries(vars).forEach(([key, value]) => root.style.setProperty(key, value));
@@ -246,7 +264,7 @@ export const SettingsProvider = ({ children }) => {
     return () => {
       Object.keys(vars).forEach((key) => root.style.removeProperty(key));
     };
-  }, [t, customerDarkMode]);
+  }, [isAdminRoute, t, customerDarkMode]);
 
   // In preview mode: listen for postMessage from the admin panel to apply
   // updated CSS vars instantly (colour/font changes without iframe reload).
@@ -268,6 +286,10 @@ export const SettingsProvider = ({ children }) => {
 
   // Inject critical CSS and package-level asset hints from theme settings.
   useEffect(() => {
+    if (isAdminRoute) {
+      document.getElementById('theme-critical-css')?.remove();
+      return undefined;
+    }
     const criticalCss = settings?.theme?.criticalCSS || settings?.theme?.performance?.criticalCSS || buildCriticalThemeCss(t, customerDarkMode);
     const styleId = 'theme-critical-css';
     let style = document.getElementById(styleId);
@@ -283,9 +305,10 @@ export const SettingsProvider = ({ children }) => {
     } else if (style) {
       style.remove();
     }
-  }, [settings?.theme?.criticalCSS, settings?.theme?.performance?.criticalCSS, t, customerDarkMode]);
+  }, [isAdminRoute, settings?.theme?.criticalCSS, settings?.theme?.performance?.criticalCSS, t, customerDarkMode]);
 
   useEffect(() => {
+    if (isAdminRoute) return undefined;
     const perf = settings?.theme?.performance || {};
     const assets = [
       ...(Array.isArray(perf.preloadAssets) ? perf.preloadAssets.map((asset) => ({ ...asset, rel: 'preload' })) : []),
@@ -311,10 +334,14 @@ export const SettingsProvider = ({ children }) => {
     return () => {
       document.querySelectorAll('link[data-theme-asset-hint="true"]').forEach((node) => node.remove());
     };
-  }, [settings?.theme?.performance]);
+  }, [isAdminRoute, settings?.theme?.performance]);
 
   // Inject custom CSS from admin settings
   useEffect(() => {
+    if (isAdminRoute) {
+      document.getElementById('admin-custom-css')?.remove();
+      return undefined;
+    }
     const customCss = settings?.advanced?.customCSS;
     const styleId = 'admin-custom-css';
     let style = document.getElementById(styleId);
@@ -328,10 +355,11 @@ export const SettingsProvider = ({ children }) => {
     } else if (style) {
       style.remove();
     }
-  }, [settings?.advanced?.customCSS]);
+  }, [isAdminRoute, settings?.advanced?.customCSS]);
 
   // Inject custom Head & Body scripts from admin settings
   useEffect(() => {
+    if (isAdminRoute) return undefined;
     const headScripts = settings?.advanced?.headScripts;
     const bodyScripts = settings?.advanced?.bodyScripts;
 
@@ -382,7 +410,7 @@ export const SettingsProvider = ({ children }) => {
       document.head.querySelectorAll('.admin-head-script').forEach(el => el.remove());
       document.body.querySelectorAll('.admin-body-script').forEach(el => el.remove());
     };
-  }, [settings?.advanced?.headScripts, settings?.advanced?.bodyScripts]);
+  }, [isAdminRoute, settings?.advanced?.headScripts, settings?.advanced?.bodyScripts]);
 
   return (
     <SettingsContext.Provider value={value}>
