@@ -155,7 +155,7 @@
                 var pImg = product.images.find(function (i) { return i.isPrimary; }) || product.images[0];
                 primaryImg = pImg.url || pImg.image || (pImg.media && pImg.media.url) || '';
             }
-            var absImage = OrbiSEO.toAbsoluteUrl(primaryImg || 'images/default-image.png');
+            var absImage = OrbiSEO.toAbsoluteUrl(primaryImg || 'images/orbi-seeds-logo.png');
             var pageUrl = window.location.href;
 
             var schema = {

@@ -27,6 +27,7 @@ const {
 } = require('../index');
 const logger = require('../../utils/logger');
 const { buildSearchPattern } = require('./search.utils');
+const { buildCategorySearchSql } = require('./search.category');
 
 const { Op } = Sequelize;
 
@@ -79,29 +80,8 @@ const TRIGRAM_MIN_SIMILARITY = 0.2;
 
 // Category, brand, and tag data are stored outside products.search_vector.
 // Match them directly so the full search and catalog filter use the same terms.
-const categoryMatchSql = () => `EXISTS (
-  SELECT 1
-  FROM "product_categories" AS "search_product_categories"
-  INNER JOIN "categories" AS "search_categories"
-    ON "search_categories"."id" = "search_product_categories"."category_id"
-  WHERE "search_product_categories"."product_id" = "Product"."id"
-    AND (
-      LOWER("search_categories"."name") = LOWER($queryText)
-      OR LOWER("search_categories"."slug") = LOWER($queryText)
-    )
-)`;
-
-const categoryPartialMatchSql = () => `EXISTS (
-  SELECT 1
-  FROM "product_categories" AS "search_product_categories"
-  INNER JOIN "categories" AS "search_categories"
-    ON "search_categories"."id" = "search_product_categories"."category_id"
-  WHERE "search_product_categories"."product_id" = "Product"."id"
-    AND (
-      LOWER("search_categories"."name") LIKE LOWER($queryPattern)
-      OR LOWER("search_categories"."slug") LIKE LOWER($queryPattern)
-    )
-)`;
+const categoryMatchSql = () => buildCategorySearchSql('$queryText', { exact: true });
+const categoryPartialMatchSql = () => buildCategorySearchSql('$queryPattern');
 
 const exactBrandMatchSql = () => `EXISTS (
   SELECT 1

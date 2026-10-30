@@ -12,6 +12,7 @@
     <!-- css -->
     <link rel="stylesheet" href="css/orbi-seeds.css">
     <link rel="stylesheet" href="css/responsive.css">
+    <link rel="stylesheet" href="css/wishlist.css">
     <!-- css -->
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -36,9 +37,9 @@
     </style>
 </head>
 
-<body>
+<body class="wishlist-page">
     <div class="wrapper">
-        <div class="inner-page-banner-wrapper" id="bg"
+        <div class="inner-page-banner-wrapper catalog-banner" id="bg"
             style="background: url('images/inr-bnr.avif') no-repeat center center/cover;">
             <header>
                 <div class="header-banner-wrapper">
@@ -186,6 +187,7 @@
 
             <div class="fluid-container">
                 <div class="inner-banner">
+                    <h1 class="product-heading">Wishlist</h1>
                     <nav aria-label="breadcrumb" class="breadcrumb-wrapper">
                         <ol class="breadcrumb">
                             <li><a href="index.html">Home</a></li>
@@ -198,23 +200,41 @@
         </div>
         <!-- inner-banner -->
 
-        <div class="cart-wrapper">
+        <main class="cart-wrapper wishlist-workspace" aria-labelledby="wishlist-section-title">
             <div class="fluid-container">
-                <h1>Wishlist</h1>
-                <div class="cart-inner-wrapper">
-                    <div id="dynamic-wishlist-container"></div>
-                    <div class="cart-buttons">
-                        <a href="javascript:;" class="view-product-btn" id="move-all-to-cart-btn">Move All to Enquiry
-                            List</a>
-                        <a href="javascript:;" class="clear-cart-btn" id="clear-wishlist-btn">Clear Wishlist</a>
+                <div class="wishlist-heading">
+                    <div>
+                        <div class="wishlist-heading-title">
+                            <h2 id="wishlist-section-title">Your saved products</h2>
+                            <span id="wishlist-item-count" class="wishlist-count" role="status">Loading…</span>
+                        </div>
+                        <p>Keep your favourites together. Move them to your enquiry list when you're ready.</p>
                     </div>
+                    <a href="product.html" class="wishlist-continue">Browse products
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+                    </a>
+                </div>
+                <div class="cart-inner-wrapper wishlist-layout is-empty">
+                    <div id="dynamic-wishlist-container" aria-busy="true">
+                        <div class="wishlist-state wishlist-loading" role="status">Loading your saved products…</div>
+                    </div>
+                    <aside class="cart-buttons wishlist-summary" aria-labelledby="wishlist-summary-title" hidden>
+                        <h3 id="wishlist-summary-title">Ready to enquire?</h3>
+                        <p>Start an enquiry with all your saved products.</p>
+                        <button type="button" class="wishlist-primary" id="move-all-to-cart-btn"><span>Move all to enquiry (<span id="wishlist-summary-count">0</span>)</span>
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+                        </button>
+                        <div class="wishlist-summary-footer">
+                            <a href="enquiry-list.html" class="wishlist-open-enquiry">View enquiry list</a>
+                            <button type="button" id="clear-wishlist-btn">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>
+                                Clear wishlist
+                            </button>
+                        </div>
+                    </aside>
                 </div>
             </div>
-        </div>
-
-
-
-
+        </main>
 
         <div class="enquiry-popup-wrapper">
             <div class="enquiry-overlay"></div>
@@ -305,10 +325,9 @@
                                         </a>
                                     </li>
                                     <li>
-                                        <a href="javascript:;">
+                                        <a href="https://maps.app.goo.gl/aJMdXwMyNMD7sE7q6" target="_blank">
                                             <span><img src="images/icons/location.png" alt=""></span>
-                                            <p>#1241, HIG-KHB, 7th B Cross, B Sector, Yelahanka New Town, Bengaluru 560
-                                                064. </p>
+                                            <p>2073, 4th Cross Rd, Bengaluru, 560065, KA, IN</p>
                                         </a>
                                     </li>
                                 </ul>
@@ -323,15 +342,23 @@
                                         </a>
                                     </li>
                                     <li>
-                                        <a href="tel:+18316372149">
+                                        <!-- <a href="tel:+18316372149">
                                             <span><img src="images/icons/telephone.png" alt=""></span>
                                             <p>(+1) 8316372149</p>
+                                        </a> -->
+                                        <a href="tel:+18316372148">
+                                            <span><img src="images/icons/telephone.png" alt=""></span>
+                                            <p>(+1) 831 6372148 </p>
+                                        </a>
+
+                                        <a href="tel:+18316372149">
+                                            <p>(+1) 831 6372149 </p>
                                         </a>
                                     </li>
                                     <li>
-                                        <a href="javascript:;">
+                                        <a href="https://maps.app.goo.gl/ezjHhfFk9SNsYJqr7">
                                             <span><img src="images/icons/location.png" alt=""></span>
-                                            <p>#7600 Fairview Road Hollister, CA-95023</p>
+                                            <p>#7600 Fairview Road Hollister, CA-95023 USA</p>
                                         </a>
                                     </li>
                                 </ul>

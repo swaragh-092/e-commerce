@@ -40,11 +40,30 @@
 .thank-you-product-list .thank-you-product-quantity { margin: 0; font-weight: 700; }
 .thank-you-note { margin: 20px 0 0; padding-top: 16px; border-top: 1px solid var(--thank-you-border); text-align: left; }
 .thank-you-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; margin-top: 32px; }
-.thank-you-actions a { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 12px 20px; border-radius: 4px; font-weight: 700; }
-.thank-you-primary { background: var(--thank-you-green); color: #fff; border: 1px solid var(--thank-you-green); }
-.thank-you-primary:hover { background: #2b5601; }
-.thank-you-secondary { color: var(--thank-you-ink); border: 1px solid var(--thank-you-border); }
-.thank-you-secondary:hover { background: #eaf3e3; }
+.thank-you-actions .view-product-btn,
+.thank-you-actions a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 10px 24px;
+    background: #71C5DD;
+    color: #fff !important;
+    text-decoration: none !important;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.2;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    transition: 0.3s ease;
+    margin: 0;
+}
+.thank-you-actions .view-product-btn:hover,
+.thank-you-actions a:hover {
+    background: #386f02;
+    color: #fff !important;
+}
 .thank-you-footer { padding: 24px; color: var(--thank-you-muted); text-align: center; font-size: 14px; }
 @media (max-width: 600px) {
     .thank-you-header { padding: 16px; flex-wrap: wrap; }

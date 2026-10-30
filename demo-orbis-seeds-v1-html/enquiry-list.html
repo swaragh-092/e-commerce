@@ -12,6 +12,7 @@
 <!-- css -->
 <link rel="stylesheet" href="css/orbi-seeds.css">
 <link rel="stylesheet" href="css/responsive.css">
+<link rel="stylesheet" href="css/enquiry-list.css">
 <!-- css -->
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -35,9 +36,9 @@
     </style>
 </head>
 
-<body>
+<body class="enquiry-list-page">
     <div class="wrapper">
-        <div class="inner-page-banner-wrapper" id="bg"
+        <div class="inner-page-banner-wrapper catalog-banner" id="bg"
             style="background: url('images/inr-bnr.avif') no-repeat center center/cover;">
             <header>
     <div class="header-banner-wrapper">
@@ -177,6 +178,7 @@
 
             <div class="fluid-container">
                 <div class="inner-banner">
+                    <h1 class="product-heading">Enquiry list</h1>
                     <nav aria-label="breadcrumb" class="breadcrumb-wrapper">
                         <ol class="breadcrumb">
                             <li><a href="index.html">Home</a></li>
@@ -189,21 +191,40 @@
         </div>
         <!-- inner-banner -->
 
-        <div class="cart-wrapper">
+        <main class="cart-wrapper enquiry-workspace" aria-labelledby="enquiry-section-title">
             <div class="fluid-container">
-                <h1>Enquiry List</h1>
-                <div class="cart-inner-wrapper">
-                    <!-- Cart items will be rendered here dynamically by js/enquiry.js -->
-                    <div id="dynamic-cart-container"></div>
-                    <div class="cart-buttons">
-                        <a href="javascript:;" class="view-product-btn" id="cart-enquiry-btn">Enquiry Now</a>
-                        <a href="javascript:;" class="clear-cart-btn" id="clear-cart-btn">Clear List</a>
+                <div class="enquiry-list-heading">
+                    <div>
+                        <div class="enquiry-heading-title">
+                            <h2 id="enquiry-section-title">Your selected products</h2>
+                            <span id="enquiry-item-count" class="enquiry-count" role="status"></span>
+                        </div>
+                        <p>Review the product details and quantities before sending your enquiry.</p>
                     </div>
+                    <a href="product.html" class="enquiry-continue">Browse products
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+                    </a>
+                </div>
+                <div class="cart-inner-wrapper enquiry-list-layout is-empty">
+                    <div id="dynamic-cart-container"></div>
+                    <aside class="cart-buttons enquiry-list-summary" aria-labelledby="enquiry-summary-title" hidden>
+                        <h3 id="enquiry-summary-title">Your enquiry</h3>
+                        <dl id="enquiry-summary-details"></dl>
+                        <p>Send your selection and quantities to our team for product details and availability.</p>
+                        <button type="button" class="enquiry-primary" id="cart-enquiry-btn">Enquire now
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+                        </button>
+                        <div class="enquiry-summary-footer">
+                            <button type="button" id="clear-cart-btn">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>
+                                Clear enquiry list
+                            </button>
+                        </div>
+                    </aside>
                 </div>
             </div>
-        </div>
+        </main>
 
-        
 <div class="enquiry-popup-wrapper">
     <div class="enquiry-overlay"></div>
     <div class="enquiry-popup">
@@ -299,10 +320,9 @@
                                         </a>
                                     </li>
                                     <li>
-                                        <a href="javascript:;">
+                                        <a href="https://maps.app.goo.gl/aJMdXwMyNMD7sE7q6" target="_blank">
                                             <span><img src="images/icons/location.png" alt=""></span>
-                                            <p>#1241, HIG-KHB, 7th B Cross, B Sector, Yelahanka New Town, Bengaluru 560
-                                                064. </p>
+                                            <p>2073, 4th Cross Rd, Bengaluru, 560065, KA, IN</p>
                                         </a>
                                     </li>
                                 </ul>
@@ -317,15 +337,23 @@
                                         </a>
                                     </li>
                                     <li>
-                                        <a href="tel:+18316372149">
+                                        <!-- <a href="tel:+18316372149">
                                             <span><img src="images/icons/telephone.png" alt=""></span>
                                             <p>(+1) 8316372149</p>
+                                        </a> -->
+                                        <a href="tel:+18316372148">
+                                            <span><img src="images/icons/telephone.png" alt=""></span>
+                                            <p>(+1) 831 6372148 </p>
+                                        </a>
+
+                                        <a href="tel:+18316372149">
+                                            <p>(+1) 831 6372149 </p>
                                         </a>
                                     </li>
                                     <li>
-                                        <a href="javascript:;">
+                                        <a href="https://maps.app.goo.gl/ezjHhfFk9SNsYJqr7">
                                             <span><img src="images/icons/location.png" alt=""></span>
-                                            <p>#7600 Fairview Road Hollister, CA-95023</p>
+                                            <p>#7600 Fairview Road Hollister, CA-95023 USA</p>
                                         </a>
                                     </li>
                                 </ul>

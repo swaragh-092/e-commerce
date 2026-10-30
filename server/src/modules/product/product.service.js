@@ -44,6 +44,7 @@ const SettingsService = require('../settings/settings.service');
 const inventoryService = require('../inventory/inventory.service');
 const { validateProductTypeChange } = require('./productType');
 const { normalizeSearchQuery, buildSearchPattern } = require('../search/search.utils');
+const { buildCategorySearchSql } = require('../search/search.category');
 const {
   isBrandVisible,
   stripBrandFields,
@@ -480,17 +481,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
         { shortDescription: { [Op.iLike]: searchPattern } },
         { sku: { [Op.iLike]: searchPattern } },
         Sequelize.literal(`"Product"."search_vector" @@ plainto_tsquery('simple', ${escapedQuery})`),
-        Sequelize.literal(`EXISTS (
-          SELECT 1
-          FROM "product_categories" AS "search_product_categories"
-          INNER JOIN "categories" AS "search_categories"
-            ON "search_categories"."id" = "search_product_categories"."category_id"
-          WHERE "search_product_categories"."product_id" = "Product"."id"
-            AND (
-              LOWER("search_categories"."name") LIKE LOWER(${escapedSearchPattern})
-              OR LOWER("search_categories"."slug") LIKE LOWER(${escapedSearchPattern})
-            )
-        )`),
+        Sequelize.literal(buildCategorySearchSql(escapedSearchPattern)),
         ...(brandsVisible ? [Sequelize.literal(`EXISTS (
           SELECT 1
           FROM "brands" AS "search_brands"
