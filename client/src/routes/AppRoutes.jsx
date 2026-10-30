@@ -209,6 +209,8 @@ const AppRoutes = () => (
 
       {/* Admin Login Route */}
       <Route path="/admin/login" element={<AdminLoginPage />} />
+      <Route path="/admin/forgot-password" element={<ForgotPasswordPage admin />} />
+      <Route path="/admin/reset-password" element={<ResetPasswordPage admin />} />
 
       {/* Admin Routes — permission-gated foundation */}
       <Route path="/admin" element={<ProtectedRoute permissions={ADMIN_ACCESS_PERMISSIONS} />}>

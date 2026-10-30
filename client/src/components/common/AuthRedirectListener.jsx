@@ -15,7 +15,7 @@ const AuthRedirectListener = () => {
   useEffect(() => {
     const handleUnauthorized = () => {
       // Don't redirect if already on login/register/auth pages
-      const authPaths = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/admin/login'];
+      const authPaths = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/admin/login', '/admin/forgot-password', '/admin/reset-password'];
       if (authPaths.some((p) => location.pathname.startsWith(p))) return;
 
       navigate('/login', {
