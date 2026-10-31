@@ -199,13 +199,14 @@ const MenuBuilderPage = () => {
   const buildItemPayload = () => {
     const label = itemForm.label.trim();
     const targetType = itemForm.targetType || 'none';
+    const childDisplayLimit = itemForm.childDisplayLimit;
     const payload = {
       parentId: itemForm.parentId || null,
       label,
       targetType,
       targetId: needsTarget(targetType) ? itemForm.targetId || null : null,
       syncChildren: targetType === 'category' && Boolean(itemForm.syncChildren),
-      childDisplayLimit: itemForm.childDisplayLimit ?? null,
+      childDisplayLimit: childDisplayLimit === 'custom' ? null : childDisplayLimit ?? null,
       url: needsUrl(targetType) ? itemForm.url.trim() : null,
       placement: itemForm.placement,
       sortOrder: Number(itemForm.sortOrder) || 0,
@@ -216,6 +217,11 @@ const MenuBuilderPage = () => {
     if (!payload.label) throw new Error('Label is required.');
     if (needsUrl(targetType) && !payload.url) throw new Error('URL is required for this link type.');
     if (needsTarget(targetType) && !payload.targetId) throw new Error('Please choose a target.');
+    if (childDisplayLimit === 'custom') throw new Error('Enter a custom child batch size before saving.');
+    if (childDisplayLimit !== null && childDisplayLimit !== undefined
+      && (!Number.isInteger(childDisplayLimit) || childDisplayLimit < 1 || childDisplayLimit > 100)) {
+      throw new Error('Child batch size must be a whole number from 1 to 100.');
+    }
 
     return payload;
   };

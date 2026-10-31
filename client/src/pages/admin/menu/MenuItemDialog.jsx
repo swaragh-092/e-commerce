@@ -21,6 +21,9 @@ import {
 } from '@mui/material';
 import { needsTarget, needsUrl } from './constants';
 
+const CHILD_DISPLAY_LIMIT_PRESETS = [5, 10, 20, 30, 50, 100];
+const CUSTOM_CHILD_DISPLAY_LIMIT = 'custom';
+
 const MenuItemDialog = ({
   open,
   onClose,
@@ -207,19 +210,45 @@ const MenuItemDialog = ({
               Display & Visibility
             </Typography>
             <Grid container spacing={3} alignItems="center">
-              <Grid item xs={12}>
+              <Grid item xs={12} md={6}>
                 <TextField
                   select
                   fullWidth
                   label="Children per batch"
-                  value={itemForm.childDisplayLimit ?? ''}
-                  onChange={(event) => setItemForm({ ...itemForm, childDisplayLimit: event.target.value === '' ? null : Number(event.target.value) })}
-                  helperText="Show this many child items initially. Customers can click Show more for the next batch. Also applies to synced category branches."
+                  value={itemForm.childDisplayLimit === CUSTOM_CHILD_DISPLAY_LIMIT
+                    || (Number.isInteger(itemForm.childDisplayLimit) && !CHILD_DISPLAY_LIMIT_PRESETS.includes(itemForm.childDisplayLimit))
+                    ? CUSTOM_CHILD_DISPLAY_LIMIT
+                    : itemForm.childDisplayLimit ?? ''}
+                  onChange={(event) => setItemForm({
+                    ...itemForm,
+                    childDisplayLimit: event.target.value === CUSTOM_CHILD_DISPLAY_LIMIT
+                      ? CUSTOM_CHILD_DISPLAY_LIMIT
+                      : event.target.value === '' ? null : Number(event.target.value),
+                  })}
+                  helperText="Choose a preset or enter a custom number. Customers can click Show more for each batch."
                 >
                   <MenuItem value="">Show all</MenuItem>
-                  {[...new Set([5, 10, 20, 30, 50, 100, ...(itemForm.childDisplayLimit ? [itemForm.childDisplayLimit] : [])])].sort((a, b) => a - b).map(limit => <MenuItem key={limit} value={limit}>{limit} items</MenuItem>)}
+                  {CHILD_DISPLAY_LIMIT_PRESETS.map((limit) => <MenuItem key={limit} value={limit}>{limit} items</MenuItem>)}
+                  <MenuItem value={CUSTOM_CHILD_DISPLAY_LIMIT}>Custom number…</MenuItem>
                 </TextField>
               </Grid>
+              {(itemForm.childDisplayLimit === CUSTOM_CHILD_DISPLAY_LIMIT
+                || (Number.isInteger(itemForm.childDisplayLimit) && !CHILD_DISPLAY_LIMIT_PRESETS.includes(itemForm.childDisplayLimit))) && (
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Custom children per batch"
+                    value={itemForm.childDisplayLimit === CUSTOM_CHILD_DISPLAY_LIMIT ? '' : itemForm.childDisplayLimit}
+                    onChange={(event) => setItemForm({
+                      ...itemForm,
+                      childDisplayLimit: event.target.value === '' ? CUSTOM_CHILD_DISPLAY_LIMIT : Number(event.target.value),
+                    })}
+                    inputProps={{ min: 1, max: 100, step: 1 }}
+                    helperText="Enter a whole number from 1 to 100."
+                  />
+                </Grid>
+              )}
               <Grid item xs={12} md={4}>
                 <FormControl fullWidth>
                   <InputLabel>Placement</InputLabel>
