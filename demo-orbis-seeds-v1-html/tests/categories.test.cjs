@@ -797,7 +797,7 @@ function fixtureHtml() {
     let html = readFileSync(join(root, 'product.html'), 'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
     // Tests use the real page, styles and scripts; external font/carousel downloads are unnecessary.
     html = html.replace(/<link\b[^>]*(?:https:|preconnect)[^>]*>/gi, '');
-    html = html.replace(/(src|href)="((?:images|css)\/[^"]+)"/g, (_, attr, file) => attr + '="' + pathToFileURL(join(root, file)).href + '"');
+    html = html.replace(/(src|href)="((?:images|css)\/[^"]+)"/g, (_, attr, file) => attr + '="' + new URL(file, pathToFileURL(join(root, 'product.html'))).href + '"');
     const scripts = ['catalog', 'catalog-browser', 'products'].map(name => `<script src="${pathToFileURL(join(root, 'js', name + '.js')).href}"></script>`).join('');
     return html.replace('</body>', `<script>(${bootstrap.toString()})(${JSON.stringify(fixtures())});</script>${scripts}
         <script>window.addEventListener('load', ${checkCatalogue.toString()});</script></body>`);
