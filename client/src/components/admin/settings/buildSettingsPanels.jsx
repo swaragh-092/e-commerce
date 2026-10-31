@@ -595,7 +595,7 @@ function buildAdvancedPanel(ctx) {
           severity="info"
           sx={{ mb: 2.5 }}
           action={(
-            <Button component={Link} to="/admin/store-designer?component=customCss" size="small" color="inherit">
+            <Button component={Link} to="/admin/store-designer?component=customCss" target="_blank" rel="noopener noreferrer" size="small" color="inherit">
               Open CSS editor
             </Button>
           )}
