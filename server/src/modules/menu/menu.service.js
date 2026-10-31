@@ -5,6 +5,8 @@ const { Op } = Sequelize;
 const AppError = require('../../utils/AppError');
 const { generateSlug } = require('../../utils/slugify');
 
+const { pageChildren, paginateMenu } = require('./menu.pagination');
+
 const SORT_ORDER = [['sortOrder', 'ASC'], ['createdAt', 'ASC']];
 
 const normalizeEmpty = (value) => (value === '' ? null : value);
@@ -53,7 +55,8 @@ const buildTree = (items = []) => {
         list.sort((a, b) =>
             String(a.placement || '').localeCompare(String(b.placement || '')) ||
             (a.sortOrder || 0) - (b.sortOrder || 0) ||
-            String(a.label || '').localeCompare(String(b.label || ''))
+            String(a.label || '').localeCompare(String(b.label || '')) ||
+            String(a.id).localeCompare(String(b.id))
         );
         list.forEach((item) => sortNodes(item.children));
     };
@@ -100,6 +103,7 @@ const expandCategoryTrees = async (items) => {
                 openInNewTab: false,
                 syncChildren: true,
                 generatedFromCategory: true,
+                childDisplayLimit: item.childDisplayLimit ?? null,
                 children: makeChildren(category.id, id, syncRootId, item),
             };
         });
@@ -286,17 +290,17 @@ const processPublicMenu = async (menu, cacheKey) => {
     if (!menu) return null;
 
     const plain = toPlain(menu);
-    const tree = await expandCategoryTrees(buildTree(plain.items || []));
+    const tree = await expandCategoryTrees(buildTree(plain.items || []).filter(item => !item.parentId));
     const result = { ...plain, items: await resolveTreeUrls(tree) };
     
     const hasSyncedCategories = (items = []) => items.some((item) =>
         item.targetType === 'category_tree' || (item.targetType === 'category' && item.syncChildren) ||
         hasSyncedCategories(item.children || []));
-    if (!hasSyncedCategories(plain.items || [])) setCache(cacheKey, result);
+    if (cacheKey && !hasSyncedCategories(plain.items || [])) setCache(cacheKey, result);
     return result;
 };
 
-exports.getPublicMenuByLocation = async (location) => {
+const getFullPublicMenuByLocation = async (location) => {
     if (typeof location !== 'string') throw new AppError('INVALID_INPUT', 400);
     const sanitizedLocation = encodeURIComponent(location).replace(/['"*]/g, '');
     
@@ -323,7 +327,7 @@ exports.getPublicMenuByLocation = async (location) => {
     return processPublicMenu(plain, cacheKey);
 };
 
-exports.getPublicMenuBySlug = async (slug) => {
+const getFullPublicMenuBySlug = async (slug) => {
     if (typeof slug !== 'string') throw new AppError('INVALID_INPUT', 400);
     const sanitizedSlug = encodeURIComponent(slug).replace(/['"*]/g, '');
     
@@ -343,6 +347,28 @@ exports.getPublicMenuBySlug = async (slug) => {
     });
 
     return processPublicMenu(menu, cacheKey);
+};
+
+
+exports.getPublicMenuByLocation = async (location) => paginateMenu(await getFullPublicMenuByLocation(location));
+exports.getPublicMenuBySlug = async (slug) => paginateMenu(await getFullPublicMenuBySlug(slug));
+exports.getPublicMenuChildren = async (menuId, itemId, { offset = 0, limit } = {}) => {
+    const menu = await Menu.findOne({
+        where: { id: menuId, isActive: true },
+        include: [{ model: MenuItem, as: 'items', required: false, where: { isVisible: true } }],
+    });
+    const full = await processPublicMenu(menu);
+    const find = (items) => {
+        for (const item of items) {
+            if (item.id === itemId) return item;
+            const found = find(item.children || []);
+            if (found) return found;
+        }
+        return null;
+    };
+    const parent = full && find(full.items);
+    if (!parent) throw new AppError('NOT_FOUND', 404, 'Public menu item not found');
+    return pageChildren(parent.children || [], limit || parent.childDisplayLimit || 30, offset);
 };
 
 

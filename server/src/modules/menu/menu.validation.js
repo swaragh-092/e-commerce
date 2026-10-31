@@ -99,6 +99,7 @@ const createMenuItemSchema = Joi.object({
         then: Joi.required(),
         otherwise: Joi.allow(null, '')
     }),
+    childDisplayLimit: Joi.number().integer().min(1).max(100).allow(null),
     syncChildren: Joi.boolean().default(false),
     url: safeUrlSchema.when('targetType', {
         is: Joi.valid('custom_url', 'system_route'),
@@ -121,6 +122,7 @@ const updateMenuItemSchema = Joi.object({
         then: Joi.required(),
         otherwise: Joi.allow(null, '')
     }),
+    childDisplayLimit: Joi.number().integer().min(1).max(100).allow(null),
     syncChildren: Joi.boolean(),
     url: safeUrlSchema.when('targetType', {
         is: Joi.valid('custom_url', 'system_route'),
@@ -183,7 +185,18 @@ const menuItemIdParamSchema = Joi.object({
 });
 
 
+const publicChildrenParamsSchema = Joi.object({
+    menuId: Joi.string().uuid().required(),
+    itemId: Joi.string().max(200).required(),
+});
+const publicChildrenQuerySchema = Joi.object({
+    offset: Joi.number().integer().min(0).max(1000000).default(0),
+    limit: Joi.number().integer().min(1).max(100),
+});
+
 module.exports = {
+    publicChildrenParamsSchema,
+    publicChildrenQuerySchema,
     createMenuSchema,
     updateMenuSchema,
     createMenuItemSchema,

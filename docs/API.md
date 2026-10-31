@@ -467,3 +467,11 @@ exact-name filtering is used only when no canonical slug matches.
 Run `cd server && npm run migrate` before deploying this version; migration
 `20261028100000-add-tag-description.js` adds the description column with an empty
 string default for existing records.
+
+### Public menu child batches
+
+Menu items can optionally return children in batches. The public menu response
+includes `childrenPagination` when a parent has a configured limit; clients can
+fetch subsequent batches from the public menu children endpoint. See the
+[menu child pagination reference](api/menu-child-pagination.md) for endpoint
+parameters, response examples, and migration details.

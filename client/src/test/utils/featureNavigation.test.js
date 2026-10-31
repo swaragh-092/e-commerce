@@ -12,6 +12,10 @@ describe('Disabled content navigation', () => {
     expect(filterFeatureLinks(links, { blogs: false, gallery: false })).toEqual([links[0], links[3]]);
     expect(getNavigationFeature('/blogs?tag=latest')).toBe('blogs');
   });
+  it('retains a heading with more pages even if the current batch contains only disabled features', () => {
+    const parent = { targetType: 'none', children: [{ url: '/blogs' }], childrenPagination: { hasMore: true, nextOffset: 1 } };
+    expect(filterFeatureLinks([parent], { blogs: false })).toEqual([{ ...parent, children: [] }]);
+  });
   it('does not loop through a disabled admin feature as the only landing page', () => {
     for (const key of ['newsletter', 'gallery', 'blogs', 'pages', 'reviews', 'customers']) {
       expect(getFirstAccessibleAdminPath({ permissions: [`${key}.read`] }, { [key]: false })).toBeNull();

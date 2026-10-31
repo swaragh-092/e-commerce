@@ -3,6 +3,13 @@
 const MenuService = require('./menu.service');
 const { success } = require('../../utils/response');
 
+exports.getPublicMenuChildren = async (req, res, next) => {
+    try {
+        const page = await MenuService.getPublicMenuChildren(req.params.menuId, req.params.itemId, req.query);
+        return success(res, page, 'Menu children retrieved successfully');
+    } catch (err) { next(err); }
+};
+
 exports.getPublicMenu = async (req, res, next) => {
     try { 
         const menu = await MenuService.getPublicMenuByLocation(req.params.location);
