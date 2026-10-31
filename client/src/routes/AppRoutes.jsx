@@ -55,6 +55,7 @@ const RegisterPage = lazy(() => import('../pages/storefront/RegisterPage'));
 const ForgotPasswordPage = lazy(() => import('../pages/storefront/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('../pages/storefront/ResetPasswordPage'));
 const VerifyEmailPage = lazy(() => import('../pages/storefront/VerifyEmailPage'));
+const VerifyEmailChangePage = lazy(() => import('../pages/storefront/VerifyEmailChangePage'));
 const OAuthCallbackPage = lazy(() => import('../pages/storefront/OAuthCallbackPage'));
 const AccountPage = lazy(() => import('../pages/storefront/AccountPage'));
 const AllOrdersPage = lazy(() => import('../pages/storefront/AllOrdersPage/index'));
@@ -178,6 +179,7 @@ const AppRoutes = () => (
         <Route path="forgot-password" element={<ForgotPasswordPage />} />
         <Route path="reset-password" element={<ResetPasswordPage />} />
         <Route path="verify-email" element={<VerifyEmailPage />} />
+        <Route path="verify-email-change" element={<VerifyEmailChangePage />} />
         <Route path="oauth/callback" element={<OAuthCallbackPage />} />
 
         {/* Feature-gated: cart & checkout — hidden in catalog mode */}
