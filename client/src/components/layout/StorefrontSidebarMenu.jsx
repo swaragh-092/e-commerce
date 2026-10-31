@@ -2,6 +2,8 @@ import React from 'react';
 import { Box, Divider, Link as MuiLink, List, ListItemButton, ListItemText, Paper, Typography } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import MenuService from '../../services/menuService';
+import MenuChildrenMore from './MenuChildrenMore';
+import { appendMenuChildren } from '../../utils/menuPagination';
 import { isExternalUrl } from '../../utils/urls';
 
 const isNavigableItem = (item) => item?.targetType !== 'none' && item?.url && item.url !== '#';
@@ -10,6 +12,7 @@ const flattenVisibleItems = (items = [], depth = 0, rows = []) => {
   items.forEach((item) => {
     rows.push({ ...item, depth });
     flattenVisibleItems(item.children || [], depth + 1, rows);
+    if (item.childrenPagination?.hasMore) rows.push({ id: `more:${item.id}`, moreParent: item, depth: depth + 1 });
   });
   return rows;
 };
@@ -45,7 +48,7 @@ const StorefrontSidebarMenu = ({ title = 'Quick Links', onNavigate }) => {
     };
   }, []);
 
-  const items = flattenVisibleItems(menu?.items || []).filter(isNavigableItem);
+  const items = flattenVisibleItems(menu?.items || []).filter(item => item.moreParent || isNavigableItem(item));
   if (!items.length) return null;
 
   return (
@@ -55,7 +58,11 @@ const StorefrontSidebarMenu = ({ title = 'Quick Links', onNavigate }) => {
       </Typography>
       <Divider sx={{ mb: 1 }} />
       <List dense disablePadding>
-        {items.map((item) => (
+        {items.map((item) => item.moreParent ? (
+          <MenuChildrenMore key={item.id} item={item.moreParent}
+            onLoaded={(menuId, parentId, page) => setMenu(current => appendMenuChildren(current, menuId, parentId, page))}
+            sx={{ pl: 1 + item.depth * 2 }} />
+        ) : (
           <ListItemButton
             key={item.id}
             {...getLinkProps(item)}

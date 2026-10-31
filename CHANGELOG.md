@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## [1.2.0.0] - 2026-10-31
+
+### Added
+- Let admins set how many child links appear at first in a menu, then let storefront visitors load more items in batches through the public menu API.
+
 ## [1.1.2.3] - 2026-10-29
 
 ### Changed

@@ -6,6 +6,11 @@ const MenuService = {
     return response.data;
   },
 
+  getPublicMenuChildren: async (menuId, itemId, params) => {
+    const response = await api.get(`/menus/public/${encodeURIComponent(menuId)}/items/${encodeURIComponent(itemId)}/children`, { params });
+    return response.data;
+  },
+
   adminGetMenus: async (params) => {
     const response = await api.get('/menus', { params });
     return response.data;

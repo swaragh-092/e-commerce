@@ -559,6 +559,7 @@ pending_payment → confirmed → processing → shipped → delivered
 | **Menu CRUD** | Create/edit/delete menus with name, slug, location (header/footer/sidebar) |
 
 | **Menu Items** | Add/reorder/edit/delete items with parent-child hierarchy |
+| **Child Batches** | Choose how many child links appear initially and let storefront visitors load additional batches |
 
 | **Link Types** | Link to pages, categories, products, or custom URLs |
 
@@ -571,6 +572,8 @@ pending_payment → confirmed → processing → shipped → delivered
 - Dynamic navigation links in header, footer, and sidebar
 
 - Configurable menu structure without code changes
+
+See the [menu child pagination guide](api/menu-child-pagination.md) for the setting and public API contract.
 
 ---
 

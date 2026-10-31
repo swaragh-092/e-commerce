@@ -1,6 +1,6 @@
 # Documentation Index
 
-> Last updated: 2026-05-29
+> Last updated: 2026-10-31
 
 ## Reading Order
 
@@ -31,6 +31,8 @@
 | [DATABASE.md](DATABASE.md) | PostgreSQL schema, Sequelize models, UUID conventions, soft delete, JSONB patterns |
 | [DATABASE-VISUALIZATION.md](DATABASE-VISUALIZATION.md) | Visual entity-relationship diagrams |
 | [API.md](API.md) | Complete REST API endpoint reference with auth, params, and responses |
+| [Menu child pagination](api/menu-child-pagination.md) | Configure menu child batches and consume the public “load more” API |
+| [ADR-0013: Configurable menu child batches](adr/0013-menu-child-pagination.md) | Why menu child pagination uses configurable batches and offset paging |
 | [KIDS_DATABASE_EXPLANATION.md](KIDS_DATABASE_EXPLANATION.md) | Simplified database explainer (onboarding aid) |
 | [SHOPIFY-ARCHITECTURE-COMPARISON.md](SHOPIFY-ARCHITECTURE-COMPARISON.md) | Real-world architectural comparison with Shopify |
 
@@ -46,6 +48,7 @@
 | [SHIPPING-SYSTEM.md](SHIPPING-SYSTEM.md) | Shipping rate engine, zones, carriers, volumetric weight, COD, fulfillment, webhook tracking |
 | [SEO.md](SEO.md) | SEO meta tag management, URL overrides, canonical URLs, social OG tags, Google snippet preview |
 | [MEDIA.md](MEDIA.md) | Media upload, storage, library UI, picker/uploader components |
+| [Menu child pagination](api/menu-child-pagination.md) | Menu Builder setup, public API pagination, and deployment migration |
 
 ### Operations & Security
 | Doc | What It Covers |
@@ -58,7 +61,7 @@
 ### Agent Rules
 | Doc | What It Covers |
 |-----|---------------|
-| [../GEMINI.md](../GEMINI.md) | Standing agent rules for this workspace |
+| [Copilot Instructions](../.github/copilot-instructions.md) | Repository-specific guidance for AI coding assistants |
 
 ---
 

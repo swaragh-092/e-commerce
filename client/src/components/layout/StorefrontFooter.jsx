@@ -16,6 +16,8 @@ import { useSettings } from '../../hooks/useSettings';
 import { useTheme } from '@mui/material/styles';
 import PageService from '../../services/pageService';
 import MenuService from '../../services/menuService';
+import MenuChildrenMore from './MenuChildrenMore';
+import { appendMenuChildren } from '../../utils/menuPagination';
 import { filterFeatureLinks } from '../../utils/featureNavigation';
 import { isExternalUrl } from '../../utils/urls';
 
@@ -77,10 +79,12 @@ const StorefrontFooter = () => {
     items.forEach((item) => {
       acc.push(item);
       flattenMenuItems(item.children || [], acc);
+      if (item.childrenPagination?.hasMore) acc.push({ id: `more:${item.id}`, moreParent: item });
     });
     return acc;
   };
   const toFooterLink = (link) => {
+    if (link.moreParent) return link;
     const label = link?.label || link?.title || link?.name || '';
     const url = link?.url || (link?.slug ? `/p/${link.slug}` : '');
     if (!label || !url || url === '#') return null;
@@ -93,7 +97,7 @@ const StorefrontFooter = () => {
   const dedupeLinks = (links) => {
     const seen = new Set();
     return links.filter((link) => {
-      const key = `${link.label}|${link.url}`;
+      const key = link.moreParent ? link.id : `${link.label}|${link.url}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -101,7 +105,7 @@ const StorefrontFooter = () => {
   };
   const menuLinks = flattenMenuItems(footerMenu?.items || [])
     .filter((item) =>
-      item.targetType !== 'none' &&
+      item.moreParent || item.targetType !== 'none' &&
       (!item.placement || ['quick_links', 'footer_column', 'center', 'left', 'right'].includes(item.placement))
     )
     .map(toFooterLink)
@@ -206,7 +210,10 @@ const StorefrontFooter = () => {
                   'flex-start'
                 }
               >
-                {allLinks.map((link, i) => (
+                {allLinks.map((link, i) => link.moreParent ? (
+                  <MenuChildrenMore key={link.id} item={link.moreParent}
+                    onLoaded={(menuId, parentId, page) => setFooterMenu(current => appendMenuChildren(current, menuId, parentId, page))} />
+                ) : (
                   <MuiLink
                     key={i}
                     component={isExternalUrl(link.url) ? 'a' : RouterLink}

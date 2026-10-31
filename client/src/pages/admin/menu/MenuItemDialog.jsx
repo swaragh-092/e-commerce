@@ -207,6 +207,19 @@ const MenuItemDialog = ({
               Display & Visibility
             </Typography>
             <Grid container spacing={3} alignItems="center">
+              <Grid item xs={12}>
+                <TextField
+                  select
+                  fullWidth
+                  label="Children per batch"
+                  value={itemForm.childDisplayLimit ?? ''}
+                  onChange={(event) => setItemForm({ ...itemForm, childDisplayLimit: event.target.value === '' ? null : Number(event.target.value) })}
+                  helperText="Show this many child items initially. Customers can click Show more for the next batch. Also applies to synced category branches."
+                >
+                  <MenuItem value="">Show all</MenuItem>
+                  {[...new Set([5, 10, 20, 30, 50, 100, ...(itemForm.childDisplayLimit ? [itemForm.childDisplayLimit] : [])])].sort((a, b) => a - b).map(limit => <MenuItem key={limit} value={limit}>{limit} items</MenuItem>)}
+                </TextField>
+              </Grid>
               <Grid item xs={12} md={4}>
                 <FormControl fullWidth>
                   <InputLabel>Placement</InputLabel>
