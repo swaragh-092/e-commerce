@@ -84,7 +84,6 @@ const MENU_STRUCTURE = [
       { text: 'Categories', path: '/admin/categories', icon: <CategoryIcon />, permission: PERMISSIONS.CATEGORIES_READ },
       { text: 'Brands', path: '/admin/brands', icon: <LocalOfferIcon />, permissions: [PERMISSIONS.BRANDS_READ, PERMISSIONS.BRANDS_MANAGE, PERMISSIONS.PRODUCTS_READ] },
       { text: 'Attributes', path: '/admin/attributes', icon: <TuneIcon />, permission: PERMISSIONS.ATTRIBUTES_READ },
-      { text: 'Gallery', path: '/admin/gallery', feature: 'gallery', icon: <PhotoLibraryIcon />, permission: PERMISSIONS.GALLERY_READ },
     ]
   },
   {
@@ -104,6 +103,8 @@ const MENU_STRUCTURE = [
     icon: <DescriptionIcon />,
     items: [
       { text: 'Media', path: '/admin/media', icon: <PhotoLibraryIcon />, permission: PERMISSIONS.MEDIA_READ },
+      { text: 'Gallery', path: '/admin/gallery', feature: 'gallery', icon: <PhotoLibraryIcon />, permission: PERMISSIONS.GALLERY_READ },
+      { text: 'Newsletter', path: '/admin/newsletter', feature: 'newsletter', icon: <MailOutlineIcon />, permissions: [PERMISSIONS.NEWSLETTER_READ, PERMISSIONS.NEWSLETTER_SUBSCRIBERS_READ] },
       { text: 'Pages', path: '/admin/pages', icon: <DescriptionIcon />, feature: 'pages', permission: PERMISSIONS.PAGES_READ },
       { text: 'Menu Builder', path: '/admin/menus', icon: <AccountTreeIcon />, permission: PERMISSIONS.MENUS_READ },
       { text: 'API Builder', path: '/admin/api-builder', icon: <ApiIcon />, feature: 'apiBuilder', permission: PERMISSIONS.API_BUILDER_READ },
@@ -126,7 +127,6 @@ const MENU_STRUCTURE = [
       { text: 'General', path: '/admin/settings', icon: <SettingsIcon />, permission: PERMISSIONS.SETTINGS_READ },
       { text: 'Store Templates', path: '/admin/themes', icon: <PhotoLibraryIcon />, feature: 'themes', permission: PERMISSIONS.SETTINGS_READ },
       { text: 'Store Designer', path: '/admin/store-designer', icon: <PhotoLibraryIcon />, feature: 'themes', permission: PERMISSIONS.SETTINGS_MANAGE, newTab: true },
-      { text: 'Newsletter', path: '/admin/newsletter', feature: 'newsletter', icon: <MailOutlineIcon />, permissions: [PERMISSIONS.NEWSLETTER_READ, PERMISSIONS.NEWSLETTER_SUBSCRIBERS_READ] },
       { text: 'Notifications', path: '/admin/email-templates', icon: <MailOutlineIcon />, permissions: [PERMISSIONS.SETTINGS_READ, PERMISSIONS.NOTIFICATIONS_MANAGE] },
       { text: 'Payment Gateways', path: '/admin/payment-gateways', icon: <PaymentIcon />, feature: 'payments', permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
       { text: 'Shipping', path: '/admin/shipping', icon: <LocalShippingIcon />, feature: 'shipping', permission: PERMISSIONS.SETTINGS_MANAGE, mode: 'ecommerce' },

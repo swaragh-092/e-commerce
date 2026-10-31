@@ -343,10 +343,23 @@ class EnquiryService {
     const transaction = await sequelize.transaction();
 
     try {
-      if (enquiry.status === 'pending') {
-        enquiry.status = 'responded';
-        await enquiry.save({ transaction });
-      }
+      // Serialize replies on this enquiry so simultaneous staff replies are retained.
+      const current = await Enquiry.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+      if (!current) throw new AppError('NOT_FOUND', 404, 'Enquiry not found');
+      const sender = adminUserId ? await User.findByPk(adminUserId, {
+        attributes: ['id', 'firstName', 'lastName', 'email'], transaction,
+      }) : null;
+      current.status = current.status === 'pending' ? 'responded' : current.status;
+      current.replies = [...(current.replies || []), {
+        id: templateVars.notification_event_id,
+        message: replyMessage.trim(),
+        senderId: adminUserId,
+        senderName: sender ? [sender.firstName, sender.lastName].filter(Boolean).join(' ') || sender.email : 'Staff',
+        createdAt: new Date().toISOString(),
+      }];
+      await current.save({ transaction });
+      enquiry.status = current.status;
+      enquiry.replies = current.replies;
 
       const routed = await notificationService.sendEvent('enquiry_replied', { variables: templateVars, transaction });
       const queued = routed === null ? await notificationService.send(
@@ -367,6 +380,7 @@ class EnquiryService {
     } catch (err) {
       await transaction.rollback();
       console.error('[EnquiryService] Failed to send reply email and update status:', err);
+      if (err instanceof AppError && err.statusCode < 500) throw err;
       throw new AppError('INTERNAL_SERVER_ERROR', 500, 'Failed to send reply email');
     }
 
