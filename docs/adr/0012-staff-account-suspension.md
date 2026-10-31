@@ -1,7 +1,9 @@
 # 0012 — Staff account suspension in Access Control
 
-**Status:** accepted  
-**Date:** 2026-10-31  
+**Status:** accepted
+
+**Date:** 2026-10-31
+
 **Spec:** none
 
 ## Context
