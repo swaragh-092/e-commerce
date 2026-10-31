@@ -292,21 +292,33 @@ class EnquiryService {
   /**
    * Update enquiry status
    */
-  async updateStatus(id, status) {
-    const validStatuses = ['pending', 'responded', 'closed'];
+  async updateStatus(id, status, adminUserId = null) {
+    const validStatuses = ['pending', 'responded', 'closed', 'closed_converted', 'closed_lost'];
     if (!validStatuses.includes(status)) {
       throw new AppError('VALIDATION_ERROR', 400, 'Invalid status');
     }
-
-    const enquiry = await Enquiry.findByPk(id);
-    if (!enquiry) {
-      throw new AppError('NOT_FOUND', 404, 'Enquiry not found');
-    }
-
-    enquiry.status = status;
-    await enquiry.save();
-
-    return enquiry;
+    return sequelize.transaction(async (transaction) => {
+      const enquiry = await Enquiry.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+      if (!enquiry) throw new AppError('NOT_FOUND', 404, 'Enquiry not found');
+      if (enquiry.status === status) return enquiry;
+      enquiry.status = status;
+      await enquiry.save({ transaction });
+      if (['closed_converted', 'closed_lost'].includes(status)) {
+        const product = enquiry.productId ? await Product.findByPk(enquiry.productId, { transaction }) : null;
+        const variables = {
+          enquiry_id: enquiry.id, notification_event_id: require('crypto').randomUUID(),
+          customerName: enquiry.name, message: enquiry.message,
+          productName: product?.name || (enquiry.cartItems ? 'Cart Items' : 'General Enquiry'),
+          status_label: status === 'closed_converted' ? 'Closed – Converted' : 'Closed – Lost',
+        };
+        const event = `enquiry_${status}`;
+        const routed = await notificationService.sendEvent(event, { variables, transaction });
+        if (routed === null) {
+          await notificationService.send(`${event}_customer`, enquiry.email, variables, adminUserId, null, 'email', transaction);
+        }
+      }
+      return enquiry;
+    });
   }
 
   /**

@@ -385,7 +385,7 @@ const AdminLayout = () => {
               borderRadius: isNested ? '9px' : '12px',
               mb: 0.5,
               py: isNested ? 0.75 : 1,
-              pl: isNested ? (itemCollapsed ? 1.5 : 2) : 2.5,
+              pl: itemCollapsed ? (isNested ? 1.5 : 2.5) : 1.5,
               pr: itemCollapsed ? 0 : 4,
               justifyContent: itemCollapsed ? 'center' : 'initial',
               bgcolor: isNested ? 'background.paper' : 'transparent',
@@ -486,6 +486,7 @@ const AdminLayout = () => {
                 }}
                 sx={{
                   mx: 1,
+                  pl: navCollapsed ? undefined : 1,
                   borderRadius: 2,
                   justifyContent: navCollapsed ? 'center' : 'initial',
                   '&:hover .drag-handle': { opacity: 0.5 }

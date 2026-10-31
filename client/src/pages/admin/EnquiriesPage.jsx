@@ -36,6 +36,7 @@ import { useNotification } from '../../context/NotificationContext';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
 
+const STATUS_LABELS = { pending: 'Pending', responded: 'Responded', closed: 'Closed (legacy)', closed_converted: 'Closed – Converted', closed_lost: 'Closed – Lost' };
 const ADMIN_PREFIX = import.meta.env.VITE_ADMIN_ROUTE_PREFIX || 'admin';
 
 const useDebounceValue = (value, delay) => {
@@ -59,6 +60,7 @@ const EnquiriesPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [replyMode, setReplyMode] = useState(false);
   const [replyMessage, setReplyMessage] = useState('');
+  const [statusLoading, setStatusLoading] = useState(false);
   const [replyLoading, setReplyLoading] = useState(false);
   const [replyFeedback, setReplyFeedback] = useState(null);
   const [copiedField, setCopiedField] = useState('');
@@ -99,17 +101,21 @@ const EnquiriesPage = () => {
   }, [statusFilter, debouncedSearchQuery]);
 
   const handleStatusChange = async (id, newStatus) => {
+    if (statusLoading) return;
+    setStatusLoading(true);
     try {
       await api.patch(`/${ADMIN_PREFIX}/enquiries/${id}/status`, { status: newStatus });
       setRows((prev) =>
         prev.map((eq) => (eq.id === id ? { ...eq, status: newStatus } : eq))
       );
       if (selectedEnquiry && selectedEnquiry.id === id) {
-        setSelectedEnquiry((prev) => ({ ...prev, status: newStatus }));
+        setSelectedEnquiry((prev) => prev?.id === id ? { ...prev, status: newStatus } : prev);
       }
       notify('Enquiry status updated successfully', 'success');
     } catch (err) {
       notify(getApiErrorMessage(err, 'Failed to update status'), 'error');
+    } finally {
+      setStatusLoading(false);
     }
   };
 
@@ -153,7 +159,9 @@ const EnquiriesPage = () => {
     switch (status) {
       case 'pending': return 'warning';
       case 'responded': return 'info';
-      case 'closed': return 'success';
+      case 'closed_converted': return 'success';
+      case 'closed_lost': return 'error';
+      case 'closed': return 'default';
       default: return 'default';
     }
   };
@@ -199,8 +207,8 @@ const EnquiriesPage = () => {
     {
       field: 'status',
       headerName: 'Status',
-      width: 130,
-      renderCell: ({ value }) => <Chip label={value} size="small" color={getStatusColor(value)} />,
+      width: 190,
+      renderCell: ({ value }) => <Chip label={STATUS_LABELS[value] || value} size="small" color={getStatusColor(value)} />,
     },
     {
       field: 'actions',
@@ -256,7 +264,9 @@ const EnquiriesPage = () => {
                 <MenuItem value="">All</MenuItem>
                 <MenuItem value="pending">Pending</MenuItem>
                 <MenuItem value="responded">Responded</MenuItem>
-                <MenuItem value="closed">Closed</MenuItem>
+                <MenuItem value="closed_converted">Closed – Converted</MenuItem>
+                <MenuItem value="closed_lost">Closed – Lost</MenuItem>
+                <MenuItem value="closed">Closed (legacy)</MenuItem>
               </Select>
             </FormControl>
           </Box>
@@ -317,7 +327,7 @@ const EnquiriesPage = () => {
               <Typography variant="body2" color="text.secondary">
                 {new Date(selectedEnquiry.createdAt || selectedEnquiry.created_at).toLocaleString()}
               </Typography>
-              <Chip size="small" label={selectedEnquiry.status} color={getStatusColor(selectedEnquiry.status)} />
+              <Chip size="small" label={STATUS_LABELS[selectedEnquiry.status] || selectedEnquiry.status} color={getStatusColor(selectedEnquiry.status)} />
             </Stack>
             <IconButton aria-label="Close enquiry" onClick={closeDialog} disabled={replyLoading} sx={{ position: 'absolute', top: 12, right: 12 }}><CloseIcon /></IconButton>
           </DialogTitle>
@@ -392,16 +402,17 @@ const EnquiriesPage = () => {
 
             <Box>
               <Typography variant="subtitle2" color="text.secondary" gutterBottom>Change Status</Typography>
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                {['pending', 'responded', 'closed'].map((status) => (
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                {['pending', 'responded', 'closed_converted', 'closed_lost'].map((status) => (
                   <Button
                     key={status}
                     size="small"
                     variant={selectedEnquiry.status === status ? 'contained' : 'outlined'}
                     color={getStatusColor(status)}
+                    disabled={statusLoading || replyLoading || selectedEnquiry.status === status}
                     onClick={() => handleStatusChange(selectedEnquiry.id, status)}
                   >
-                    {status}
+                    {STATUS_LABELS[status]}
                   </Button>
                 ))}
               </Box>
@@ -428,14 +439,14 @@ const EnquiriesPage = () => {
             {replyFeedback && <Alert severity={replyFeedback.type} role="status" sx={{ mr: 'auto' }}>{replyFeedback.message}</Alert>}
             <Button onClick={closeDialog} disabled={replyLoading}>Close</Button>
             {!replyMode ? (
-              <Button onClick={() => { setReplyMode(true); setReplyFeedback(null); }} variant="contained" startIcon={<ReplyIcon />}>
+              <Button disabled={statusLoading} onClick={() => { setReplyMode(true); setReplyFeedback(null); }} variant="contained" startIcon={<ReplyIcon />}>
                 Reply via Email
               </Button>
             ) : (
               <Button
                 onClick={handleReply}
                 variant="contained"
-                disabled={replyLoading || !replyMessage.trim()}
+                disabled={statusLoading || replyLoading || !replyMessage.trim()}
               >
                 {replyLoading ? <CircularProgress size={24} color="inherit" /> : 'Send Reply'}
               </Button>
