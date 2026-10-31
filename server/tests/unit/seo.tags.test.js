@@ -22,6 +22,13 @@ describe('tag SEO', () => {
     expect(html).toContain('Summer Planting | Store');
     expect(html).toContain('"@type":"CollectionPage"');
   });
+  it('normalizes long trailing slash runs without a regex and rejects nested tag paths', async () => {
+    const getPublicTag = vi.spyOn(tags, 'getPublicTagBySlug').mockResolvedValue({ name: 'Summer', slug: 'summer', description: '' });
+    const metadata = await seo.getMetadataByPath(`/tags/summer${'/'.repeat(5000)}?sort=price`);
+    expect(metadata.canonicalUrl).toBe('https://shop.example.test/tags/summer');
+    await expect(seo.getMetadataByPath('/tags/summer/extra')).rejects.toMatchObject({ statusCode: 404 });
+    expect(getPublicTag).toHaveBeenCalledTimes(1);
+  });
   it('uses a useful fallback description and excludes unavailable tags even when SEO overrides exist', async () => {
     vi.spyOn(tags, 'getPublicTagBySlug').mockResolvedValueOnce({ name: 'Summer', slug: 'summer', description: '' }).mockRejectedValue({ statusCode: 404 });
     expect((await seo.getMetadataByPath('/tags/summer')).description).toBe('Browse products tagged Summer.');

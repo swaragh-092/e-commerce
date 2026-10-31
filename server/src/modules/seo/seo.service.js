@@ -193,14 +193,18 @@ class SeoService {
     if (typeof urlPath !== 'string' || !urlPath.startsWith('/') || urlPath.startsWith('//')) {
       throw new AppError('VALIDATION_ERROR', 400, 'A local page path is required.');
     }
-    urlPath = urlPath.split(/[?#]/)[0].replace(/\/+$/, '') || '/';
+    const queryIndex = urlPath.indexOf('?');
+    const hashIndex = urlPath.indexOf('#');
+    const delimiterIndex = [queryIndex, hashIndex].filter((index) => index !== -1).reduce((first, index) => Math.min(first, index), urlPath.length);
+    urlPath = urlPath.slice(0, delimiterIndex);
+    while (urlPath.length > 1 && urlPath.endsWith('/')) urlPath = urlPath.slice(0, -1);
     // Validate public visibility before resolving overrides for tag URLs.
     let tag = null;
-    const tagMatch = urlPath.match(/^\/tags\/([^\/\?#]+)\/?(?:[\?#].*)?$/);
     if (urlPath.startsWith('/tags/')) {
-      if (!tagMatch) throw new AppError('NOT_FOUND', 404, 'Tag not found.');
+      const tagSlugPath = urlPath.slice('/tags/'.length);
+      if (!tagSlugPath || tagSlugPath.includes('/')) throw new AppError('NOT_FOUND', 404, 'Tag not found.');
       let slug;
-      try { slug = decodeURIComponent(tagMatch[1]); }
+      try { slug = decodeURIComponent(tagSlugPath); }
       catch (_) { throw new AppError('NOT_FOUND', 404, 'Tag not found.'); }
       tag = await tagService.getPublicTagBySlug(slug);
     }
