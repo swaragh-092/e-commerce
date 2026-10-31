@@ -7,8 +7,11 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
   IconButton,
+  MenuItem,
   Paper,
+  Select,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -28,6 +31,7 @@ const BlogsManagePage = () => {
   const [rowCount, setRowCount] = useState(0);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [savingStatuses, setSavingStatuses] = useState(() => new Set());
 
   const navigate = useNavigate();
   const { notify } = useNotification();
@@ -70,6 +74,31 @@ const BlogsManagePage = () => {
     }
   };
 
+  const handleStatusChange = async (post, nextStatus) => {
+    if (!canManageBlogs || !post?.id || nextStatus === post.status || savingStatuses.has(post.id)) return;
+
+    const previousStatus = post.status;
+    setSavingStatuses((current) => new Set(current).add(post.id));
+    setRows((current) => current.map((row) => row.id === post.id ? { ...row, status: nextStatus } : row));
+    try {
+      const response = await BlogService.adminUpdatePost(post.id, { status: nextStatus });
+      const savedPost = response?.data;
+      if (savedPost) {
+        setRows((current) => current.map((row) => row.id === post.id ? { ...row, ...savedPost } : row));
+      }
+      notify(`Blog post status updated to ${nextStatus}.`, 'success');
+    } catch (error) {
+      setRows((current) => current.map((row) => row.id === post.id ? { ...row, status: previousStatus } : row));
+      notify(getApiErrorMessage(error, 'Failed to update blog post status.'), 'error');
+    } finally {
+      setSavingStatuses((current) => {
+        const next = new Set(current);
+        next.delete(post.id);
+        return next;
+      });
+    }
+  };
+
   const columns = useMemo(() => ([
     {
       field: 'title',
@@ -94,7 +123,31 @@ const BlogsManagePage = () => {
       field: 'status',
       headerName: 'Status',
       width: 120,
-      renderCell: (params) => <Chip size="small" label={params.value} color={params.value === 'published' ? 'success' : 'default'} />,
+      renderCell: (params) => {
+        const status = params.value || params.row.status || 'draft';
+        if (!canManageBlogs) {
+          return <Chip size="small" label={status} color={status === 'published' ? 'success' : 'default'} />;
+        }
+
+        return (
+          <FormControl size="small" variant="standard" fullWidth>
+            <Select
+              value={status}
+              onChange={(event) => handleStatusChange(params.row, event.target.value)}
+              disabled={savingStatuses.has(params.row.id)}
+              disableUnderline
+              inputProps={{ 'aria-label': `Status for ${params.row.title}` }}
+              sx={{ '& .MuiSelect-select': { py: 0.5 } }}
+              renderValue={(value) => (
+                <Chip size="small" label={value} color={value === 'published' ? 'success' : 'default'} />
+              )}
+            >
+              <MenuItem value="draft">Draft</MenuItem>
+              <MenuItem value="published">Published</MenuItem>
+            </Select>
+          </FormControl>
+        );
+      },
     },
     {
       field: 'displayDate',
@@ -137,7 +190,7 @@ const BlogsManagePage = () => {
         </Box>
       ),
     },
-  ]), [canManageBlogs, navigate]);
+  ]), [canManageBlogs, navigate, savingStatuses]);
 
   return (
     <Box p={3}>
