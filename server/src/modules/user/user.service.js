@@ -43,8 +43,9 @@ const assertCustomerManagementTarget = (user) => {
   }
 };
 
-const getMe = async (userId) => {
+const getMe = async (userId, options = {}) => {
   const user = await User.findByPk(userId, {
+    transaction: options.transaction,
     include: [
       { model: UserProfile, as: 'profile' },
       ...authzInclude,
@@ -108,7 +109,9 @@ const updateMe = async (userId, payload) => {
     }
     
     // fetch updated record
-    const updatedUser = await getMe(userId);
+    // Read the profile through the same transaction so the response includes
+    // this update even before the transaction commits.
+    const updatedUser = await getMe(userId, { transaction: t });
 
     try {
       if (AuditService && AuditService.log) {
