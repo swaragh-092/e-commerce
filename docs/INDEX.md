@@ -61,7 +61,7 @@
 ### Agent Rules
 | Doc | What It Covers |
 |-----|---------------|
-| [../GEMINI.md](../GEMINI.md) | Standing agent rules for this workspace |
+| [Copilot Instructions](../.github/copilot-instructions.md) | Repository-specific guidance for AI coding assistants |
 
 ---
 
