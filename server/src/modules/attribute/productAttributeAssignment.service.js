@@ -7,6 +7,7 @@ const { validateAttributeCategory, validateValueUnit } = require('./attributeUni
 const { generateSlug } = require('../../utils/slugify');
 const AppError = require('../../utils/AppError');
 const { assertVariableProduct } = require('../product/productType');
+const { lockProductVariantChanges, assertAttributeNotUsedByVariants } = require('./productAttributeUsage');
 
 const normalize = (value) => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
 
@@ -15,6 +16,7 @@ const normalize = (value) => String(value || '').trim().replace(/\s+/g, ' ').toL
 const assignProductAttribute = async (productId, data) => sequelize.transaction(async (transaction) => {
     const isVariantAttr = data.isVariantAttr ?? false;
     await lockUnitSettings(transaction);
+    await lockProductVariantChanges(productId, transaction);
     const product = await Product.findByPk(productId, { attributes: ['id', 'type'], transaction, lock: transaction.LOCK.UPDATE });
     if (!product) throw new AppError('NOT_FOUND', 404, 'Save the product before assigning attributes.');
     if (isVariantAttr) assertVariableProduct(product);
@@ -63,6 +65,9 @@ const assignProductAttribute = async (productId, data) => sequelize.transaction(
         selected.set(value.id, value);
     }
     const existingRows = await ProductAttribute.findAll({ where: { productId, attributeId: template.id, valueId: { [Op.in]: [...selected.keys()] } }, transaction });
+    if (!isVariantAttr && existingRows.some((row) => row.attributeId === template.id && selected.has(row.valueId) && row.isVariantAttr)) {
+        await assertAttributeNotUsedByVariants(productId, template.id, transaction);
+    }
     for (const value of selected.values()) {
         const existing = existingRows.find((row) => row.valueId === value.id);
         if (existing) {

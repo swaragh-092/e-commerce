@@ -51,7 +51,7 @@ describe('Attribute, Brand & Permission Fixes Verification', () => {
       db.ProductAttribute.count = vi.fn().mockResolvedValue(3);
       db.VariantOption.count = vi.fn().mockResolvedValue(0);
 
-      await expect(deleteAttribute('attr-1')).rejects.toMatchObject({ statusCode: 409, message: expect.stringContaining('still attached to products') });
+      await expect(deleteAttribute('attr-1')).rejects.toMatchObject({ statusCode: 409, message: expect.stringContaining('still attached to product') });
       expect(db.AttributeTemplate.options.paranoid).toBe(true);
       expect(mockAttr.destroy).not.toHaveBeenCalled();
     });
@@ -164,6 +164,10 @@ describe('Attribute, Brand & Permission Fixes Verification', () => {
   });
 
   describe('P3 — Product Attribute Mixed-Mode Validation & Service Checks', () => {
+    beforeEach(() => {
+      db.sequelize.transaction = vi.fn(async callback => callback({ LOCK: { UPDATE: 'UPDATE' } }));
+      db.sequelize.query = vi.fn().mockResolvedValue([]);
+    });
     it('updateProductAttributeSchema rejects both valueId and customValue', () => {
       const { error } = updateProductAttributeSchema.validate({
         valueId: '11111111-1111-4111-8111-111111111111',

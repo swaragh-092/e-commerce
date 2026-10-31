@@ -589,6 +589,11 @@ const addProductVariant = async (productId, data) => {
         const currentProduct = await Product.findByPk(productId, { transaction: t, lock: t.LOCK.UPDATE });
         if (!currentProduct) throw new AppError('NOT_FOUND', 404, 'Product not found');
         assertVariableProduct(currentProduct);
+        const assignments = await ProductAttribute.findAll({ where: { productId, isVariantAttr: true }, transaction: t });
+        if (!data.options.length || new Set(data.options.map((option) => option.attributeId)).size !== data.options.length
+            || data.options.some((option) => !assignments.some((row) => row.attributeId === option.attributeId && row.valueId === option.valueId))) {
+            throw new AppError('CONFLICT', 409, 'Variant options changed. Assign each option to this product and enable “Use for variants” before creating the variant.');
+        }
         const variant = await ProductVariant.create({
             productId,
             sku: data.sku ?? null,
