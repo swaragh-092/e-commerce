@@ -871,14 +871,13 @@ const requestEmailChange = async (userId, newEmail, password) => {
     // Store pending new email on user record
     await user.update({ pendingEmail: normalizedNewEmail }, { transaction: t });
 
-    try {
-      if (NotificationService && NotificationService.send) {
-        await NotificationService.send('email_change_verification', normalizedNewEmail, {
-          name: user.firstName,
-          verify_url: `${getClientBaseUrl()}/verify-email-change?token=${token}`,
-        }, userId, null, 'email', t);
-      }
-    } catch (e) {}
+    const queued = await NotificationService.send('email_change_verification', normalizedNewEmail, {
+      name: user.firstName,
+      verify_url: `${getClientBaseUrl()}/verify-email-change?token=${token}`,
+    }, userId, null, 'email', t);
+    if (!queued) {
+      throw new AppError('SERVICE_UNAVAILABLE', 503, 'Could not send the verification email. Please try again.');
+    }
     return { sent: true };
   });
 };

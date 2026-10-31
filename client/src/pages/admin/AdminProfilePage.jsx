@@ -15,6 +15,11 @@ const AdminProfilePage = () => {
   const [saved, setSaved] = useState(() => profileFor(user));
   const [profileFeedback, setProfileFeedback] = useState(null);
   const [profileBusy, setProfileBusy] = useState(false);
+  const [emailChangeOpen, setEmailChangeOpen] = useState(false);
+  const [emailChange, setEmailChange] = useState({ newEmail: '', password: '' });
+  const [pendingEmail, setPendingEmail] = useState(user?.pendingEmail || '');
+  const [emailFeedback, setEmailFeedback] = useState(null);
+  const [emailBusy, setEmailBusy] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [passwords, setPasswords] = useState(emptyPasswords);
   const [passwordFeedback, setPasswordFeedback] = useState(null);
@@ -22,7 +27,8 @@ const AdminProfilePage = () => {
   useEffect(() => {
     const next = profileFor(user);
     setForm(next); setSaved(next);
-  }, [user?.id, user?.firstName, user?.lastName, user?.profile?.phone]);
+    setPendingEmail(user?.pendingEmail || '');
+  }, [user?.id, user?.firstName, user?.lastName, user?.profile?.phone, user?.pendingEmail]);
   const dirty = Object.keys(form).some(key => form[key] !== saved[key]);
   const groups = [...new Set(permissions)].sort().reduce((result, permission) => {
     const [group, ...action] = permission.split('.');
@@ -46,6 +52,30 @@ const AdminProfilePage = () => {
     } catch (error) {
       setProfileFeedback({ severity: 'error', message: getApiErrorMessage(error, 'Could not save profile. Please try again.') });
     } finally { setProfileBusy(false); }
+  };
+  const requestEmailChange = async () => {
+    if (emailBusy) return;
+    setEmailFeedback(null);
+    const newEmail = emailChange.newEmail.trim().toLowerCase();
+    if (!newEmail) {
+      setEmailFeedback({ severity: 'error', message: 'Enter a new email address.' }); return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+      setEmailFeedback({ severity: 'error', message: 'Enter a valid email address.' }); return;
+    }
+    if (newEmail === String(user?.email || '').toLowerCase()) {
+      setEmailFeedback({ severity: 'error', message: 'Enter a different email address.' }); return;
+    }
+    setEmailBusy(true);
+    try {
+      await userService.requestEmailChange({ newEmail, password: emailChange.password });
+      setPendingEmail(newEmail);
+      setEmailChange({ newEmail: '', password: '' });
+      setEmailChangeOpen(false);
+      setEmailFeedback({ severity: 'success', message: `Verification link sent to ${newEmail}. Your sign-in email changes after you confirm it.` });
+    } catch (error) {
+      setEmailFeedback({ severity: 'error', message: getApiErrorMessage(error, 'Could not send the verification email. Please try again.') });
+    } finally { setEmailBusy(false); }
   };
   const changePassword = async event => {
     event.preventDefault();
@@ -89,6 +119,20 @@ const AdminProfilePage = () => {
           <Stack spacing={2}>
             {['firstName', 'lastName', 'phone'].map(key => <TextField key={key} label={{ firstName: 'First name', lastName: 'Last name', phone: 'Phone number' }[key]} value={form[key]} disabled={profileBusy} required={key === 'firstName' || (key === 'lastName' && Boolean(saved.lastName))} type={key === 'phone' ? 'tel' : 'text'} inputProps={{ maxLength: key === 'phone' ? 15 : 50 }} autoComplete={{ firstName: 'given-name', lastName: 'family-name', phone: 'tel' }[key]} onChange={event => { setForm(prev => ({ ...prev, [key]: event.target.value })); setProfileFeedback(null); }} helperText={key === 'phone' ? 'Optional. Enter 10 to 15 digits.' : undefined} />)}
             <TextField label="Email address" value={user?.email || ''} InputProps={{ readOnly: true }} helperText="Your sign-in email address." />
+            {pendingEmail && <Alert severity="info">Email change pending. Confirm the link sent to {pendingEmail} to finish updating your sign-in email.</Alert>}
+            {emailFeedback && <Alert severity={emailFeedback.severity} role="status">{emailFeedback.message}</Alert>}
+            {!emailChangeOpen ? (
+              <Button type="button" variant="outlined" onClick={() => { setEmailChangeOpen(true); setEmailFeedback(null); }} sx={{ alignSelf: 'flex-start' }}>Change email</Button>
+            ) : (
+              <Stack spacing={2}>
+                <TextField label="New email address" type="email" autoComplete="email" required value={emailChange.newEmail} disabled={emailBusy} onChange={event => setEmailChange(prev => ({ ...prev, newEmail: event.target.value }))} />
+                <TextField label="Current password" type="password" autoComplete="current-password" required value={emailChange.password} disabled={emailBusy} onChange={event => setEmailChange(prev => ({ ...prev, password: event.target.value }))} helperText="Confirm your identity before changing your sign-in email." />
+                <Stack direction="row" spacing={1}>
+                  <Button type="button" variant="contained" disabled={emailBusy || !emailChange.newEmail || !emailChange.password} onClick={requestEmailChange}>{emailBusy ? 'Sending…' : 'Send verification link'}</Button>
+                  <Button type="button" disabled={emailBusy} onClick={() => { setEmailChangeOpen(false); setEmailChange({ newEmail: '', password: '' }); setEmailFeedback(null); }}>Cancel</Button>
+                </Stack>
+              </Stack>
+            )}
             {profileFeedback && <Alert severity={profileFeedback.severity} role="status">{profileFeedback.message}</Alert>}
             <Button type="submit" variant="contained" disabled={!dirty || profileBusy} sx={{ alignSelf: 'flex-start' }}>{profileBusy ? 'Saving…' : 'Save profile'}</Button>
           </Stack>
