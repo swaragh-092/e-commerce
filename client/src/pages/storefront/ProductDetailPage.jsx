@@ -36,7 +36,6 @@ import { getStoreName } from '../../utils/store';
 import { trackRecentlyViewed } from '../../components/storefront/sections/RecentlyViewedSection';
 import { buildBreadcrumbJsonLd, buildProductJsonLd } from '../../utils/seo/buildStructuredData';
 import { getBadgeChipProps } from '../../utils/componentStyles';
-import StorefrontButton from '../../components/storefront/StorefrontButton';
 
 const getAvailableStock = (entity, stockKey) => {
     const total = Number(entity?.[stockKey] || 0);
@@ -433,8 +432,8 @@ const ProductDetailPage = () => {
             }}
         >
             <PageSEO
-                title={product.name}
-                description={product.shortDescription}
+                title={product.metaTitle || product.name}
+                description={product.metaDescription || product.shortDescription}
                 image={product.ogImage || product.images?.[0]?.url}
                 type="product"
                 url={resolvedPageUrl}
@@ -748,9 +747,9 @@ const ProductDetailPage = () => {
                                         {pendingAction === 'cart' ? 'Adding...' : stockAvailable ? addToCartLabel : 'Out of Stock'}
                                     </Button>
                                     {showBuyNowButton && (
-                                        <StorefrontButton
-                                            role="primary"
-                                            appearance="outlined"
+                                        <Button
+                                            variant="outlined"
+                                            color="primary"
                                             size="large"
                                             fullWidth
                                             startIcon={<FlashOnIcon />}
@@ -759,7 +758,7 @@ const ProductDetailPage = () => {
                                             sx={{ py: 1.55, fontSize: '1.05rem', borderRadius: 2, fontWeight: 900 }}
                                         >
                                             {pendingAction === 'buyNow' ? 'Redirecting...' : stockAvailable ? buyNowLabel : 'Out of Stock'}
-                                        </StorefrontButton>
+                                        </Button>
                                     )}
                                 </Box>
                             </Box>
@@ -948,9 +947,9 @@ const ProductDetailPage = () => {
                                     {pendingAction === 'cart' ? 'Adding...' : stockAvailable ? addToCartLabel : 'Out of Stock'}
                                 </Button>
                                 {showBuyNowButton && (
-                                    <StorefrontButton
-                                        role="primary"
-                                        appearance="outlined"
+                                    <Button
+                                        variant="contained"
+                                        color="secondary"
                                         fullWidth
                                         startIcon={<FlashOnIcon />}
                                         disabled={!stockAvailable || pendingAction !== null}
@@ -958,7 +957,7 @@ const ProductDetailPage = () => {
                                         sx={{ py: 1.25, borderRadius: 999, fontWeight: 900 }}
                                     >
                                         {pendingAction === 'buyNow' ? 'Redirecting...' : stockAvailable ? buyNowLabel : 'Out of Stock'}
-                                    </StorefrontButton>
+                                    </Button>
                                 )}
                             </Box>
                         )}

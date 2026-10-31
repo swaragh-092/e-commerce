@@ -275,8 +275,9 @@ const CategoryPage = () => {
             <PageSEO
                 title={category?.metaTitle || pageTitle}
                 description={category?.metaDescription || category?.description}
-                image={category?.bannerImage ? getMediaUrl(category.bannerImage) : undefined}
+                image={category?.ogImage || category?.bannerImage || category?.image}
                 url={categoryUrl}
+                type="collection"
                 structuredData={breadcrumbStructuredData}
             />
 

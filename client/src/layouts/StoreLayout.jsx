@@ -24,6 +24,7 @@ import MenuService from '../services/menuService';
 import { ADMIN_ACCESS_PERMISSIONS } from '../utils/permissions';
 import { filterFeatureLinks } from '../utils/featureNavigation';
 import SEO from '../components/common/SEO';
+import StorefrontAnalytics from '../components/common/StorefrontAnalytics';
 import CategoryIcon from '../components/common/CategoryIcon';
 import { isExternalUrl } from '../utils/urls';
 import { getStoreName } from '../utils/store';
@@ -282,7 +283,7 @@ const StoreLayout = () => {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <SEO />
+      <StorefrontAnalytics />
       <Box
         component="a"
         href="#main"
@@ -621,6 +622,8 @@ const StoreLayout = () => {
       </Box>
 
       {!isAuthPage && <StorefrontFooter />}
+      {/* Resolved entity metadata and URL overrides take precedence over page fallbacks. */}
+      <SEO />
     </Box>
   );
 };

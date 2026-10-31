@@ -38,6 +38,12 @@ describe('tag SEO', () => {
     expect(metadata.canonicalUrl).toBe('https://shop.example.test/tags/summer');
   });
   it('adds only public tag slugs to the sitemap using the configured canonical origin', async () => {
+    vi.spyOn(db.Setting, 'findAll').mockResolvedValue([]);
+    vi.spyOn(db.Setting, 'findOne').mockResolvedValue(null);
+    vi.spyOn(db.SeoOverride, 'findAll').mockResolvedValue([]);
+    vi.spyOn(db.Page, 'findAll').mockResolvedValue([]);
+    vi.spyOn(db.BlogPost, 'findAll').mockResolvedValue([]);
+    vi.spyOn(db.Brand, 'findAll').mockResolvedValue([]);
     vi.spyOn(db.Product, 'findAll').mockResolvedValue([]);
     vi.spyOn(db.Category, 'findAll').mockResolvedValue([]);
     vi.spyOn(tags, 'getPublicTags').mockResolvedValue([{ slug: 'summer-planting' }]);
@@ -50,7 +56,7 @@ describe('tag SEO', () => {
     const html = seo.injectMetadataIntoHtml({ ...defaults, title: 'Summer', schemaType: 'CollectionPage', description, canonicalUrl: 'https://shop.example.test/tags/summer' }, '<html><head></head><body></body></html>');
     expect(html).not.toContain('</script><script>');
     const json = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1];
-    expect(JSON.parse(json).description).toBe(description);
+    expect(JSON.parse(json)['@graph'].find((node) => node['@type'] === 'CollectionPage').description).toBe(description);
   });
   it('returns a real 404 and noindex for crawler requests to unavailable tags', async () => {
     vi.spyOn(seo, 'renderHtmlForPath').mockRejectedValue({ statusCode: 404 });

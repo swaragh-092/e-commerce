@@ -4,6 +4,7 @@ import api from '../../services/api';
 import { getProducts } from '../../services/productService';
 import { getCategories } from '../../services/categoryService';
 import { useSettings, useFeature, useFeatureVisible } from '../../hooks/useSettings';
+import { getStoreName } from '../../utils/store';
 import { useBrands } from '../../context/BrandContext';
 import PageSEO from '../../components/common/PageSEO';
 import {
@@ -263,7 +264,7 @@ const HomeExperience = () => {
   return (
     <Box sx={{ bgcolor: 'background.default' }}>
       <PageSEO
-        title={config.seoTitle || 'Home'}
+        title={config.seoTitle || settings?.seo?.defaultTitle || getStoreName(settings)}
         description={config.seoDescription || config.heroSlides?.[0]?.subtitle || settings?.seo?.defaultDescription}
       />
 

@@ -130,16 +130,12 @@ export default function buildSettingsPanels(ctx) {
             {field('seo.defaultDescription', 'Default Meta Description', 'text', { multiline: true, rows: 3 })}
             {field('seo.defaultKeywords', 'Default Keywords (Internal)', 'text', { helperText: 'Separated by commas. Used for internal search fallback.' })}
             {field('seo.canonicalBaseUrl', 'Canonical Base URL', 'text', { placeholder: 'https://mystore.com', helperText: 'Crucial for automatic canonical URL generation. Include https://' })}
-            {field('seo.ogImage', 'Default Social Share Image (URL)')}
-            {form['seo.ogImage'] && (
-              <Box sx={{ mb: 2 }}>
-                <img src={form['seo.ogImage']} alt="OG Preview" style={{ maxHeight: 100, borderRadius: 8, border: '1px solid #ddd' }} />
-              </Box>
-            )}
+            {imageField('seo.defaultOgImage', 'Default Social Share Image')}
             <Divider sx={{ my: 2 }} />
             <Typography variant="subtitle2" sx={{ mb: 1 }}>Analytics & Tracking</Typography>
-            {field('seo.googleAnalyticsId', 'Google Analytics G-ID')}
-            {field('seo.facebookPixelId', 'Facebook Pixel ID')}
+            {field('seo.googleAnalyticsId', 'Google Analytics G-ID', 'text', { helperText: 'GA4 measurement ID, such as G-XXXXXXXXXX. In GA4 Enhanced Measurement, turn off “Page changes based on browser history events”; this store sends pageviews on navigation.' })}
+            {field('seo.facebookPixelId', 'Facebook Pixel ID', 'text', { helperText: 'Numeric Meta Pixel ID. The store loads the pixel and sends PageView events automatically.' })}
+            <Alert severity="info" sx={{ mb: 2 }}>Use these fields for tracking IDs. Adding the same Google or Meta tracking code in Head Scripts or a tag manager can count visits twice. Admin pages and Store Designer previews are excluded from this integration.</Alert>
             <Divider sx={{ my: 3 }} />
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Box>
@@ -188,8 +184,30 @@ export default function buildSettingsPanels(ctx) {
         { designer: true }
       ),
     ],
-    // Preserve panel indexes; navigation is managed in Menu Builder.
-    [],
+    // ─── 3: Layout ──────────────────────────────────────────────────────
+    [
+      section(
+        'Header & Navigation',
+        canUseSettingsDesigner(ctx) ? 'Edit the visual header layout in Store Designer and manage published links in Menu Builder.' : 'Manage published navigation links in Menu Builder.',
+        <>
+          <StoreDesignSummary scope="header" form={form} homepageSections={homepageSections} />
+          {ctx.hasPermission?.(PERMISSIONS.MENUS_READ) && <Button component={Link} to="/admin/menus" variant="outlined" size="small" sx={{ mt: 2 }}>
+            Manage published menu links
+          </Button>}
+        </>,
+        ['header', 'nav', 'navigation', 'sticky'],
+        { navigation: true }
+      ),
+      section(
+        'Footer',
+        'Edit footer content and visual layout together from the footer inspector.',
+        <>
+          <StoreDesignSummary scope="footer" form={form} homepageSections={homepageSections} />
+        </>,
+        ['footer', 'links', 'social', 'contact'],
+        { designer: true }
+      ),
+    ],
     // ─── 4: Homepage ────────────────────────────────────────────────────
     [
       section(
@@ -618,30 +636,6 @@ function buildAdvancedPanel(ctx) {
       </>,
       ['seo', 'analytics', 'meta description', 'og image'],
       { feature: 'seo' }
-    ),
-    section(
-      'Admin Appearance',
-      'Choose your admin brand color. Buttons and selection follow it unless you choose custom colors. Save settings to apply.',
-      <Grid container spacing={2}>
-        {[
-          ['brandColor', 'Brand color', '#4f46e5', 'Header, navigation accents, and links.'],
-          ['buttonColor', 'Button color', form['admin.brandColor'] || '#4f46e5', 'Primary actions. Hover and pressed shades are automatic.'],
-          ['stateColor', 'Focus / selection color', form['admin.brandColor'] || '#4f46e5', 'Keyboard focus outlines and selected-item highlights.'],
-        ].map(([key, label, fallback, help]) => (
-          <Grid item xs={12} sm={4} key={key}>
-            {key !== 'brandColor' && <FormControlLabel
-              control={<Switch checked={!form[`admin.${key}`]} onChange={(event) => set(`admin.${key}`, event.target.checked ? '' : fallback)} />}
-              label="Use brand color" />}
-            <TextField fullWidth size="small" type="color" label={label}
-              disabled={key !== 'brandColor' && !form[`admin.${key}`]}
-              value={form[`admin.${key}`] || fallback}
-              onChange={(event) => set(`admin.${key}`, event.target.value)}
-              helperText={`${form[`admin.${key}`] || fallback} — ${help}`}
-              InputLabelProps={{ shrink: true }} />
-          </Grid>
-        ))}
-      </Grid>,
-      ['admin appearance', 'brand color', 'button color', 'state color', 'dashboard theme']
     ),
     section(
       'Dashboard',
