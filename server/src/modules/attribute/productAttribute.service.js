@@ -4,6 +4,7 @@ const { ProductAttribute, AttributeTemplate, AttributeValue, Product, sequelize 
 const AppError = require('../../utils/AppError');
 const { assertVariableProduct } = require('../product/productType');
 const { groupKey } = require('./productAttributeOrder');
+const { lockProductVariantChanges, assertAttributeNotUsedByVariants, assertAttributeRemovalAllowed } = require('./productAttributeUsage');
 
 const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit', 'unitCategory'];
 const ATTRIBUTE_VALUE_FIELDS = ['id', 'value', 'slug', 'sortOrder', 'displayLabel', 'swatchColor', 'imageUrl', 'unitLabel', 'metadata'];
@@ -85,11 +86,12 @@ const addProductAttribute = async (productId, data) => sequelize.transaction(asy
 /**
  * Update a single product attribute row (value swap, sort order, isVariantAttr toggle).
  */
-const updateProductAttribute = async (productId, attrId, data) => {
-    const row = await ProductAttribute.findOne({ where: { id: attrId, productId } });
+const updateProductAttribute = async (productId, attrId, data) => sequelize.transaction(async (transaction) => {
+    await lockProductVariantChanges(productId, transaction);
+    const row = await ProductAttribute.findOne({ where: { id: attrId, productId }, transaction, lock: transaction.LOCK.UPDATE });
     if (!row) throw new AppError('NOT_FOUND', 404, 'Product attribute not found');
     if (data.isVariantAttr) {
-        const product = await Product.findByPk(productId, { attributes: ['id', 'type'] });
+        const product = await Product.findByPk(productId, { attributes: ['id', 'type'], transaction });
         if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
         assertVariableProduct(product);
     }
@@ -102,11 +104,16 @@ const updateProductAttribute = async (productId, attrId, data) => {
         throw new AppError('VALIDATION_ERROR', 400, 'Cannot set customValue on a global attribute template');
     }
 
+    if (data.isVariantAttr === false || (data.valueId && data.valueId !== row.valueId)) {
+        await assertAttributeNotUsedByVariants(productId, row.attributeId, transaction);
+    }
+
     // If swapping to a new global value, validate the new attributeValue belongs to the same template
     if (data.valueId && row.attributeId) {
         const attrValue = await AttributeValue.findOne({
             where: { id: data.valueId, attributeId: row.attributeId },
             attributes: ['id'],
+            transaction,
         });
         if (!attrValue) throw new AppError('VALIDATION_ERROR', 400, 'Value does not belong to this attribute template');
     }
@@ -118,24 +125,49 @@ const updateProductAttribute = async (productId, attrId, data) => {
         if (data[field] !== undefined) updates[field] = data[field];
     }
 
-    await row.update(updates);
-    return ProductAttribute.findByPk(row.id, { include: fullInclude });
+    await row.update(updates, { transaction });
+    return ProductAttribute.findByPk(row.id, { include: fullInclude, transaction });
+});
+
+const loadAttributeGroup = async (productId, attrId, transaction) => {
+    const product = await Product.findByPk(productId, { attributes: ['id', 'type'], transaction, lock: transaction.LOCK.UPDATE });
+    if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
+    const rows = await ProductAttribute.findAll({ where: { productId }, transaction, lock: transaction.LOCK.UPDATE });
+    const row = rows.find((item) => item.id === attrId);
+    if (!row) throw new AppError('NOT_FOUND', 404, 'Product attribute not found');
+    const group = rows.filter((item) => groupKey(item) === groupKey(row));
+    return { product, group };
 };
 
-/**
- * Remove a display attribute from a product.
- */
-const deleteProductAttribute = async (productId, attrId) => {
-    const row = await ProductAttribute.findOne({ where: { id: attrId, productId } });
-    if (!row) throw new AppError('NOT_FOUND', 404, 'Product attribute not found');
-    await row.destroy();
-};
+// Change every value together, including groups larger than assignment requests.
+const updateProductAttributeGroup = async (productId, attrId, { isVariantAttr }) => sequelize.transaction(async (transaction) => {
+    await lockProductVariantChanges(productId, transaction);
+    const { product, group } = await loadAttributeGroup(productId, attrId, transaction);
+    if (isVariantAttr) {
+        assertVariableProduct(product);
+        if (!group[0].attributeId) throw new AppError('VALIDATION_ERROR', 400, 'Custom specifications cannot be used for variants.');
+    } else {
+        await assertAttributeNotUsedByVariants(productId, group[0].attributeId, transaction);
+    }
+    for (const row of group) await row.update({ isVariantAttr }, { transaction });
+    return ProductAttribute.findAll({ where: { productId }, include: fullInclude, order: [['sortOrder', 'ASC'], ['createdAt', 'ASC'], ['id', 'ASC']], transaction });
+});
+
+/** Remove a value or its entire attribute, only after variant use is disabled. */
+const deleteProductAttribute = async (productId, attrId, { wholeGroup = false } = {}) => sequelize.transaction(async (transaction) => {
+    await lockProductVariantChanges(productId, transaction);
+    const { group } = await loadAttributeGroup(productId, attrId, transaction);
+    await assertAttributeRemovalAllowed(productId, group, transaction);
+    for (const item of wholeGroup ? group : group.filter((row) => row.id === attrId)) await item.destroy({ transaction });
+});
 
 module.exports = {
     getProductAttributes,
     addProductAttribute,
     updateProductAttribute,
+    updateProductAttributeGroup,
     deleteProductAttribute,
+    deleteProductAttributeGroup: (productId, attrId) => deleteProductAttribute(productId, attrId, { wholeGroup: true }),
     reorderProductAttributes: async (productId, rowIds) => sequelize.transaction(async (transaction) => {
         const product = await Product.findByPk(productId, { transaction, lock: transaction.LOCK.UPDATE });
         if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');

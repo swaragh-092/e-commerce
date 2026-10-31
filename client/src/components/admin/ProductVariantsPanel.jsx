@@ -390,7 +390,7 @@ const VariantsPanel = ({
 
       <Grid container spacing={3}>
         <Grid item xs={12} lg={5} sx={{ minWidth: 0 }}>
-          <ProductAttributesSection productId={productId} rows={productAttributes} templates={attributes}
+          <ProductAttributesSection productId={productId} rows={productAttributes} templates={attributes} variants={variants}
             suggestions={suggestedAttributes} loading={loading} error={loadError} canManage={canManageAttributes && !variantBusy}
             onRowsChange={setProductAttributes} onRetry={loadAll} onBusyChange={setAttributesBusy} />
         </Grid>

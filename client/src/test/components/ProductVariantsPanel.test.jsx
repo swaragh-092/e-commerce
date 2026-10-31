@@ -15,7 +15,7 @@ vi.mock('../../hooks/useSKUGenerator', () => ({ default: () => ({ generateProduc
 vi.mock('../../components/common/MediaPicker', () => ({ default: () => null }));
 vi.mock('../../services/productService', () => ({ getProductById: vi.fn(), getProducts: vi.fn() }));
 vi.mock('../../services/settingsService', () => ({ default: { getSettingsGroup: vi.fn() } }));
-vi.mock('../../services/attributeService', () => ({ default: { getProductAttributes: vi.fn(), getProductVariants: vi.fn(), getAttributes: vi.fn(), getCategoryAttributes: vi.fn(), getAttributeById: vi.fn(), assignProductAttribute: vi.fn(), deleteProductVariant: vi.fn(), cloneVariants: vi.fn(), updateProductVariant: vi.fn(), previewVariantGeneration: vi.fn(), bulkGenerateVariants: vi.fn() } }));
+vi.mock('../../services/attributeService', () => ({ default: { getProductAttributes: vi.fn(), getProductVariants: vi.fn(), getAttributes: vi.fn(), getCategoryAttributes: vi.fn(), getAttributeById: vi.fn(), assignProductAttribute: vi.fn(), updateProductAttributeGroup: vi.fn(), deleteProductAttributeGroup: vi.fn(), deleteProductVariant: vi.fn(), cloneVariants: vi.fn(), updateProductVariant: vi.fn(), previewVariantGeneration: vi.fn(), bulkGenerateVariants: vi.fn() } }));
 const height = { id: 'height', name: 'Height', unitCategory: 'Length', values: [{ id: 'ten', value: '10', unitLabel: 'cm' }] };
 const row = { id: 'row', attributeId: 'height', valueId: 'ten', attribute: height, value: height.values[0], isVariantAttr: false };
 const tree = (props = {}) => <MemoryRouter><NotificationProvider><UnitCatalogProvider><ProductVariantsPanel productId="product" canManageVariants {...props} /></UnitCatalogProvider></NotificationProvider></MemoryRouter>;
@@ -36,6 +36,31 @@ beforeEach(() => {
 });
 
 describe('product attributes and variant drafts', () => {
+  it('unlocks attribute removal only after deleting the last dependent variant and disabling variant use', async () => {
+    attributeService.getProductAttributes.mockResolvedValue({ data: { data: [{ ...row, isVariantAttr: true }] } });
+    attributeService.getProductVariants.mockResolvedValue({ data: { data: [{ id: 'variant', optionLabel: 'Height option', price: 100, stockQty: 0, isActive: false, options: [{ attributeId: 'height', valueId: 'ten' }], images: [] }] } });
+    attributeService.updateProductAttributeGroup.mockResolvedValue({ data: { data: [row] } });
+    attributeService.deleteProductAttributeGroup.mockImplementation(async () => {
+      attributeService.getProductAttributes.mockResolvedValue({ data: { data: [] } });
+      return { data: { data: null } };
+    });
+    render(tree());
+    const toggle = await screen.findByRole('checkbox', { name: 'Use Height for variants' });
+    expect(toggle).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Remove Height attribute' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Height option', exact: true }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Delete variant?' })).getByRole('button', { name: 'Delete variant', exact: true }));
+    await waitFor(() => expect(toggle).toBeEnabled());
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Remove Height attribute' })).toBeDisabled();
+    fireEvent.click(toggle);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Remove Height attribute' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Height attribute' }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Remove attribute from product?' })).getByRole('button', { name: 'Remove attribute', exact: true }));
+    expect(await screen.findByText('No attributes assigned')).toBeInTheDocument();
+    expect(attributeService.updateProductAttributeGroup).toHaveBeenCalledWith('product', 'row', { isVariantAttr: false });
+    expect(attributeService.deleteProductAttributeGroup).toHaveBeenCalledWith('product', 'row');
+  });
   const pickCopySource = async () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Copy from product' }));
     fireEvent.change(screen.getByRole('combobox', { name: 'Search products' }), { target: { value: 'SOURCE' } });
