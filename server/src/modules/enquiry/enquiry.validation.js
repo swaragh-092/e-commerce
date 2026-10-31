@@ -63,7 +63,7 @@ const createEnquirySchema = Joi.object({
 });
 
 const updateEnquiryStatusSchema = Joi.object({
-  status: Joi.string().valid('pending', 'responded', 'closed').required()
+  status: Joi.string().valid('pending', 'responded', 'closed', 'closed_converted', 'closed_lost').required()
 });
 
 const replyEnquirySchema = Joi.object({
@@ -71,7 +71,7 @@ const replyEnquirySchema = Joi.object({
 });
 
 const queryEnquiriesSchema = Joi.object({
-  status: Joi.string().valid('pending', 'responded', 'closed').allow(''),
+  status: Joi.string().valid('pending', 'responded', 'closed', 'closed_converted', 'closed_lost').allow(''),
   search: Joi.string().trim().allow(''),
   sortBy: Joi.string().valid('createdAt', 'name', 'email', 'status', 'subject').default('createdAt'),
   sortDir: Joi.string().valid('asc', 'desc', 'ASC', 'DESC').default('desc'),

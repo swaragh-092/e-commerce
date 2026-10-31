@@ -21,6 +21,15 @@ const open = async () => {
   return within(screen.getByRole('dialog'));
 };
 describe('Enquiry workspace', () => {
+  it.each([['Closed – Converted', 'closed_converted'], ['Closed – Lost', 'closed_lost']])('saves and displays %s', async (label, status) => {
+    api.patch.mockResolvedValue({});
+    const dialog = await open();
+    fireEvent.click(dialog.getByRole('button', { name: label }));
+    await waitFor(() => expect(api.patch).toHaveBeenCalledWith('/admin/enquiries/eq1/status', { status }));
+    await waitFor(() => expect(dialog.getByRole('button', { name: label })).toBeDisabled());
+    expect(dialog.getAllByText(label)).toHaveLength(2);
+    expect(dialog.queryByRole('button', { name: 'closed' })).not.toBeInTheDocument();
+  });
   it('shows contact links and product details, and saves only changed assignments', async () => {
     const dialog = await open();
     expect(dialog.getByRole('heading', { name: /RED BERRY enquiry/ })).toBeInTheDocument();

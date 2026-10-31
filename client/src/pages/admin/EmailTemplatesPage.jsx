@@ -59,6 +59,8 @@ const TEMPLATE_LABELS = {
   enquiry_assigned_staff:  { label: 'Enquiry Assigned',          desc: 'Sent to the staff member assigned a customer enquiry',        icon: '📬' },
   new_enquiry_admin:       { label: 'New Enquiry — Staff',       desc: 'Alerts selected staff when a customer submits an enquiry',    icon: '📬' },
   new_enquiry_customer:    { label: 'Enquiry Received — Customer', desc: 'Acknowledges customer enquiry and includes details',       icon: '📬' },
+  enquiry_closed_converted_customer: { label: 'Enquiry Closed – Converted', desc: 'Customer email when an enquiry converts', icon: '✓' },
+  enquiry_closed_lost_customer: { label: 'Enquiry Closed – Lost', desc: 'Customer email when an enquiry is closed as lost', icon: '✉' },
   enquiry_reply_customer:  { label: 'Enquiry Reply — Customer',  desc: 'Reply sent when staff respond to an enquiry',                 icon: '💬' },
   newsletter_confirmation: { label: 'Newsletter Confirmation',   desc: 'Confirmation after a customer opts into store updates',       icon: '📰' },
   newsletter_campaign:     { label: 'Newsletter Campaign',       desc: 'Wrapper for composed campaigns, including unsubscribe link',  icon: '📢' },
