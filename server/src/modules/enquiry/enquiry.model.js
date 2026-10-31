@@ -2,6 +2,7 @@ module.exports = (sequelize, DataTypes) => {
   const Enquiry = sequelize.define(
     'Enquiry',
     {
+      replies: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
       assignedUserId: { type: DataTypes.UUID, allowNull: true },
       id: {
         type: DataTypes.UUID,
