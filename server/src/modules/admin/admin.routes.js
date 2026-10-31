@@ -6,8 +6,8 @@ const { authorizeAnyPermission, authorizePermissions } = require('../../middlewa
 const adminController = require('./admin.controller');
 const { PERMISSIONS } = require('../../config/permissions');
 const { validate } = require('../../middleware/validate.middleware');
-const { updateUserRoleSchema, createRoleSchema, updateRoleSchema, deleteRoleSchema, salesChartQuerySchema, lowStockQuerySchema, createStaffUserSchema, analyticsQuerySchema, analyticsTrendSchema, catalogAnalyticsQuerySchema } = require('./admin.validation');
-const { idParamSchema, paginationQuerySchema } = require('../../utils/common.validation');
+const { updateUserRoleSchema, updateStaffStatusSchema, accessUsersQuerySchema, createRoleSchema, updateRoleSchema, deleteRoleSchema, salesChartQuerySchema, lowStockQuerySchema, createStaffUserSchema, analyticsQuerySchema, analyticsTrendSchema, catalogAnalyticsQuerySchema } = require('./admin.validation');
+const { idParamSchema } = require('../../utils/common.validation');
 const { inventoryAlertConfigSchema, updateInventoryAlertSchema } = require('../inventory/inventoryAlert.validation');
 
 
@@ -87,10 +87,11 @@ router.post('/access-control/roles', ...roleManageOnly, validate(createRoleSchem
 router.put('/access-control/roles/:id', ...roleEditOnly, validate(idParamSchema, 'params'), validate(updateRoleSchema), adminController.updateAccessRole);
 router.delete('/access-control/roles/:id', ...roleManageOnly, validate(idParamSchema, 'params'), validate(deleteRoleSchema), adminController.deleteAccessRole);
 
-router.get('/access-control/users', ...accessManageOnly, validate(paginationQuerySchema, 'query'), adminController.getAccessUsers);
+router.get('/access-control/users', ...accessManageOnly, validate(accessUsersQuerySchema, 'query'), adminController.getAccessUsers);
 
 router.post('/access-control/users', ...accessManageOnly, validate(createStaffUserSchema), adminController.createStaffUser);
 router.put('/access-control/users/:id/role', ...accessManageOnly, validate(idParamSchema, 'params'), validate(updateUserRoleSchema), adminController.updateUserRole);
+router.put('/access-control/users/:id/status', ...accessManageOnly, validate(idParamSchema, 'params'), validate(updateStaffStatusSchema), adminController.updateStaffStatus);
 router.delete('/access-control/users/:id', ...accessManageOnly, validate(idParamSchema, 'params'), adminController.deleteStaffUser);
 
 // Analytics

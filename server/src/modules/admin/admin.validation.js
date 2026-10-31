@@ -7,6 +7,20 @@ const updateUserRoleSchema = Joi.object({
   roleId: Joi.string().uuid().required(),
 });
 
+const updateStaffStatusSchema = Joi.object({
+  status: Joi.string().valid('active', 'inactive').required(),
+  reason: Joi.string().trim().min(5).max(500).required(),
+});
+
+const accessUsersQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(1000).default(20),
+  search: Joi.string().trim().max(200).allow(''),
+  roleId: Joi.string().uuid().allow(''),
+  status: Joi.string().valid('active', 'inactive', 'banned').allow(''),
+  includeCustomers: Joi.boolean().default(false),
+});
+
 const rolePayload = {
   name: Joi.string().max(100).required(),
   description: Joi.string().max(255).allow('', null),
@@ -81,6 +95,8 @@ const analyticsTrendSchema = Joi.object({
 
 module.exports = {
   updateUserRoleSchema,
+  updateStaffStatusSchema,
+  accessUsersQuerySchema,
   createRoleSchema,
   updateRoleSchema,
   deleteRoleSchema,

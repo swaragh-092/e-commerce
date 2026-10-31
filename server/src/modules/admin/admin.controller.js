@@ -112,13 +112,14 @@ const deleteAccessRole = async (req, res, next) => {
 
 const getAccessUsers = async (req, res, next) => {
   try {
-    const { page = 1, limit = 20, search, roleId, includeCustomers } = req.query;
+    const { page = 1, limit = 20, search, roleId, status, includeCustomers } = req.query;
     const result = await AdminService.listAccessUsers({
       page,
       limit,
       search,
       roleId,
-      includeCustomers: includeCustomers === 'true',
+      status,
+      includeCustomers: includeCustomers === true || includeCustomers === 'true',
     }, req.user);
     return paginated(res, result.rows, result.count, page, limit);
   } catch (err) {
@@ -130,6 +131,16 @@ const updateUserRole = async (req, res, next) => {
   try {
     const user = await AdminService.updateUserRole(req.params.id, req.validated.roleId, req.user);
     return success(res, user, 'User role updated successfully');
+  } catch (err) {
+    next(err);
+  }
+};
+
+const updateStaffStatus = async (req, res, next) => {
+  try {
+    const { status, reason } = req.validated;
+    const user = await AdminService.updateStaffStatus(req.params.id, status, reason, req.user);
+    return success(res, user, status === 'active' ? 'Staff account reactivated successfully' : 'Staff account suspended successfully');
   } catch (err) {
     next(err);
   }
@@ -380,6 +391,7 @@ module.exports = {
   deleteAccessRole,
   getAccessUsers,
   updateUserRole,
+  updateStaffStatus,
   createStaffUser,
   deleteStaffUser,
   getTopProducts,

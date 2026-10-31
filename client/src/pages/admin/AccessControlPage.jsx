@@ -44,6 +44,8 @@ import SearchIcon from '@mui/icons-material/Search';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
+import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { DataGrid } from '@mui/x-data-grid';
 import {
@@ -56,6 +58,7 @@ import {
   getAccessUsers,
   updateAccessRole,
   updateAccessUserRole,
+  updateAccessUserStatus,
 } from '../../services/adminService';
 import { useAuth, useIsSuperAdmin } from '../../hooks/useAuth';
 import { PERMISSIONS, IMPLIES } from '../../utils/permissions';
@@ -154,6 +157,7 @@ const AccessControlPage = () => {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+  const [staffStatusFilter, setStaffStatusFilter] = useState('');
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 5 });
   const [updatingUserId, setUpdatingUserId] = useState(null);
   const [roleDialogOpen, setRoleDialogOpen] = useState(false);
@@ -177,6 +181,9 @@ const AccessControlPage = () => {
   const [deleteUserDialogOpen, setDeleteUserDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
   const [deletingUser, setDeletingUser] = useState(false);
+  const [pendingStatusChange, setPendingStatusChange] = useState(null);
+  const [statusReason, setStatusReason] = useState('');
+  const [savingStatus, setSavingStatus] = useState(false);
 
   const canManageCustomRoles = hasPermission(PERMISSIONS.ROLES_MANAGE);
   // System roles are governed by the reserved system_roles.manage grant, which
@@ -303,6 +310,7 @@ const AccessControlPage = () => {
             limit: paginationModel.pageSize,
             search: debouncedSearch,
             roleId: roleFilter,
+            status: staffStatusFilter,
             includeCustomers: Boolean(debouncedSearch),
           })
         );
@@ -326,7 +334,7 @@ const AccessControlPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [canAssignRoles, canGrantPermission, debouncedSearch, isSuperAdmin, notify, paginationModel.page, paginationModel.pageSize, roleFilter]);
+  }, [canAssignRoles, canGrantPermission, debouncedSearch, isSuperAdmin, notify, paginationModel.page, paginationModel.pageSize, roleFilter, staffStatusFilter]);
 
   useEffect(() => {
     fetchAccessControl();
@@ -498,6 +506,31 @@ const AccessControlPage = () => {
     }
   };
 
+  const closeStatusDialog = () => {
+    if (savingStatus) return;
+    setPendingStatusChange(null);
+    setStatusReason('');
+  };
+
+  const handleStatusChange = async () => {
+    if (!pendingStatusChange || statusReason.trim().length < 5) return;
+    const { user, status } = pendingStatusChange;
+    setSavingStatus(true);
+    setUpdatingUserId(user.id);
+    try {
+      await updateAccessUserStatus(user.id, status, statusReason.trim());
+      notify(status === 'active' ? 'Staff account reactivated.' : 'Staff account suspended. Active sessions were signed out.', 'success');
+      setPendingStatusChange(null);
+      setStatusReason('');
+      await fetchAccessControl();
+    } catch (error) {
+      notify(getApiErrorMessage(error, 'Failed to update staff status.'), 'error');
+    } finally {
+      setSavingStatus(false);
+      setUpdatingUserId(null);
+    }
+  };
+
   const openCreateUserDialog = () => {
     setCreateUserForm(emptyUserForm);
     setShowPassword(false);
@@ -535,6 +568,11 @@ const AccessControlPage = () => {
     if (!canAssignRoles && deleteUserDialogOpen) closeDeleteUserDialog();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canAssignRoles, deleteUserDialogOpen]);
+
+  useEffect(() => {
+    if (!canAssignRoles && pendingStatusChange) closeStatusDialog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canAssignRoles, pendingStatusChange]);
 
   useEffect(() => {
     if (!canAssignRoles) setPendingRoleAssignment(null);
@@ -588,7 +626,7 @@ const AccessControlPage = () => {
       field: 'status',
       headerName: 'Status',
       width: 110,
-      renderCell: ({ value }) => <Chip label={value} size="small" color={value === 'active' ? 'success' : 'default'} />,
+      renderCell: ({ value }) => <Chip label={value === 'inactive' ? 'Suspended' : value} size="small" color={value === 'active' ? 'success' : value === 'inactive' ? 'warning' : 'default'} />,
     },
     {
       field: 'assignedRole',
@@ -644,7 +682,7 @@ const AccessControlPage = () => {
     {
       field: 'actions',
       headerName: '',
-      width: 70,
+      width: 120,
       sortable: false,
       align: 'right',
       renderCell: ({ row }) => {
@@ -661,20 +699,48 @@ const AccessControlPage = () => {
         } else if (!isSuperAdmin && isSuperAdminAccount) {
           tooltipTitle = 'Only super admins can delete super admin accounts';
         }
+        const isSuspended = row.status === 'inactive';
+        const isAdminAccount = row.assignedRole?.slug === 'admin' || (row.role === 'admin' && !row.roleId);
+        const canChangeStatus = row.status === 'active' || isSuspended;
+        const statusActionDisabled = isSelf || isCustomer || !canChangeStatus || (!isSuperAdmin && (isSuperAdminAccount || isAdminAccount)) || updatingUserId === row.id;
+        const statusActionTitle = isSelf
+          ? 'You cannot suspend your own account'
+          : isCustomer
+            ? 'Manage customer accounts from the Customers page'
+              : !canChangeStatus
+                ? 'Banned accounts cannot be reactivated here'
+                : (!isSuperAdmin && (isSuperAdminAccount || isAdminAccount))
+              ? 'Only super admins can suspend admin accounts'
+              : isSuspended ? 'Reactivate staff account' : 'Suspend staff account';
         return (
-          <Tooltip title={tooltipTitle}>
-            <span>
-              <IconButton
-                size="small"
-                color="error"
-                aria-label={`Delete user ${row.email}`}
-                onClick={() => openDeleteUserDialog(row)}
-                disabled={deletingUser || isSelf || isCustomer || (!isSuperAdmin && isSuperAdminAccount)}
-              >
-                <DeleteIcon fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
+          <Stack direction="row" spacing={0.25}>
+            <Tooltip title={statusActionTitle}>
+              <span>
+                <IconButton
+                  size="small"
+                  color={row.status === 'active' ? 'warning' : 'success'}
+                  aria-label={`${isSuspended ? 'Reactivate' : 'Suspend'} user ${row.email}`}
+                  onClick={() => { setPendingStatusChange({ user: row, status: isSuspended ? 'active' : 'inactive' }); setStatusReason(''); }}
+                  disabled={statusActionDisabled}
+                >
+                  {isSuspended ? <PlayCircleOutlineIcon fontSize="small" /> : <PauseCircleOutlineIcon fontSize="small" />}
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title={tooltipTitle}>
+              <span>
+                <IconButton
+                  size="small"
+                  color="error"
+                  aria-label={`Delete user ${row.email}`}
+                  onClick={() => openDeleteUserDialog(row)}
+                  disabled={deletingUser || isSelf || isCustomer || (!isSuperAdmin && isSuperAdminAccount)}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+          </Stack>
         );
       },
     },
@@ -872,6 +938,23 @@ const AccessControlPage = () => {
                 {roleOptions.map((role) => (
                   <MenuItem key={role.id} value={role.id}>{role.name}</MenuItem>
                 ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: { xs: 0, sm: 180 } }} fullWidth={isMobile}>
+              <InputLabel id="staff-status-filter-label">Filter by status</InputLabel>
+              <Select
+                labelId="staff-status-filter-label"
+                label="Filter by status"
+                value={staffStatusFilter}
+                onChange={(event) => {
+                  setStaffStatusFilter(event.target.value);
+                  setPaginationModel((current) => ({ ...current, page: 0 }));
+                }}
+              >
+                <MenuItem value="">All statuses</MenuItem>
+                <MenuItem value="active">Active</MenuItem>
+                <MenuItem value="inactive">Suspended</MenuItem>
+                <MenuItem value="banned">Banned</MenuItem>
               </Select>
             </FormControl>
           </Stack>
@@ -1324,6 +1407,46 @@ const AccessControlPage = () => {
             startIcon={deletingRole ? <CircularProgress size={16} color="inherit" /> : <DeleteIcon />}
           >
             {deletingRole ? 'Deleting…' : 'Delete Role'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(pendingStatusChange)} onClose={closeStatusDialog} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          {pendingStatusChange?.status === 'active' ? 'Reactivate staff account' : 'Suspend staff account'}
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {pendingStatusChange?.status === 'active'
+              ? <>Reactivate <strong>{pendingStatusChange?.user?.email}</strong>? Their assigned roles will be restored and they can sign in again.</>
+              : <>Suspend <strong>{pendingStatusChange?.user?.email}</strong>? They will lose access immediately and all active sessions will be signed out.</>}
+          </DialogContentText>
+          <TextField
+            autoFocus
+            required
+            fullWidth
+            multiline
+            minRows={2}
+            maxRows={4}
+            label="Reason for this change"
+            value={statusReason}
+            onChange={(event) => setStatusReason(event.target.value)}
+            inputProps={{ maxLength: 500, 'aria-label': 'Reason for this change' }}
+            helperText={`${statusReason.trim().length}/500 characters (minimum 5)`}
+            sx={{ mt: 2 }}
+            disabled={savingStatus}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={closeStatusDialog} disabled={savingStatus}>Cancel</Button>
+          <Button
+            onClick={handleStatusChange}
+            color={pendingStatusChange?.status === 'active' ? 'success' : 'warning'}
+            variant="contained"
+            disabled={savingStatus || statusReason.trim().length < 5}
+            startIcon={savingStatus ? <CircularProgress size={16} color="inherit" /> : pendingStatusChange?.status === 'active' ? <PlayCircleOutlineIcon /> : <PauseCircleOutlineIcon />}
+          >
+            {savingStatus ? 'Saving…' : pendingStatusChange?.status === 'active' ? 'Reactivate account' : 'Suspend account'}
           </Button>
         </DialogActions>
       </Dialog>
