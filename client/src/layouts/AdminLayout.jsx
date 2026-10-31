@@ -152,6 +152,10 @@ const MENU_STRUCTURE = [
   },
 ];
 
+const MENU_PATHS = MENU_STRUCTURE.flatMap(item => item.items ? item.items.map(child => child.path) : [item.path]).filter(Boolean);
+const matchesMenuPath = (path, pathname) =>
+  path === '/admin' ? pathname === path : pathname === path || pathname.startsWith(`${path}/`);
+
 const AdminLayout = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -259,8 +263,16 @@ const AdminLayout = () => {
     localStorage.setItem('admin_sidebar_group_order', JSON.stringify(newOrder));
   };
 
-  const isActive = (path) =>
-    path === '/admin' ? location.pathname === '/admin' : location.pathname.startsWith(path);
+  const isActive = (path) => {
+    if (!matchesMenuPath(path, location.pathname)) return false;
+    // Routes such as /admin/blogs/categories also start with /admin/blogs.
+    // Select only the most specific menu item that matches the current path.
+    return !MENU_PATHS.some(menuPath =>
+      menuPath.length > path.length
+      && menuPath.startsWith(`${path}/`)
+      && matchesMenuPath(menuPath, location.pathname)
+    );
+  };
 
   // Keyboard shortcut for search (Ctrl + /)
   const [searchFocusTrigger, setSearchFocusTrigger] = React.useState(0);
