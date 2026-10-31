@@ -17,6 +17,7 @@ const {
 } = require('../index');
 const tagService = require('../product/tag.service');
 const { buildFeatures } = require('../../config/modes');
+const featureGate = require('../../middleware/featureGate.middleware');
 const { getEffectivePrice, getVariantUnitPrice, resolveSaleLabel } = require('../product/product.pricing');
 const AppError = require('../../utils/AppError');
 
@@ -281,6 +282,7 @@ class SeoService {
     }
 
     if (blogMatch) {
+      if (!(await featureGate.getResolvedFeature('blogs'))) throw new AppError('NOT_FOUND', 404, 'Blog post not found.');
       let slug;
       try { slug = decodeURIComponent(blogMatch[1]); } catch (_) { slug = blogMatch[1]; }
       const post = await BlogPost.findOne({
@@ -292,6 +294,7 @@ class SeoService {
     }
 
     if (pageMatch) {
+      if (!(await featureGate.getResolvedFeature('pages'))) throw new AppError('NOT_FOUND', 404, 'Page not found.');
       let slug;
       try { slug = decodeURIComponent(pageMatch[1]); } catch (_) { slug = pageMatch[1]; }
       const page = await Page.findOne({ where: { slug, status: 'published' } });
@@ -300,11 +303,19 @@ class SeoService {
     }
 
     if (brandMatch) {
+      if (!(await featureGate.getResolvedFeature('brands'))) throw new AppError('NOT_FOUND', 404, 'Brand not found.');
       let slug;
       try { slug = decodeURIComponent(brandMatch[1]); } catch (_) { slug = brandMatch[1]; }
       const brand = await Brand.findOne({ where: { slug, isActive: true } });
       if (brand) return formatEntity(brand, 'brand', `/brands/${encodeURIComponent(slug)}`);
       throw new AppError('NOT_FOUND', 404, 'Brand not found.');
+    }
+
+    if (urlPath === '/blogs' && !(await featureGate.getResolvedFeature('blogs'))) {
+      throw new AppError('NOT_FOUND', 404, 'Blog page not found.');
+    }
+    if (urlPath === '/brands' && !(await featureGate.getResolvedFeature('brands'))) {
+      throw new AppError('NOT_FOUND', 404, 'Brand page not found.');
     }
 
     const defaults = await this._getGlobalDefaults();

@@ -5,6 +5,7 @@ const db = require('../../src/modules');
 const seo = require('../../src/modules/seo/seo.service');
 const tags = require('../../src/modules/product/tag.service');
 const controller = require('../../src/modules/seo/seo.controller');
+const featureMiddleware = require('../../src/middleware/featureGate.middleware');
 const defaults = {
   siteName: 'Shop', title: 'Seeds', titleSuffix: ' | Shop', description: 'Garden seeds',
   canonicalBaseUrl: 'https://shop.test', currency: 'INR',
@@ -22,6 +23,7 @@ beforeEach(() => {
     vi.spyOn(model, 'findOne').mockResolvedValue(null);
   }
   vi.spyOn(tags, 'getPublicTags').mockResolvedValue([]);
+  vi.spyOn(featureMiddleware, 'getResolvedFeature').mockResolvedValue(true);
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -77,6 +79,17 @@ describe('SEO regression coverage', () => {
     await expect(seo.getMetadataByPath('/products/draft')).rejects.toMatchObject({ statusCode: 404 });
     db.Product.findOne.mockResolvedValue({ name: 'Seeds', price: 100, quantity: 1 });
     expect(await seo.getMetadataByPath('/products/seeds')).toMatchObject({ title: 'Better seed title', type: 'product', productData: { price: 100 } });
+  });
+  it.each([
+    ['/blogs', 'blogs'], ['/blogs/post', 'blogs'],
+    ['/brands', 'brands'], ['/brands/brand', 'brands'], ['/p/about', 'pages'],
+  ])('returns 404 for %s when its %s feature is disabled', async (path, feature) => {
+    featureMiddleware.getResolvedFeature.mockResolvedValue(false);
+    await expect(seo.getMetadataByPath(path)).rejects.toMatchObject({ statusCode: 404 });
+    expect(featureMiddleware.getResolvedFeature).toHaveBeenCalledWith(feature);
+    expect(db.BlogPost.findOne).not.toHaveBeenCalled();
+    expect(db.Page.findOne).not.toHaveBeenCalled();
+    expect(db.Brand.findOne).not.toHaveBeenCalled();
   });
   it('returns HTML with a real noindex 404 through the prerender endpoint', async () => {
     vi.spyOn(seo, 'renderHtmlForPath').mockRejectedValue({ statusCode: 404 });
