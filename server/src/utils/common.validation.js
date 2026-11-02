@@ -2,6 +2,9 @@
 
 const Joi = require('joi');
 
+const hideEmptySchema = Joi.boolean().truthy('1', 'yes').falsy('0', 'no').default(false);
+const hideEmptyQuerySchema = Joi.object({ hideEmpty: hideEmptySchema });
+
 /**
  * Common validation schemas for reusable parts
  */
@@ -86,6 +89,8 @@ const slugParamSchema = Joi.object({
 
 
 module.exports = {
+    hideEmptySchema,
+    hideEmptyQuerySchema,
     uuidSchema,
     uuidCsvSchema,
     uuidCsvParamSchema,
@@ -103,7 +108,6 @@ module.exports = {
     paginationQuerySchema,
     slugParamSchema,
 };
-
 
 
 

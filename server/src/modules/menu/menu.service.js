@@ -6,6 +6,7 @@ const AppError = require('../../utils/AppError');
 const { generateSlug } = require('../../utils/slugify');
 
 const { pageChildren, paginateMenu } = require('./menu.pagination');
+const { getPopulatedCategoryIds } = require('../category/category.visibility');
 
 const SORT_ORDER = [['sortOrder', 'ASC'], ['createdAt', 'ASC']];
 
@@ -286,26 +287,34 @@ exports.getMenuById = async (id) => {
     return { ...plain, items: await expandCategoryTrees(buildTree(plain.items || [])) };
 };
 
-const processPublicMenu = async (menu, cacheKey) => {
+const filterEmptyCategories = (items, populatedIds) => items.flatMap((item) => {
+    if (item.targetType === 'category' && !populatedIds.has(item.targetId)) return [];
+    const children = filterEmptyCategories(item.children || [], populatedIds);
+    if (item.targetType === 'category_tree' && children.length === 0) return [];
+    return [{ ...item, children }];
+});
+
+const processPublicMenu = async (menu, cacheKey, { hideEmpty = false } = {}) => {
     if (!menu) return null;
 
     const plain = toPlain(menu);
-    const tree = await expandCategoryTrees(buildTree(plain.items || []).filter(item => !item.parentId));
+    let tree = await expandCategoryTrees(buildTree(plain.items || []).filter(item => !item.parentId));
+    if (hideEmpty) tree = filterEmptyCategories(tree, await getPopulatedCategoryIds());
     const result = { ...plain, items: await resolveTreeUrls(tree) };
     
     const hasSyncedCategories = (items = []) => items.some((item) =>
         item.targetType === 'category_tree' || (item.targetType === 'category' && item.syncChildren) ||
         hasSyncedCategories(item.children || []));
-    if (cacheKey && !hasSyncedCategories(plain.items || [])) setCache(cacheKey, result);
+    if (cacheKey && !hideEmpty && !hasSyncedCategories(plain.items || [])) setCache(cacheKey, result);
     return result;
 };
 
-const getFullPublicMenuByLocation = async (location) => {
+const getFullPublicMenuByLocation = async (location, options = {}) => {
     if (typeof location !== 'string') throw new AppError('INVALID_INPUT', 400);
     const sanitizedLocation = encodeURIComponent(location).replace(/['"*]/g, '');
     
     const cacheKey = `location:${sanitizedLocation}`;
-    const cached = getCache(cacheKey);
+    const cached = !options.hideEmpty && getCache(cacheKey);
     if (cached) return cached;
 
     const menus = await Menu.findAll({
@@ -324,15 +333,15 @@ const getFullPublicMenuByLocation = async (location) => {
     const plainMenus = menus.map(toPlain);
     const plain = plainMenus.find((candidate) => candidate.items?.length > 0) || plainMenus[0];
     
-    return processPublicMenu(plain, cacheKey);
+    return processPublicMenu(plain, cacheKey, options);
 };
 
-const getFullPublicMenuBySlug = async (slug) => {
+const getFullPublicMenuBySlug = async (slug, options = {}) => {
     if (typeof slug !== 'string') throw new AppError('INVALID_INPUT', 400);
     const sanitizedSlug = encodeURIComponent(slug).replace(/['"*]/g, '');
     
     const cacheKey = `slug:${sanitizedSlug}`;
-    const cached = getCache(cacheKey);
+    const cached = !options.hideEmpty && getCache(cacheKey);
     if (cached) return cached;
 
     const menu = await Menu.findOne({
@@ -346,18 +355,18 @@ const getFullPublicMenuBySlug = async (slug) => {
         order: [[{ model: MenuItem, as: 'items' }, 'sortOrder', 'ASC']],
     });
 
-    return processPublicMenu(menu, cacheKey);
+    return processPublicMenu(menu, cacheKey, options);
 };
 
 
-exports.getPublicMenuByLocation = async (location) => paginateMenu(await getFullPublicMenuByLocation(location));
-exports.getPublicMenuBySlug = async (slug) => paginateMenu(await getFullPublicMenuBySlug(slug));
-exports.getPublicMenuChildren = async (menuId, itemId, { offset = 0, limit } = {}) => {
+exports.getPublicMenuByLocation = async (location, options) => paginateMenu(await getFullPublicMenuByLocation(location, options));
+exports.getPublicMenuBySlug = async (slug, options) => paginateMenu(await getFullPublicMenuBySlug(slug, options));
+exports.getPublicMenuChildren = async (menuId, itemId, { offset = 0, limit, hideEmpty = false } = {}) => {
     const menu = await Menu.findOne({
         where: { id: menuId, isActive: true },
         include: [{ model: MenuItem, as: 'items', required: false, where: { isVisible: true } }],
     });
-    const full = await processPublicMenu(menu);
+    const full = await processPublicMenu(menu, null, { hideEmpty });
     const find = (items) => {
         for (const item of items) {
             if (item.id === itemId) return item;
@@ -679,7 +688,6 @@ exports.restoreMenuItem = async (menuId, itemId) => {
         throw error;
     }
 };
-
 
 
 

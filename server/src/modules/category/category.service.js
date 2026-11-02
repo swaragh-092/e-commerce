@@ -8,6 +8,7 @@ const SettingsService = require('../settings/settings.service');
 const { getSaleLabels } = require('../settings/saleLabel.service');
 const { serializeProductPricing } = require('../product/product.pricing');
 const { isBrandVisible, stripBrandFields } = require('../../utils/brandVisibility');
+const { getPopulatedCategoryIds } = require('./category.visibility');
 
 // ProductVariant has no salePrice column. Product-level sale rules are
 // applied by serializeProductPricing after the query returns.
@@ -83,11 +84,12 @@ exports.getCategoryAncestors = async (categoryId) => {
     return chain;
 };
 
-exports.getCategoryTree = async () => {
+exports.getCategoryTree = async ({ hideEmpty = false } = {}) => {
     const categories = await Category.findAll({
         order: [['sortOrder', 'ASC'], ['name', 'ASC']]
     });
-    return buildTree(categories);
+    const populatedIds = hideEmpty ? await getPopulatedCategoryIds(categories) : null;
+    return buildTree(populatedIds ? categories.filter(category => populatedIds.has(category.id)) : categories);
 };
 
 exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20, sortArg = 'newest', minPriceArg, maxPriceArg) => {
@@ -132,9 +134,11 @@ exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20,
     });
     if (!category) throw new AppError('NOT_FOUND', 404, 'Category not found');
 
+    const populatedIds = pageOrOptions?.hideEmpty === true ? await getPopulatedCategoryIds() : null;
+
     // Direct subcategories for the subcategory rail on the category page
     const subcategories = await Category.findAll({
-        where: { parentId: category.id },
+        where: { parentId: category.id, ...(populatedIds && { id: { [Op.in]: [...populatedIds] } }) },
         order: [['sortOrder', 'ASC'], ['name', 'ASC']],
         attributes: ['id', 'name', 'slug', 'image', 'sortOrder'],
     });

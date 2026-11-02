@@ -16,7 +16,7 @@ const MenuChildrenMore = ({ item, onLoaded, menuItem = false, sx }) => {
     setFailed(false);
     try {
       const response = await MenuService.getPublicMenuChildren(item.menuId, item.id, {
-        offset: pagination.nextOffset, limit: pagination.limit,
+        offset: pagination.nextOffset, limit: pagination.limit, hideEmpty: true,
       });
       onLoaded(item.menuId, item.id, response.data);
     } catch {

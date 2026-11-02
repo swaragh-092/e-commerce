@@ -193,6 +193,7 @@ const CategoryPage = () => {
         setNotFound(false);
 
         getCategoryWithProducts(categorySlug, {
+            hideEmpty: true,
             page: filters.page,
             limit: filters.limit,
             sort: filters.sort,
