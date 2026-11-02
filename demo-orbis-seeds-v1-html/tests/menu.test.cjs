@@ -138,7 +138,7 @@ test('API fallback renders and caches bounded desktop menus without shortening m
         children: [{ name: 'Seed ' + index, slug: 'seed-' + index }],
     }));
     menu.API_URL = 'https://api.example/';
-    menu.fetch = async url => ({ json: async () => ({ success: true, data: url.endsWith('categories')
+    menu.fetch = async url => ({ json: async () => ({ success: true, data: new URL(url).pathname.endsWith('/categories')
         ? categories : { items: [{ label: 'Our Products', url: 'product.html', isVisible: true }] } }) });
     menu.localStorage = { setItem: (key, value) => cache.set(key, value) };
     menu.setActiveLinks = () => {};
@@ -154,8 +154,8 @@ test('API fallback renders and caches bounded desktop menus without shortening m
     assert.match(rendered['.mobile-menu-content'], />Crop 7</);
     assert.match(rendered['.mobile-menu-content'], />Seed 7</);
     assert.match(rendered['.mobile-menu-content'], /class="has-submenu mobile-catalog-menu"/);
-    assert.equal(cache.get('orbis_desktop_menu_html_v5'), rendered['.nav-links']);
-    assert.equal(cache.get('orbis_mobile_menu_html_v4'), rendered['.mobile-menu-content']);
+    assert.equal(cache.get('orbis_desktop_menu_populated_v1'), rendered['.nav-links']);
+    assert.equal(cache.get('orbis_mobile_menu_populated_v1'), rendered['.mobile-menu-content']);
 
     // A catalog containing only leaf categories must use the same bounded preview.
     categories.forEach(item => { item.children = []; });

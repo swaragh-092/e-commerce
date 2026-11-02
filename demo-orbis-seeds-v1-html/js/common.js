@@ -294,9 +294,9 @@ function buildMobileMenuSub(items, parentLabel) {
 function fetchAndRenderMenu() {
     var apiUrl = API_URL;
 
-    Promise.all([
-        fetch(apiUrl + "menus/slug/public/orbis-menu").then(function (r) { return r.json(); }),
-        fetch(apiUrl + "categories").then(function (r) { return r.json(); })
+    return Promise.all([
+        fetch(apiUrl + "menus/slug/public/orbis-menu?hideEmpty=true").then(function (r) { return r.json(); }),
+        fetch(apiUrl + "categories?hideEmpty=true").then(function (r) { return r.json(); })
     ])
         .then(function (results) {
             var menuResult = results[0];
@@ -370,8 +370,8 @@ function fetchAndRenderMenu() {
 
                 // Cache in localStorage to render with zero delay/flicker on subsequent loads
                 try {
-                    localStorage.setItem('orbis_desktop_menu_html_v5', desktopHtml);
-                    localStorage.setItem('orbis_mobile_menu_html_v4', mobileHtml);
+                    localStorage.setItem('orbis_desktop_menu_populated_v1', desktopHtml);
+                    localStorage.setItem('orbis_mobile_menu_populated_v1', mobileHtml);
                 } catch (e) { }
 
                 // Update DOM only if changed to avoid unnecessary flicker/repaint
@@ -410,8 +410,8 @@ function fetchAndRenderMenu() {
 
 function applyCachedMenu() {
     try {
-        var cachedDesktop = localStorage.getItem('orbis_desktop_menu_html_v5');
-        var cachedMobile = localStorage.getItem('orbis_mobile_menu_html_v4');
+        var cachedDesktop = localStorage.getItem('orbis_desktop_menu_populated_v1');
+        var cachedMobile = localStorage.getItem('orbis_mobile_menu_populated_v1');
         if (cachedDesktop && $('.nav-links').length) {
             $('.nav-links').html(cachedDesktop);
         }

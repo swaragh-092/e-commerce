@@ -40,7 +40,7 @@ const StorefrontFooter = () => {
   React.useEffect(() => {
     const fetchDynamicLinks = async () => {
       const [menuResult, pageResult] = await Promise.allSettled([
-        MenuService.getPublicMenu('footer'),
+        MenuService.getPublicMenu('footer', { hideEmpty: true }),
         pagesEnabled ? PageService.getPublicPages('bottom') : Promise.resolve({ data: [] }),
       ]);
 

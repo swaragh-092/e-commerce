@@ -39,7 +39,7 @@ function fetchCategories() {
     container.setAttribute('aria-busy', 'true');
     if (categoryBrowser) categoryBrowser.setBusy(true);
 
-    fetch(API_URL + "categories")
+    fetch(API_URL + "categories?hideEmpty=true")
         .then(function (response) {
             if (!response.ok) throw new Error('Unable to load categories');
             return response.json();

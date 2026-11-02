@@ -24,6 +24,7 @@ const AppError = require('../../utils/AppError');
 const { generateSlug } = require('../../utils/slugify');
 const SettingsService = require('../settings/settings.service');
 const { isBrandVisible, stripBrandFields } = require('../../utils/brandVisibility');
+const { getPopulatedCategoryIds } = require('../category/category.visibility');
 const {
   PUBLIC_SETTING_GROUPS,
   PUBLIC_SETTING_GROUP_NAMES,
@@ -578,13 +579,16 @@ const withPublicConstraints = (resource, where = {}) => {
   return { [Op.and]: [where, publicWhere] };
 };
 
-const buildNodeWhere = (resource, node = {}, context = {}) => withPublicConstraints(
-  resource,
-  {
+const buildNodeWhere = (resource, node = {}, context = {}) => {
+  const where = withPublicConstraints(resource, {
     ...buildWhere(resource, node.filters || [], context),
     ...selectedWhere(node),
-  }
-);
+  });
+  // Constrain the query before its limit/count, including nested relations.
+  return resource === 'categories' && context.populatedCategoryIds
+    ? { [Op.and]: [where, { id: { [Op.in]: [...context.populatedCategoryIds] } }] }
+    : where;
+};
 
 const loadManyToMany = async ({ source, targetResource, parent, node, throughAs, sourceWhere, context }) => {
   const Model = RESOURCE_MODELS[targetResource];
@@ -907,12 +911,20 @@ exports.remove = async (id) => {
   return true;
 };
 
+const usesCategories = (resource, node) => resource === 'categories' || legacyRelations(node).some(relation => {
+  const target = RELATIONS[resource]?.[relation.relation];
+  return target && usesCategories(target.resource, relation);
+});
+
 exports.executeConfig = async (config, { api = null, preview = false, query = {} } = {}) => {
   const normalized = normalizeConfig(config);
   const enabledBlocks = normalized.blocks.filter((block) => block.enabled !== false && block.resource);
   const SettingsService = require('../settings/settings.service');
   const { features } = await SettingsService.getFeatures();
   const context = { query, preview, features };
+  if (!preview && query.hideEmpty === true && enabledBlocks.some(block => usesCategories(block.resource, block))) {
+    context.populatedCategoryIds = await getPopulatedCategoryIds();
+  }
 
   const output = {};
   const arrayOutput = [];

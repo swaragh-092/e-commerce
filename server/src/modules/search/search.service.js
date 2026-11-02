@@ -19,6 +19,7 @@ const SearchRepository = require('./search.repository');
 const { events, PRODUCT_EVENTS } = require('../../utils/events');
 const { normalizeSearchQuery } = require('./search.utils');
 const { stripBrandFields } = require('../../utils/brandVisibility');
+const { getPopulatedCategoryIds } = require('../category/category.visibility');
 
 // ── Search response cache ────────────────────────────────────────────────
 // Follows the same 60s TTL pattern used by saleLabelCache and featureCache.
@@ -29,8 +30,8 @@ const CACHE_TTL_MS = 60_000;
 const MAX_CACHE_ENTRIES = 200;
 const _cache = new Map();
 
-const buildCacheKey = (query, page, limit, brandsVisible = true) =>
-  `${normalizeSearchQuery(query).toLowerCase()}:${page}:${limit}:b${brandsVisible ? 1 : 0}`;
+const buildCacheKey = (query, page, limit, brandsVisible = true, hideEmpty = false) =>
+  `${normalizeSearchQuery(query).toLowerCase()}:${page}:${limit}:b${brandsVisible ? 1 : 0}:h${hideEmpty ? 1 : 0}`;
 
 /**
  * Redacts brand identity from search payloads when the brands feature is OFF.
@@ -99,11 +100,11 @@ events.on(PRODUCT_EVENTS.BULK_DELETED, invalidateCache);
  * @param {number} limit - Items per page
  * @returns {object} { products, brands, categories, suggestion?, fromCache }
  */
-const search = async (query, page = 1, limit = 20) => {
+const search = async (query, page = 1, limit = 20, { hideEmpty = false } = {}) => {
   const normalizedQuery = normalizeSearchQuery(query);
   const { features } = await SettingsService.getFeatures();
   const brandsVisible = features.brands !== false;
-  const cacheKey = buildCacheKey(normalizedQuery, page, limit, brandsVisible);
+  const cacheKey = buildCacheKey(normalizedQuery, page, limit, brandsVisible, hideEmpty);
 
   // Serve from cache if available (hot path)
   const cached = cacheGet(cacheKey);
@@ -112,13 +113,14 @@ const search = async (query, page = 1, limit = 20) => {
   }
 
   const { limit: queryLimit, offset } = getPagination(page, limit);
+  const categoryOptions = hideEmpty ? { populatedCategoryIds: await getPopulatedCategoryIds() } : {};
 
   // Run product, brand, and category searches in parallel
   const [productResults, brands, categories, labelPresets] =
     await Promise.all([
       SearchRepository.searchProducts(normalizedQuery, queryLimit, offset, { includeBrands: brandsVisible }),
       brandsVisible ? SearchRepository.searchBrands(normalizedQuery, 5) : [],
-      SearchRepository.searchCategories(normalizedQuery, 5),
+      SearchRepository.searchCategories(normalizedQuery, 5, categoryOptions),
       getSaleLabels().catch(() => []),
     ]);
 
@@ -134,7 +136,7 @@ const search = async (query, page = 1, limit = 20) => {
     productResults.count === 0 && brands.length === 0 && categories.length === 0;
 
   const suggestion = isEmpty
-    ? await SearchRepository.suggestCorrection(normalizedQuery, { includeBrands: brandsVisible })
+    ? await SearchRepository.suggestCorrection(normalizedQuery, { includeBrands: brandsVisible, ...categoryOptions })
     : null;
 
   const result = redactBrands({

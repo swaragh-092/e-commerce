@@ -9,11 +9,11 @@ const { authorizePermissions } = require('../../middleware/role.middleware');
 const { validate } = require('../../middleware/validate.middleware');
 const { auditLog } = require('../audit/audit.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
-const { idParamSchema } = require('../../utils/common.validation');
+const { idParamSchema, hideEmptyQuerySchema } = require('../../utils/common.validation');
 
 
 
-router.get('/', categoryController.getTree);
+router.get('/', validate(hideEmptyQuerySchema, 'query'), categoryController.getTree);
 router.get('/:slug', validate(getCategoryProductsQuerySchema, 'query'), categoryController.getBySlug);
 
 

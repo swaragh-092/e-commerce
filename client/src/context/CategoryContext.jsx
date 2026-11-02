@@ -12,7 +12,7 @@ export const CategoryProvider = ({ children }) => {
     let mounted = true;
     const fetchCategories = async () => {
       try {
-        const res = await getCategoryTree();
+        const res = await getCategoryTree({ hideEmpty: true });
         if (mounted) {
           const data = res?.data?.categories ?? res?.data ?? [];
           setCategories(Array.isArray(data) ? data : []);

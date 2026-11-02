@@ -163,6 +163,20 @@
 | PUT    | `/categories/:id`   | ✅    | Admin  | Update                                        |
 | DELETE | `/categories/:id`   | ✅    | Admin  | Delete (products set to categoryId=NULL)      |
 
+Storefront category consumers opt in with `hideEmpty=true` (default: `false`).
+On `/categories`, this removes branches without a published, enabled, non-deleted
+product anywhere in their descendant tree. Parents with populated descendants and
+categories containing out-of-stock products remain visible. On
+`/categories/:slug`, it filters the subcategory rail without changing the product
+query or making direct category URLs invalid.
+
+The same flag is supported by public menus (`/menus/public/:location`,
+`/menus/slug/public/:slug`, and `/menus/public/:menuId/items/:itemId/children`),
+`/api-builder/public/:slug`, and `/search`. Filtering happens before limits and
+pagination. Search also filters category spelling suggestions. Menu Builder,
+category management, product assignment, and API Builder previews retain their
+existing full category data. Stock levels do not affect category visibility.
+
 ---
 
 ## Cart
