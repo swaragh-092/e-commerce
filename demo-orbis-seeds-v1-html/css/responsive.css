@@ -79,6 +79,9 @@
    .research-developement-parent{padding-top: 25px;}
    .contact-left{max-width: 215px;}
    
+  #section-1 .banner-inner-wrapper {padding-top: 150px;gap: 28px;}
+  #section-1 .banner-statistics {grid-template-columns: repeat(2, minmax(0, 1fr));gap: 24px 32px;max-width: 760px;}
+
   /* Hide all labels by default */
   #section-1 .content-slider nav .controls label {display: none;}
 
@@ -243,6 +246,10 @@
 }
 
 @media(max-width:776px){
+   #section-1 .banner-inner-wrapper {gap: 24px;padding-bottom: 24px;}
+   #section-1 .banner-statistics {gap: 20px;}
+   #section-1 .banner-statistics h3 {font-size: 20px;}
+
    .location-1 h3{font-size: 20px;}
    .location-1 span {padding: 8px 13px;}
    .locations{justify-content: center;}
@@ -387,6 +394,10 @@
    .research-faq .acc__title h3{font-size: 20px;}
 }
  @media(max-width:480px){
+    #section-1 .banner-inner-wrapper {gap: 20px;}
+    #section-1 .banner-statistics {gap: 18px 12px;padding-bottom: 20px;}
+    #section-1 .banner-statistics h3 {font-size: 18px;}
+
     .bottom-header-top .iso-logos img {max-width: 38px;}
     header.scrolled-header .bottom-inner-wrapper .iso-logos img {max-width: 40px;}
     .about-inner{gap:0}
