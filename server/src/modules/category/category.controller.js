@@ -5,7 +5,7 @@ const { success, error } = require('../../utils/response');
 
 exports.getTree = async (req, res, next) => {
     try {
-        const tree = await categoryService.getCategoryTree();
+        const tree = await categoryService.getCategoryTree({ hideEmpty: req.query.hideEmpty });
         return success(res, tree);
     } catch (err) {
         next(err);
@@ -14,7 +14,7 @@ exports.getTree = async (req, res, next) => {
 
 exports.getBySlug = async (req, res, next) => {
     try {
-        const { page = 1, limit = 20, sort = 'newest', minPrice, maxPrice, includeSubcategories } = req.query;
+        const { page = 1, limit = 20, sort = 'newest', minPrice, maxPrice, includeSubcategories, hideEmpty } = req.query;
         const result = await categoryService.getCategoryWithProducts(req.params.slug, {
             page: parseInt(page, 10) || 1,
             limit: parseInt(limit, 10) || 20,
@@ -22,6 +22,7 @@ exports.getBySlug = async (req, res, next) => {
             minPrice,
             maxPrice,
             includeSubcategories,
+            hideEmpty,
         });
         return success(res, result);
     } catch (err) {

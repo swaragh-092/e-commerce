@@ -96,7 +96,7 @@ function initBackButton() {
     backBtnWrapper.style.display = 'block';
     backBtnWrapper.innerHTML =
         '<a href="javascript:void(0)" class="view-product-btn back-btn">' +
-        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>' +
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>' +
         '<span>Go Back</span>' +
         '</a>';
 
@@ -340,13 +340,13 @@ function updateCategoryBreadcrumbs(categorySlug, fallbackName) {
         if (window.OrbiSEO && currentCat && !params.get('slug')) window.OrbiSEO.setCategorySEO(currentCat, path);
     }
     try {
-        var cached = JSON.parse(sessionStorage.getItem('orbis_categories_data') || 'null');
+        var cached = JSON.parse(sessionStorage.getItem('orbis_categories_populated_v1') || 'null');
         if (Array.isArray(cached)) apply(cached);
     } catch (error) { /* Storage is optional. */ }
     if (!productCategoriesRequest) {
-        productCategoriesRequest = fetch(API_URL + 'categories').then(OrbiCatalog.readResponse).then(function (result) {
+        productCategoriesRequest = fetch(API_URL + 'categories?hideEmpty=true').then(OrbiCatalog.readResponse).then(function (result) {
             if (!Array.isArray(result.data)) throw new Error('Unable to load categories');
-            try { sessionStorage.setItem('orbis_categories_data', JSON.stringify(result.data)); } catch (error) { /* Storage is optional. */ }
+            try { sessionStorage.setItem('orbis_categories_populated_v1', JSON.stringify(result.data)); } catch (error) { /* Storage is optional. */ }
             return result.data;
         }).catch(function (error) { productCategoriesRequest = null; throw error; });
     }

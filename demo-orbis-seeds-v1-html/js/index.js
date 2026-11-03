@@ -37,7 +37,10 @@ function resolveItemImage(sub, uploadUrl) {
 }
 
 function renderHomeCategories(categories, uploadUrl) {
-    if (!categories || !categories.length) return false;
+    if (!categories || !categories.length) {
+        $('#orbis-home-section-categories').empty();
+        return false;
+    }
     var html = "";
     categories.forEach(function (cat) {
         if (!cat.children || !cat.children.length) return;
@@ -84,7 +87,7 @@ function renderHomeCategories(categories, uploadUrl) {
 function fetchAndRenderHomeSections() {
     var apiUrl = typeof API_URL !== 'undefined' ? API_URL : "https://eshopadmin.swaragh.org.in/api/";
     var uploadUrl = typeof APP_URL !== 'undefined' ? APP_URL : "https://eshopadmin.swaragh.org.in/";
-    var homeSectionUrl = apiUrl + "api-builder/public/orbis-home-section-1";
+    var homeSectionUrl = apiUrl + "api-builder/public/orbis-home-section-1?hideEmpty=true";
 
     fetch(homeSectionUrl)
         .then(function (r) { return r.json(); })
@@ -100,7 +103,7 @@ function fetchAndRenderHomeSections() {
         })
         .catch(function () {
             // Fallback to categories endpoint if api-builder is disabled or unavailable
-            fetch(apiUrl + "categories")
+            fetch(apiUrl + "categories?hideEmpty=true")
                 .then(function (r) { return r.json(); })
                 .then(function (catResult) {
                     var categories = catResult && catResult.success && Array.isArray(catResult.data)

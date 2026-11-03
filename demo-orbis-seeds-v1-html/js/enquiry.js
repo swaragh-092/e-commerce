@@ -38,12 +38,12 @@ $(document).ready(function () {
 
     function customAlert(title, text, type, timer) {
         var icon = type === 'success' ? 'OK' : (type === 'error' ? '!' : 'i');
-        var color = type === 'success' ? '#58AE68' : (type === 'error' ? '#dc3545' : '#71C5DD');
+        var color = type === 'success' ? 'var(--color-success)' : (type === 'error' ? 'var(--color-danger)' : 'var(--color-primary)');
         var toastKey = [type || '', title || '', text || ''].join('|');
         var safeToastKey = C.escape(toastKey);
         var html = `
         <div class="custom-toast" data-toast-key="${safeToastKey}" style="border-left: 4px solid ${color};">
-            <div class="custom-toast-icon" style="background:${color};">${icon}</div>
+            <div class="custom-toast-icon" style="background:${color};color:${type === 'success' || type === 'error' ? 'var(--color-white)' : 'var(--color-ink)'};">${icon}</div>
             <div class="custom-toast-content"><strong>${C.escape(title)}</strong> ${C.escape(text)}</div>
             ${!timer ? `<button class="custom-toast-btn" style="color:${color};">OK</button>` : ''}
         </div>`;

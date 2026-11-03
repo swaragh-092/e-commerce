@@ -94,7 +94,7 @@ describe('public menu child pagination', () => {
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
     const next = vi.fn();
     await require('../../src/modules/menu/menu.controller').getPublicMenuChildren({ params: { menuId, itemId }, query }, res, next);
-    expect(read).toHaveBeenCalledWith(menuId, itemId, { offset: 10, limit: 10 });
+    expect(read).toHaveBeenCalledWith(menuId, itemId, { offset: 10, limit: 10, hideEmpty: false });
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, data: page }));
     expect(next).not.toHaveBeenCalled();
   });

@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [1.2.1.0] - 2026-11-03
+
+### Fixed
+- Allow payment providers to retry failed webhook settlements without losing the captured-payment event to duplicate detection.
+- Share login limits, email throttles, and session revocations across server instances and restarts.
+- Prevent removal of media files that are still referenced and validate public menu slugs before lookup.
+
+### Changed
+- Load API Builder relations in batches and fetch newsletter delivery totals in one grouped query.
+
 ## [1.2.0.0] - 2026-10-31
 
 ### Added

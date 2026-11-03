@@ -101,7 +101,7 @@ const ProductListPage = ({ tag = null }) => {
             return null;
         };
 
-        getCategoryTree().then((res) => {
+        getCategoryTree({ hideEmpty: true }).then((res) => {
             const path = findPathInTree(res?.data || [], categorySlug);
             setCategoryName(path || '');
         }).catch(() => setCategoryName(''));

@@ -76,8 +76,8 @@ const StoreLayout = () => {
   useEffect(() => {
     const fetchTopLinks = async () => {
       const [headerMenuResult, mobileMenuResult, pageResult] = await Promise.allSettled([
-        MenuService.getPublicMenu('header'),
-        MenuService.getPublicMenu('mobile'),
+        MenuService.getPublicMenu('header', { hideEmpty: true }),
+        MenuService.getPublicMenu('mobile', { hideEmpty: true }),
         pagesEnabled ? PageService.getPublicPages('top') : Promise.resolve({ data: [] }),
       ]);
 

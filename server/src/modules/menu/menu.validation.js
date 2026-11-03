@@ -1,6 +1,7 @@
 'use strict';
 
 const Joi = require('joi');
+const { hideEmptySchema } = require('../../utils/common.validation');
 
 const menuLocations = ['header', 'footer', 'mobile', 'sidebar'];
 const targetTypes = ['none', 'custom_url', 'page', 'category', 'category_tree', 'product', 'collection', 'system_route'];
@@ -154,6 +155,10 @@ const getPublicMenuSchema = Joi.object({
     location: Joi.string().valid(...menuLocations).required(),
 });
 
+const getPublicMenuBySlugSchema = Joi.object({
+    slug: Joi.string().trim().max(120).pattern(/^[a-z0-9-]+$/).required(),
+});
+
 const reorderMenusSchema = Joi.object({
     menus: Joi.array().items(Joi.object({
         id: Joi.string().trim().uuid().required(),
@@ -190,6 +195,7 @@ const publicChildrenParamsSchema = Joi.object({
     itemId: Joi.string().max(200).required(),
 });
 const publicChildrenQuerySchema = Joi.object({
+    hideEmpty: hideEmptySchema,
     offset: Joi.number().integer().min(0).max(1000000).default(0),
     limit: Joi.number().integer().min(1).max(100),
 });
@@ -208,11 +214,11 @@ module.exports = {
     queryMenusSchema,
 
     getPublicMenuSchema,
+    getPublicMenuBySlugSchema,
     idParamSchema,
     menuIdParamSchema,
     menuItemIdParamSchema,
 };
-
 
 
 

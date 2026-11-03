@@ -10,6 +10,7 @@ const AuditService = require('../audit/audit.service');
 const { ACTIONS, AUTH_TIME, ENTITIES } = require('../../config/constants');
 const { enrichUserAuthorization } = require('../../config/permissions');
 const logger = require('../../utils/logger');
+const LoginAttemptStore = require('./loginAttemptStore');
 
 const { hashToken, generateTokens, signTempTwoFactorToken } = require('./tokenUtils');
 
@@ -36,57 +37,8 @@ const isEmailVerificationRequired = async () => {
 const JWT_ISS = process.env.JWT_ISSUER || 'ecommerce-pro';
 const JWT_AUD = process.env.JWT_AUDIENCE || 'ecommerce-pro-client';
 
-// Per-account login brute-force guard (in-memory; use Redis for
-// multi-instance — same caveat as tokenBlocklist).
-const LOGIN_FAIL_WINDOW_MS = 15 * 60 * 1000;
-const LOGIN_MAX_FAILS = 5;
-const LOGIN_LOCK_MS = 15 * 60 * 1000;
-const loginFailures = new Map(); // normalizedEmail -> { count, firstAt, lockedUntil }
-
-const checkLoginLock = (normalizedEmail) => {
-  const rec = loginFailures.get(normalizedEmail);
-  if (!rec) return;
-  const now = Date.now();
-  if (rec.lockedUntil && now < rec.lockedUntil) {
-    throw new AppError('TOO_MANY_REQUESTS', 429, 'Too many failed attempts for this account. Please try again later.');
-  }
-  if (now - rec.firstAt > LOGIN_FAIL_WINDOW_MS) loginFailures.delete(normalizedEmail);
-};
-
-const recordLoginFailure = (normalizedEmail) => {
-  const now = Date.now();
-  const rec = loginFailures.get(normalizedEmail);
-  if (!rec || now - rec.firstAt > LOGIN_FAIL_WINDOW_MS) {
-    loginFailures.set(normalizedEmail, { count: 1, firstAt: now, lockedUntil: null });
-    return;
-  }
-  rec.count += 1;
-  if (rec.count >= LOGIN_MAX_FAILS) rec.lockedUntil = now + LOGIN_LOCK_MS;
-};
-
-// Quiet per-email throttle for password-reset / verification mail so rotating
-// IPs can't inbox-spam a victim. Throttled requests return success silently
-// (no oracle, no duplicate mail).
-const EMAIL_SEND_QUIET_MS = 5 * 60 * 1000;
-const lastEmailSentAt = new Map(); // `${kind}:${email}` -> timestamp
-const isEmailThrottled = (kind, normalizedEmail) => {
-  const last = lastEmailSentAt.get(`${kind}:${normalizedEmail}`);
-  if (last && Date.now() - last < EMAIL_SEND_QUIET_MS) return true;
-  lastEmailSentAt.set(`${kind}:${normalizedEmail}`, Date.now());
-  return false;
-};
-
-// Bound the in-memory throttle maps — entries are short-lived, sweep them.
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, rec] of loginFailures) {
-    const lastActivity = Math.max(rec.firstAt || 0, rec.lockedUntil || 0);
-    if (now - lastActivity > LOGIN_FAIL_WINDOW_MS + LOGIN_LOCK_MS) loginFailures.delete(key);
-  }
-  for (const [key, ts] of lastEmailSentAt) {
-    if (now - ts > EMAIL_SEND_QUIET_MS * 2) lastEmailSentAt.delete(key);
-  }
-}, 5 * 60 * 1000).unref();
+// Shared, atomic per-email throttles prevent rotating IPs from inbox-spamming a victim.
+const isEmailThrottled = (kind, email) => LoginAttemptStore.claimEmailSend(kind, email);
 
 const getClientBaseUrl = () => {
   const url = process.env.CLIENT_URL || 'http://localhost:5173';
@@ -235,7 +187,7 @@ const AccountEvents = require('./accountEvents');
 
 const login = async (email, password, ipAddress, rememberMe = false, userAgent, trustedDevice) => {
   const normalizedEmail = String(email || '').trim().toLowerCase();
-  checkLoginLock(normalizedEmail);
+  await LoginAttemptStore.checkLock(normalizedEmail);
   const user = await User.scope('withPassword').findOne({
     where: { email: normalizedEmail },
     include: authUserInclude,
@@ -247,10 +199,10 @@ const login = async (email, password, ipAddress, rememberMe = false, userAgent, 
     : await bcrypt.compare(password, DUMMY_HASH);
 
   if (!user || !isValid) {
-    recordLoginFailure(normalizedEmail);
+    await LoginAttemptStore.recordFailure(normalizedEmail);
     throw new AppError('UNAUTHORIZED', 401, 'Invalid email or password');
   }
-  loginFailures.delete(normalizedEmail);
+  await LoginAttemptStore.clear(normalizedEmail);
 
   if (user.status !== 'active') {
     throw new AppError('FORBIDDEN', 403, 'Your account is inactive or banned');
@@ -514,7 +466,7 @@ const forgotPassword = async (email) => {
   }
 
   // Quiet per-email throttle: rotating IPs must not inbox-spam one victim.
-  if (isEmailThrottled('forgot', normalizedEmail)) return;
+  if (await isEmailThrottled('forgot', normalizedEmail)) return;
 
   await sequelize.transaction(async (t) => {
     // Delete any existing unused tokens for this user
@@ -625,7 +577,7 @@ const resendVerification = async (email) => {
     if (!user || user.emailVerified) return; // Silent return — no state leak
 
     // Quiet per-email throttle (same anti-spam rationale as forgot-password).
-    if (isEmailThrottled('resend', normalizedEmail)) return;
+    if (await isEmailThrottled('resend', normalizedEmail)) return;
 
     await EmailVerificationToken.destroy({ where: { userId: user.id }, transaction: t });
 

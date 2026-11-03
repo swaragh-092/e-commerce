@@ -35,7 +35,7 @@ const StorefrontSidebarMenu = ({ title = 'Quick Links', onNavigate }) => {
 
   React.useEffect(() => {
     let mounted = true;
-    MenuService.getPublicMenu('sidebar')
+    MenuService.getPublicMenu('sidebar', { hideEmpty: true })
       .then((response) => {
         if (mounted) setMenu(response.data || null);
       })

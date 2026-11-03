@@ -19,7 +19,7 @@ describe('Show more menu children', () => {
     fireEvent.click(button);
     expect(button).toBeDisabled();
     expect(MenuService.getPublicMenuChildren).toHaveBeenCalledTimes(1);
-    expect(MenuService.getPublicMenuChildren).toHaveBeenCalledWith('menu', 'parent', { limit: 1, offset: 1 });
+    expect(MenuService.getPublicMenuChildren).toHaveBeenCalledWith('menu', 'parent', { limit: 1, offset: 1, hideEmpty: true });
     resolve({ data: page });
     await waitFor(() => expect(onLoaded).toHaveBeenCalledWith('menu', 'parent', page));
   });

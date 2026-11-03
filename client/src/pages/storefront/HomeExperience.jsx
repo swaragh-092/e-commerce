@@ -14,6 +14,7 @@ import {
 } from '../../components/storefront/sections/sectionRegistry';
 import SectionRenderer from '../../components/storefront/sections/SectionRenderer';
 import { buildSectionRendererData } from '../../components/storefront/sections/sectionData';
+import { filterCategoryTiles } from '../../utils/categories';
 
 const DEFAULT_HERO_IMAGE = 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1800&q=80';
 
@@ -175,7 +176,7 @@ const fetchSectionData = async (section) => {
   }
 
   try {
-    const response = await api.get('/api-builder/public/' + slug, { timeout: 2000 });
+    const response = await api.get('/api-builder/public/' + slug, { timeout: 2000, params: { hideEmpty: true } });
     
     if (!response || !response.data) {
       throw new Error('Empty or null results returned');
@@ -225,13 +226,13 @@ const HomeExperience = () => {
     () => visibleSections.filter((section) => needsProductData(section, { pricingEnabled })),
     [pricingEnabled, visibleSections],
   );
-  const needsCategories = visibleSections.some((section) => needsCategoryData(section, { hasConfiguredTiles: Boolean(arr(config.categoryTiles).length) }));
+  const needsCategories = visibleSections.some((section) => needsCategoryData(section));
   const [data, setData] = useState({ categories: [], products: {} });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const productFetches = productSections.map((section) => fetchSectionData(section));
-    const categoryFetch = needsCategories ? getCategories() : Promise.resolve(null);
+    const categoryFetch = needsCategories ? getCategories({ hideEmpty: true }) : Promise.resolve(null);
 
     setLoading(true);
     Promise.allSettled([...productFetches, categoryFetch])
@@ -252,8 +253,9 @@ const HomeExperience = () => {
   }, [needsCategories, productSections]);
 
   const buildSectionData = (section) => buildSectionRendererData({
-    section,
-    homepage: { ...config, promoBanners: visiblePromoBanners },
+    section: needsCategoryData(section) && Array.isArray(section.items)
+      ? { ...section, items: filterCategoryTiles(section.items, data.categories) } : section,
+    homepage: { ...config, categoryTiles: filterCategoryTiles(config.categoryTiles, data.categories), promoBanners: visiblePromoBanners },
     resolvedData: data,
     brands: contextBrands,
     loading,

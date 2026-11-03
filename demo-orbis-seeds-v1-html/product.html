@@ -14,6 +14,8 @@
 <!-- css -->
 <link rel="stylesheet" href="css/orbi-seeds.css">
 <link rel="stylesheet" href="css/responsive.css">
+<link rel="stylesheet" href="css/products.css">
+<link rel="stylesheet" href="css/categories.css">
 <!-- css -->
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -31,8 +33,15 @@
  <script src="js/constant.js"></script>
     <script src="js/catalog.js"></script>
     <style>
-        .wrapper {
+        body > .wrapper {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            min-height: 100dvh;
             overflow: unset;
+        }
+        body > .wrapper > .products-main-wrapper {
+            flex: 1 0 auto;
         }
     </style>
 </head>
@@ -195,11 +204,13 @@
         </div>
         <!-- inner-banner -->
 
-        <section class="products-main-wrapper">
-            <div class="fluid-container">
-                <div id="catalog-controls" class="catalog-controls"></div>
-                <div class="products-inner-wrapper" id="catalog-results" aria-busy="true"></div>
-                <nav id="catalog-pagination" class="catalog-pagination" aria-label="Category pages"></nav>
+        <section class="products-main-wrapper catalog-category-page">
+            <div class="fluid-container category-layout">
+                <div class="category-content">
+                    <div id="catalog-controls" class="catalog-controls" hidden></div>
+                    <div class="products-inner-wrapper" id="catalog-results" aria-busy="true"></div>
+                    <nav id="catalog-pagination" class="catalog-pagination" aria-label="Subcategory pages" hidden></nav>
+                </div>
             </div>
         </section>
 
@@ -316,7 +327,7 @@
 
 
 
-<a id="to-top" href="javascript:;" title="Back to top"><img src="images/go-to-top.png" alt="to-top"></a>
+<a id="to-top" class="catalog-to-top" href="javascript:;" title="Back to top"><img src="images/go-to-top.png" alt="to-top"></a>
 
 <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
 

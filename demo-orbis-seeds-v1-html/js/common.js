@@ -178,7 +178,7 @@ function escapeMenuText(value) {
     });
 }
 
-var menuDataCacheKey = 'orbis_menu_data_v1';
+var menuDataCacheKey = 'orbis_menu_populated_v2';
 
 // The public menu API already applies each parent's configured childDisplayLimit.
 // Keep its order and batch intact, including when Menu Builder selects Show all.
@@ -331,7 +331,7 @@ function readMenuResponse(response) {
 }
 
 function fetchAndRenderMenu() {
-    return fetch(API_URL + 'menus/slug/public/orbis-menu')
+    return fetch(API_URL + 'menus/slug/public/orbis-menu?hideEmpty=true')
         .then(readMenuResponse)
         .then(function (result) {
             var menu = result.data || { items: [] };
