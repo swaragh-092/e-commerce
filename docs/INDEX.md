@@ -1,6 +1,6 @@
 # Documentation Index
 
-> Last updated: 2026-10-31
+> Last updated: 2026-11-03
 
 ## Reading Order
 
@@ -53,6 +53,7 @@
 ### Operations & Security
 | Doc | What It Covers |
 |-----|---------------|
+| [Backend audit rollout](BACKEND-AUDIT-ROLLOUT.md) | v1.2.1.0 migration order, behavior changes, verification, and remaining limits |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Docker deployment, AWS EC2 setup, environment config, backup strategy |
 | [TESTING_GUIDE.md](TESTING_GUIDE.md) | Manual & automated testing framework, QA workflows |
 | [../SECURITY.md](../SECURITY.md) | Security policy, supported versions, vulnerability reporting |
