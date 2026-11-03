@@ -3,6 +3,7 @@ const AppError = require('../../utils/AppError');
 
 // Include both the legacy role and persisted custom-role base roles.
 const requiresAdminMfa = (user) => {
+  if (process.env.REQUIRE_ADMIN_MFA === 'false' && !user?.twoFactorEnabled) return false;
   const isAdmin = (role) => ['admin', 'super_admin'].includes(role);
   return isAdmin(user?.role) || (user?.roles || []).some((role) =>
     typeof role === 'string' ? isAdmin(role) : isAdmin(role.baseRole) || isAdmin(role.slug)
