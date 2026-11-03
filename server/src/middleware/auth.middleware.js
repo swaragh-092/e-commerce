@@ -2,7 +2,7 @@
 
 const jwt = require('jsonwebtoken');
 const AppError = require('../utils/AppError');
-const { User, Role, Permission } = require('../modules');
+const { User, Role, Permission, RefreshToken } = require('../modules');
 const { enrichUserAuthorization } = require('../config/permissions');
 const logger = require('../utils/logger');
 const tokenBlocklist = require('../utils/tokenBlocklist');
@@ -46,6 +46,14 @@ const authenticate = async (req, res, next) => {
     // Reject sessions revoked via sid kill-switch (revoke/force-logout/ban).
     if (decoded.sid && tokenBlocklist.isSessionRevoked(decoded.sid)) {
       throw new AppError('UNAUTHORIZED', 401, 'Session has been revoked');
+    }
+
+    // The database session record makes revocation effective across workers.
+    if (decoded.sid) {
+      const session = await RefreshToken.findByPk(decoded.sid, { attributes: ['id', 'revokedAt'] });
+      if (!session || session.revokedAt) {
+        throw new AppError('UNAUTHORIZED', 401, 'Session has been revoked');
+      }
     }
 
     // Check blocklist (tokens invalidated on logout)
@@ -96,6 +104,11 @@ const optionalAuth = async (req, res, next) => {
     // Revoked sessions proceed as unauthenticated.
     if (decoded.sid && tokenBlocklist.isSessionRevoked(decoded.sid)) {
       return next();
+    }
+
+    if (decoded.sid) {
+      const session = await RefreshToken.findByPk(decoded.sid, { attributes: ['id', 'revokedAt'] });
+      if (!session || session.revokedAt) return next();
     }
 
     const user = await User.findByPk(decoded.id, {
