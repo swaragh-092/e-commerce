@@ -1,5 +1,5 @@
-/* Preserve the product catalogue's original design using the shared palette. */
-.catalog-products-page {
+/* Product cards and shared catalogue controls use the central palette. */
+:is(.catalog-products-page, .catalog-subcategories-page) {
   --catalog-text: #0c0c0c;
   --catalog-copy: #555555;
   --catalog-sidebar-surface: #f8faf9;
@@ -93,23 +93,23 @@
 }
 
 /* Search and clear controls keep their original fills, borders and text. */
-.catalog-products-page .catalog-toolbar {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-toolbar {
   background: var(--catalog-toolbar-surface);
   border-color: var(--catalog-control-border);
 }
-.catalog-products-page .catalog-field input,
-.catalog-products-page .catalog-field select {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-field input,
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-field select {
   color: var(--catalog-control-text);
   border-color: var(--catalog-control-border);
 }
-.catalog-products-page .catalog-field-q input::placeholder {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-field-q input::placeholder {
   color: var(--catalog-placeholder);
 }
-.catalog-products-page .catalog-search-button {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-search-button {
   --button-hover-bg: var(--color-accent-dark);
   --button-active-bg: var(--color-accent-dark);
 }
-.catalog-products-page .catalog-clear {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-clear {
   --button-bg: var(--color-white);
   --button-text: var(--color-accent-dark);
   --button-border: var(--color-accent-dark);
@@ -117,24 +117,24 @@
   --button-active-bg: var(--color-accent-dark);
   border-width: 1.5px;
 }
-.catalog-products-page .catalog-clear:hover:not(:disabled):not([aria-disabled="true"]),
-.catalog-products-page .catalog-clear:active:not(:disabled):not([aria-disabled="true"]) {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-clear:hover:not(:disabled):not([aria-disabled="true"]),
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-clear:active:not(:disabled):not([aria-disabled="true"]) {
   --button-text: var(--color-white);
 }
-.catalog-products-page .catalog-pagination button:hover:not(:disabled) {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-pagination button:hover:not(:disabled) {
   background: var(--color-accent);
   color: var(--color-white);
   border-color: var(--color-accent);
 }
-.catalog-products-page .catalog-pagination button[aria-current="page"] {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-pagination button[aria-current="page"] {
   color: var(--color-white);
 }
-.catalog-products-page .catalog-controls input:focus,
-.catalog-products-page .catalog-controls select:focus {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-controls input:focus,
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-controls select:focus {
   border-color: var(--color-accent-dark);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent-dark) 12%, transparent);
 }
-.catalog-products-page .catalog-controls :is(input, select, button):focus-visible,
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-controls :is(input, select, button):focus-visible,
 .catalog-products-page .products-list a:focus-visible,
 .catalog-products-page .product-enquiry-actions button:focus-visible {
   outline: 3px solid var(--color-accent-dark);
@@ -142,17 +142,17 @@
 }
 
 /* Give category and search priority; keep display controls beside the count. */
-.catalog-products-page .catalog-toolbar {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-toolbar {
   display: grid;
   grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
   gap: 20px;
   padding: 16px 20px;
 }
-.catalog-products-page .catalog-toolbar :is(input, select, .catalog-search-button) {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-toolbar :is(input, select, .catalog-search-button) {
   min-height: 44px;
   height: 44px;
 }
-.catalog-products-page .catalog-results-bar {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-results-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -160,14 +160,14 @@
   gap: 12px 20px;
   margin-top: 14px;
 }
-.catalog-products-page .catalog-results-status {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-results-status {
   flex: 1 1 200px;
   min-width: 0;
   margin: 0;
   font-size: 14px;
   overflow-wrap: anywhere;
 }
-.catalog-products-page .catalog-result-options {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-result-options {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -175,18 +175,18 @@
   gap: 16px;
   margin-left: auto;
 }
-.catalog-products-page .catalog-result-options .catalog-field {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-result-options .catalog-field {
   flex: 0 0 auto;
   flex-direction: row;
   align-items: center;
   gap: 8px;
 }
-.catalog-products-page .catalog-result-options label {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-result-options label {
   width: auto;
   font-size: 13px;
   white-space: nowrap;
 }
-.catalog-products-page .catalog-result-options select {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-result-options select {
   width: auto;
   min-width: 0;
   min-height: 40px;
@@ -197,7 +197,7 @@
   background-position: left 0 center, right 10px center;
   background-size: 0, 12px 12px;
 }
-.catalog-products-page .catalog-result-options .catalog-clear {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-result-options .catalog-clear {
   width: auto;
   min-height: 40px;
   height: 40px;
@@ -206,12 +206,12 @@
   border-radius: 6px;
   font-size: 14px;
 }
-.catalog-products-page .catalog-result-options .catalog-clear::before {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-result-options .catalog-clear::before {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
 }
-.catalog-products-page .catalog-options-toggle {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-options-toggle {
   display: none;
   align-items: center;
   justify-content: center;
@@ -228,7 +228,7 @@
   line-height: 1.3;
   white-space: nowrap;
 }
-.catalog-products-page .catalog-options-toggle::after {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-options-toggle::after {
   content: '';
   width: 6px;
   height: 6px;
@@ -238,12 +238,12 @@
   transform: rotate(45deg);
   transition: transform .2s;
 }
-.catalog-products-page .catalog-options-toggle:hover,
-.catalog-products-page .catalog-options-toggle[aria-expanded="true"] {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-options-toggle:hover,
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-options-toggle[aria-expanded="true"] {
   background: var(--color-primary-soft);
   border-color: var(--color-primary);
 }
-.catalog-products-page .catalog-options-toggle[aria-expanded="true"]::after {
+:is(.catalog-products-page, .catalog-subcategories-page) .catalog-options-toggle[aria-expanded="true"]::after {
   transform: translateY(3px) rotate(225deg);
 }
 @media (max-width: 776px) {
@@ -252,12 +252,12 @@
   }
 }
 @media (max-width: 700px) {
-  .catalog-products-page .catalog-toolbar {
+  :is(.catalog-products-page, .catalog-subcategories-page) .catalog-toolbar {
     grid-template-columns: minmax(0, 1fr);
     padding: 16px;
     gap: 12px;
   }
-  .catalog-products-page .catalog-results-bar {
+  :is(.catalog-products-page, .catalog-subcategories-page) .catalog-results-bar {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
@@ -267,14 +267,14 @@
     border-radius: 10px;
     background: var(--catalog-toolbar-surface);
   }
-  .catalog-products-page .catalog-results-status {
+  :is(.catalog-products-page, .catalog-subcategories-page) .catalog-results-status {
     font-size: 13px;
     line-height: 1.5;
   }
-  .catalog-products-page .catalog-options-toggle {
+  :is(.catalog-products-page, .catalog-subcategories-page) .catalog-options-toggle {
     display: inline-flex;
   }
-  .catalog-products-page .catalog-result-options {
+  :is(.catalog-products-page, .catalog-subcategories-page) .catalog-result-options {
     display: none;
     grid-column: 1 / -1;
     grid-template-columns: repeat(3, max-content);
@@ -286,22 +286,22 @@
     padding-top: 12px;
     border-top: 1px solid var(--catalog-control-border);
   }
-  .catalog-products-page .catalog-results-bar.is-expanded .catalog-result-options {
+  :is(.catalog-products-page, .catalog-subcategories-page) .catalog-results-bar.is-expanded .catalog-result-options {
     display: grid;
   }
-  .catalog-products-page .catalog-result-options .catalog-field {
+  :is(.catalog-products-page, .catalog-subcategories-page) .catalog-result-options .catalog-field {
     flex-direction: column;
     align-items: stretch;
     gap: 4px;
   }
-  .catalog-products-page .catalog-result-options select {
+  :is(.catalog-products-page, .catalog-subcategories-page) .catalog-result-options select {
     min-height: 44px;
     height: 44px;
     padding-left: 8px;
     padding-right: 26px;
     background-position: left 0 center, right 8px center;
   }
-  .catalog-products-page .catalog-result-options .catalog-clear {
+  :is(.catalog-products-page, .catalog-subcategories-page) .catalog-result-options .catalog-clear {
     min-height: 44px;
     height: 44px;
     padding: 8px 6px;

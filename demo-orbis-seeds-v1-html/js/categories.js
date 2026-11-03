@@ -2,17 +2,27 @@ var categoriesData = [];
 var navigationHistory = [];
 var categoriesLoaded = false;
 var categoriesLoading = false;
+var categoryBrowser = null;
 
 document.addEventListener("DOMContentLoaded", function () {
+    categoryBrowser = window.OrbiBrowser && OrbiBrowser.create({
+        label: 'Subcategories', search: false, sizes: [12, 24, 48],
+        sorts: [{ value: 'name_asc', label: 'Name: A–Z' }, { value: 'name_desc', label: 'Name: Z–A' }],
+        onChange: function () { if (categoriesLoaded) handleUrlParams(); }
+    });
     fetchCategories();
 
     // Handle browser back/forward buttons
-    window.addEventListener('popstate', function () {
+    if (!categoryBrowser) window.addEventListener('popstate', function () {
         if (categoriesLoaded) {
             handleUrlParams();
         }
     });
 });
+
+function compareCategories(a, b) {
+    return String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' }) || String(a.slug).localeCompare(String(b.slug));
+}
 
 function fetchCategories() {
     const container = document.querySelector(".products-inner-wrapper");
@@ -51,6 +61,11 @@ function fetchCategories() {
 }
 
 function handleUrlParams() {
+    var canonical = new URL(window.location.href);
+    if (canonical.searchParams.has('q')) {
+        canonical.searchParams.delete('q');
+        window.history.replaceState({}, '', canonical);
+    }
     const urlParams = new URLSearchParams(window.location.search);
     const categorySlug = urlParams.get("cat");
 
@@ -146,6 +161,15 @@ function displayCategories(list, parentName, targetCategory, path) {
     if (!container) return;
 
     container.innerHTML = "";
+    var isSubcategory = !!targetCategory;
+    var section = document.querySelector('.catalog-category-page');
+    if (section) section.classList.toggle('has-subcategories', isSubcategory);
+    var content = document.querySelector('.category-content');
+    if (content) content.classList.toggle('catalog-subcategories-page', isSubcategory);
+    ['catalog-controls', 'catalog-pagination'].forEach(function (id) {
+        var element = document.getElementById(id);
+        if (element) element.hidden = !isSubcategory;
+    });
 
     // Update Heading (located above breadcrumb inside inner-banner)
     const heading = document.querySelector(".product-heading");
@@ -186,12 +210,22 @@ function displayCategories(list, parentName, targetCategory, path) {
         }
     }
 
-    // Show every category at this level without search, filters or pagination.
-    var categories = (list || []).slice().sort(function (a, b) {
-        return String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' }) || String(a.slug).localeCompare(String(b.slug));
-    });
+    // Only subcategory pages use browsing controls; the root lists every main category.
+    var categories = (list || []).slice();
+    var state = isSubcategory && categoryBrowser ? categoryBrowser.sync() : null;
+    categories.sort(function (a, b) { return compareCategories(a, b) * (state && state.sort === 'name_desc' ? -1 : 1); });
+    if (state) {
+        var total = categories.length;
+        var pages = Math.max(1, Math.ceil(total / state.limit));
+        if (state.page > pages) { categoryBrowser.write({ page: pages }, true); return; }
+        categories = categories.slice((state.page - 1) * state.limit, state.page * state.limit);
+        categoryBrowser.results({ total: total, page: state.page, totalPages: pages, limit: state.limit });
+    }
     if (!categories.length) {
-        container.innerHTML = '<div class="no-data" role="status">No sub-categories found.</div>';
+        var empty = document.createElement('div');
+        empty.className = 'no-data'; empty.setAttribute('role', 'status');
+        empty.textContent = 'No subcategories found.';
+        container.appendChild(empty);
     }
     categories.forEach(function (category) {
         container.appendChild(createCategoryCard(category));
