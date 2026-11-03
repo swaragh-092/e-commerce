@@ -77,6 +77,19 @@ describe('Authentication security regressions', () => {
 
 describe('Administrator MFA policy', () => {
   const policy = require('../../src/modules/auth/mfaPolicy');
+  it('allows unenrolled administrators when mandatory MFA is explicitly disabled', () => {
+    vi.stubEnv('REQUIRE_ADMIN_MFA', 'false');
+    try {
+      for (const user of [{ role: 'admin' }, { role: 'super_admin' }, { role: 'customer', roles: [{ baseRole: 'admin' }] }]) {
+        expect(policy.requiresAdminMfa(user)).toBe(false);
+        expect(() => policy.assertMfaEnrollment(user)).not.toThrow();
+        expect(() => policy.assertMfaSession(user, {})).not.toThrow();
+        const enrolledUser = { ...user, twoFactorEnabled: true };
+        expect(() => policy.assertMfaSession(enrolledUser, {})).toThrow();
+        expect(() => policy.assertMfaSession(enrolledUser, { mfa: true })).not.toThrow();
+      }
+    } finally { vi.unstubAllEnvs(); }
+  });
   it.each([
     { role: 'admin' },
     { role: 'super_admin', roles: [] },

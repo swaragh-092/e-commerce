@@ -6,7 +6,7 @@ Date: 2026-11-02. Scope: accounts/login only. Status: local implementation in pr
 
 ## Confirmed requirements
 
-- Administrators without MFA must be denied login until operator-assisted enrollment.
+- Mandatory administrator MFA is controlled by `REQUIRE_ADMIN_MFA` (enforced by default). The owner may set `REQUIRE_ADMIN_MFA=false` during rollout to allow password login without enrollment. Set it to `true` after enrolling administrators to enforce it again. Voluntarily enabled MFA continues to require verification.
 - Infrastructure in scope: AWS EC2, GitHub, PostgreSQL.
 - Do not infer deployment topology, change live credentials, or suspend identities based only on an email address.
 - PostgreSQL runs on the AWS EC2 instance. Test both locally and at `https://eshopadmin.swaragh.org.in/admin`.
