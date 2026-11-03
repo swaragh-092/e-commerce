@@ -163,13 +163,11 @@ function isCatalogMenu(item) {
 function getMenuItemUrl(item) {
     if (item.targetType === 'category_tree') return 'product.html';
     var url = formatMenuUrl(item.url);
-    // Every category, crop and product opens the same catalogue.
-    if (/^products?\.html(?:[?#]|$)/.test(url)) {
-        var parsed = new URL(url, window.location.href);
-        var slug = parsed.searchParams.get('category') || parsed.searchParams.get('cat');
-        parsed.searchParams.delete('cat');
-        if (slug) parsed.searchParams.set('category', slug);
-        return 'product.html' + parsed.search + parsed.hash;
+    // Parent categories open the category browser; leaves keep their product listing.
+    if (hasMenuChildren(item) && /^products?\.html\?/.test(url)) {
+        var params = new URL(url, window.location.href).searchParams;
+        var slug = params.get('category') || params.get('cat');
+        if (slug) return 'product.html?cat=' + encodeURIComponent(slug);
     }
     return url;
 }
@@ -180,266 +178,187 @@ function escapeMenuText(value) {
     });
 }
 
-function categoryMenuItem(category) {
-    var children = (category.children || []).map(categoryMenuItem);
-    return {
-        label: category.name,
-        url: 'product.html?category=' + encodeURIComponent(category.slug || ''),
-        sortOrder: category.sortOrder || 0,
-        isVisible: true,
-        children: children
-    };
+var menuDataCacheKey = 'orbis_menu_populated_v2';
+
+// The public menu API already applies each parent's configured childDisplayLimit.
+// Keep its order and batch intact, including when Menu Builder selects Show all.
+function visibleMenuItems(items) {
+    return (items || []).filter(function (item) { return item.isVisible !== false; });
 }
 
-function buildDesktopMegaMenu(item) {
-    var categoryLimit = 4;
-    var subcategoryLimit = 12;
+function hasMenuChildren(item) {
+    return visibleMenuItems(item.children).length > 0 || !!(item.childrenPagination && item.childrenPagination.hasMore);
+}
+
+function menuChildrenAttributes(item, view, catalogDepth) {
+    return ' data-menu-children="' + escapeMenuText(item.id) + '" data-menu-view="' + view + '"' +
+        (catalogDepth == null ? '' : ' data-menu-catalog-depth="' + catalogDepth + '"');
+}
+
+function menuLink(item, className) {
+    return '<a href="' + escapeMenuText(getMenuItemUrl(item)) + '" data-menu-link="' + escapeMenuText(item.id) + '"' +
+        (className ? ' class="' + className + '"' : '') +
+        (item.openInNewTab ? ' target="_blank" rel="noopener noreferrer"' : '') + '>' + escapeMenuText(item.label) + '</a>';
+}
+
+function buildMenuMoreLink(item) {
+    if (!item.childrenPagination || !item.childrenPagination.hasMore) return '';
+    var url = getMenuItemUrl(item);
+    if (url === 'javascript:;') return '';
+    return '<a href="' + escapeMenuText(url) + '" class="menu-children-more" aria-label="More ' + escapeMenuText(item.label) + '"' +
+        (item.openInNewTab ? ' target="_blank" rel="noopener noreferrer"' : '') + '>More &rarr;</a>';
+}
+
+function buildDesktopMegaMenuContent(item) {
     var compact = isCatalogMenu(item);
-    var html = '<div class="mega-menu-wrapper' + (compact ? ' mega-menu-catalog' : '') + '"><div class="mega-menu-container"><div class="mega-menu-columns">';
-
-    var sortedChildren = (item.children || []).filter(function (child) { return child.isVisible; })
-        .sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
-    var shownChildren = compact ? sortedChildren.slice(0, categoryLimit) : sortedChildren;
-
-    shownChildren.forEach(function (child) {
-        var childUrl = getMenuItemUrl(child);
-        var targetAttr = child.openInNewTab ? ' target="_blank"' : '';
-        var sortedSubChildren = (child.children || []).filter(function (subChild) { return subChild.isVisible; })
-            .sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
-        var wide = compact && sortedSubChildren.length > 6;
-
-        html += '<div class="mega-menu-column' + (wide ? ' mega-menu-column-wide' : '') + '">';
-        html += '<a href="' + escapeMenuText(childUrl) + '" class="mega-menu-column-title"' + targetAttr + '>' + escapeMenuText(child.label) + '</a>';
-
-        if (sortedSubChildren.length > 0) {
-            html += '<ul class="mega-menu-list">';
-            // Only truncate when the parent has a destination for the remaining links.
-            var hasMore = compact && childUrl !== 'javascript:;' && sortedSubChildren.length > subcategoryLimit;
-            var shownSubChildren = hasMore ? sortedSubChildren.slice(0, subcategoryLimit) : sortedSubChildren;
-            shownSubChildren.forEach(function (subChild, index) {
-                var subUrl = getMenuItemUrl(subChild);
-                var subTargetAttr = subChild.openInNewTab ? ' target="_blank"' : '';
-                var nextColumn = wide && hasMore && index === Math.ceil(shownSubChildren.length / 2);
-                html += '<li' + (nextColumn ? ' class="mega-menu-next-column"' : '') + '><a href="' + escapeMenuText(subUrl) + '"' + subTargetAttr + '>' + escapeMenuText(subChild.label) + '</a></li>';
-            });
-            if (hasMore) html += '<li class="mega-menu-more"><a href="' + escapeMenuText(childUrl) + '" aria-label="More ' + escapeMenuText(child.label) + '"' + targetAttr + '>More &rarr;</a></li>';
-            html += '</ul>';
+    var html = '<div class="mega-menu-columns">';
+    visibleMenuItems(item.children).forEach(function (child) {
+        html += '<div class="mega-menu-column">';
+        html += menuLink(child, 'mega-menu-column-title');
+        if (hasMenuChildren(child)) {
+            html += '<ul class="mega-menu-list"' + menuChildrenAttributes(child, compact ? 'catalog' : 'desktop') + '>';
+            html += (compact ? buildDesktopCatalogItems(child.children, child) : buildDesktopMenuSub(child.children, child)) + '</ul>';
         }
         html += '</div>';
     });
-
     html += '</div>';
-    if (compact && sortedChildren.length > categoryLimit) {
-        html += '<div class="mega-menu-footer"><a href="product.html">More categories &rarr;</a></div>';
+    if (item.childrenPagination && item.childrenPagination.hasMore) {
+        html += '<div class="mega-menu-footer">' + buildMenuMoreLink(item) + '</div>';
     }
-    html += '</div></div>';
     return html;
 }
 
-function buildDesktopMenuSub(items) {
-    var html = "";
-    if (!items || !items.length) return html;
+function buildDesktopMegaMenu(item) {
+    return '<div class="mega-menu-wrapper' + (isCatalogMenu(item) ? ' mega-menu-catalog' : '') + '"><div class="mega-menu-container"' +
+        menuChildrenAttributes(item, 'mega') + '>' + buildDesktopMegaMenuContent(item) + '</div></div>';
+}
 
-    items.forEach(function (item) {
-        if (!item.isVisible) return;
-        var hasChildren = item.children && item.children.length > 0;
-        var itemUrl = getMenuItemUrl(item);
-        var targetAttr = item.openInNewTab ? ' target="_blank"' : '';
-
-        if (hasChildren) {
-            html += '<li class="dropdown-wrapper-li"><a href="' + itemUrl + '"' + targetAttr + '>' + item.label + '</a>';
-            html += '<div class="dropdown-wrapper"><ul>';
-            var sortedChildren = item.children.sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
-            html += buildDesktopMenuSub(sortedChildren);
-            html += '</ul></div></li>';
-        } else {
-            html += '<li><a href="' + itemUrl + '"' + targetAttr + '>' + item.label + '</a></li>';
-        }
-    });
+// Catalog navigation stops at the category links; deeper levels open on the category page.
+function buildDesktopCatalogItems(items, parent) {
+    var html = visibleMenuItems(items).map(function (item) { return '<li>' + menuLink(item) + '</li>'; }).join('');
+    if (parent.childrenPagination && parent.childrenPagination.hasMore) {
+        html += '<li class="mega-menu-more">' + buildMenuMoreLink(parent) + '</li>';
+    }
     return html;
 }
 
-function buildMobileMenuSub(items, parentLabel) {
-    var html = "";
-    if (!items || !items.length) return html;
-
-    html += '<li class="back-item"><a href="javascript:;" class="back-button"><span class="back-icon"><img src="images/icons/back.png" alt="Back"></span> ' + (parentLabel || 'Back') + '</a></li>';
-
-    items.forEach(function (item) {
-        if (!item.isVisible) return;
-        var hasChildren = item.children && item.children.length > 0;
-        var itemUrl = getMenuItemUrl(item);
-        var targetAttr = item.openInNewTab ? ' target="_blank"' : '';
-
-        var liClass = hasChildren ? 'class="has-submenu"' : '';
-        html += '<li ' + liClass + '>';
-
-        if (hasChildren) {
-            html += '<div class="menu-item-row">';
-            html += '<a href="' + itemUrl + '"' + targetAttr + '>' + item.label + '</a>';
-            html += '<span class="submenu-toggle"><img src="images/icons/next.png" alt=">"></span>';
-            html += '</div>';
-            html += '<ul class="submenu">';
-            var sortedChildren = item.children.sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
-            html += buildMobileMenuSub(sortedChildren, item.label);
-            html += '</ul>';
+function buildDesktopMenuSub(items, parent) {
+    var html = '';
+    visibleMenuItems(items).forEach(function (item) {
+        if (hasMenuChildren(item)) {
+            html += '<li class="dropdown-wrapper-li">' + menuLink(item);
+            html += '<div class="dropdown-wrapper"><ul' + menuChildrenAttributes(item, 'desktop') + '>';
+            html += buildDesktopMenuSub(item.children, item) + '</ul></div></li>';
         } else {
-            html += '<a href="' + itemUrl + '"' + targetAttr + '>' + item.label + '</a>';
+            html += '<li>' + menuLink(item) + '</li>';
         }
-        html += '</li>';
     });
+    if (parent && parent.childrenPagination && parent.childrenPagination.hasMore) {
+        html += '<li class="mega-menu-more">' + buildMenuMoreLink(parent) + '</li>';
+    }
     return html;
+}
+
+function buildMobileMenuSub(items, parentLabel, parent, catalogDepth) {
+    if (catalogDepth == null && parent && isCatalogMenu(parent)) catalogDepth = 1;
+    var html = '<li class="back-item"><a href="javascript:;" class="back-button"><span class="back-icon"><img src="images/icons/back.png" alt="Back"></span> ' + escapeMenuText(parentLabel || 'Back') + '</a></li>';
+    visibleMenuItems(items).forEach(function (item) { html += buildMobileMenuItem(item, catalogDepth); });
+    if (parent && parent.childrenPagination && parent.childrenPagination.hasMore) {
+        html += '<li class="menu-more-row">' + buildMenuMoreLink(parent) + '</li>';
+    }
+    return html;
+}
+
+function buildMobileMenuItem(item, catalogDepth) {
+    if (catalogDepth == null && isCatalogMenu(item)) catalogDepth = 0;
+    var hasChildren = hasMenuChildren(item) && (catalogDepth == null || catalogDepth < 2);
+    var html = '<li' + (hasChildren ? ' class="has-submenu' + (isCatalogMenu(item) ? ' mobile-catalog-menu' : '') + '"' : '') + '>';
+    if (hasChildren) {
+        html += '<div class="menu-item-row">' + menuLink(item);
+        html += '<span class="submenu-toggle"><img src="images/icons/next.png" alt=">"></span></div>';
+        var childDepth = catalogDepth == null ? null : catalogDepth + 1;
+        html += '<ul class="submenu"' + menuChildrenAttributes(item, 'mobile', childDepth) + '>';
+        html += buildMobileMenuSub(item.children, item.label, item, childDepth) + '</ul>';
+    } else {
+        html += menuLink(item);
+    }
+    return html + '</li>';
+}
+
+function ensureMobileMenu() {
+    if ($('.mobile-menu-container').length === 0) {
+        $('body').append(
+            '<div class="mobile-menu-overlay"></div>' +
+            '<div class="mobile-menu-container">' +
+            '<div class="mobile-menu-header">' +
+            '<img src="images/orbi-seeds-logo.jpg" alt="Logo">' +
+            '<div class="mobile-menu-close">&times;</div></div>' +
+            '<div class="mobile-menu-content"></div></div>'
+        );
+    }
+}
+
+function renderMenu(menu) {
+    var desktopHtml = '';
+    var mobileHtml = '<ul><li><a href="index.html" class="resp-home">Home</a></li>';
+    visibleMenuItems(menu.items).forEach(function (item) {
+        if (hasMenuChildren(item)) {
+            var isMega = isCatalogMenu(item) || visibleMenuItems(item.children).some(hasMenuChildren);
+            if (isMega) {
+                desktopHtml += '<li class="megamenu-wrapper-li">' + menuLink(item) + buildDesktopMegaMenu(item) + '</li>';
+            } else {
+                desktopHtml += '<li class="dropdown-wrapper-li">' + menuLink(item);
+                desktopHtml += '<div class="dropdown-wrapper last"><ul' + menuChildrenAttributes(item, 'desktop') + '>';
+                desktopHtml += buildDesktopMenuSub(item.children, item) + '</ul></div></li>';
+            }
+        } else {
+            desktopHtml += '<li class="dropdown-wrapper-li">' + menuLink(item) + '</li>';
+        }
+        mobileHtml += buildMobileMenuItem(item);
+    });
+    mobileHtml += '</ul>';
+    if ($('.nav-links').html() !== desktopHtml) $('.nav-links').html(desktopHtml);
+    ensureMobileMenu();
+    if ($('.mobile-menu-content').html() !== mobileHtml) $('.mobile-menu-content').html(mobileHtml);
+}
+
+function readMenuResponse(response) {
+    if (!response.ok) throw new Error('Menu request failed (' + response.status + ')');
+    return response.json().then(function (result) {
+        if (!result.success) throw new Error(result.message || 'Menu request failed');
+        return result;
+    });
 }
 
 function fetchAndRenderMenu() {
-    var apiUrl = API_URL;
-
-    return Promise.all([
-        fetch(apiUrl + "menus/slug/public/orbis-menu?hideEmpty=true").then(function (r) { return r.json(); }),
-        fetch(apiUrl + "categories?hideEmpty=true").then(function (r) { return r.json(); })
-    ])
-        .then(function (results) {
-            var menuResult = results[0];
-            var categoriesResult = results[1];
-
-            if (menuResult && menuResult.success && menuResult.data && menuResult.data.items) {
-                var desktopHtml = "";
-                var mobileHtml = '<ul>';
-
-                // Initial mobile items
-                mobileHtml += '<li><a href="index.html" class="resp-home">Home</a></li>';
-
-                var items = menuResult.data.items.sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
-
-                items.forEach(function (item) {
-                    if (!item.isVisible) return;
-
-                    var hasChildren = item.children && item.children.length > 0;
-                    var targetAttr = item.openInNewTab ? ' target="_blank"' : '';
-
-                    // Identify "Our Products" for dynamic category injection
-                    var isProducts = isCatalogMenu(item);
-
-                    if (isProducts && (!hasChildren)) {
-                        if (categoriesResult && categoriesResult.success && categoriesResult.data) {
-                            item.children = categoriesResult.data.map(categoryMenuItem);
-                            hasChildren = item.children.length > 0;
-                        }
-                    }
-                    var itemUrl = getMenuItemUrl(item);
-
-                    // Desktop Builder
-                    if (hasChildren) {
-                        // Check if it should be a mega menu (e.g. if children have children)
-                        var isMegaMenu = isProducts || item.children.some(function (c) { return c.children && c.children.length > 0; });
-
-                        if (isMegaMenu) {
-                            desktopHtml += '<li class="megamenu-wrapper-li"><a href="' + itemUrl + '"' + targetAttr + '>' + item.label + '</a>';
-                            desktopHtml += buildDesktopMegaMenu(item);
-                            desktopHtml += '</li>';
-                        } else {
-                            desktopHtml += '<li class="dropdown-wrapper-li"><a href="' + itemUrl + '"' + targetAttr + '>' + item.label + '</a>';
-                            desktopHtml += '<div class="dropdown-wrapper last"><ul>';
-                            var sortedChildren = item.children.sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
-                            desktopHtml += buildDesktopMenuSub(sortedChildren);
-                            desktopHtml += '</ul></div></li>';
-                        }
-                    } else {
-                        desktopHtml += '<li class="dropdown-wrapper-li"><a href="' + itemUrl + '"' + targetAttr + '>' + item.label + '</a></li>';
-                    }
-
-                    // Mobile Builder
-                    var liClass = hasChildren ? 'class="has-submenu' + (isProducts ? ' mobile-catalog-menu' : '') + '"' : '';
-                    mobileHtml += '<li ' + liClass + '>';
-                    if (hasChildren) {
-                        mobileHtml += '<div class="menu-item-row">';
-                        mobileHtml += '<a href="' + itemUrl + '"' + targetAttr + '>' + item.label + '</a>';
-                        mobileHtml += '<span class="submenu-toggle"><img src="images/icons/next.png" alt=">"></span>';
-                        mobileHtml += '</div>';
-                        mobileHtml += '<ul class="submenu">';
-                        var sortedChildren = item.children.sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
-                        mobileHtml += buildMobileMenuSub(sortedChildren, item.label);
-                        mobileHtml += '</ul>';
-                    } else {
-                        mobileHtml += '<a href="' + itemUrl + '"' + targetAttr + '>' + item.label + '</a>';
-                    }
-                    mobileHtml += '</li>';
-                });
-
-                mobileHtml += '</ul>';
-
-                // Cache in localStorage to render with zero delay/flicker on subsequent loads
-                try {
-                    localStorage.setItem('orbis_desktop_menu_populated_v1', desktopHtml);
-                    localStorage.setItem('orbis_mobile_menu_populated_v1', mobileHtml);
-                } catch (e) { }
-
-                // Update DOM only if changed to avoid unnecessary flicker/repaint
-                if ($('.nav-links').html() !== desktopHtml) {
-                    $('.nav-links').html(desktopHtml);
-                }
-
-                // Build the custom mobile menu container if it doesn't exist
-                if ($('.mobile-menu-container').length === 0) {
-                    $('body').append(
-                        '<div class="mobile-menu-overlay"></div>' +
-                        '<div class="mobile-menu-container">' +
-                        '<div class="mobile-menu-header">' +
-                        '<img src="images/orbi-seeds-logo.jpg" alt="Logo">' +
-                        '<div class="mobile-menu-close">&times;</div>' +
-                        '</div>' +
-                        '<div class="mobile-menu-content"></div>' +
-                        '</div>'
-                    );
-                }
-                if ($('.mobile-menu-content').html() !== mobileHtml) {
-                    $('.mobile-menu-content').html(mobileHtml);
-                }
-            }
+    return fetch(API_URL + 'menus/slug/public/orbis-menu?hideEmpty=true')
+        .then(readMenuResponse)
+        .then(function (result) {
+            var menu = result.data || { items: [] };
+            if (!Array.isArray(menu.items)) throw new Error('Invalid public menu response');
+            // Cache the initial API batch, never the old frontend-truncated HTML or expanded pages.
+            try { localStorage.setItem(menuDataCacheKey, JSON.stringify(menu)); } catch (e) { }
+            renderMenu(menu);
         })
-        .catch(function (error) {
-            console.error("Error fetching menu or categories:", error);
-        })
+        .catch(function (error) { console.error('Error fetching menu:', error); })
         .finally(function () {
             setActiveLinks();
-            if (typeof window.initMobileMenu === 'function') {
-                window.initMobileMenu();
-            }
+            if (typeof window.initMobileMenu === 'function') window.initMobileMenu();
         });
 }
 
 function applyCachedMenu() {
     try {
-        var cachedDesktop = localStorage.getItem('orbis_desktop_menu_populated_v1');
-        var cachedMobile = localStorage.getItem('orbis_mobile_menu_populated_v1');
-        if (cachedDesktop && $('.nav-links').length) {
-            $('.nav-links').html(cachedDesktop);
-        }
-        if (cachedMobile) {
-            if ($('.mobile-menu-container').length === 0) {
-                $('body').append(
-                    '<div class="mobile-menu-overlay"></div>' +
-                    '<div class="mobile-menu-container">' +
-                    '<div class="mobile-menu-header">' +
-                    '<img src="images/orbi-seeds-logo.jpg" alt="Logo">' +
-                    '<div class="mobile-menu-close">&times;</div>' +
-                    '</div>' +
-                    '<div class="mobile-menu-content"></div>' +
-                    '</div>'
-                );
-            }
-            $('.mobile-menu-content').html(cachedMobile);
-        }
-        if (cachedDesktop) {
+        var cached = JSON.parse(localStorage.getItem(menuDataCacheKey));
+        if (cached && Array.isArray(cached.items)) {
+            renderMenu(cached);
             setActiveLinks();
         }
     } catch (e) { }
 }
 
-// Immediately apply cached header to eliminate delay and flickering
-if (typeof $ !== 'undefined' && $('.nav-links').length > 0) {
-    applyCachedMenu();
-}
+// Immediately apply cached header to eliminate delay and flickering.
+if (typeof $ !== 'undefined' && $('.nav-links').length > 0) applyCachedMenu();
 
 $(document).ready(function () {
     applyCachedMenu();

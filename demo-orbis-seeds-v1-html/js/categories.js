@@ -1,34 +1,28 @@
 var categoriesData = [];
 var navigationHistory = [];
-var currentList = [];
-var currentParentName = "Our Products";
-var categoryBrowser = null;
 var categoriesLoaded = false;
 var categoriesLoading = false;
+var categoryBrowser = null;
 
 document.addEventListener("DOMContentLoaded", function () {
     categoryBrowser = window.OrbiBrowser && OrbiBrowser.create({
-        label: 'Categories', placeholder: 'Search categories and sub-categories', sizes: [12, 24, 48],
-        filters: [{
-            name: 'cat', label: 'Category', resetSearch: true, options: [
-                { value: '', label: 'All categories' }
-            ]
-        }],
+        label: 'Subcategories', search: false, sizes: [12, 24, 48],
         sorts: [{ value: 'name_asc', label: 'Name: A–Z' }, { value: 'name_desc', label: 'Name: Z–A' }],
-        onChange: function () {
-            if (categoriesLoaded) handleUrlParams();
-            else fetchCategories();
-        }
+        onChange: function () { if (categoriesLoaded) handleUrlParams(); }
     });
     fetchCategories();
 
     // Handle browser back/forward buttons
-    window.addEventListener('popstate', function (event) {
-        if (!categoryBrowser && categoriesData.length > 0) {
+    if (!categoryBrowser) window.addEventListener('popstate', function () {
+        if (categoriesLoaded) {
             handleUrlParams();
         }
     });
 });
+
+function compareCategories(a, b) {
+    return String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' }) || String(a.slug).localeCompare(String(b.slug));
+}
 
 function fetchCategories() {
     const container = document.querySelector(".products-inner-wrapper");
@@ -37,7 +31,6 @@ function fetchCategories() {
 
     container.innerHTML = '<div class="loading">Loading categories...</div>';
     container.setAttribute('aria-busy', 'true');
-    if (categoryBrowser) categoryBrowser.setBusy(true);
 
     fetch(API_URL + "categories?hideEmpty=true")
         .then(function (response) {
@@ -48,7 +41,6 @@ function fetchCategories() {
             if (result.success && Array.isArray(result.data)) {
                 categoriesData = result.data;
                 categoriesLoaded = true;
-                updateCategoryFilterOptions();
                 handleUrlParams();
             } else {
                 throw new Error('Unable to load categories');
@@ -62,28 +54,18 @@ function fetchCategories() {
             retry.onclick = fetchCategories;
             container.querySelector('.error').setAttribute('role', 'alert');
             container.querySelector('.error').appendChild(retry);
-            if (categoryBrowser) categoryBrowser.setStatus('Categories could not be loaded. Please try again.');
         }).finally(function () {
             categoriesLoading = false;
             container.setAttribute('aria-busy', 'false');
-            if (categoryBrowser) categoryBrowser.setBusy(false);
         });
-}
-
-function updateCategoryFilterOptions() {
-    if (!categoryBrowser) return;
-    var values = [{ value: '', label: 'All categories' }];
-    function collect(items, depth) {
-        items.forEach(function (category) {
-            values.push({ value: category.slug, label: '— '.repeat(depth) + category.name });
-            collect(category.children || [], depth + 1);
-        });
-    }
-    collect(categoriesData, 0);
-    categoryBrowser.setOptions('cat', values);
 }
 
 function handleUrlParams() {
+    var canonical = new URL(window.location.href);
+    if (canonical.searchParams.has('q')) {
+        canonical.searchParams.delete('q');
+        window.history.replaceState({}, '', canonical);
+    }
     const urlParams = new URLSearchParams(window.location.search);
     const categorySlug = urlParams.get("cat");
 
@@ -120,7 +102,6 @@ function handleUrlParams() {
             const corrected = new URL(window.location.href);
             corrected.searchParams.delete('cat');
             window.history.replaceState({}, '', corrected);
-            updateCategoryFilterOptions();
             resetToRoot(false);
         }
     } else {
@@ -180,8 +161,15 @@ function displayCategories(list, parentName, targetCategory, path) {
     if (!container) return;
 
     container.innerHTML = "";
-    currentList = list || [];
-    currentParentName = parentName;
+    var isSubcategory = !!targetCategory;
+    var section = document.querySelector('.catalog-category-page');
+    if (section) section.classList.toggle('has-subcategories', isSubcategory);
+    var content = document.querySelector('.category-content');
+    if (content) content.classList.toggle('catalog-subcategories-page', isSubcategory);
+    ['catalog-controls', 'catalog-pagination'].forEach(function (id) {
+        var element = document.getElementById(id);
+        if (element) element.hidden = !isSubcategory;
+    });
 
     // Update Heading (located above breadcrumb inside inner-banner)
     const heading = document.querySelector(".product-heading");
@@ -213,7 +201,7 @@ function displayCategories(list, parentName, targetCategory, path) {
             backBtnWrapper.style.display = 'block';
             backBtnWrapper.innerHTML =
                 '<a href="javascript:void(0)" class="view-product-btn back-btn">' +
-                '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>' +
+                '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>' +
                 '<span>Go Back</span>' +
                 '</a>';
             backBtnWrapper.onclick = goBack;
@@ -222,39 +210,24 @@ function displayCategories(list, parentName, targetCategory, path) {
         }
     }
 
-    // The category tree is returned in full, so filter before slicing the page.
-    var state = categoryBrowser ? categoryBrowser.sync() : { q: '', sort: 'name_asc', page: 1, limit: 12 };
-    var candidates = [];
-    function collect(items) {
-        items.forEach(function (category) {
-            candidates.push(category);
-            if (state.q && category.children) collect(category.children);
-        });
+    // Only subcategory pages use browsing controls; the root lists every main category.
+    var categories = (list || []).slice();
+    var state = isSubcategory && categoryBrowser ? categoryBrowser.sync() : null;
+    categories.sort(function (a, b) { return compareCategories(a, b) * (state && state.sort === 'name_desc' ? -1 : 1); });
+    if (state) {
+        var total = categories.length;
+        var pages = Math.max(1, Math.ceil(total / state.limit));
+        if (state.page > pages) { categoryBrowser.write({ page: pages }, true); return; }
+        categories = categories.slice((state.page - 1) * state.limit, state.page * state.limit);
+        categoryBrowser.results({ total: total, page: state.page, totalPages: pages, limit: state.limit });
     }
-    collect(currentList);
-    var query = state.q.toLocaleLowerCase();
-    var filtered = candidates.filter(function (category) {
-        return !query || (String(category.name || '') + ' ' + String(category.slug || '')).toLocaleLowerCase().includes(query);
-    }).sort(function (a, b) {
-        var order = String(a.name).localeCompare(String(b.name), undefined, { sensitivity: 'base' }) || String(a.slug).localeCompare(String(b.slug));
-        return state.sort === 'name_desc' ? -order : order;
-    });
-    var totalPages = Math.max(1, Math.ceil(filtered.length / state.limit));
-    var page = Math.min(state.page, totalPages);
-    if (page !== state.page) {
-        var corrected = new URL(window.location.href);
-        if (page === 1) corrected.searchParams.delete('page'); else corrected.searchParams.set('page', page);
-        window.history.replaceState({}, '', corrected);
-        if (categoryBrowser) categoryBrowser.sync();
+    if (!categories.length) {
+        var empty = document.createElement('div');
+        empty.className = 'no-data'; empty.setAttribute('role', 'status');
+        empty.textContent = 'No subcategories found.';
+        container.appendChild(empty);
     }
-    if (categoryBrowser) {
-        categoryBrowser.setBusy(false);
-        categoryBrowser.results({ total: filtered.length, page: page, totalPages: totalPages, limit: state.limit });
-    }
-    if (!filtered.length) {
-        container.innerHTML = '<div class="no-data" role="status">' + (state.q ? 'No categories match your search or filters. Try another search or clear the filters.' : 'No sub-categories found.') + '</div>';
-    }
-    filtered.slice((page - 1) * state.limit, page * state.limit).forEach(function (category) {
+    categories.forEach(function (category) {
         container.appendChild(createCategoryCard(category));
     });
     container.setAttribute('aria-busy', 'false');
