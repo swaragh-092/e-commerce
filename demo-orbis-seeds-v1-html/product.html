@@ -31,8 +31,15 @@
  <script src="js/constant.js"></script>
     <script src="js/catalog.js"></script>
     <style>
-        .wrapper {
+        body > .wrapper {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            min-height: 100dvh;
             overflow: unset;
+        }
+        body > .wrapper > .products-main-wrapper {
+            flex: 1 0 auto;
         }
     </style>
 </head>
@@ -197,9 +204,7 @@
 
         <section class="products-main-wrapper">
             <div class="fluid-container">
-                <div id="catalog-controls" class="catalog-controls"></div>
                 <div class="products-inner-wrapper" id="catalog-results" aria-busy="true"></div>
-                <nav id="catalog-pagination" class="catalog-pagination" aria-label="Category pages"></nav>
             </div>
         </section>
 
@@ -316,7 +321,7 @@
 
 
 
-<a id="to-top" href="javascript:;" title="Back to top"><img src="images/go-to-top.png" alt="to-top"></a>
+<a id="to-top" class="catalog-to-top" href="javascript:;" title="Back to top"><img src="images/go-to-top.png" alt="to-top"></a>
 
 <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
 
@@ -429,7 +434,6 @@
     </div>
 
     <script src="js/constant.js"></script>
-    <script src="js/catalog-browser.js"></script>
     <script src="js/categories.js"></script>
 
 </body>

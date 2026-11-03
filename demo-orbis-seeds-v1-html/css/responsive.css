@@ -48,6 +48,7 @@
     .variety-of-seeds-1{max-width: 200px;}
     .variety-of-text h3{font-size: 20px;}
     .founded-left{max-width: 400px;}
+    .founded-left h2{font-size: 32px;}
     #section-1{top: -108px;}
     .founded-wrapper {padding: 50px 0;}
     .world-operations-wrapper{padding: 50px 0;}
@@ -171,7 +172,7 @@
 .our-cards{max-width: 100%;}
 .right-cards-main .sub-cards-box{flex-direction: row;}
 .right-cards-main .sub-cards-box:nth-child(1) .bg-geen::before {transform: rotate(0deg);top: 20px;left: -30px;}
-.left-cards-main .sub-cards-box:nth-child(2) .bg-geen::before {color: #71C5DD;}
+.left-cards-main .sub-cards-box:nth-child(2) .bg-geen::before {color: var(--color-primary);}
 .our-cards.cards-box{display: none;}
 .our-collaborations{flex-wrap: wrap;gap: 20px;}
 .our-collaborations-inner{padding: 0;}
@@ -210,6 +211,7 @@
    .variety-of-seeds-links .category-label {font-size: 14px;min-width: 100px;left: -53px;}
 .founder-right-1{padding: 15px;}
 .founded-left {max-width: 300px;}
+.founded-left h2{font-size: 24px;}
 .founded-inner{flex-direction: column;}
 
  .variety-of-seeds-links .vegetables{padding: 20px 40px;}
@@ -251,7 +253,7 @@
    #section-1 .banner-statistics h3 {font-size: 20px;}
 
    .location-1 h3{font-size: 20px;}
-   .location-1 span {padding: 8px 13px;}
+   .location-1 span {flex-basis: 44px;width: 44px;height: 44px;}
    .locations{justify-content: center;}
    .footer-inner {flex-direction: column;align-items: center;gap: 50px;}
    .footer-left{max-width: 100%;padding: 0;}
@@ -331,7 +333,7 @@
   .our-cards.bg-geen {flex: 1 1 auto !important; width: 100% !important; max-width: 100% !important; padding: 22px 20px !important;}
   .our-cards.bg-geen h2 {font-size: 19px;}
   .our-cards.bg-geen p {font-size: 14px;line-height: 1.65;}
-  .sub-cards-box .our-cards.bg-geen::before, .left-cards-main .sub-cards-box .our-cards.bg-geen::before, .right-cards-main .sub-cards-box .our-cards.bg-geen::before {top: -12px !important; left: 50% !important; right: auto !important; transform: translateX(-50%) !important; border-left: 12px solid transparent !important; border-right: 12px solid transparent !important; border-top: none !important; border-bottom: 12px solid #71C5DD !important;}
+  .sub-cards-box .our-cards.bg-geen::before, .left-cards-main .sub-cards-box .our-cards.bg-geen::before, .right-cards-main .sub-cards-box .our-cards.bg-geen::before {top: -12px !important; left: 50% !important; right: auto !important; transform: translateX(-50%) !important; border-left: 12px solid transparent !important; border-right: 12px solid transparent !important; border-top: none !important; border-bottom: 12px solid var(--color-primary) !important;}
 }
 @media(max-width:676px){
   .research-and-development-big img{max-width: 300px;}
@@ -367,12 +369,12 @@
    .vegetables:last-child{padding: 0;}
    .variety-of-seeds-inner{padding: 0;}
 
-   .variety-of-seeds-links .category-label {top: -45px;left: 0;color: #fff;font-size: 18px;right: 0;rotate: unset;bottom: unset;}
+   .variety-of-seeds-links .category-label {top: -45px;left: 0;color: var(--color-white);font-size: 18px;right: 0;rotate: unset;bottom: unset;}
    .variety-of-seeds-links .vegetables {padding: 10px;margin: 0 0 75px;}
    .variety-of-seeds-1:hover .variety-of-seeds-img {transform: translate(15%,30%);}
    .vegetables:last-child{padding: 10px;margin: 30px 0 0;}
    .location-1 span{font-size: 15px;}
-   .research-faq .acc__title::after {width: 12px;height: 12px;border-right: 3px solid #70c5dd;border-bottom: 3px solid #70c5dd;right: 3px;}
+   .research-faq .acc__title::after {width: 12px;height: 12px;border-right: 3px solid var(--color-primary);border-bottom: 3px solid var(--color-primary);right: 3px;}
    .research-right{padding: 12px 10px;}
    p{font-size: 15px;}
    .research-faq .acc__title h3{font-size: 22px;}
@@ -410,7 +412,7 @@
     .bg-geen::before {left: 0;top: -35px;rotate: 90deg;right: 0;margin: auto;}
     .left-cards-main .sub-cards-box:nth-child(2){flex-direction: column;}
     .right-cards-main .sub-cards-box{flex-direction: column;}
-    .left-cards-main .sub-cards-box:nth-child(2) .bg-geen::before {color: #c9e9f2;left: 0;right: 0;top: -33px;rotate: -90deg;}
+    .left-cards-main .sub-cards-box:nth-child(2) .bg-geen::before {color: var(--color-primary-soft);left: 0;right: 0;top: -33px;rotate: -90deg;}
     .right-cards-main .sub-cards-box:nth-child(1) .bg-geen::before {transform: rotate(0deg);top: -33px;left: -30px;}
   h1{font-size: 32px;}
   #to-top{bottom: 50px;right: 10px;width: 63px;height: 64px;}
@@ -531,3 +533,16 @@
  @media(max-width:360px){
    .founder-right-1 h3 {font-size: 12px;}
  }
+
+/* Inner-page banner heights; the homepage hero keeps its own layout. */
+@media (max-width: 1200px) {
+  .inner-page-banner-wrapper {min-height: 340px;}
+}
+@media (max-width: 776px) {
+  .inner-page-banner-wrapper {min-height: 300px;}
+  .inner-page-banner-wrapper > .fluid-container {padding-top: 24px;padding-bottom: 24px;}
+}
+@media (max-width: 480px) {
+  .inner-page-banner-wrapper {min-height: 280px;}
+  .inner-page-banner-wrapper > .fluid-container {padding-top: 20px;}
+}

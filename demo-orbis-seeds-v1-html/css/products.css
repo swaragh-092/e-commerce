@@ -1,0 +1,311 @@
+/* Preserve the product catalogue's original design using the shared palette. */
+.catalog-products-page {
+  --catalog-text: #0c0c0c;
+  --catalog-copy: #555555;
+  --catalog-sidebar-surface: #f8faf9;
+  --catalog-attribute-surface: #f7faf8;
+  --catalog-toolbar-surface: #f8fafc;
+  --catalog-control-border: #e2e8f0;
+  --catalog-control-text: #0f172a;
+  --catalog-placeholder: #334155;
+  --catalog-image-border: #ebe1e1;
+  --catalog-heart: #8a94a6;
+  --catalog-heart-border: #e4e7ec;
+  --catalog-action-hover: #56a865;
+  --button-text: var(--color-white);
+  color: var(--catalog-text);
+}
+
+/* Sidebar cards and arrows match the original green selection treatment. */
+.catalog-products-page .ip-products-list p {
+  color: var(--catalog-text);
+}
+.catalog-products-page .products-list.tap-section li a {
+  color: var(--color-accent-dark);
+  background: var(--catalog-sidebar-surface);
+}
+.catalog-products-page .products-list.tap-section li a::after {
+  background: url('../images/side-arrow.png') no-repeat center / contain;
+}
+.catalog-products-page .products-list.tap-section li a:hover,
+.catalog-products-page .products-list.tap-section li a.act {
+  background: var(--color-accent);
+  color: var(--color-white);
+}
+.catalog-products-page .products-list.tap-section li a:hover::after,
+.catalog-products-page .products-list.tap-section li a.act::after {
+  filter: brightness(0) invert(1);
+}
+
+/* Product specifications retain their plain, pale backgrounds. */
+.catalog-products-page .products-left {
+  border-color: var(--catalog-image-border);
+}
+.catalog-products-page .products-right h3 {
+  color: var(--color-ink);
+  min-height: 40px;
+  padding-right: 52px;
+}
+.catalog-products-page .products-right {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.catalog-products-page .products-list.tap-section li a {
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.catalog-products-page .products-list.tap-section li a::after {
+  flex: 0 0 16px;
+}
+.catalog-products-page .products-left {
+  margin-inline: auto;
+}
+.catalog-products-page .products-left img {
+  transition: transform .4s ease;
+}
+.catalog-products-page .products-right ul li {
+  background: var(--catalog-attribute-surface);
+  color: var(--catalog-text);
+  border-left: 0;
+}
+.catalog-products-page .products-right ul li b {
+  color: var(--catalog-text);
+}
+.catalog-products-page .products-right p {
+  color: var(--catalog-copy);
+}
+.catalog-products-page .wishlist-heart-btn:not(.active):not(:hover):not([aria-disabled="true"]) {
+  color: var(--catalog-heart);
+  border-color: var(--catalog-heart-border);
+}
+
+/* Keep the original filled dark enquiry action and cyan list action. */
+.catalog-products-page .product-enquiry-actions .view-product-btn {
+  --button-bg: var(--color-ink);
+  --button-text: var(--color-white);
+  --button-border: transparent;
+  --button-hover-bg: var(--catalog-action-hover);
+  --button-active-bg: var(--color-accent-dark);
+}
+.catalog-products-page .product-enquiry-actions .add-enquiry-list {
+  --button-bg: var(--color-primary);
+  --button-border: var(--color-primary);
+}
+
+/* Search and clear controls keep their original fills, borders and text. */
+.catalog-products-page .catalog-toolbar {
+  background: var(--catalog-toolbar-surface);
+  border-color: var(--catalog-control-border);
+}
+.catalog-products-page .catalog-field input,
+.catalog-products-page .catalog-field select {
+  color: var(--catalog-control-text);
+  border-color: var(--catalog-control-border);
+}
+.catalog-products-page .catalog-field-q input::placeholder {
+  color: var(--catalog-placeholder);
+}
+.catalog-products-page .catalog-search-button {
+  --button-hover-bg: var(--color-accent-dark);
+  --button-active-bg: var(--color-accent-dark);
+}
+.catalog-products-page .catalog-clear {
+  --button-bg: var(--color-white);
+  --button-text: var(--color-accent-dark);
+  --button-border: var(--color-accent-dark);
+  --button-hover-bg: var(--color-accent-dark);
+  --button-active-bg: var(--color-accent-dark);
+  border-width: 1.5px;
+}
+.catalog-products-page .catalog-clear:hover:not(:disabled):not([aria-disabled="true"]),
+.catalog-products-page .catalog-clear:active:not(:disabled):not([aria-disabled="true"]) {
+  --button-text: var(--color-white);
+}
+.catalog-products-page .catalog-pagination button:hover:not(:disabled) {
+  background: var(--color-accent);
+  color: var(--color-white);
+  border-color: var(--color-accent);
+}
+.catalog-products-page .catalog-pagination button[aria-current="page"] {
+  color: var(--color-white);
+}
+.catalog-products-page .catalog-controls input:focus,
+.catalog-products-page .catalog-controls select:focus {
+  border-color: var(--color-accent-dark);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent-dark) 12%, transparent);
+}
+.catalog-products-page .catalog-controls :is(input, select, button):focus-visible,
+.catalog-products-page .products-list a:focus-visible,
+.catalog-products-page .product-enquiry-actions button:focus-visible {
+  outline: 3px solid var(--color-accent-dark);
+  outline-offset: 3px;
+}
+
+/* Give category and search priority; keep display controls beside the count. */
+.catalog-products-page .catalog-toolbar {
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+  gap: 20px;
+  padding: 16px 20px;
+}
+.catalog-products-page .catalog-toolbar :is(input, select, .catalog-search-button) {
+  min-height: 44px;
+  height: 44px;
+}
+.catalog-products-page .catalog-results-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  margin-top: 14px;
+}
+.catalog-products-page .catalog-results-status {
+  flex: 1 1 200px;
+  min-width: 0;
+  margin: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.catalog-products-page .catalog-result-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-left: auto;
+}
+.catalog-products-page .catalog-result-options .catalog-field {
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.catalog-products-page .catalog-result-options label {
+  width: auto;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.catalog-products-page .catalog-result-options select {
+  width: auto;
+  min-width: 0;
+  min-height: 40px;
+  height: 40px;
+  padding: 8px 30px 8px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  background-position: left 0 center, right 10px center;
+  background-size: 0, 12px 12px;
+}
+.catalog-products-page .catalog-result-options .catalog-clear {
+  width: auto;
+  min-height: 40px;
+  height: 40px;
+  padding: 8px 12px;
+  gap: 6px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+.catalog-products-page .catalog-result-options .catalog-clear::before {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.catalog-products-page .catalog-options-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: auto;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-primary-border);
+  border-radius: 6px;
+  background: var(--color-white);
+  color: var(--color-ink);
+  font-size: 13px;
+  font-weight: var(--button-font-weight);
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.catalog-products-page .catalog-options-toggle::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  margin: -3px 2px 0;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform .2s;
+}
+.catalog-products-page .catalog-options-toggle:hover,
+.catalog-products-page .catalog-options-toggle[aria-expanded="true"] {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+}
+.catalog-products-page .catalog-options-toggle[aria-expanded="true"]::after {
+  transform: translateY(3px) rotate(225deg);
+}
+@media (max-width: 776px) {
+  .catalog-products-page .ip-products-list {
+    display: none;
+  }
+}
+@media (max-width: 700px) {
+  .catalog-products-page .catalog-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 16px;
+    gap: 12px;
+  }
+  .catalog-products-page .catalog-results-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0 12px;
+    padding: 12px;
+    border: 1px solid var(--catalog-control-border);
+    border-radius: 10px;
+    background: var(--catalog-toolbar-surface);
+  }
+  .catalog-products-page .catalog-results-status {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .catalog-products-page .catalog-options-toggle {
+    display: inline-flex;
+  }
+  .catalog-products-page .catalog-result-options {
+    display: none;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(3, max-content);
+    align-items: end;
+    justify-content: space-between;
+    width: 100%;
+    gap: 8px;
+    margin: 12px 0 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--catalog-control-border);
+  }
+  .catalog-products-page .catalog-results-bar.is-expanded .catalog-result-options {
+    display: grid;
+  }
+  .catalog-products-page .catalog-result-options .catalog-field {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+  .catalog-products-page .catalog-result-options select {
+    min-height: 44px;
+    height: 44px;
+    padding-left: 8px;
+    padding-right: 26px;
+    background-position: left 0 center, right 8px center;
+  }
+  .catalog-products-page .catalog-result-options .catalog-clear {
+    min-height: 44px;
+    height: 44px;
+    padding: 8px 6px;
+    gap: 4px;
+    font-size: 13px;
+  }
+}

@@ -12,6 +12,7 @@
     <!-- css -->
     <link rel="stylesheet" href="css/orbi-seeds.css">
     <link rel="stylesheet" href="css/responsive.css">
+    <link rel="stylesheet" href="css/products.css">
     <!-- css -->
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -34,18 +35,32 @@
         .wrapper {
             overflow: unset;
         }
+        body > .wrapper {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            min-height: 100dvh;
+        }
+        body > .wrapper > .wrapper {
+            display: flex;
+            flex-direction: column;
+            flex: 1 0 auto;
+        }
+        .catalog-products-page {
+            flex: 1 0 auto;
+        }
 
         .product-enquiry-form-wrapper {
             margin-top: 30px;
             padding: 20px;
-            background: #f9f9f9;
+            background: var(--color-surface-muted);
             border-radius: 8px;
-            border: 1px solid #eee;
+            border: 1px solid var(--color-border);
         }
 
         .product-enquiry-form-wrapper h4 {
             margin-bottom: 20px;
-            color: #333;
+            color: var(--color-text);
             font-size: 1.2rem;
         }
 
@@ -68,7 +83,7 @@
         .enquiry-form-inline textarea {
             width: 100%;
             padding: 10px 15px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--color-border);
             border-radius: 5px;
             font-family: inherit;
         }
@@ -102,8 +117,8 @@
         .products-loading-spinner {
             width: 32px;
             height: 32px;
-            border: 3px solid #e6f3e9;
-            border-top-color: #58AE68;
+            border: 3px solid var(--color-accent-soft);
+            border-top-color: var(--color-primary);
             border-radius: 50%;
             display: inline-block;
             animation: products-spin 0.8s linear infinite;
@@ -126,15 +141,15 @@
             min-height: 200px;
             width: 100%;
             text-align: center;
-            background: #f9f9f9;
+            background: var(--color-surface-muted);
             border-radius: 8px;
-            border: 1px solid #eee;
+            border: 1px solid var(--color-border);
         }
 
         .no-products-message p {
             margin: 0;
             padding: 30px;
-            color: #666;
+            color: var(--color-text-muted);
             font-size: 1.1rem;
         }
     </style>
@@ -495,7 +510,7 @@
 
 
 
-            <a id="to-top" href="javascript:;" title="Back to top"><img src="images/go-to-top.png" alt="to-top"></a>
+            <a id="to-top" class="catalog-to-top" href="javascript:;" title="Back to top"><img src="images/go-to-top.png" alt="to-top"></a>
 
             <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
 

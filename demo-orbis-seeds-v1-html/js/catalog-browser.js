@@ -1,4 +1,4 @@
-/* Search, filters and page navigation shared by the static catalog pages. */
+/* Search, filters and page navigation for the product catalogue. */
 (function (window) {
     'use strict';
     var B = {};
@@ -15,8 +15,13 @@
         form.className = 'catalog-toolbar';
         form.setAttribute('role', 'search');
         form.setAttribute('aria-label', config.label + ' search and filters');
+        var displayOptions = document.createElement('div');
+        displayOptions.id = 'catalog-display-options';
+        displayOptions.className = 'catalog-result-options';
+        displayOptions.setAttribute('role', 'group');
+        displayOptions.setAttribute('aria-label', 'Product display options');
 
-        function field(name, label, input) {
+        function field(name, label, input, parent) {
             var wrapper = document.createElement('div');
             wrapper.className = 'catalog-field catalog-field-' + name;
             var caption = document.createElement('label');
@@ -25,7 +30,7 @@
             caption.htmlFor = input.id;
             caption.textContent = label;
             wrapper.append(caption, input);
-            form.appendChild(wrapper);
+            (parent || form).appendChild(wrapper);
             fields[name] = input;
             return wrapper;
         }
@@ -43,7 +48,7 @@
         search.maxLength = 100;
         search.placeholder = config.placeholder;
         search.setAttribute('aria-describedby', 'catalog-search-help');
-        var searchField = field('q', 'Search ' + config.label.toLowerCase(), search);
+        var searchField = field('q', 'Search ' + config.label, search);
         var submit = document.createElement('button');
         submit.type = 'submit';
         submit.className = 'catalog-search-button';
@@ -51,11 +56,12 @@
         searchField.appendChild(submit);
         (config.filters || []).concat([
             { name: 'sort', label: 'Sort by', options: config.sorts },
-            { name: 'limit', label: 'Per page', options: sizes.map(function (size) { return { value: String(size), label: String(size) }; }) }
+            { name: 'limit', label: 'Per Page', options: sizes.map(function (size) { return { value: String(size), label: String(size) }; }) }
         ]).forEach(function (filter) {
             var select = document.createElement('select');
             options(select, filter.options);
-            field(filter.name, filter.label, select);
+            var parent = filter.name === 'sort' || filter.name === 'limit' ? displayOptions : form;
+            field(filter.name, filter.label, select, parent);
             select.addEventListener('change', function () {
                 clearTimeout(timer);
                 var patch = { page: 1, q: filter.resetSearch ? '' : search.value.trim() };
@@ -63,17 +69,20 @@
                 write(patch);
             });
         });
+        // Keep the DOM and keyboard order aligned: category, then search.
+        form.appendChild(searchField);
         var clear = document.createElement('button');
         clear.type = 'button';
         clear.className = 'catalog-clear';
-        clear.textContent = 'Clear filters';
+        clear.textContent = 'Clear';
+        clear.setAttribute('aria-label', 'Clear search and filters');
         clear.addEventListener('click', function () {
             clearTimeout(timer);
             var patch = { q: '', page: 1, sort: config.sorts[0].value };
             (config.filters || []).forEach(function (filter) { patch[filter.name] = ''; });
             write(patch);
         });
-        form.appendChild(clear);
+        displayOptions.appendChild(clear);
         var help = document.createElement('p');
         help.id = 'catalog-search-help';
         help.className = 'catalog-search-help';
@@ -82,7 +91,29 @@
         status.className = 'catalog-results-status';
         status.setAttribute('role', 'status');
         status.setAttribute('aria-live', 'polite');
-        controls.append(form, help, status);
+        var resultsBar = document.createElement('div');
+        resultsBar.className = 'catalog-results-bar';
+        var optionsToggle = document.createElement('button');
+        optionsToggle.type = 'button';
+        optionsToggle.className = 'catalog-options-toggle';
+        optionsToggle.textContent = 'Sort & display';
+        optionsToggle.setAttribute('aria-expanded', 'false');
+        optionsToggle.setAttribute('aria-controls', displayOptions.id);
+        function toggleOptions(expanded) {
+            optionsToggle.setAttribute('aria-expanded', String(expanded));
+            resultsBar.classList.toggle('is-expanded', expanded);
+        }
+        optionsToggle.addEventListener('click', function () {
+            toggleOptions(optionsToggle.getAttribute('aria-expanded') !== 'true');
+        });
+        resultsBar.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && optionsToggle.offsetParent !== null && resultsBar.classList.contains('is-expanded')) {
+                toggleOptions(false);
+                optionsToggle.focus();
+            }
+        });
+        resultsBar.append(status, optionsToggle, displayOptions);
+        controls.append(form, help, resultsBar);
 
         function read() {
             var params = new URLSearchParams(window.location.search);
