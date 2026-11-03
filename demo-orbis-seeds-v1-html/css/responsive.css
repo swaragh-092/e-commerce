@@ -34,17 +34,20 @@
 }
 
 @media(max-width:1200px){
-    /* .right-desktop-menu-container {display: none;} */
+    /* Reserve separate columns for the brand, action links and menu trigger. */
+    .bottom-inner-wrapper,
+    header.scrolled-header .bottom-inner-wrapper {display: grid;grid-template-columns: minmax(0, 1fr) auto auto;align-items: center;gap: 12px;padding: 10px 0;}
     .right-desktop-menu-container .nav-links {display: none;}
-    .right-desktop-menu-container {justify-content: flex-end;margin-right: 35px;width: fit-content;}
-    .resp-menu {display: block !important;position: absolute;right: 0px;width: 100%;max-width: 30px;top: 0;bottom: 0;}
-    .bottom-header-top {justify-content: flex-start; width: 100%;max-width: 100%;}
-    .bottom-inner-wrapper {padding: 10px 0;position: relative;}
+    .right-desktop-menu-container {justify-content: flex-end;margin: 0;width: auto;gap: 0;}
+    .resp-menu {display: block;position: static;width: 44px;max-width: none;}
+    .resp-menu > a.toggle {display: block;position: relative;width: 44px;max-width: none;height: 44px;padding: 0;}
+    .resp-menu .hc-nav-trigger > span {left: 8px;width: 28px;}
+    .bottom-header-top {justify-content: flex-start;width: 100%;max-width: 100%;}
+    .bottom-header-top .orbi-logo {flex-basis: 52px;width: 52px;}
     .bottom-header-top .iso-logos img {width: 100%;max-width: 65px;position: relative;top: 3px;}
     .bottom-header-top .iso-logos{display: block;}
     header.scrolled-header .bottom-header-top .iso-logos{display: block;}
-    header.scrolled-header .bottom-inner-wrapper .bottom-header-top {align-items: flex-end;flex-direction: row;}
-    header.scrolled-header .bottom-inner-wrapper {justify-content: flex-start;}
+    header.scrolled-header .bottom-inner-wrapper .bottom-header-top {align-items: center;flex-direction: row;}
     .variety-of-seeds-1{max-width: 200px;}
     .variety-of-text h3{font-size: 20px;}
     .founded-left{max-width: 400px;}
@@ -453,8 +456,11 @@
     }
   }
   .list-variety-chillies ul{justify-content: center;}
-  .bottom-inner-wrapper {gap: 10px;}
-  .bottom-header-top span{font-size: 15px;}
+  .logo-header-wrapper > .fluid-container {padding: 0 12px;}
+  .bottom-inner-wrapper, header.scrolled-header .bottom-inner-wrapper {gap: 6px;}
+  .bottom-header-top a {gap: 8px;}
+  .bottom-header-top .orbi-logo {flex-basis: 44px;width: 44px;}
+  .bottom-header-top span{font-size: 13px;}
   .reality-inner p{font-size:20px;text-align:center;}
   .testimonial-left h2{text-align: center;}
   .common-btn-parent{margin: auto;}
@@ -534,6 +540,8 @@
  }
 
  @media(max-width:360px){
+   .bottom-header-top a {gap: 6px;}
+   .bottom-header-top span {font-size: 12px;}
    .founder-right-1 h3 {font-size: 12px;}
  }
 

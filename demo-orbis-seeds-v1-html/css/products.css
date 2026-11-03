@@ -80,7 +80,11 @@
 }
 
 /* Keep the original filled dark enquiry action and cyan list action. */
+.catalog-products-page .product-enquiry-actions {
+  flex-wrap: nowrap;
+}
 .catalog-products-page .product-enquiry-actions .view-product-btn {
+  min-width: 0;
   --button-bg: var(--color-ink);
   --button-text: var(--color-white);
   --button-border: transparent;
@@ -90,6 +94,15 @@
 .catalog-products-page .product-enquiry-actions .add-enquiry-list {
   --button-bg: var(--color-primary);
   --button-border: var(--color-primary);
+}
+@media (max-width: 480px) {
+  .catalog-products-page .product-enquiry-actions {
+    gap: 8px;
+  }
+  .catalog-products-page .product-enquiry-actions .view-product-btn {
+    padding: 10px 6px;
+    font-size: 13px;
+  }
 }
 
 /* Search and clear controls keep their original fills, borders and text. */
