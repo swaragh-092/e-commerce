@@ -21,11 +21,7 @@ const updateProfileSchema = Joi.object({
 
 const changePasswordSchema = Joi.object({
   currentPassword: Joi.string().required(),
-  newPassword: Joi.string()
-    .min(8)
-    .pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])'))
-    .message('Password must be at least 8 characters long and include uppercase, lowercase, number, and special character (!@#$%^&*)')
-    .required(),
+  newPassword: require('../auth/passwordPolicy').required(),
   confirmPassword: Joi.string()
     .valid(Joi.ref('newPassword'))
     .required()

@@ -26,6 +26,8 @@ describe('AdminService.deleteAccessRole edge cases', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(User, 'findAll').mockResolvedValue([]);
+    vi.spyOn(db.RefreshToken, 'update').mockResolvedValue([1]);
     db.sequelize.transaction = vi.fn().mockImplementation(async (callback) => callback({}));
   });
 

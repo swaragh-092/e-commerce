@@ -9,6 +9,7 @@ authenticator.options = { window: 1 };
 const { encrypt, decrypt } = require('../../utils/crypto');
 const { User } = require('../index');
 const AppError = require('../../utils/AppError');
+const { requiresAdminMfa } = require('./mfaPolicy');
 
 const APP_NAME = process.env.APP_NAME || 'E-Commerce Pro';
 const AccountEvents = require('./accountEvents');
@@ -69,8 +70,9 @@ const enable = async (userId, totpCode) => {
 };
 
 const disable = async (userId, totpCode) => {
-  const user = await User.scope('withPassword').findByPk(userId);
+  const user = await User.scope('withPassword').findByPk(userId, { include: ['roles'] });
   if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
+  if (requiresAdminMfa(user)) throw new AppError('MFA_REQUIRED', 403, 'Administrator MFA cannot be disabled. Contact your operator for recovery.');
   if (!user.twoFactorEnabled) throw new AppError('VALIDATION_ERROR', 400, '2FA is not enabled');
   if (!user.twoFactorSecret) throw new AppError('VALIDATION_ERROR', 400, '2FA secret missing');
 
@@ -116,8 +118,8 @@ const verifyBackupCode = async (user, code) => {
 
   const { sequelize } = require('../index');
   return sequelize.transaction(async (t) => {
-    const locked = await User.findByPk(user.id, { transaction: t, lock: t.LOCK.UPDATE });
-    if (!locked.twoFactorBackupCodes) return false;
+    const locked = await User.scope('withPassword').findByPk(user.id, { transaction: t, lock: t.LOCK.UPDATE });
+    if (!locked?.twoFactorBackupCodes) return false;
 
     const idx = locked.twoFactorBackupCodes.indexOf(hashed);
     if (idx === -1) return false;

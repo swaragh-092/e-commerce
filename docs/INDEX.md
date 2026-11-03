@@ -22,6 +22,13 @@
 
 ---
 
+## Accounts and login security
+
+- [Implementation requirements](ACCOUNT-LOGIN-SECURITY.md)
+- [Verification and rollout limits](ACCOUNT-LOGIN-SECURITY-2026-11-03.md)
+- [Security learning guide](SECURITY-LEARNING-GUIDE.md)
+- [Authentication architecture decision](adr/0014-authentication-session-security.md)
+
 ## Documentation Map
 
 ### Architecture & Platform

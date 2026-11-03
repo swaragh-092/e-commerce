@@ -12,13 +12,17 @@ const getJwtIssAud = () => ({
   audience: process.env.JWT_AUDIENCE || 'ecommerce-pro-client',
 });
 
-const getCookieOptions = () => ({
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.AUTH_COOKIE_SAMESITE || 'lax',
-    path: '/',
-    ...(process.env.AUTH_COOKIE_DOMAIN ? { domain: process.env.AUTH_COOKIE_DOMAIN } : {}),
-});
+const getCookieOptions = () => {
+    const sameSite = (process.env.AUTH_COOKIE_SAMESITE || 'lax').toLowerCase();
+    if (!['lax', 'strict', 'none'].includes(sameSite)) throw new Error('Invalid AUTH_COOKIE_SAMESITE setting');
+    return {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production' || sameSite === 'none',
+        sameSite,
+        path: '/',
+        ...(process.env.AUTH_COOKIE_DOMAIN ? { domain: process.env.AUTH_COOKIE_DOMAIN } : {}),
+    };
+};
 
 const setAuthCookies = (res, tokens, { rememberMe = false } = {}) => {
     if (!tokens?.accessToken || !tokens?.refreshToken) return;
@@ -55,7 +59,7 @@ const stripAuthTokens = (result) => {
 const crypto = require('crypto');
 
 const getEncryptionKey = () => {
-    const secret = process.env.JWT_ACCESS_SECRET || 'default-fallback-jwt-secret-min-32-chars';
+    const secret = getJwtSecret();
     return crypto.createHash('sha256').update(secret).digest();
 };
 
@@ -85,7 +89,11 @@ const decrypt = (encryptedText) => {
     }
 };
 
-const getJwtSecret = () => process.env.JWT_ACCESS_SECRET || 'jwt-default-access-secret-32-chars-long';
+const getJwtSecret = () => {
+    const secret = process.env.JWT_ACCESS_SECRET;
+    if (!secret || secret.length < 32) throw new Error('JWT_ACCESS_SECRET must contain at least 32 characters');
+    return secret;
+};
 
 const createTrustedDeviceToken = (userId) => {
     const { issuer, audience } = getJwtIssAud();
@@ -115,11 +123,8 @@ const verifyTrustedDevice = (cookieValue, userId) => {
 const setTrustedDeviceCookie = (res, userId) => {
     const rawToken = createTrustedDeviceToken(userId);
     res.cookie(TRUSTED_DEVICE_COOKIE, encrypt(rawToken), {
-        httpOnly: true,
+        ...getCookieOptions(),
         secure: true,
-        sameSite: process.env.AUTH_COOKIE_SAMESITE || 'lax',
-        path: '/',
-        ...(process.env.AUTH_COOKIE_DOMAIN ? { domain: process.env.AUTH_COOKIE_DOMAIN } : {}),
         maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 };
