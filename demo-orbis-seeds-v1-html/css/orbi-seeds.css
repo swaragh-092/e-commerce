@@ -1,5 +1,11 @@
+@import url('https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@100,200,300,400,500,700,800,900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&display=swap');
+
 /* Shared storefront palette. Change brand colors here, not in individual components. */
 :root {
+  --font-heading: 'Cabinet Grotesk', 'Plus Jakarta Sans', sans-serif;
+  --font-para: 'Plus Jakarta Sans', sans-serif;
+  --font-base: 'Zen Maru Gothic', serif;
   --color-primary: #32c7f2;
   --color-primary-hover: #18b4df;
   --color-primary-active: #079bc5;
@@ -48,20 +54,20 @@
 }
 
 /* reset css */
-*,:after,:before{box-sizing: border-box;padding: 0;margin: 0;border: none;outline: none;font-family: "Zen Maru Gothic", serif;}
+*,:after,:before{box-sizing: border-box;padding: 0;margin: 0;border: none;outline: none;font-family:var(--font-para);}
 img{max-width: 100%;}
 ul,li{list-style: none;margin: 0;}
-a{text-decoration: none !important;display: inline-block;color: var(--color-text);font-size: 16px;cursor: pointer; font-family: "Zen Maru Gothic", serif;}
-select,input,textarea,button{width: 100%;border: none;outline: none; background: transparent;cursor: pointer;font-size: 18px;font-family: "Zen Maru Gothic", serif;}
+a{text-decoration: none !important;display: inline-block;color: var(--color-text);font-size: 16px;cursor: pointer; font-family:var(--font-para)}
+select,input,textarea,button{width: 100%;border: none;outline: none; background: transparent;cursor: pointer;font-size: 18px;font-family:var(--font-para);}
 select:focus,input:focus,textarea:focus,button:focus{border: none;outline: none;}
 
-input::placeholder, textarea::placeholder {opacity: 1;color: var(--color-text-muted);font-family: "Zen Maru Gothic", serif;}
+input::placeholder, textarea::placeholder {opacity: 1;color: var(--color-text-muted);font-family:var(--font-para);}
 label{width: 100%;max-width: fit-content;}
 textarea{resize: none;}
-p {font-size: 16px;margin: 15px 0;text-align: justify;line-height: 1.6;font-family: "Zen Maru Gothic", serif;}
+p {font-size: 16px;margin: 15px 0;text-align: justify;line-height: 1.6;font-family:var(--font-para)}
 iframe{width: 100%;height: 100%;border: none;}
 body{font-family: "Zen Maru Gothic", serif;color: var(--color-text);background: var(--color-surface);}
-h1, h2, h3, h4, h5, h6{ font-family: "Zen Maru Gothic", serif;}
+h1, h2, h3, h4, h5, h6{ font-family:var(--font-heading)}
 h1{font-size: 44px;}
 h2{font-size: 42px;font-weight: 600;}
 h3{font-size: 40px;}
@@ -502,7 +508,7 @@ li.dropdown-wrapper-li:hover > .dropdown-wrapper, li.dropdown-wrapper-li:focus-w
 .core-value-1 h3{color: var(--color-white);text-align: center;font-weight: 500;padding-bottom: 20px;}
 .core-value-text {position: absolute;bottom: 20px;left: 0;right: 0;margin: auto;}
 .core-value-text .common-btn-parent{margin: auto;}
-.core-value-btn {border: 1px solid var(--button-border));padding: 10px 30px;width: 100%;max-width: 155px;margin: auto;display: flex;justify-content: center;align-items: center;}
+.core-value-btn {border: 1px solid var(--button-border);padding: 10px 30px;width: 100%;max-width: 155px;margin: auto;display: flex;justify-content: center;align-items: center;}
 /* .owl-carousel.our-core-values-inner .owl-nav.disabled {display: flex;justify-content: space-between;align-items: center;position: absolute;top: 0;bottom: 0;margin: auto;width: 100%;max-width: 100%;} */
 .owl-carousel.our-core-values-inner .owl-prev{width: 50px;border: 1px solid var(--color-text);border-radius: 50%;}
 .owl-carousel.our-core-values-inner .owl-next{width: 50px;border: 1px solid var(--color-text);border-radius: 50%;}
@@ -592,12 +598,14 @@ li.dropdown-wrapper-li:hover > .dropdown-wrapper, li.dropdown-wrapper-li:focus-w
   #section-1 .content-slider .slider {position: absolute;inset: 0;width: 100%;height: 100%;overflow: hidden;}
   #section-1 .content-slider .slider .banner {position: absolute;top: 0;left: 0;opacity: 0;z-index: 0;width: inherit;height: inherit;text-align: center;background-repeat: no-repeat;background-position: 50% 50%;transition: all 0.5s ease;}
   #section-1 .banner-inner-wrapper {position: relative;z-index: 2;flex: 1;display: flex;justify-content: center;align-items: center;flex-direction: column;gap: 32px;padding-top: 140px;padding-bottom: 40px;text-align: center;}
-#section-1 .banner-statistics {display: grid;grid-template-columns: minmax(0, 2.0fr) repeat(3, minmax(0, 1fr));align-items: start;gap: 24px;padding: 0 0 22px;margin: 0;}
+  #section-1 .banner-inner-wrapper h2 {font-family: var(--font-heading);font-size: 52px;font-weight: 700;line-height: 1.22;letter-spacing: -0.5px;color: var(--color-white);text-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);max-width: 960px;margin: 0 auto;}
+  #section-1 .banner-statistics {display: grid;grid-template-columns: minmax(0, 2.0fr) repeat(3, minmax(0, 1fr));align-items: start;gap: 24px;padding: 0 0 22px;margin: 0;}
   #section-1 .banner-statistics .counter {min-width: 0;padding: 0;}
   #section-1 .banner-statistics .count {white-space: nowrap;}
-  #section-1 .banner-statistics h3 {line-height: 1.4;text-align: center;}
+  #section-1 .banner-statistics .counter span {font-family: var(--font-heading);font-weight: 800;}
+  #section-1 .banner-statistics h3 {font-family: var(--font-heading);font-size: 20px;font-weight: 600;line-height: 1.35;text-align: center;letter-spacing: -0.2px;}
   #section-1 .banner-inner-wrapper .common-btn-parent {margin: 0;}
-  .reality.banner-statistics .counter:nth-child(3) .count span:first-child {  padding-left: 10px; }
+  .reality.banner-statistics .counter:nth-child(3) .count span:first-child{padding-left: 10px;}
 
 .banner::before {content: "";position: absolute;background-color: color-mix(in srgb, var(--color-black) 61.96%, transparent);top: 0;left: 0;width: 100%;height: 100%;}
   #section-1 .content-slider .slider #top-banner-1 {background: url('../images/home-banner.jpg') no-repeat center center;background-size: cover;}
