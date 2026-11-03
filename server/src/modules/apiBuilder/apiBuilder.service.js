@@ -165,8 +165,8 @@ const RELATIONS = {
     value: { resource: 'attributeValues', foreignKey: 'id', parentKey: 'valueId', one: true },
   },
   productAttributes: {
-    attribute: { resource: 'attributeTemplates', loader: 'attributeTemplate', one: true },
-    value: { resource: 'attributeValues', loader: 'attributeValue', one: true },
+    attribute: { resource: 'attributeTemplates', foreignKey: 'id', parentKey: 'attributeId', one: true, paranoid: false },
+    value: { resource: 'attributeValues', foreignKey: 'id', parentKey: 'valueId', one: true },
   },
 };
 
@@ -370,11 +370,15 @@ const executeCategories = async (block) => {
       rootIds = matchingRows.map((row) => row.id);
     }
     const selectedTree = Array.isArray(rootIds) ? filterTreeRoots(tree, rootIds) : tree;
-    let trimmed = trimTreeFields(selectedTree, block.fields, depth);
+    // Restrict the requested roots before loading related products. Loading
+    // products for every category in the tree and slicing afterward creates
+    // avoidable per-category queries for data that is never returned.
+    let trimmed = trimTreeFields(selectedTree, block.fields, depth)
+      .slice(0, clampLimit(block.limit, 10));
     if (block.include?.products?.enabled || block.includes?.includes('products')) {
       trimmed = await attachProductsToCategories(trimmed, block.include?.products || {});
     }
-    return trimmed.slice(0, clampLimit(block.limit, 10));
+    return trimmed;
   }
 
   const rows = await Category.findAll({
@@ -646,25 +650,6 @@ const RELATION_LOADERS = {
     context,
     sourceWhere: (product) => ({ id: product.id }),
   }),
-  attributeTemplate: async (parent, node, context) => ({
-    rows: await AttributeTemplate.findAll({
-      paranoid: false,
-      where: {
-        ...buildNodeWhere('attributeTemplates', node, context),
-        id: parent.attributeId || null,
-      },
-      limit: 1,
-    }),
-  }),
-  attributeValue: async (parent, node, context) => ({
-    rows: await AttributeValue.findAll({
-      where: {
-        ...buildNodeWhere('attributeValues', node, context),
-        id: parent.valueId || null,
-      },
-      limit: 1,
-    }),
-  }),
 };
 
 const loadRelationRows = async (parent, relationConfig, relationNode, context = {}) => {
@@ -700,30 +685,61 @@ const loadRelationRows = async (parent, relationConfig, relationNode, context = 
 
 const attachRelations = async (resource, items, node, rawItems = items, context = {}) => {
   const relations = legacyRelations(node);
-  if (!relations.length) return items;
+  if (!relations.length || !items.length) return items;
 
-  return Promise.all(items.map(async (item, index) => {
-    const result = { ...item };
-    const parent = rawItems[index] || item;
-    const parentRelations = RELATIONS[resource] || {};
+  const results = items.map((item) => ({ ...item }));
+  const parents = items.map((item, index) => rawItems[index] || item);
+  const parentRelations = RELATIONS[resource] || {};
 
-    for (const relationNode of relations) {
-      const relationName = relationNode.relation;
-      const relationConfig = parentRelations[relationName];
-      if (!relationConfig) continue;
+  for (const relationNode of relations) {
+    const relationName = relationNode.relation;
+    const relationConfig = parentRelations[relationName];
+    if (!relationConfig) continue;
 
-      const targetResource = relationConfig.resource;
-      const relationResult = await loadRelationRows(parent, relationConfig, relationNode, context);
-      const shaped = await shapeRows(targetResource, relationResult.rows || [], relationNode, context);
-      result[relationNode.key || relationName] = relationConfig.one
-        ? shaped[0] || null
-        : relationResult.pagination
-          ? { rows: shaped, pagination: relationResult.pagination }
-          : shaped;
+    const targetResource = relationConfig.resource;
+    const key = relationNode.key || relationName;
+
+    if (relationConfig.one) {
+      // Singular relations reference unique IDs. Fetch each referenced record
+      // once, then shape the batch together so nested lookups can also batch.
+      const parentKey = relationConfig.parentKey || 'id';
+      const ids = [...new Set(parents.map((parent) => parent[parentKey]).filter(Boolean))];
+      const rows = ids.length ? await RESOURCE_MODELS[targetResource].findAll({
+        ...(relationConfig.paranoid === false ? { paranoid: false } : {}),
+        where: {
+          [Op.and]: [
+            buildNodeWhere(targetResource, relationNode, context),
+            { [relationConfig.foreignKey]: { [Op.in]: ids } },
+          ],
+        },
+      }) : [];
+      const shaped = await shapeRows(targetResource, rows, relationNode, context);
+      const byId = new Map(rows.map((row, index) => [toPlain(row)[relationConfig.foreignKey], shaped[index]]));
+      results.forEach((result, index) => {
+        result[key] = byId.get(parents[index][parentKey]) || null;
+      });
+      continue;
     }
 
-    return result;
-  }));
+    // Query each collection with its own limits/counts, but shape all children
+    // together so shared nested references are loaded once across parents.
+    const collections = await Promise.all(parents.map((parent) =>
+      loadRelationRows(parent, relationConfig, relationNode, context)));
+    const rows = collections.flatMap((collection) => collection.rows || []);
+    const shaped = await shapeRows(targetResource, rows, relationNode, context);
+    let offset = 0;
+    results.forEach((result, index) => {
+      const relationResult = collections[index];
+      const length = relationResult.rows?.length || 0;
+      const children = shaped.slice(offset, offset + length);
+      offset += length;
+      result[key] = relationResult.pagination
+        ? { rows: children, pagination: relationResult.pagination }
+        : children;
+    });
+  }
+
+  return results;
 };
 
 const PRICE_FIELD_NAMES = ['price', 'salePrice', 'costPrice', 'unitPrice', 'regularPrice', 'effectivePrice', 'savingsAmount'];
