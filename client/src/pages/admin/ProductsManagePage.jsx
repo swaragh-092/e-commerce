@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Typography, Button, Chip, IconButton, TextField,
   FormControl, InputLabel, Select, MenuItem, Stack, Tooltip,
@@ -138,6 +138,11 @@ const ProductsManagePage = () => {
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
 
   // Filters – initialise from URL query params so dashboard cards can pre-apply filters
+  const urlSearch = searchParams.get('search') || '';
+  const urlStatus = searchParams.get('status') || '';
+  const urlLowStockOnly = searchParams.get('stock') === 'low';
+  const lastUrlSearch = useRef(urlSearch);
+  const requestVersion = useRef(0);
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [searchInput, setSearchInput] = useState(() => searchParams.get('search') || '');
   const [status, setStatus] = useState(() => searchParams.get('status') || '');
@@ -149,18 +154,23 @@ const ProductsManagePage = () => {
   // ?stock=low from dashboard → show only items with qty ≤ lowStockThreshold
   const [lowStockOnly, setLowStockOnly] = useState(() => searchParams.get('stock') === 'low');
 
-  // Keep dashboard deep links in sync when the product route stays mounted
-  // while its query string changes (for example, switching dashboard filters).
+  // Sync each URL field independently: unrelated filter changes must not
+  // restore the previous URL query over a draft the user is still editing.
   useEffect(() => {
-    const nextStatus = searchParams.get('status') || '';
-    const nextLowStockOnly = searchParams.get('stock') === 'low';
-    const nextSearch = searchParams.get('search') || '';
-    setStatus((current) => current === nextStatus ? current : nextStatus);
-    setLowStockOnly((current) => current === nextLowStockOnly ? current : nextLowStockOnly);
-    setSearch((current) => current === nextSearch ? current : nextSearch);
-    setSearchInput((current) => current === nextSearch ? current : nextSearch);
+    setStatus((current) => current === urlStatus ? current : urlStatus);
     setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
-  }, [searchParams]);
+  }, [urlStatus]);
+  useEffect(() => {
+    setLowStockOnly((current) => current === urlLowStockOnly ? current : urlLowStockOnly);
+    setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
+  }, [urlLowStockOnly]);
+  useEffect(() => {
+    if (lastUrlSearch.current === urlSearch) return;
+    lastUrlSearch.current = urlSearch;
+    setSearch(urlSearch);
+    setSearchInput(urlSearch);
+    setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
+  }, [urlSearch]);
 
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState([]);
@@ -452,6 +462,7 @@ const ProductsManagePage = () => {
   }, []);
 
   const fetchProducts = useCallback(() => {
+    const version = ++requestVersion.current;
     setLoading(true);
     const params = {
       page: paginationModel.page + 1,
@@ -468,33 +479,40 @@ const ProductsManagePage = () => {
     };
     getProducts(params)
       .then((res) => {
+        if (version !== requestVersion.current) return;
         setRows(res?.data || []);
         setTotal(res?.meta?.total || 0);
         setCounts(res?.counts || res?.meta?.counts || { published: 0, paused: 0, draft: 0, archived: 0 });
       })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+      .catch((error) => { if (version === requestVersion.current) console.error(error); })
+      .finally(() => { if (version === requestVersion.current) setLoading(false); });
   }, [paginationModel, search, status, saleFilter, categoryFilter, tagFilter, sortModel, lowStockOnly, lowStockThreshold]);
 
   useEffect(() => {
     fetchProducts();
+    return () => { requestVersion.current += 1; };
   }, [fetchProducts]);
 
-  // Debounce search: only fire when user stops typing
+  const applySearch = useCallback((value) => {
+    const query = value.trim();
+    const nextParams = new URLSearchParams(searchParams);
+    if (query) nextParams.set('search', query);
+    else nextParams.delete('search');
+    // Mark our own navigation so URL synchronization cannot restore stale text.
+    lastUrlSearch.current = query;
+    setSearchInput(value);
+    setSearch(query);
+    setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
+    if (nextParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
   useEffect(() => {
-    const t = setTimeout(() => {
-      setPaginationModel((prev) => ({ ...prev, page: 0 }));
-      setSearch(searchInput);
-      const nextParams = new URLSearchParams(searchParams);
-      const trimmedSearch = searchInput.trim();
-      if (trimmedSearch) nextParams.set('search', trimmedSearch);
-      else nextParams.delete('search');
-      if (nextParams.toString() !== searchParams.toString()) {
-        setSearchParams(nextParams, { replace: true });
-      }
-    }, 400);
-    return () => clearTimeout(t);
-  }, [searchInput, searchParams, setSearchParams]);
+    if (searchInput.trim() === search) return;
+    const timer = setTimeout(() => applySearch(searchInput), 400);
+    return () => clearTimeout(timer);
+  }, [searchInput, search, applySearch]);
 
   const handleStatusChange = (val) => {
     setStatus(val);
@@ -1099,7 +1117,7 @@ const ProductsManagePage = () => {
           InputProps={{
             endAdornment: searchInput ? (
               <InputAdornment position="end">
-                <IconButton size="small" onClick={() => { setSearchInput(''); setSearch(''); }}>
+                <IconButton size="small" aria-label="Clear search" onClick={() => applySearch('')}>
                   <ClearIcon fontSize="small" />
                 </IconButton>
               </InputAdornment>
