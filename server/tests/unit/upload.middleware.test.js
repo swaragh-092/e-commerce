@@ -28,17 +28,19 @@ const BOUNDARY = '---------------------------974767299852498929531610575';
 
 function sendMultipart(middleware, bodyString) {
   return new Promise((resolvePromise, rejectPromise) => {
+    let capturedResult = null;
+
     const server = http.createServer((req, res) => {
       middleware(req, res, (err) => {
+        capturedResult = {
+          error: err ? err.message : null,
+          code: err ? (err.code || err.name) : null,
+          body: req.body || null,
+          file: req.file ? { originalname: req.file.originalname, mimetype: req.file.mimetype } : null,
+        };
         res.statusCode = err ? 400 : 200;
-        res.end(
-          JSON.stringify({
-            error: err ? err.message : null,
-            code: err ? (err.code || err.name) : null,
-            body: req.body || null,
-            file: req.file ? { originalname: req.file.originalname, mimetype: req.file.mimetype } : null,
-          })
-        );
+        res.setHeader('Content-Type', 'application/json');
+        res.end('{}');
       });
     });
 
@@ -53,15 +55,10 @@ function sendMultipart(middleware, bodyString) {
           },
         },
         (res) => {
-          let data = '';
-          res.on('data', (chunk) => (data += chunk));
+          res.resume();
           res.on('end', () => {
             server.close();
-            try {
-              resolvePromise(JSON.parse(data));
-            } catch (e) {
-              rejectPromise(e);
-            }
+            resolvePromise(capturedResult);
           });
         }
       );
