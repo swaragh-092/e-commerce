@@ -144,11 +144,11 @@ header.scrolled-header .bottom-inner-wrapper li.megamenu-wrapper-li:hover .mega-
 header.scrolled-header .bottom-inner-wrapper .mega-menu-wrapper .mega-menu-column-title {padding: 0 0 8px !important;}
 header.scrolled-header .right-desktop-menu-container .iso-logos{display: block;}
 header.scrolled-header .bottom-header-top .iso-logos{display: none;}
-.bottom-header-top a {display: flex;justify-content: center;align-items: center;width: 100%;gap: 10px;}
+.bottom-header-top a {display: flex;justify-content: center;align-items: center;width: 400px;gap: 10px;}
 .orbi-logo{display: flex;justify-content: center;align-items: center;width: 100% !important;max-width: 60px !important;}
 .orbi-logo{width: 100% !important;max-width: 60px !important;}
 .orbi-logo img{width: 100%;max-width: 60px;}
-.bottom-header-top span {font-weight: 500;color: var(--color-white);font-size: 18px;}
+.bottom-header-top span {font-weight: 800;color: var(--color-white);font-size: 18px;}
 .enquiry-list-header a img {max-width: 20px;filter: invert(100%);}
 .wishlist{display: flex; justify-content: center; align-items: center;}
 .wishlist a img {max-width: 20px;filter: invert(100%);}
