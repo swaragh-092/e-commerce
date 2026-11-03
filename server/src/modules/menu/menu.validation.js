@@ -155,6 +155,10 @@ const getPublicMenuSchema = Joi.object({
     location: Joi.string().valid(...menuLocations).required(),
 });
 
+const getPublicMenuBySlugSchema = Joi.object({
+    slug: Joi.string().trim().max(120).pattern(/^[a-z0-9-]+$/).required(),
+});
+
 const reorderMenusSchema = Joi.object({
     menus: Joi.array().items(Joi.object({
         id: Joi.string().trim().uuid().required(),
@@ -210,6 +214,7 @@ module.exports = {
     queryMenusSchema,
 
     getPublicMenuSchema,
+    getPublicMenuBySlugSchema,
     idParamSchema,
     menuIdParamSchema,
     menuItemIdParamSchema,

@@ -160,8 +160,13 @@ exports.listMedia = async (page, limit, sortBy = 'createdAt', sortDir = 'DESC', 
 };
 
 exports.deleteMedia = async (id) => {
-  const mediaRecord = await Media.findByPk(id);
+  const mediaRecord = await Media.findByPk(id, {
+    attributes: { include: [[Media.sequelize.literal(mediaUsageCountSql()), 'usageCount']] },
+  });
   if (!mediaRecord) throw new AppError('NOT_FOUND', 404, 'Media not found');
+  if (Number(mediaRecord.get('usageCount') || 0) > 0) {
+    throw new AppError('CONFLICT', 409, 'This media file is still in use and cannot be deleted.');
+  }
 
   const filename = mediaRecord.filename;
   const webpFilename = filename.split('.').slice(0, -1).join('.') + '.webp';

@@ -20,7 +20,7 @@ router.get('/public/:menuId/items/:itemId/children', publicApiLimiter,
     validate(menuValidation.publicChildrenQuerySchema, 'query'), menuController.getPublicMenuChildren);
 
 router.get('/public/:location', publicApiLimiter, validate(menuValidation.getPublicMenuSchema, 'params'), validate(hideEmptyQuerySchema, 'query'), menuController.getPublicMenu);
-router.get('/slug/public/:slug', publicApiLimiter, validate(hideEmptyQuerySchema, 'query'), menuController.getPublicCustomMenu);
+router.get('/slug/public/:slug', publicApiLimiter, validate(menuValidation.getPublicMenuBySlugSchema, 'params'), validate(hideEmptyQuerySchema, 'query'), menuController.getPublicCustomMenu);
 
 
 

@@ -20,7 +20,6 @@ exports.getPublicMenu = async (req, res, next) => {
 };
 exports.getPublicCustomMenu = async (req, res, next) => {
     try {
-        console.log(req.params);
         const menu = await MenuService.getPublicMenuBySlug(req.params.slug, { hideEmpty: req.query.hideEmpty });
         return success(res, menu, 'Menu retrieved successfully');
     } catch (err) {
