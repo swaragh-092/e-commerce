@@ -74,7 +74,7 @@ cd ../server
 cp ../.env.example ../.env              # Edit with your DB credentials
 npx sequelize-cli db:create
 npx sequelize-cli db:migrate
-npx sequelize-cli db:seed:all           # Seeds demo data + email templates
+npx sequelize-cli db:seed:all           # Runs configured seeders; no default accounts are created
 
 # 3. Start (Terminal 1: Backend, Terminal 2: Frontend)
 cd server && npm run dev                # → http://localhost:5000
@@ -274,7 +274,7 @@ docker exec -i ecommerce-db psql -U postgres ecommerce < backup.sql
 2. Writes `config/default.json` with custom theme
 3. Generates `.env` with DB + SMTP + JWT credentials
 4. Creates the PostgreSQL database
-5. Runs migrations + seeds (demo data + email templates)
+5. Runs migrations + configured seeders (including email templates, with no default admin/customer accounts)
 6. Outputs dev server URL
 
 ---

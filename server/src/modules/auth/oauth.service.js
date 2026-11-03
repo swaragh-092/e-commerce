@@ -1,6 +1,8 @@
 'use strict';
 
 const passport = require('passport');
+const { getGoogleCallbackUrl } = require('./authRedirects');
+const { assertMfaEnrollment } = require('./mfaPolicy');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const crypto = require('crypto');
 const { sequelize, User, RefreshToken, Role, Permission } = require('../index');
@@ -18,8 +20,9 @@ const initializeGoogleStrategy = () => {
   passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: `${process.env.SERVER_URL || 'http://localhost:5000'}/api/auth/google/callback`,
+    callbackURL: getGoogleCallbackUrl(),
     passReqToCallback: true,
+    store: require('./oauthState'),
   }, async (req, _accessToken, _refreshToken, profile, done) => {
     try {
       const result = await findOrCreateOAuthUser(profile, req.ip);
@@ -36,9 +39,9 @@ const initializeGoogleStrategy = () => {
 const findOrCreateOAuthUser = async (profile, clientIp) => {
   const rawEmail = profile.emails?.[0]?.value;
   if (!rawEmail) throw new Error('No email returned from Google');
-  const emailExplicitlyUnverified = profile.emails?.[0]?.verified === false
-    || profile._json?.email_verified === false;
-  if (emailExplicitlyUnverified) {
+  const verifiedEmail = profile.emails?.[0]?.verified === true || profile._json?.email_verified === true;
+  const explicitlyUnverified = profile.emails?.[0]?.verified === false || profile._json?.email_verified === false;
+  if (!verifiedEmail || explicitlyUnverified) {
     throw new Error('Google did not return a verified email address');
   }
   const email = String(rawEmail).trim().toLowerCase();
@@ -46,6 +49,7 @@ const findOrCreateOAuthUser = async (profile, clientIp) => {
   return sequelize.transaction(async (t) => {
     let user = await User.findOne({
       where: sequelize.where(sequelize.fn('LOWER', sequelize.col('email')), email),
+      include: authUserInclude,
       transaction: t,
     });
     let isMerge = false;
@@ -73,6 +77,8 @@ const findOrCreateOAuthUser = async (profile, clientIp) => {
         user.email = email;
       }
     }
+
+    assertMfaEnrollment(user);
 
     if (isMerge) {
       // Merging into a pre-existing password row: kill any sessions the

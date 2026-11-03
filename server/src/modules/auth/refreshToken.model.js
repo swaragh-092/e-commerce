@@ -16,6 +16,11 @@ module.exports = (sequelize, DataTypes) => {
             unique: true,
             allowNull: false,
         },
+        replacedByTokenId: {
+            type: DataTypes.UUID,
+            allowNull: true,
+            field: 'replaced_by_token_id',
+        },
         expiresAt: {
             type: DataTypes.DATE,
             allowNull: false,

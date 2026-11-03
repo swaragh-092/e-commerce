@@ -7,6 +7,7 @@ const { Order, User, Product, ProductVariant, Role, Permission, Review } = db;
 const AppError = require('../../utils/AppError');
 const logger = require('../../utils/logger');
 const AuditService = require('../audit/audit.service');
+const { revokeUserSessions, revokeRoleSessions } = require('../auth/sessionRevocation');
 const { ACTIONS, ENTITIES, ROLES } = require('../../config/constants');
 const {
   PERMISSIONS,
@@ -616,6 +617,14 @@ const updateAccessRole = async (roleId, payload, actingUser) => {
       }
     }
 
+    const currentPermissionIds = (role.permissions || []).map(permission => permission.id).sort();
+    const permissionsChanged = payload.permissionIds !== undefined
+      && JSON.stringify([...new Set(permissionIdsToSave)].sort()) !== JSON.stringify(currentPermissionIds);
+    const baseRoleChanged = !role.isSystem && payload.baseRole && payload.baseRole !== role.baseRole;
+    if (permissionsChanged || baseRoleChanged) {
+      // Resolve affected members using the old role identity before a rename.
+      await revokeRoleSessions(role, transaction);
+    }
     if (payload.permissionIds !== undefined) {
       await role.setPermissions(permissionIdsToSave, { transaction });
     }
@@ -742,6 +751,7 @@ const deleteAccessRole = async (roleId, actingUser, replacementRoleId = null) =>
       assertDelegableRole(replacementRole, actingUser);
     }
 
+    await revokeUserSessions(assignedUsers.map(user => user.id), transaction);
     await role.setPermissions([], { transaction });
     await role.destroy({ transaction });
 
@@ -911,8 +921,11 @@ const updateUserRole = async (userId, roleId, actingUser) => {
       }
     }
 
+    const assignmentChanged = user.role !== role.baseRole
+      || user.roles?.length !== 1 || user.roles[0].id !== role.id;
     await user.update({ role: role.baseRole }, { transaction });
     await user.setRoles([role], { transaction });
+    if (assignmentChanged) await revokeUserSessions([user.id], transaction);
 
     const updatedUser = await User.findByPk(user.id, { include: userRoleInclude, transaction });
 

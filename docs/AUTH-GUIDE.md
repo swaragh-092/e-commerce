@@ -2,6 +2,10 @@
 
 > All auth endpoints, flows, and security features in one place.
 
+> For the current administrator MFA policy, operator enrollment, verification
+> evidence, and rollout limits, see [Accounts and login security](ACCOUNT-LOGIN-SECURITY.md)
+> and the [2026-11-03 verification report](ACCOUNT-LOGIN-SECURITY-2026-11-03.md).
+
 ---
 
 ## Table of Contents
@@ -48,19 +52,19 @@ Response: { user } OR { requiresTwoFactor: true, tempToken }
 ```
 POST /api/auth/refresh
 Body: optional (the HttpOnly refresh cookie is used by the storefront)
-Response: `{}` (rotated cookies are set by the server)
+Response: `{ rememberMe }` (rotated cookies are set by the server)
 ```
 - Rotates refresh token (old one invalidated)
-- Reuse detection: replaying a revoked token revokes ALL user sessions
+- Reuse detection: replaying a rotated token while its successor is active revokes all refresh sessions; a logged-out or otherwise dead chain is simply rejected
 - Rate limit: 30 requests / 15 min
 
 ### Logout
 ```
-POST /api/auth/logout (requires auth)
+POST /api/auth/logout (refresh cookie or access token, when available)
 Body: optional (the HttpOnly refresh cookie is used by the storefront)
 ```
-- Revokes ALL refresh tokens for the user
-- Access token added to blocklist (immediate invalidation)
+- Revokes the presented device's refresh-token chain, including any rotation that completed just before logout; other devices stay signed in
+- Protected requests check durable session state so access tokens from that session are rejected after logout
 
 ### Forgot Password
 ```
@@ -105,7 +109,7 @@ Response: { qrCodeDataUrl, otpauth, secret }
 ### Enable (Step 2)
 ```
 POST /api/auth/2fa/enable (requires auth)
-Body: { code } (6-digit TOTP)
+Body: { code } (6-digit TOTP or one-time backup code for customer accounts)
 Response: { enabled: true, backupCodes: ["b2ef58fb", "54388477", ...] }
 ```
 - Verifies user can generate valid codes
@@ -123,6 +127,8 @@ Body: { tempToken, code }
 - TOTP is tried first; if it fails/throws, backup code is attempted
 - Backup codes are single-use (removed atomically with row lock after use)
 - Rate limit: 5 requests / 15 min
+- Administrators, including custom roles with an administrative base role, must complete operator-assisted MFA enrollment before sign-in. Admin trusted-device bypass and self-service MFA disable are denied.
+- Use the operator-assisted process in [Accounts and login security](ACCOUNT-LOGIN-SECURITY.md); do not reset an administrator's MFA with direct SQL. Recovery for an already enrolled administrator requires a separately approved identity-verification procedure.
 
 ### Disable
 ```
@@ -135,11 +141,6 @@ Body: { code } (6-digit TOTP)
 POST /api/auth/2fa/backup-codes (requires auth)
 Body: { code } (6-digit TOTP)
 Response: { backupCodes: [...] }
-```
-
-### Emergency: Admin Disable
-```sql
-UPDATE users SET two_factor_enabled = false, two_factor_secret = NULL WHERE email = 'user@example.com';
 ```
 
 ---
@@ -160,7 +161,8 @@ Response: { expiresIn: 300 }
 ```
 POST /api/auth/otp/verify
 Body: { phone, code }
-Response: { user, tokens }
+Response: { user } with authenticated HttpOnly cookies,
+or { requiresTwoFactor: true, tempToken } when MFA is enabled
 ```
 - Max 3 failed attempts per OTP, then invalidated
 - Auto-creates account if phone is new
@@ -182,12 +184,13 @@ GET /api/auth/google → Redirects to Google consent screen
 
 ### Callback
 ```
-GET /api/auth/google/callback → Redirects to client with tokens in URL fragment
+GET /api/auth/google/callback → Redirects to the configured client
 ```
-- Client URL: `/oauth/callback`; the server sets the authenticated HttpOnly cookies before redirecting
+- On successful login, the server sets authenticated HttpOnly cookies before redirecting to `/oauth/callback`; if MFA is required, the client is sent to the login challenge flow
 - Creates account if email is new (email auto-verified)
 - Links to existing account if email matches
-- Only active when `GOOGLE_CLIENT_ID` is set
+- Requires both `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`; callback state is bound to the initiating browser
+- Requires a verified-email claim and automatically matches an existing account with the same verified email, per the selected product policy. Google's external-address ownership caveat remains; see the security learning guide.
 
 ---
 
@@ -412,13 +415,8 @@ The Security tab contains:
 ## Quick Reference: Login Flow Decision Tree
 
 ```
-User submits credentials
-├── Email + Password
-│   ├── 2FA enabled? → Show TOTP/backup code input → Verify → Full login
-│   └── No 2FA → Full login
-├── Phone + OTP
-│   ├── Send OTP → Enter code → Verify → Full login
-│   └── 2FA enabled? → Additional TOTP step
-└── Google OAuth
-    └── Redirect → Callback → Full login (2FA skipped for OAuth)
+User submits credentials through password, phone OTP, or Google
+├── Administrator without MFA enrollment → Deny; contact operator
+├── MFA enabled → Verify TOTP or one-use backup code → Full session
+└── Customer without MFA enabled → Full session
 ```

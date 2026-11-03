@@ -2,9 +2,8 @@
 
 const crypto = require('crypto');
 const { Op } = require('sequelize');
-const { OtpToken } = require('../index');
+const { sequelize, OtpToken } = require('../index');
 const AppError = require('../../utils/AppError');
-const logger = require('../../utils/logger');
 
 const OTP_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
 const OTP_COOLDOWN_MS = 60 * 1000; // 60 seconds between sends
@@ -56,39 +55,46 @@ const generate = async (identifier, purpose = 'login', ip) => {
 const verify = async (identifier, otp, purpose = 'login') => {
   const normalizedId = String(identifier || '').trim();
   const normalizedOtp = String(otp || '').trim();
-  const record = await OtpToken.findOne({
-    where: { identifier: normalizedId, purpose },
-    order: [['createdAt', 'DESC']],
-  });
+  // Commit attempt counters/deletions before reporting validation errors.
+  const result = await sequelize.transaction(async (t) => {
+    const record = await OtpToken.findOne({
+      where: { identifier: normalizedId, purpose },
+      order: [['createdAt', 'DESC']],
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
 
-  if (!record) {
-    throw new AppError('VALIDATION_ERROR', 400, 'No OTP found. Please request a new one.');
-  }
-
-  if (record.expiresAt < new Date()) {
-    await record.destroy();
-    throw new AppError('VALIDATION_ERROR', 400, 'OTP has expired. Please request a new one.');
-  }
-
-  if (record.attempts >= record.maxAttempts) {
-    await record.destroy();
-    throw new AppError('VALIDATION_ERROR', 400, 'Too many failed attempts. Please request a new OTP.');
-  }
-
-  if (hashOtp(normalizedOtp) !== record.otpHash) {
-    const attemptsNow = (record.attempts || 0) + 1;
-    await record.increment('attempts');
-    const remaining = record.maxAttempts - attemptsNow;
-    if (remaining <= 0) {
-      await record.destroy();
-      throw new AppError('VALIDATION_ERROR', 400, 'Too many failed attempts. Please request a new OTP.');
+    if (!record) {
+      return new AppError('VALIDATION_ERROR', 400, 'No OTP found. Please request a new one.');
     }
-    throw new AppError('VALIDATION_ERROR', 400, `Invalid OTP. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`);
-  }
 
-  // Success — destroy the token
-  await record.destroy();
-  return true;
+    if (record.expiresAt < new Date()) {
+      await record.destroy({ transaction: t });
+      return new AppError('VALIDATION_ERROR', 400, 'OTP has expired. Please request a new one.');
+    }
+
+    if (record.attempts >= record.maxAttempts) {
+      await record.destroy({ transaction: t });
+      return new AppError('VALIDATION_ERROR', 400, 'Too many failed attempts. Please request a new OTP.');
+    }
+
+    if (hashOtp(normalizedOtp) !== record.otpHash) {
+      const attemptsNow = (record.attempts || 0) + 1;
+      await record.increment('attempts', { transaction: t });
+      const remaining = record.maxAttempts - attemptsNow;
+      if (remaining <= 0) {
+        await record.destroy({ transaction: t });
+        return new AppError('VALIDATION_ERROR', 400, 'Too many failed attempts. Please request a new OTP.');
+      }
+      return new AppError('VALIDATION_ERROR', 400, `Invalid OTP. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`);
+    }
+
+    // Success — destroy the token
+    await record.destroy({ transaction: t });
+    return true;
+  });
+  if (result instanceof AppError) throw result;
+  return result;
 };
 
 module.exports = { generate, verify, hashOtp };

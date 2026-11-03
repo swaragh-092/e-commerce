@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## [1.3.0.0] - 2026-11-03
+
+### Changed
+- Require administrator MFA with operator-assisted enrollment and enforce MFA evidence across password, phone, Google, and refresh authentication.
+- Coordinate refresh and account changes across browser tabs, and revoke rotated sessions safely during logout and permission changes.
+
+### Fixed
+- Commit refresh-token replay revocation and OTP attempt counters before returning authentication errors.
+- Consume OTPs under row locks, validate OAuth state and redirects, enforce password byte limits, and reject unsafe cookie and cryptographic-secret configuration.
+- Disable creation of demo accounts with default passwords.
+
+### Documentation
+- Add account/login security evidence, rollout requirements, an authentication ADR, and a security learning guide.
+
 ## [1.2.1.0] - 2026-11-03
 
 ### Fixed

@@ -97,7 +97,7 @@ describe('Edge — OAuth user case-insensitivity and normalization', () => {
     vi.spyOn(db.RefreshToken, 'create').mockResolvedValue({});
 
     const profile = {
-      emails: [{ value: 'john.doe@example.com' }],
+      emails: [{ value: 'john.doe@example.com', verified: true }],
       name: { givenName: 'John', familyName: 'Doe' },
     };
 
@@ -139,7 +139,7 @@ describe('Edge — OAuth user case-insensitivity and normalization', () => {
     vi.spyOn(db.RefreshToken, 'create').mockResolvedValue({});
 
     const profile = {
-      emails: [{ value: 'New.User@Example.COM' }],
+      emails: [{ value: 'New.User@Example.COM', verified: true }],
       name: { givenName: 'New', familyName: 'User' },
     };
 
