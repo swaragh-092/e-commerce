@@ -111,3 +111,7 @@ brag-output*/
 /CLAUDE.md
 /GEMINI.md
 /skills-lock.json
+
+# Strix pentest (contains credentials — never commit)
+.strix/
+strix_runs/
