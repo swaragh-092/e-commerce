@@ -347,8 +347,8 @@ const MediaPage = () => {
       setSelectedFiles((current) => current.filter((file) => file.id !== id));
       setDeleteFailures((current) => current.filter((file) => file.id !== id));
       fetchMedia(1);
-    } catch {
-      notify('Failed to delete file.', 'error');
+    } catch (err) {
+      notify(err.response?.data?.error?.message || 'Failed to delete file.', 'error');
     }
   };
 
@@ -462,8 +462,8 @@ const MediaPage = () => {
       await mediaService.delete(icon.id);
       notify('Custom icon deleted.', 'success');
       fetchCustomIcons();
-    } catch {
-      notify('Failed to delete icon.', 'error');
+    } catch (err) {
+      notify(err.response?.data?.error?.message || 'Failed to delete icon.', 'error');
     }
   };
 

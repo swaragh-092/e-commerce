@@ -53,6 +53,18 @@ describe('Media Library tabs', () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
+  it.each([
+    [{ response: { data: { error: { message: 'This media file is still in use and cannot be deleted.' } } } }, 'This media file is still in use and cannot be deleted.'],
+    [new Error('Network Error'), 'Failed to delete file.'],
+  ])('explains single-file deletion failures', async (error, message) => {
+    mediaService.delete.mockRejectedValueOnce(error);
+    render(<MediaPage />);
+    await screen.findByText('media-1.png');
+    fireEvent.click(screen.getAllByTestId('DeleteIcon').at(-1).closest('button'));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith(message, 'error'));
+    expect(screen.getByText('media-1.png')).toBeInTheDocument();
+  });
+
   it('reattaches infinite scroll to the media sentinel after switching tabs', async () => {
     render(<MediaPage />);
 
