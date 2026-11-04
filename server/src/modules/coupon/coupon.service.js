@@ -494,8 +494,15 @@ const update = async (id, payload, actingUserId) => {
 
 const remove = async (id, actingUserId) => {
     return sequelize.transaction(async (t) => {
-        const item = await Coupon.findByPk(id, { transaction: t });
+        const item = await Coupon.findByPk(id, { transaction: t, lock: t.LOCK.UPDATE });
         if (!item) throw new AppError('NOT_FOUND', 404, 'Coupon not found');
+        // Orders keep their financial totals and appliedDiscounts snapshot.
+        // Unlink the nullable FK before deleting a coupon referenced by orders.
+        await Order.update({ couponId: null }, {
+            where: { couponId: id },
+            transaction: t,
+            silent: true,
+        });
         await item.destroy({ transaction: t });
 
         try {
