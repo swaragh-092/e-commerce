@@ -108,7 +108,7 @@ h6{font-size: 22px;}
 
 .nav-links li a img{width: 100%; max-width: 350px;}
 
-.right-desktop-menu-container{flex: 1 0 auto;display: flex;justify-content: space-between;align-items: center;gap: 24px;}
+.right-desktop-menu-container{flex: 1 0 auto;display: flex;justify-content: space-between;align-items: center;align-self: stretch;gap: 24px;}
 .nav-links{display: flex; align-items: center; gap: 10px; width: 100%;}
 .right-desktop-menu-container > ul {display: flex;justify-content: space-evenly;align-items: center;gap: 10px;}
 .right-desktop-menu-container ul li a{font-size: 16px;font-weight: 500;position: relative;color: var(--color-white);}
@@ -123,6 +123,9 @@ h6{font-size: 22px;}
 .mega-menu-column.act-link > .mega-menu-column-title, .mega-menu-column-title.act-link{color: var(--color-ink) !important; border-bottom: 2px solid var(--color-primary) !important; font-weight: 800 !important;}
 .mega-menu-wrapper .top-menu-wrapper li:last-child{border: none !important;}
 .dropdown-wrapper-li a:hover{color: var(--color-primary) !important;}
+/* Extend navigation hover targets to the header edge where the panels begin. */
+.right-desktop-menu-container > .nav-links {align-self: stretch;align-items: stretch;}
+.right-desktop-menu-container > .nav-links > li {display: flex;align-items: stretch;}
 .right-desktop-menu-container > .nav-links > li > a {white-space: nowrap;}
 .right-desktop-menu-container > ul:last-child{display: flex;flex: 0 0 auto;align-items: center;gap: 4px;}
 .right-desktop-menu-container > ul:last-child > li {flex: 0 0 auto;}
@@ -146,8 +149,6 @@ header.scrolled-header .bottom-inner-wrapper {display: flex;justify-content: cen
 header.scrolled-header .bottom-inner-wrapper .bottom-header-top {align-items: flex-end;flex-direction: row-reverse;}
 header.scrolled-header .bottom-inner-wrapper .iso-logos img {max-width: 60px;}
 header.scrolled-header .bottom-inner-wrapper .right-desktop-menu-container ul li a {padding: 30px 0;}
-header.scrolled-header .bottom-inner-wrapper li.dropdown-wrapper-li:hover .dropdown-wrapper {top: 82px;}
-header.scrolled-header .bottom-inner-wrapper li.megamenu-wrapper-li:hover .mega-menu-wrapper, header.scrolled-header .bottom-inner-wrapper li.megamenu-wrapper-li:focus-within .mega-menu-wrapper {top: 83px;}
 header.scrolled-header .bottom-inner-wrapper .mega-menu-wrapper .mega-menu-column-title {padding: 0 0 8px !important;}
 header.scrolled-header .right-desktop-menu-container .iso-logos{display: block;}
 header.scrolled-header .bottom-header-top .iso-logos{display: none;}
@@ -247,8 +248,8 @@ body.menu-open {overflow: hidden;}
 
 /* Megamenu css */
 li.megamenu-wrapper-li {position: static !important;}
-li.megamenu-wrapper-li .mega-menu-wrapper { pointer-events: none; opacity: 0; position: absolute; left: 0; right: 0; width: 100%; max-width: fit-content; margin: 0 auto; top: 100px; visibility: hidden; transition: all .3s ease; z-index: 10;}
-li.megamenu-wrapper-li:hover .mega-menu-wrapper, li.megamenu-wrapper-li:focus-within .mega-menu-wrapper { visibility: visible; opacity: 1; top: 76px; pointer-events: visible; box-shadow: 0 10px 25px color-mix(in srgb, var(--color-black) 10%, transparent);}
+li.megamenu-wrapper-li .mega-menu-wrapper { pointer-events: none; opacity: 0; position: absolute; left: 0; right: 0; width: 100%; max-width: fit-content; margin: 0 auto; top: 100%; visibility: hidden; transition: opacity .3s ease, visibility .3s ease; z-index: 10;}
+li.megamenu-wrapper-li:hover .mega-menu-wrapper, li.megamenu-wrapper-li:focus-within .mega-menu-wrapper { visibility: visible; opacity: 1; pointer-events: auto; box-shadow: 0 10px 25px color-mix(in srgb, var(--color-black) 10%, transparent);}
 .mega-menu-container { background: var(--color-white); border-top: 4px solid var(--color-primary); padding: 32px 45px 36px; border-radius: 0 0 8px 8px; box-shadow: 0 15px 35px color-mix(in srgb, var(--color-black) 12%, transparent);}
 .mega-menu-columns { display: flex; flex-wrap: wrap; gap: 40px 55px; justify-content: flex-start; align-items: flex-start;}
 .mega-menu-column { flex: 0 1 auto; min-width: 180px;}
@@ -261,7 +262,6 @@ li.megamenu-wrapper-li:hover .mega-menu-wrapper, li.megamenu-wrapper-li:focus-wi
 /* Menu Builder limits the preview; More opens the parent page. */
 li.megamenu-wrapper-li .mega-menu-wrapper.mega-menu-catalog {--menu-row-limit: 7; width: max-content; max-width: min(1100px, 100%);}
 .mega-menu-catalog .mega-menu-container {max-height: calc(100vh - 140px); overflow: auto; overscroll-behavior: contain; padding: 24px 32px 28px;}
-li.megamenu-wrapper-li:focus-within .mega-menu-wrapper.mega-menu-catalog {visibility: visible; opacity: 1; top: 76px; pointer-events: auto;}
 .mega-menu-catalog .mega-menu-columns {display: flex; flex-wrap: nowrap; gap: 24px 32px;}
 .mega-menu-catalog .mega-menu-column {flex: 0 0 auto; width: max-content; min-width: 128px;}
 .mega-menu-catalog .mega-menu-column + .mega-menu-column {border-left: 1px solid var(--color-border); padding-left: 32px;}
@@ -278,9 +278,9 @@ li.megamenu-wrapper-li:focus-within .mega-menu-wrapper.mega-menu-catalog {visibi
 
 /* Dropdown css */
 .dropdown-wrapper-li{position: relative;}
-li.dropdown-wrapper-li > .dropdown-wrapper {pointer-events: none; opacity: 0;position: absolute; width: 300px;top: 100px;visibility: hidden;transition: all .2s ease-in-out;z-index: 1;}
+li.dropdown-wrapper-li > .dropdown-wrapper {pointer-events: none; opacity: 0;position: absolute; width: 300px;top: 100%;visibility: hidden;transition: opacity .2s ease-in-out, visibility .2s ease-in-out;z-index: 1;}
 li.dropdown-wrapper-li:hover > .dropdown-wrapper.last {left: -70px !important}
-li.dropdown-wrapper-li:hover > .dropdown-wrapper, li.dropdown-wrapper-li:focus-within > .dropdown-wrapper{visibility: visible;opacity: 1;top: 80px;pointer-events: visible; box-shadow: color-mix(in srgb, var(--color-black) 24%, transparent) 0px 3px 8px;}
+li.dropdown-wrapper-li:hover > .dropdown-wrapper, li.dropdown-wrapper-li:focus-within > .dropdown-wrapper{visibility: visible;opacity: 1;pointer-events: auto; box-shadow: color-mix(in srgb, var(--color-black) 24%, transparent) 0px 3px 8px;}
 .dropdown-wrapper ul{background: color-mix(in srgb, var(--color-primary) 58.04%, transparent);z-index: 0;border-top: 5px solid var(--color-primary); padding: 0 20px 2px;}
 .dropdown-wrapper li a{width: 100%; max-width: 300px; padding: 10px 5px !important;}
 .dropdown-wrapper li{position: relative;border-bottom: 2px dotted color-mix(in srgb, var(--color-decor-rose-shadow) 12.16%, transparent);}

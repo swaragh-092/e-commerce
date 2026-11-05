@@ -4,13 +4,15 @@
     var form = document.getElementById('contact-form');
     if (!form) return;
     var button = form.querySelector('button[type="submit"]');
-    var status = document.getElementById('contact-form-status');
     var pending = false;
 
-    function showStatus(message, error) {
-        status.className = 'contact-form-status ' + (error ? 'is-error' : 'is-success');
-        status.setAttribute('role', error ? 'alert' : 'status');
-        status.textContent = message;
+    function showAlert(message, error) {
+        var title = error ? 'Submission Failed' : 'Message Sent';
+        if (typeof window.customAlert === 'function') {
+            window.customAlert(title, message, error ? 'error' : 'success', error ? undefined : 4000);
+        } else {
+            window.alert(title + '\n' + message);
+        }
     }
 
     form.addEventListener('input', function (event) {
@@ -32,7 +34,6 @@
         button.disabled = true;
         button.textContent = 'Sending…';
         form.setAttribute('aria-busy', 'true');
-        status.textContent = '';
 
         try {
             var response = await fetch(API_URL.replace(/\/?$/, '/') + 'contact', {
@@ -54,9 +55,9 @@
                 throw new Error((result && result.error && result.error.message) || 'We could not send your message. Please try again.');
             }
             form.reset();
-            showStatus(result.message || 'Thank you. Your message has been received. Our team will get back to you.', false);
+            showAlert(result.message || 'Thank you. Your message has been received. Our team will get back to you.', false);
         } catch (error) {
-            showStatus(error.name === 'AbortError'
+            showAlert(error.name === 'AbortError'
                 ? 'The request timed out. Please try again or contact us by email or phone.'
                 : error instanceof TypeError ? 'Unable to connect. Please check your connection and try again.' : error.message, true);
         } finally {

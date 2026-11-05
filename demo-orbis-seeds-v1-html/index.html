@@ -65,7 +65,7 @@
                                 <div class="orbi-logo">
                                     <img src="./images/orbi-seeds-logo.png" alt="Orbi-Seeds">
                                 </div>
-                                <span>ORBI SEEDS INTERNATIONAL PVT LTD</span>
+                                <span>ORBI SEEDS INTERNATIONAL</span>
                             </a>
                         </div>
 
@@ -755,26 +755,25 @@
                         <div class="section-heading">
                             <h2><span class="first-letter">Contact</span> <span class="first-letter">Us</span></h2>
                         </div>
-                        <form name="valid_cont" id="send" method="POST" action="index.html"
-                            onsubmit="return validationCont()">
+                        <form id="contact-form" method="POST">
                             <div class="form-div">
                                 <label for="name">Name:</label>
-                                <input type="text" id="name" name="textName">
+                                <input type="text" id="name" name="name" autocomplete="name" minlength="2" maxlength="120" required>
                             </div>
                             <div class="form-div">
-                                <label for="name">PhoneNo:</label>
-                                <input type="tel" id="phonenumber" name="textPhone:" maxlength="15">
+                                <label for="phonenumber">PhoneNo:</label>
+                                <input type="tel" id="phonenumber" name="phone" autocomplete="tel" maxlength="32" required>
                             </div>
                             <div class="form-div">
-                                <label for="name">Email-Id:</label>
-                                <input type="email" id="email" name="textEmail">
+                                <label for="email">Email-Id:</label>
+                                <input type="email" id="email" name="email" autocomplete="email" maxlength="254" required>
                             </div>
                             <div class="form-div">
-                                <label for="name">Subject:</label>
-                                <textarea id="message" name="message" rows="1" cols="50"></textarea>
+                                <label for="message">Subject:</label>
+                                <textarea id="message" name="message" rows="1" cols="50" maxlength="5000" required></textarea>
                             </div>
                             <div class="common-btn">
-                                <button name="submit" value="submit">Know More</button>
+                                <button type="submit">Know More</button>
                             </div>
                         </form>
                     </div>
@@ -932,6 +931,7 @@
         <script src="js/common.js"></script>
         <script src="js/enquiry.js"></script>
         <script src="js/wishlist.js"></script>
+        <script src="js/contact.js"></script>
 
         <script>
             // Go to top 
