@@ -606,8 +606,10 @@ const ProductEditPage = () => {
         const res = await updateProduct(id, payload);
         if (res?.data) {
           setDbProduct(res.data);
-          if (Array.isArray(res.data.variants)) setInventoryVariants(res.data.variants);
-          if (payload.type === 'variable') {
+          // The mounted variant panel owns its draft snapshot during parent-only saves.
+          // Initialize from the response only when entering the Variable editor.
+          if (payload.type === 'variable' && dbProduct?.type !== 'variable') {
+            setInventoryVariants(res.data.variants || []);
             const active = (res.data.variants || []).filter((variant) => variant.isActive !== false);
             setVariantStockTotal(active.reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0));
             setVariantCount((res.data.variants || []).length);

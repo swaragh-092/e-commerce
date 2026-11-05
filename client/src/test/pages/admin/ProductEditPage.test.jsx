@@ -28,7 +28,7 @@ vi.mock('../../../components/admin/UnitSelector', () => ({ default: () => null }
 vi.mock('../../../components/admin/ProductCustomTabs', () => ({ default: () => null }));
 vi.mock('../../../components/admin/ProductTaxConfig', () => ({ default: () => null }));
 vi.mock('../../../components/admin/ProductComboBuilder', () => ({ default: () => <div>Bundle builder</div> }));
-vi.mock('../../../components/admin/ProductVariantsPanel', () => ({ default: ({ onStockTotalChange, pricingEnabled }) => <div data-testid="variant-editor" data-pricing-enabled={pricingEnabled}>Variant editor<button type="button" onClick={() => onStockTotalChange(14, 2, undefined, 2)}>Update variant stock</button></div> }));
+vi.mock('../../../components/admin/ProductVariantsPanel', () => ({ default: ({ onStockTotalChange, pricingEnabled }) => <div data-testid="variant-editor" data-pricing-enabled={pricingEnabled}>Variant editor<button type="button" onClick={() => onStockTotalChange(14, 2, undefined, 2)}>Update variant stock</button><button type="button" onClick={() => onStockTotalChange(14, 1, undefined, 1, [{ id: 'v', stockQty: 14, reservedQty: 2, isActive: true, _dirty: true }])}>Draft variant stock</button><button type="button" onClick={() => onStockTotalChange(0, 0, undefined, 1, [{ id: 'v', stockQty: 5, reservedQty: 2, isActive: false, _dirty: true }])}>Draft variant disabled</button></div> }));
 
 const product = { id: 'product', name: 'Test product', slug: 'test-product', type: 'simple', price: 200, quantity: 10, requiresShipping: false, status: 'draft', variants: [], comboItems: [], categories: [], images: [] };
 const mount = (id = 'product') => render(<MemoryRouter initialEntries={[`/admin/products/${id}/edit`]}><NotificationProvider><Routes><Route path="/admin/products/:id/edit" element={<ProductEditPage />} /></Routes></NotificationProvider></MemoryRouter>);
@@ -141,6 +141,25 @@ describe('product type and inventory editor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
     await waitFor(() => expect(updateProduct).toHaveBeenCalled());
     expect(updateProduct.mock.calls[0][1]).not.toHaveProperty('quantity');
+  });
+  it.each([
+    ['Draft variant stock', 14, 'Available to sell: 12'],
+    ['Draft variant disabled', 0, 'Disabled variants: 5 on hand, 2 reserved'],
+  ])('preserves %s in the summary after saving parent details', async (action, total, text) => {
+    const persisted = { ...product, type: 'variable', variants: [{ id: 'v', stockQty: 5, reservedQty: 2, isActive: true }] };
+    getProductById.mockResolvedValue({ data: persisted });
+    updateProduct.mockResolvedValue({ data: persisted });
+    mount(); await loaded();
+    fireEvent.click(screen.getByRole('button', { name: action }));
+    const summary = screen.getByLabelText('Inventory stock breakdown');
+    expect(summary).toHaveTextContent(text);
+    expect(summary).toHaveTextContent('Includes unsaved variant changes');
+    fireEvent.change(screen.getByRole('textbox', { name: /Product Name/ }), { target: { value: 'Updated details' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
+    await screen.findByText('Product updated successfully.');
+    expect(summary).toHaveTextContent(text);
+    expect(summary).toHaveTextContent('Includes unsaved variant changes');
+    expect(screen.getByLabelText('Total variant stock')).toHaveValue(total);
   });
   it('requires saving the Variable type before allowing variant operations', async () => {
     getProductById.mockResolvedValue({ data: { ...product, quantity: 0 } });
