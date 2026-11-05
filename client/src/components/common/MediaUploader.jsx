@@ -112,7 +112,9 @@ export default function MediaUploader({ onUploadSuccess, onAllUploadsComplete, m
     }
     busy.current = false;
     abort.current = null;
-    if (mounted.current && !failed && !cancelled && !hasInvalid) onAllUploadsComplete?.();
+    const queuedIds = new Set(queue.map((row) => row.id));
+    const unresolvedRowsRemain = rows.some((row) => !queuedIds.has(row.id) && ['Pending', 'Failed', 'Invalid', 'Uploading…'].includes(row.status));
+    if (mounted.current && !failed && !cancelled && !hasInvalid && !unresolvedRowsRemain) onAllUploadsComplete?.();
   };
 
   const selectFiles = (files) => {
