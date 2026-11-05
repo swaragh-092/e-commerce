@@ -10,6 +10,16 @@ vi.mock('../../../services/authService', () => ({ default: { forgotPassword: vi.
 
 beforeEach(() => vi.clearAllMocks());
 describe('Password recovery destinations', () => {
+  it('keeps password validation errors focused on correcting the form', () => {
+    render(<MemoryRouter initialEntries={['/reset-password?token=valid-token']}><ResetPasswordPage /></MemoryRouter>);
+    fireEvent.change(screen.getByLabelText(/^New Password/), { target: { value: 'NewPassword1!' } });
+    fireEvent.change(screen.getByLabelText(/^Confirm New Password/), { target: { value: 'DifferentPassword1!' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Reset Password' }));
+    expect(screen.getByText('Passwords do not match')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Request a new reset link' })).not.toBeInTheDocument();
+    expect(authService.resetPassword).not.toHaveBeenCalled();
+  });
+
   it.each([true, false])('offers a way out of a missing reset link (admin=%s)', (admin) => {
     render(<MemoryRouter><ResetPasswordPage admin={admin} /></MemoryRouter>);
     expect(screen.getByRole('link', { name: 'Request a new reset link' })).toHaveAttribute('href', admin ? '/admin/forgot-password' : '/forgot-password');
