@@ -23,6 +23,10 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.BIGINT,
             allowNull: false,
         },
+        contentHash: {
+            type: DataTypes.STRING(64),
+            allowNull: true,
+        },
         originalName: {
             type: DataTypes.STRING(255),
             allowNull: true,

@@ -1,4 +1,5 @@
 'use strict';
+const { createHash } = require('node:crypto');
 const path = require('path');
 const fs = require('fs').promises;
 const sharp = require('sharp');
@@ -32,7 +33,7 @@ const mediaUsageCountSql = () => `(
     WHERE COALESCE(attribute_image->>'mediaId', attribute_image->>'media_id') = "Media"."id"::text)
 )`;
 
-exports.uploadMedia = async (file, type = 'image') => {
+exports.uploadMedia = async (file, type = 'image', { allowDuplicate = false } = {}) => {
   if (!file) throw new AppError('VALIDATION_ERROR', 400, 'No file provided');
 
   const validTypes = ['image', 'icon', 'font', 'document'];
@@ -48,41 +49,89 @@ exports.uploadMedia = async (file, type = 'image') => {
     throw new AppError('VALIDATION_ERROR', 400, 'Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed.');
   }
 
-  const uniqueId = uuidv4();
-  const ext = typeInfo.ext;
-  const filename = `${uniqueId}.${ext}`;
-  const webpFilename = `${uniqueId}.webp`;
+  const contentHash = createHash('sha256').update(file.buffer).digest('hex');
+  const result = await Media.sequelize.transaction(async (transaction) => {
+    // Serialize equal content across processes, including simultaneous uploads.
+    // A transaction-scoped lock releases automatically on success or failure.
+    const lockKey = BigInt.asIntN(64, BigInt(`0x${contentHash.slice(0, 16)}`)).toString();
+    await Media.sequelize.query('SELECT pg_advisory_xact_lock(CAST(:key AS bigint))', {
+      replacements: { key: lockKey }, transaction,
+    });
+    const typeWhere = mediaType === 'image'
+      ? { [Op.or]: [{ type: 'image' }, { type: null }] }
+      : { type: mediaType };
+    if (!allowDuplicate) {
+      let duplicate = await Media.findOne({
+        where: { ...typeWhere, contentHash }, order: [['createdAt', 'ASC']], transaction,
+      });
+      // Older library files have no hash. Compare only same-size candidates,
+      // then cache their hashes so future uploads use the indexed lookup.
+      if (!duplicate) {
+        const legacy = await Media.findAll({
+          where: { ...typeWhere, contentHash: null, size: file.size }, transaction,
+        });
+        for (const candidate of legacy) {
+          if (candidate.provider && candidate.provider !== 'local') continue;
+          let bytes;
+          try { bytes = await storage.read(candidate.filename); }
+          catch (error) {
+            if (error.code === 'ENOENT') continue;
+            throw error;
+          }
+          const hash = createHash('sha256').update(bytes).digest('hex');
+          await candidate.update({ contentHash: hash }, { transaction });
+          if (hash === contentHash) { duplicate = candidate; break; }
+        }
+      }
+      if (duplicate) {
+        return { duplicate: {
+          id: duplicate.id, url: duplicate.url, originalName: duplicate.originalName,
+          filename: duplicate.filename, mimeType: duplicate.mimeType, size: duplicate.size, type: duplicate.type,
+          alt: duplicate.alt, caption: duplicate.caption, description: duplicate.description,
+        } };
+      }
+    }
+    const uniqueId = uuidv4();
+    const ext = typeInfo.ext;
+    const filename = `${uniqueId}.${ext}`;
+    const webpFilename = `${uniqueId}.webp`;
 
-  // Reject decompression bombs before doing any resize work. The upload middleware
-  // independently caps compressed bytes; this cap limits decoded pixel memory/CPU.
-  const imageOptions = { limitInputPixels: 40_000_000 };
+    // Reject decompression bombs before doing any resize work. The upload middleware
+    // independently caps compressed bytes; this cap limits decoded pixel memory/CPU.
+    const imageOptions = { limitInputPixels: 40_000_000 };
 
-  const resizeAndSave = async (width, folder) => {
-    const pipeline = sharp(file.buffer, imageOptions)
-      .resize({ width, withoutEnlargement: true })
-      .toFormat('webp', { quality: 80 });
-    const buffer = await pipeline.toBuffer();
-    return storage.save(buffer, webpFilename, folder);
-  };
+    const resizeAndSave = async (width, folder) => {
+      const pipeline = sharp(file.buffer, imageOptions)
+        .resize({ width, withoutEnlargement: true })
+        .toFormat('webp', { quality: 80 });
+      const buffer = await pipeline.toBuffer();
+      return storage.save(buffer, webpFilename, folder);
+    };
 
-  // Finish processing first so invalid/unsupported image data is not persisted.
-  await resizeAndSave(150, 'thumbnails');
-  await resizeAndSave(600, 'medium');
-  await resizeAndSave(1200, 'large');
+    // Finish processing first so invalid/unsupported image data is not persisted.
+    await resizeAndSave(150, 'thumbnails');
+    await resizeAndSave(600, 'medium');
+    await resizeAndSave(1200, 'large');
 
-  const mediaUrl = await storage.save(file.buffer, filename);
+    const mediaUrl = await storage.save(file.buffer, filename);
 
-  const media = await Media.create({
-    url: mediaUrl,
-    filename: filename,
-    originalName: file.originalname,
-    mimeType: typeInfo.mime,
-    size: file.size,
-    type: mediaType,
-    provider: process.env.STORAGE_PROVIDER || 'local',
+    const media = await Media.create({
+      url: mediaUrl,
+      filename: filename,
+      originalName: file.originalname,
+      mimeType: typeInfo.mime,
+      size: file.size,
+      type: mediaType,
+      contentHash,
+      provider: process.env.STORAGE_PROVIDER || 'local',
+    }, { transaction });
+
+    return media;
   });
-
-  return media;
+  if (result.duplicate) {
+    throw new AppError('DUPLICATE_MEDIA', 409, 'This exact image is already in your media library.', { media: result.duplicate });
+  }
+  return result;
 };
 
 exports.uploadFont = async (file) => {

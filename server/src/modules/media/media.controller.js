@@ -5,7 +5,7 @@ const { success } = require('../../utils/response');
 exports.upload = async (req, res, next) => {
     try {
         const type = req.body?.type || req.query?.type || 'image';
-        const media = await mediaService.uploadMedia(req.file, type);
+        const media = await mediaService.uploadMedia(req.file, type, { allowDuplicate: req.body?.allowDuplicate === 'true' });
         return success(res, { media }, 'File uploaded successfully', 201);
     } catch (err) {
         next(err);

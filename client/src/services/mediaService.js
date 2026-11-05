@@ -2,7 +2,12 @@ import api from './api';
 import { withQueryString } from '../utils/query';
 
 export const mediaService = {
-  uploadMedia: async (file, typeOrSignal, maybeSignal) => {
+  listCropPresets: async (signal) => (await api.get('/media/crop-presets', { signal })).data,
+  createCropPreset: async (data) => (await api.post('/media/crop-presets', data)).data,
+  updateCropPreset: async (id, data) => (await api.patch(`/media/crop-presets/${id}`, data)).data,
+  removeCropPreset: async (id) => (await api.delete(`/media/crop-presets/${id}`)).data,
+  restoreCropPreset: async (id) => (await api.post(`/media/crop-presets/${id}/restore`)).data,
+  uploadMedia: async (file, typeOrSignal, maybeSignal, options = {}) => {
     let type = 'image';
     let signal = undefined;
     if (typeof typeOrSignal === 'string') {
@@ -14,6 +19,7 @@ export const mediaService = {
     const formData = new FormData();
     formData.append('file', file);
     if (type) formData.append('type', type);
+    if (options.allowDuplicate) formData.append('allowDuplicate', 'true');
     const response = await api.post('/media/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',

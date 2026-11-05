@@ -16,3 +16,9 @@ exports.listMediaSchema = Joi.object({
     type: Joi.string().valid('image', 'icon', 'font', 'all').optional().default('image'),
     usage: Joi.string().valid('all', 'used', 'unused').optional().default('all'),
 });
+
+exports.cropPresetSchema = Joi.object({
+    name: Joi.string().trim().min(1).max(60).required(),
+    width: Joi.number().integer().min(1).max(4096).required(),
+    height: Joi.number().integer().min(1).max(4096).required(),
+});

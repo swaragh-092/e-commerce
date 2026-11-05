@@ -35,6 +35,14 @@ class LocalStorage {
         return `/uploads/${folder ? folder + '/' : ''}${filename}`;
     }
 
+    async read(filename) {
+        // Read only generated filenames, never a caller-supplied path.
+        if (!filename || path.basename(filename) !== filename) {
+            throw new Error('Invalid storage filename');
+        }
+        return fs.readFile(path.join(this.getUploadsDir(), filename));
+    }
+
     async delete(filename, folder = '') {
         const filePath = path.join(this.getUploadsDir(), folder, filename);
         try {

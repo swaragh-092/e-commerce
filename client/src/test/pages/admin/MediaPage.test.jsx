@@ -4,13 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MediaPage from '../../../pages/admin/MediaPage';
 import { mediaService } from '../../../services/mediaService';
 
-const access = vi.hoisted(() => ({ canDelete: true }));
+const access = vi.hoisted(() => ({ canDelete: true, canUpload: true }));
 const { notify, confirm } = vi.hoisted(() => ({
   notify: vi.fn(),
   confirm: vi.fn(),
 }));
 
-vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: (permission) => permission !== 'media.delete' || access.canDelete }) }));
+vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: (permission) => (permission !== 'media.delete' || access.canDelete) && (permission !== 'media.upload' || access.canUpload) }) }));
 vi.mock('../../../context/NotificationContext', () => ({ useNotification: () => ({ notify, confirm }) }));
 vi.mock('../../../services/mediaService', () => ({
   mediaService: {
@@ -29,6 +29,7 @@ describe('Media Library tabs', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     access.canDelete = true;
+    access.canUpload = true;
     confirm.mockResolvedValue(true);
     mediaService.delete.mockResolvedValue({});
     observers = [];
@@ -201,12 +202,27 @@ describe('Media Library tabs', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Delete selected (0)' })).toBeDisabled());
     expect(mediaService.delete.mock.calls.map(([id]) => id)).toEqual(['a', 'b', 'b']);
   });
-  it('hides selection and batch deletion without delete permission', async () => {
+  it('allows crop selection but hides batch deletion without delete permission', async () => {
     access.canDelete = false;
     render(<MediaPage />);
     await screen.findByText('Used 2 times');
-    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Select media-1.png' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Crop selected (0)' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: /Delete selected/ })).not.toBeInTheDocument();
+  });
+  it('hides crop selection when neither upload nor delete permission is granted', async () => {
+    access.canDelete = false;
+    access.canUpload = false;
+    render(<MediaPage />);
+    await screen.findByText('Used 2 times');
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Crop selected/ })).not.toBeInTheDocument();
+  });
+  it('opens bulk cropping for the selected images', async () => {
+    render(<MediaPage />);
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select media-1.png' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Crop selected (1)' }));
+    expect(await screen.findByRole('dialog', { name: /Bulk crop images/ })).toBeInTheDocument();
   });
   it('disables batch controls while deleting and avoids duplicate submissions', async () => {
     let finish;

@@ -246,13 +246,15 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
       handleClose();
     } else {
       // If multiple, add to selection but don't refresh here (onAllUploadsComplete handles it)
-      setSelected((prev) => [...prev, newMedia]);
-      setTab(1);
+      setSelected((prev) => prev.some((item) => item.id === newMedia.id) ? prev : [...prev, newMedia]);
     }
   };
 
   const handleAllUploadsComplete = () => {
-    if (activeRef.current) fetchMedia(1, false, true); // Refresh only an active picker.
+    if (activeRef.current) {
+      fetchMedia(1, false, true); // Refresh only an active picker.
+      if (multiple) setTab(1);
+    }
   };
 
   return (
@@ -312,7 +314,7 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
                 onUploadSuccess={handleUploadSuccess}
                 onAllUploadsComplete={handleAllUploadsComplete}
                 multiple={multiple}
-                autoUpload={true}
+                autoUpload={false}
               />
             </Box>
           </Box>

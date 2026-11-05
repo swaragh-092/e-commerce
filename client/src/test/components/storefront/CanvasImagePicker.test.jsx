@@ -9,9 +9,11 @@ vi.mock('../../../context/NotificationContext', () => ({ useNotification: () => 
 beforeEach(() => {
   vi.clearAllMocks();
   media.list.mockResolvedValue({ data: [], meta: { page: 1, totalPages: 1 } });
+  Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: vi.fn(() => 'blob:upload-preview') });
+  Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: vi.fn() });
   vi.stubGlobal('IntersectionObserver', class { observe() {} unobserve() {} disconnect() {} });
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 const mount = () => {
   const onCommit = vi.fn();
@@ -49,6 +51,7 @@ describe('Canvas image picker dismissal', () => {
     const { onCommit } = mount();
     const dialog = await screen.findByRole('dialog');
     fireEvent.change(dialog.querySelector('input[type="file"]'), { target: { files: [new File(['image'], 'hero.png', { type: 'image/png' })] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Upload 1 image' }));
     await waitFor(() => expect(media.uploadMedia).toHaveBeenCalledTimes(1));
     const signal = media.uploadMedia.mock.calls[0][2];
     fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
