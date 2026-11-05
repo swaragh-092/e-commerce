@@ -17,6 +17,7 @@ const definitions = [
   ['enquiry_closed_converted', 'Enquiry closed – Converted', 'Enquiries', 'When an enquiry is closed with a converted outcome.', 'enquiry_closed_converted_customer'],
   ['enquiry_closed_lost', 'Enquiry closed – Lost', 'Enquiries', 'When an enquiry is closed with a lost outcome.', 'enquiry_closed_lost_customer'],
   ['enquiry_replied', 'Enquiry replied to', 'Enquiries', 'When staff send a reply to an enquiry.', 'enquiry_reply_customer'],
+  ['contact_form_submitted', 'Contact form submitted', 'Contact', 'When a visitor submits the public website contact form.', null, 'contact_form_admin'],
 ];
 
 const EVENTS = definitions.map(([key, label, group, description, customerTemplate, internalTemplate]) => ({

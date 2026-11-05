@@ -235,6 +235,7 @@ app.use('/api/pages', pageRoutes);
 app.use('/api/menus', menuRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/enquiries', enquiryRoutes);
+app.use('/api/contact', require('./modules/contact/contact.routes'));
 app.use('/api/search', searchRoutes);
 app.use('/api/api-builder', apiBuilderRoutes);
 app.use('/api/blogs', blogRoutes);

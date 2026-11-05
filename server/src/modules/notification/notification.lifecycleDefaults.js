@@ -153,6 +153,7 @@ const templateConfigs = {
 };
 
 const variables = {
+  contact_form_admin: ['contact_name', 'contact_email', 'contact_phone', 'contact_message'],
   password_changed: ['name'],
   email_changed: ['name', 'new_email'],
   staff_invitation: ['name', 'setup_url'],
@@ -175,6 +176,23 @@ const buildDefaults = (emailWrapper) => {
       },
     ])
   );
+
+  defaults.contact_form_admin = {
+    subject: 'New contact message from {{contact_name}} — {{store_name}}',
+    bodyHtml: emailWrapper(`
+    <h2>New Contact Form Message</h2>
+    <p>A visitor submitted the contact form on your website.</p>
+    <div class="info-box">
+      <p><strong>Name:</strong> {{contact_name}}</p>
+      <p><strong>Email:</strong> <a href="mailto:{{contact_email}}">{{contact_email}}</a></p>
+      <p><strong>Phone:</strong> {{contact_phone}}</p>
+    </div>
+    <h3>Message</h3>
+    <div style="white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7;">{{contact_message}}</div>
+    <p style="margin-top:24px;">Reply to <a href="mailto:{{contact_email}}">{{contact_email}}</a> to respond to this visitor.</p>
+`),
+    bodyText: 'New website contact message\n\nName: {{contact_name}}\nEmail: {{contact_email}}\nPhone: {{contact_phone}}\n\nMessage:\n{{contact_message}}\n\nReply to {{contact_email}} to respond.\n{{store_name}}',
+  };
 
   defaults.newsletter_confirm = {
     subject: 'Confirm your subscription to {{store_name}}',

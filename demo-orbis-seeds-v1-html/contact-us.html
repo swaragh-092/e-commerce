@@ -12,6 +12,7 @@
 <!-- css -->
 <link rel="stylesheet" href="css/orbi-seeds.css">
 <link rel="stylesheet" href="css/responsive.css">
+<link rel="stylesheet" href="css/contact.css">
 <!-- css -->
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -250,26 +251,26 @@
 
                     </div>
                     <div class="contact-right-right">
-                        <form name="valid_cont" id="send" method="POST" action="contact-us.html" onsubmit="return validationCont()">
+                        <form id="contact-form" method="POST" aria-describedby="contact-form-status">
                             <div class="formname">
                                 <label for="firstname">Name:</label>
-                                <input type="text" id="firstname" placeholder="" name="textName">
+                                <input type="text" id="firstname" placeholder="" name="name" autocomplete="name" minlength="2" maxlength="120" required>
                             </div>
                             <div class="formname">
                                 <label for="email">Email:</label>
-                                <input type="email" id="email" placeholder="" name="textEmail">
+                                <input type="email" id="email" placeholder="" name="email" autocomplete="email" maxlength="254" required>
                             </div>
                             <div class="formname">
                                 <label for="phonenumber">Phone Number:</label>
-                                <input type="tel" id="phonenumber" name="textPhone" maxlength="15" placeholder="">
+                                <input type="tel" id="phonenumber" name="phone" autocomplete="tel" maxlength="32" placeholder="" required>
                             </div>
                             <div class="formname">
-                                <textarea id="message" name="message" rows="7" cols="50" placeholder="Your Message:"></textarea>
+                                <textarea id="message" name="message" rows="7" cols="50" placeholder="Your Message:" aria-label="Your Message" maxlength="5000" required></textarea>
                             </div>
-                            <div id="recaptcha" class="g-recaptcha" data-sitekey="6Ldjwx0qAAAAAIZu5_ngKeTxJNBZ6hO0bCwK5V4c" data-callback="PopupValidation" data-size="invisible"></div>
                             <div class="common-btn">
-                                <button name="submit" value="submit">Send Message</button>
+                                <button type="submit">Send Message</button>
                             </div>
+                            <p id="contact-form-status" class="contact-form-status" role="status" aria-live="polite"></p>
                         </form>
                     </div>
                     
@@ -394,6 +395,7 @@
 <script src="js/common.js"></script>
 <script src="js/enquiry.js"></script>
 <script src="js/wishlist.js"></script>
+<script src="js/contact.js"></script>
 
 <script>
     // Go to top 

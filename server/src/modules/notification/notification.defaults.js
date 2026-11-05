@@ -477,6 +477,10 @@ const TEMPLATE_VARIABLES = {
 };
 
 const SAMPLE_VARIABLES = {
+  contact_name: 'Jane Doe',
+  contact_email: 'jane@example.com',
+  contact_phone: '+919876543210',
+  contact_message: 'Hello, I would like to learn more about your seeds.\nPlease contact me with more information.',
   claim_url: 'https://store.example.com/account/orders/link-guest?token=sample-token',
   expiry_minutes: 30,
   customer_name: 'Jane Doe',
