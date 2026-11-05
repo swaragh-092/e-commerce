@@ -1166,10 +1166,10 @@ const placeOrder = async (userId, payload) => {
                 throw new AppError('NOT_FOUND', 404, 'Selected product variant not found or is currently unavailable');
             }
         } else {
-            const activeVariantCount = await ProductVariant.count({
-                where: { productId: buyNowItem.productId, isActive: true },
+            const variantCount = await ProductVariant.count({
+                where: { productId: buyNowItem.productId },
             });
-            if (product.type === 'variable' || activeVariantCount > 0) {
+            if (product.type === 'variable' || variantCount > 0) {
                 throw new AppError('VALIDATION_ERROR', 400, `Please select an option for "${product.name}" before checkout.`);
             }
         }
@@ -1307,7 +1307,7 @@ const placeOrder = async (userId, payload) => {
             }
 
             const currentProduct = await Product.findByPk(product.id, { transaction: t, lock: Transaction.LOCK.UPDATE });
-            if (!currentProduct) {
+            if (!currentProduct || currentProduct.status !== 'published' || currentProduct.isEnabled === false) {
                 throw new AppError(
                     'VALIDATION_ERROR',
                     400,
@@ -1334,11 +1334,11 @@ const placeOrder = async (userId, payload) => {
                 currentPrice = getVariantUnitPrice(plainCurrentProduct, currentVariant);
                 item.variant = currentVariant;
             } else {
-                const activeVariantCount = await ProductVariant.count({
-                    where: { productId: product.id, isActive: true },
+                const variantCount = await ProductVariant.count({
+                    where: { productId: product.id },
                     transaction: t,
                 });
-                if (currentProduct.type === 'variable' || activeVariantCount > 0) {
+                if (currentProduct.type === 'variable' || variantCount > 0) {
                     throw new AppError('VALIDATION_ERROR', 400, `Please select a product option for "${product.name}" before checkout.`);
                 }
             }

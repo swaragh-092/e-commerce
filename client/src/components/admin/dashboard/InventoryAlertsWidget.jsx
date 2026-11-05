@@ -70,12 +70,13 @@ const InventoryAlertsWidget = ({ lowStock = [], inventoryAlerts, loading, spacin
         <WarningIcon color="warning" />
         <Typography variant="h6" fontWeight={600}>Inventory Alerts ({totalAtRisk})</Typography>
       </Box>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Each active variant is checked separately. Available = on hand − reserved for orders. Disabled products and variants are excluded.</Typography>
       {outOfStockCount > 0 && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>{outOfStockCount} item{outOfStockCount === 1 ? '' : 's'} out of stock.</Alert>}
       {inventoryAlerts && rows.length < totalAtRisk && <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>Showing the first {rows.length} of {totalAtRisk} inventory alerts.</Alert>}
       <Box sx={{ overflowX: 'auto' }}>
         <Table size="small" aria-label="Inventory alerts" sx={{ minWidth: inventoryAlerts ? 820 : 400 }}>
           <TableHead><TableRow>
-            <TableCell>Product / SKU</TableCell><TableCell align="right">Total Qty</TableCell>
+            <TableCell>Product / SKU</TableCell><TableCell align="right">On hand</TableCell>
             <TableCell align="right">Reserved</TableCell><TableCell align="right">Available / Threshold</TableCell>
             {inventoryAlerts && <TableCell>Follow-up</TableCell>}
           </TableRow></TableHead>
@@ -89,6 +90,7 @@ const InventoryAlertsWidget = ({ lowStock = [], inventoryAlerts, loading, spacin
                 <TableRow key={alert.inventoryKey || alert.id} hover onClick={() => navigate(`/admin/products/${productId}/edit`)} sx={{ cursor: 'pointer' }}>
                   <TableCell>
                     <Typography variant="body2" fontWeight={600}>{product.name || alert.name}</Typography>
+                    <Typography variant="caption" color="text.secondary" display="block">{alert.variantId ? 'Variant stock' : 'Product stock'}</Typography>
                     {(alert.sku || alert.variant?.sku || product.sku) && <Typography variant="caption" color="text.secondary">SKU: {alert.sku || alert.variant?.sku || product.sku}</Typography>}
                   </TableCell>
                   <TableCell align="right">{alert.quantity}</TableCell><TableCell align="right">{alert.reservedQty}</TableCell>

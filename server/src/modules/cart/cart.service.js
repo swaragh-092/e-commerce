@@ -115,7 +115,7 @@ const addItem = async (userId, sessionId, payload) => {
         const { productId, variantId, quantity = 1 } = payload;
 
         const product = await Product.findByPk(productId, { transaction: t, lock: Transaction.LOCK.UPDATE });
-        if (!product || !product.isEnabled) {
+        if (!product || !product.isEnabled || product.status !== 'published') {
             throw new AppError('NOT_FOUND', 404, 'Product not found or unavailable');
         }
 
@@ -131,11 +131,11 @@ const addItem = async (userId, sessionId, payload) => {
             }
             availableStock = Number(variant.stockQty || 0) - Number(variant.reservedQty || 0);
         } else {
-            const activeVariantCount = await ProductVariant.count({
-                where: { productId, isActive: true },
+            const variantCount = await ProductVariant.count({
+                where: { productId },
                 transaction: t,
             });
-            if (product.type === 'variable' || activeVariantCount > 0) {
+            if (product.type === 'variable' || variantCount > 0) {
                 throw new AppError('VALIDATION_ERROR', 400, 'Please select a variant option before adding to cart');
             }
             availableStock = Number(product.quantity || 0) - Number(product.reservedQty || 0);
@@ -197,7 +197,7 @@ const updateItem = async (userId, sessionId, itemId, quantity) => {
             });
         }
 
-        if (!product || product.deletedAt !== null || !product.isEnabled) {
+        if (!product || product.deletedAt !== null || !product.isEnabled || product.status !== 'published') {
             await item.destroy({ transaction: t });
             throw new AppError('NOT_FOUND', 404, 'Product no longer available and removed from cart');
         }
@@ -208,11 +208,11 @@ const updateItem = async (userId, sessionId, itemId, quantity) => {
         }
 
         if (!item.variantId) {
-            const activeVariantCount = await ProductVariant.count({
-                where: { productId: item.productId, isActive: true },
+            const variantCount = await ProductVariant.count({
+                where: { productId: item.productId },
                 transaction: t,
             });
-            if (product.type === 'variable' || activeVariantCount > 0) {
+            if (product.type === 'variable' || variantCount > 0) {
                 await item.destroy({ transaction: t });
                 throw new AppError('CONFLICT', 409, 'Product now requires option selection and was removed from cart');
             }
