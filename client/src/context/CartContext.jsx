@@ -8,15 +8,18 @@ export const CartProvider = ({ children }) => {
   const cartEnabled = useFeature('cart');
   const [cart, setCart] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const cartCount = cart?.items?.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
 
   const fetchCart = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
       const res = await cartService.getCart();
       setCart(res.data.data);
     } catch (err) {
+      setError('We couldn’t load your cart. Please try again.');
       console.error('Failed to fetch cart', err);
     } finally {
       setLoading(false);
@@ -56,6 +59,7 @@ export const CartProvider = ({ children }) => {
     cart,
     cartCount,
     loading,
+    error,
     fetchCart,
     addItem,
     updateItem,

@@ -8,6 +8,7 @@ import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const ResetPasswordPage = ({ admin = false }) => {
   const loginPath = admin ? '/admin/login' : '/login';
+  const recoveryPath = admin ? '/admin/forgot-password' : '/forgot-password';
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
   const navigate = useNavigate();
@@ -66,6 +67,9 @@ const ResetPasswordPage = ({ admin = false }) => {
           <PasswordRecoveryLayout admin={admin}>
             <Box sx={{ maxWidth: 400, mx: 'auto', mt: admin ? 0 : 8 }}>
                 <Alert severity="error">Invalid link. Please request a new password reset.</Alert>
+                <Button fullWidth component={RouterLink} to={recoveryPath} sx={{ mt: 2 }}>
+                    Request a new reset link
+                </Button>
             </Box>
           </PasswordRecoveryLayout>
       );
@@ -79,6 +83,11 @@ const ResetPasswordPage = ({ admin = false }) => {
         </Typography>
       
         {status.message && <Alert severity={status.type} sx={{ mb: 3 }}>{status.message}</Alert>}
+        {status.type === 'error' && (
+            <Button component={RouterLink} to={recoveryPath} sx={{ mb: 2 }}>
+                Request a new reset link
+            </Button>
+        )}
 
         {status.type !== 'success' && (
           <Box component="form" onSubmit={handleSubmit}>

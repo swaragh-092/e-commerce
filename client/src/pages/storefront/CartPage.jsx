@@ -31,6 +31,7 @@ import { getVariantOptionLabel } from '../../utils/variantOptions';
 import EnquiryModal from '../../components/storefront/EnquiryModal';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { calculateTaxSummary } from '../../utils/gst';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const row = (align = 'center', justify = 'flex-start') => ({
     display: 'flex', alignItems: align, justifyContent: justify,
@@ -46,6 +47,7 @@ const getAvailableStock = (entity, stockKey) => {
 
 // ── Optimistic state ──────────────────────────────────────────────────────────
 const useOptimisticCart = (items, updateItem, removeItem) => {
+    const { notify } = useNotification();
     const [optimisticQtys, setOptimisticQtys] = useState({});
     const [removingIds, setRemovingIds] = useState(new Set());
     const [updatingIds, setUpdatingIds] = useState(new Set());
@@ -58,18 +60,21 @@ const useOptimisticCart = (items, updateItem, removeItem) => {
         clearTimeout(pendingRef.current[itemId]);
         pendingRef.current[itemId] = setTimeout(async () => {
             try { await updateItem(itemId, newQty); }
-            catch { /* ignore, cleared below regardless of outcome */ }
+            catch (err) { notify(getApiErrorMessage(err, 'Could not update quantity. Please try again.'), 'error'); }
             finally {
                 setOptimisticQtys(p => { const n = { ...p }; delete n[itemId]; return n; });
                 setUpdatingIds(p => { const n = new Set(p); n.delete(itemId); return n; });
             }
         }, 400);
-    }, [updateItem]);
+    }, [updateItem, notify]);
     const handleRemove = useCallback(async (itemId) => {
         setRemovingIds(p => new Set([...p, itemId]));
         try { await removeItem(itemId); }
-        catch { setRemovingIds(p => { const n = new Set(p); n.delete(itemId); return n; }); }
-    }, [removeItem]);
+        catch (err) {
+            setRemovingIds(p => { const n = new Set(p); n.delete(itemId); return n; });
+            notify(getApiErrorMessage(err, 'Could not remove item. Please try again.'), 'error');
+        }
+    }, [removeItem, notify]);
     return { getQty, handleUpdate, handleRemove, removingIds, updatingIds };
 };
 
@@ -123,14 +128,14 @@ const EmptyCart = ({ message }) => (
 // ── Qty Stepper ───────────────────────────────────────────────────────────────
 const QttyStepper = ({ qty, isUpdating, onDecrement, onIncrement, atMax }) => (
     <Box sx={{ display: 'inline-flex', alignItems: 'center', height: 30, border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
-        <IconButton size="small" disableRipple disabled={qty <= 1 || isUpdating} onClick={onDecrement}
+        <IconButton aria-label="Decrease quantity" size="small" disableRipple disabled={qty <= 1 || isUpdating} onClick={onDecrement}
             sx={{ width: 28, height: 30, borderRadius: 0, color: 'text.secondary', '&:not(.Mui-disabled):hover': { bgcolor: 'action.selected' }, '&.Mui-disabled': { opacity: 0.3 } }}>
             <RemoveIcon sx={{ fontSize: 12 }} />
         </IconButton>
         <Box sx={{ minWidth: 30, height: 30, borderLeft: '1px solid', borderRight: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.paper' }}>
             {isUpdating ? <CircularProgress size={10} /> : <Typography sx={{ fontSize: '0.78rem', fontWeight: 700 }}>{qty}</Typography>}
         </Box>
-        <IconButton size="small" disableRipple disabled={isUpdating || atMax} onClick={onIncrement}
+        <IconButton aria-label="Increase quantity" size="small" disableRipple disabled={isUpdating || atMax} onClick={onIncrement}
             sx={{ width: 28, height: 30, borderRadius: 0, color: 'text.secondary', '&:not(.Mui-disabled):hover': { bgcolor: 'action.selected' }, '&.Mui-disabled': { opacity: 0.3 } }}>
             <AddIcon sx={{ fontSize: 12 }} />
         </IconButton>
@@ -415,7 +420,7 @@ const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingPending, s
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 const CartPage = () => {
-    const { cart, loading, updateItem, removeItem, clearCart } = useCart();
+    const { cart, loading, error, fetchCart, updateItem, removeItem, clearCart } = useCart();
     const { notify } = useNotification();
     const { formatPrice } = useCurrency();
     const { settings } = useSettings();
@@ -483,7 +488,12 @@ const CartPage = () => {
             .catch(() => setOfferSummary(null));
     }, [user, items.length, subtotal, shippingCost, couponsEnabled, showAvailableCoupons]);
 
-    const handleClearCart = async () => { setClearing(true); await clearCart(); setClearing(false); };
+    const handleClearCart = async () => {
+        setClearing(true);
+        try { await clearCart(); }
+        catch (err) { notify(getApiErrorMessage(err, 'Could not clear your cart. Please try again.'), 'error'); }
+        finally { setClearing(false); }
+    };
 
     const handleCheckout = () => {
         const itemNeedingOption = items.find(
@@ -497,6 +507,13 @@ const CartPage = () => {
     };
 
     if (loading) return <CartSkeleton />;
+    if (error) return (
+        <Container maxWidth="lg" sx={{ py: 5 }}>
+            <Alert severity="error" action={<Button color="inherit" onClick={fetchCart}>Try again</Button>}>
+                {error}
+            </Alert>
+        </Container>
+    );
     if (items.length === 0) return <EmptyCart message={emptyStateText} />;
 
     const visibleItems = items.filter(i => !removingIds.has(i.id));
