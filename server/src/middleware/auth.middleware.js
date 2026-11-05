@@ -6,7 +6,7 @@ const { User, Role, Permission, RefreshToken } = require('../modules');
 const { enrichUserAuthorization } = require('../config/permissions');
 const logger = require('../utils/logger');
 const tokenBlocklist = require('../utils/tokenBlocklist');
-const { assertMfaSession } = require('../modules/auth/mfaPolicy');
+const { assertMfaSession, loadMfaPolicy } = require('../modules/auth/mfaPolicy');
 const { getAccessToken } = require('../modules/auth/authCookies');
 
 const JWT_VERIFY_OPTS = { algorithms: ['HS256'], issuer: process.env.JWT_ISSUER || 'ecommerce-pro', audience: process.env.JWT_AUDIENCE || 'ecommerce-pro-client' };
@@ -78,7 +78,7 @@ const authenticate = async (req, res, next) => {
       throw new AppError('FORBIDDEN', 403, 'Your account is inactive');
     }
 
-    assertMfaSession(user, decoded);
+    assertMfaSession(user, decoded, await loadMfaPolicy(user));
     req.user = enrichUserAuthorization(user);
     next();
   } catch (error) {
@@ -121,7 +121,7 @@ const optionalAuth = async (req, res, next) => {
     });
 
     if (user && user.status === 'active') {
-      try { assertMfaSession(user, decoded); } catch { return next(); }
+      try { assertMfaSession(user, decoded, await loadMfaPolicy(user)); } catch { return next(); }
       req.user = enrichUserAuthorization(user);
     }
     next();

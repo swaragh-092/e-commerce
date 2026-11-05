@@ -10,7 +10,7 @@ const AuditService = require('../audit/audit.service');
 const { ACTIONS, AUTH_TIME, ENTITIES } = require('../../config/constants');
 const { enrichUserAuthorization } = require('../../config/permissions');
 const logger = require('../../utils/logger');
-const { requiresAdminMfa, assertMfaEnrollment, assertMfaSession } = require('./mfaPolicy');
+const { requiresAdminMfa, assertMfaEnrollment, assertMfaSession, loadMfaPolicy } = require('./mfaPolicy');
 const LoginAttemptStore = require('./loginAttemptStore');
 
 const { hashToken, generateTokens, signTempTwoFactorToken } = require('./tokenUtils');
@@ -218,14 +218,15 @@ const login = async (email, password, ipAddress, rememberMe = false, userAgent, 
     }
   }
 
-  assertMfaEnrollment(user);
+  const mfaPolicy = await loadMfaPolicy(user);
+  assertMfaEnrollment(user, mfaPolicy);
 
   // If 2FA is enabled, check trusted device cookie before requiring TOTP.
   // The cookie is a signed JWT (see authCookies.signTrustedDevice) — never a
   // deterministic hash, so it cannot be forged without the JWT secret.
   if (user.twoFactorEnabled) {
     const { verifyTrustedDevice } = require('./authCookies');
-    if (!requiresAdminMfa(user) && trustedDevice && verifyTrustedDevice(trustedDevice, user.id)) {
+    if (!requiresAdminMfa(user, mfaPolicy) && trustedDevice && verifyTrustedDevice(trustedDevice, user.id)) {
       // Trusted device — skip 2FA
     } else {
       return { requiresTwoFactor: true, tempToken: signTempTwoFactorToken(user.id) };
@@ -370,7 +371,7 @@ const refresh = async (refreshTokenStr, ipAddress, userAgent) => {
           return { reuseDetected: true, revokedSessionIds: sessions.map((session) => session.id) };
         }
 
-        assertMfaSession(user, decoded);
+        assertMfaSession(user, decoded, await loadMfaPolicy(user, t));
         const sessionId = crypto.randomUUID();
         const tokens = generateTokens(user, sessionId, { mfaVerified: decoded.mfa === true });
 
@@ -718,7 +719,7 @@ const verifyTwoFactor = async (tempToken, totpCode, ipAddress) => {
     throw new AppError('FORBIDDEN', 403, 'Account deletion period has expired');
   }
 
-  assertMfaEnrollment(user);
+  assertMfaEnrollment(user, await loadMfaPolicy(user));
   if (!user.twoFactorEnabled) throw new AppError('UNAUTHORIZED', 401, 'MFA is not enabled');
   const TwoFactorService = require('./twoFactor.service');
   let isValid = false;
@@ -811,7 +812,7 @@ const loginByPhone = async (phone, ipAddress) => {
     return await User.findByPk(newUser.id, { include: authUserInclude, transaction: t });
   });
 
-  assertMfaEnrollment(user);
+  assertMfaEnrollment(user, await loadMfaPolicy(user));
 
   // If 2FA is enabled, return temp token instead of full auth
   if (user.twoFactorEnabled) {

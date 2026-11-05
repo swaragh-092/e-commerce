@@ -2,7 +2,7 @@
 
 const passport = require('passport');
 const { getGoogleCallbackUrl } = require('./authRedirects');
-const { assertMfaEnrollment } = require('./mfaPolicy');
+const { assertMfaEnrollment, loadMfaPolicy } = require('./mfaPolicy');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const crypto = require('crypto');
 const { sequelize, User, RefreshToken, Role, Permission } = require('../index');
@@ -78,7 +78,7 @@ const findOrCreateOAuthUser = async (profile, clientIp) => {
       }
     }
 
-    assertMfaEnrollment(user);
+    assertMfaEnrollment(user, await loadMfaPolicy(user, t));
 
     if (isMerge) {
       // Merging into a pre-existing password row: kill any sessions the

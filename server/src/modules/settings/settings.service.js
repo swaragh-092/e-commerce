@@ -26,6 +26,9 @@ const isMaskedSecretPlaceholder = (value) =>
   typeof value === 'string' && value.trim() === '********';
 
 const ensureNotificationRecipientsAllowed = (settingsArray, actingUser) => {
+  if (settingsArray.some(({ key }) => ['mfaPolicy', 'auth.mfaPolicy'].includes(String(key)))) {
+    throw new AppError('FORBIDDEN', 403, 'Use Security Settings and verify your identity to change MFA policy.');
+  }
   if (settingsArray.some(({ key }) => String(key).startsWith('notificationRules_'))) {
     throw new AppError('FORBIDDEN', 403, 'Use the notification event editor to update notification rules');
   }
