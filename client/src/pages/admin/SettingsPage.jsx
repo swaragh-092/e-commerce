@@ -32,6 +32,7 @@ import { DASHBOARD_PROFILES } from '../../components/admin/dashboard/dashboardWi
 import MessagingSettingsPanel from '../../components/admin/settings/MessagingSettingsPanel';
 import MediaPicker from '../../components/common/MediaPicker';
 import buildSettingsPanels from '../../components/admin/settings/buildSettingsPanels';
+import MfaSecurityPanel from '../../components/admin/settings/MfaSecurityPanel';
 import { getMediaUrl } from '../../utils/media';
 import { DEFAULT_STORE_NAME } from '../../utils/store';
 import { INDIAN_STATES } from '../../utils/indianStates';
@@ -242,6 +243,7 @@ const SettingsPage = () => {
         group !== 'shipping'
         && !['features', 'visibility'].includes(group)
         && !(group === 'general' && key === 'mode')
+        && !(group === 'auth' && key === 'mfaPolicy')
         && !(group === 'messaging' && (['eventRecipientUserIds', 'enquiryCustomerAcknowledgementEnabled'].includes(key) || key.startsWith('notificationRules_')))
         && (isSuperAdmin || !isSuperAdminOnlySettingsKey(group, key))
         && !isDesignerOwnedSetting(group, key)
@@ -263,7 +265,7 @@ const SettingsPage = () => {
 
 
 
-  const allTabs = ['Store', 'SEO', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Advanced', 'Notifications'];
+  const allTabs = ['Store', 'SEO', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Advanced', 'Notifications', 'Security'];
 
   // Current currency symbol — used in shipping adornments
   const currSymbol = getCurrencySymbol(form['general.currency']);
@@ -479,7 +481,7 @@ const SettingsPage = () => {
     if (name === 'Promotions' && !adminPricing) return false;
     if (name === 'Invoice' && !adminOrders) return false;
     if (name === 'Advanced' && !canManageAdvancedSettings) return false;
-    return name === 'Notifications' || panels[index]?.length > 0;
+    return ['Notifications', 'Security'].includes(name) || panels[index]?.length > 0;
   });
   const safeTabIndex = Math.max(visibleTabs.indexOf(tab), 0);
   const currentTab = visibleTabs[safeTabIndex];
@@ -492,7 +494,7 @@ const SettingsPage = () => {
         <Typography variant="h5" component="h1" fontWeight={700}>
           Settings
         </Typography>
-        <Button variant="contained" onClick={handleSave} disabled={saving || !canManageSettings}>
+        <Button variant="contained" onClick={handleSave} disabled={saving || !canManageSettings || currentTab === 'Security'}>
           {saving ? 'Saving…' : 'Save All'}
         </Button>
       </Box>
@@ -592,7 +594,7 @@ const SettingsPage = () => {
             </Tabs>
             <Divider />
             <Box sx={{ p: 3 }}>
-              {isMessagingTab ? (
+              {currentTab === 'Security' ? <MfaSecurityPanel /> : isMessagingTab ? (
                 <Box>
                   <Box sx={{ pointerEvents: canManageSettings ? 'auto' : 'none', opacity: canManageSettings ? 1 : 0.75 }}>
                     <MessagingSettingsPanel form={form} set={set} />

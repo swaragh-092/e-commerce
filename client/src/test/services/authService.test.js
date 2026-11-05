@@ -9,10 +9,21 @@ vi.mock('../../services/api', () => ({
   completeAuthSessionChange: vi.fn().mockResolvedValue(undefined),
   default: {
     post: vi.fn(),
+    get: vi.fn(),
+    put: vi.fn(),
   },
 }));
 
 describe('authService', () => {
+  it('uses the dedicated verified policy endpoint for security settings', async () => {
+    const policy = { requireAdministrators: false, staffMode: 'optional', requiredRoleIds: [] };
+    api.get.mockResolvedValue({ data: { data: { policy } } });
+    api.put.mockResolvedValue({ data: { data: { policy } } });
+    expect(await authService.getMfaPolicy()).toEqual({ policy });
+    const payload = { policy, verification: { currentPassword: 'provided-by-user' } };
+    await authService.updateMfaPolicy(payload);
+    expect(api.put).toHaveBeenCalledWith('/auth/mfa-policy', payload);
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
