@@ -551,6 +551,6 @@ const sendOnce = (templateName, recipient, variables = {}, userId = null, orderI
 const sendEvent = (eventKey, context = {}) => {
     const event = require('./notification.events').findEvent(eventKey);
     if (!event) return Promise.resolve(null);
-    return require('./notificationRules.service').route({ ...context, sourceTemplate: context.sourceTemplate || event.customerTemplate });
+    return require('./notificationRules.service').route({ ...context, sourceTemplate: context.sourceTemplate || event.customerTemplate || event.internalTemplate });
 };
 module.exports = { send, sendOnce, sendImmediate, sendToUser, sendToAdmins, sendDeliveryUpdate, processQueued, normalizeVariables, compileTemplate, buildPayload, sendEvent };

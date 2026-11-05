@@ -193,6 +193,7 @@ const CategoryPage = () => {
         setNotFound(false);
 
         getCategoryWithProducts(categorySlug, {
+            hideEmpty: true,
             page: filters.page,
             limit: filters.limit,
             sort: filters.sort,
@@ -275,8 +276,9 @@ const CategoryPage = () => {
             <PageSEO
                 title={category?.metaTitle || pageTitle}
                 description={category?.metaDescription || category?.description}
-                image={category?.bannerImage ? getMediaUrl(category.bannerImage) : undefined}
+                image={category?.ogImage || category?.bannerImage || category?.image}
                 url={categoryUrl}
+                type="collection"
                 structuredData={breadcrumbStructuredData}
             />
 

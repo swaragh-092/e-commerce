@@ -19,6 +19,42 @@ beforeEach(() => {
 });
 
 describe('guided variant setup', () => {
+  it.each([0, 125.5])('creates stock-only variants without requiring MRP when pricing is disabled (base price %s)', async basePrice => {
+    render(tree({ pricingEnabled: false, basePrice }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create 2 variants' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Create variants' }));
+    expect(dialog.queryByLabelText('Starting MRP')).not.toBeInTheDocument();
+    expect(dialog.queryAllByLabelText('MRP')).toHaveLength(0);
+    expect(dialog.queryByRole('button', { name: 'Set prices by attribute' })).not.toBeInTheDocument();
+    expect(dialog.queryByText(/MRP/)).not.toBeInTheDocument();
+    fireEvent.change(dialog.getByLabelText('Starting stock'), { target: { value: '3' } });
+    fireEvent.change(within(dialog.getByRole('group', { name: '10 cm' })).getByLabelText('Stock'), { target: { value: '7' } });
+    fireEvent.click(within(dialog.getByRole('group', { name: '20 cm' })).getByRole('checkbox'));
+    fireEvent.click(dialog.getByRole('button', { name: 'Create 1 variant' }));
+    await waitFor(() => expect(attributeService.bulkGenerateVariants).toHaveBeenCalledWith('product', expect.objectContaining({
+      newVariants: [{ valueIds: ['10'], price: basePrice, stockQty: 7 }],
+    })));
+  });
+
+  it('ignores hidden price drafts while still validating stock when pricing is turned off during a review', async () => {
+    const { rerender } = render(tree());
+    fireEvent.click(screen.getByRole('button', { name: 'Create 2 variants' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Create variants' }));
+    fireEvent.change(dialog.getByLabelText('Starting MRP'), { target: { value: '-5' } });
+    expect(dialog.getByRole('button', { name: 'Create 2 variants' })).toBeDisabled();
+    rerender(tree({ pricingEnabled: false }));
+    expect(dialog.queryByLabelText('Starting MRP')).not.toBeInTheDocument();
+    expect(dialog.getByRole('button', { name: 'Create 2 variants' })).toBeEnabled();
+    fireEvent.change(dialog.getByLabelText('Starting stock'), { target: { value: '1.5' } });
+    expect(dialog.getByRole('button', { name: 'Create 2 variants' })).toBeDisabled();
+    fireEvent.change(dialog.getByLabelText('Starting stock'), { target: { value: '2' } });
+    fireEvent.click(dialog.getByRole('button', { name: 'Apply defaults to selected' }));
+    fireEvent.click(dialog.getByRole('button', { name: 'Create 2 variants' }));
+    await waitFor(() => expect(attributeService.bulkGenerateVariants).toHaveBeenCalledWith('product', expect.objectContaining({ newVariants: [
+      { valueIds: ['10'], price: 100, stockQty: 2 }, { valueIds: ['20'], price: 100, stockQty: 2 },
+    ] })));
+  });
+
   it('sets new variant prices by one attribute while preserving selected combinations and stock', async () => {
     const rows = [
       ['days', 'early', 'Flowering Days', 'Early'], ['days', 'late', 'Flowering Days', 'Late'],

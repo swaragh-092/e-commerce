@@ -2,6 +2,35 @@
 
 All notable changes to this project are documented here.
 
+## [1.3.0.0] - 2026-11-03
+
+### Changed
+- Require administrator MFA with operator-assisted enrollment and enforce MFA evidence across password, phone, Google, and refresh authentication.
+- Coordinate refresh and account changes across browser tabs, and revoke rotated sessions safely during logout and permission changes.
+
+### Fixed
+- Commit refresh-token replay revocation and OTP attempt counters before returning authentication errors.
+- Consume OTPs under row locks, validate OAuth state and redirects, enforce password byte limits, and reject unsafe cookie and cryptographic-secret configuration.
+- Disable creation of demo accounts with default passwords.
+
+### Documentation
+- Add account/login security evidence, rollout requirements, an authentication ADR, and a security learning guide.
+
+## [1.2.1.0] - 2026-11-03
+
+### Fixed
+- Allow payment providers to retry failed webhook settlements without losing the captured-payment event to duplicate detection.
+- Share login limits, email throttles, and session revocations across server instances and restarts.
+- Prevent removal of media files that are still referenced and validate public menu slugs before lookup.
+
+### Changed
+- Load API Builder relations in batches and fetch newsletter delivery totals in one grouped query.
+
+## [1.2.0.0] - 2026-10-31
+
+### Added
+- Let admins set how many child links appear at first in a menu, then let storefront visitors load more items in batches through the public menu API.
+
 ## [1.1.2.3] - 2026-10-29
 
 ### Changed

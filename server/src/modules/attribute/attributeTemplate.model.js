@@ -9,12 +9,10 @@ module.exports = (sequelize, DataTypes) => {
         },
         name: {
             type: DataTypes.STRING(100),
-            unique: true,
             allowNull: false,
         },
         slug: {
             type: DataTypes.STRING(100),
-            unique: true,
             allowNull: false,
         },
         sortOrder: {
@@ -43,6 +41,11 @@ module.exports = (sequelize, DataTypes) => {
         tableName: 'attribute_templates',
         timestamps: true,
         underscored: true,
+        paranoid: true,
+        indexes: [
+            { name: 'idx_attribute_templates_active_name_unique', unique: true, fields: ['name'], where: { deleted_at: null } },
+            { name: 'idx_attribute_templates_active_slug_unique', unique: true, fields: ['slug'], where: { deleted_at: null } },
+        ],
     });
 
     AttributeTemplate.associate = (models) => {

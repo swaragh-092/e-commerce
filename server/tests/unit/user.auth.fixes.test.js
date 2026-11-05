@@ -178,6 +178,31 @@ describe('C4 & C5 — Email/Phone uniqueness validation', () => {
 
     vi.restoreAllMocks();
   });
+
+  it('returns the updated profile from inside the update transaction', async () => {
+    const UserService = require('../../src/modules/user/user.service');
+    const { User, UserProfile } = require('../../src/modules/index');
+    const transaction = { LOCK: { UPDATE: 'UPDATE' }, commit: vi.fn(), rollback: vi.fn() };
+    const user = {
+      id: 'u-1',
+      firstName: 'Old',
+      lastName: 'Name',
+      update: vi.fn(async (changes) => Object.assign(user, changes)),
+      toJSON: () => ({ id: user.id, firstName: user.firstName, lastName: user.lastName }),
+    };
+    vi.spyOn(sequelize, 'transaction').mockImplementation(async (cb) => cb(transaction));
+    vi.spyOn(User, 'findByPk').mockImplementation(async (_id, options) => {
+      if (options.transaction === transaction) return user;
+      return { ...user, toJSON: user.toJSON };
+    });
+    vi.spyOn(UserProfile, 'findOne').mockResolvedValue(null);
+
+    const updated = await UserService.updateMe('u-1', { firstName: 'New' });
+
+    expect(updated.firstName).toBe('New');
+    expect(User.findByPk).toHaveBeenLastCalledWith('u-1', expect.objectContaining({ transaction }));
+    vi.restoreAllMocks();
+  });
 });
 
 describe('C6 — Role permission subset check and super_admin escalation guard', () => {

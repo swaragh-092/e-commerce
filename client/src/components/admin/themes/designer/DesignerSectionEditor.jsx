@@ -17,7 +17,7 @@ import PaletteIcon from '@mui/icons-material/Palette';
 import DevicesIcon from '@mui/icons-material/Devices';
 import TuneIcon from '@mui/icons-material/Tune';
 import StorageIcon from '@mui/icons-material/Storage';
-import { SECTION_VARIANTS } from '../../../storefront/sections/sectionRegistry';
+import { SECTION_VARIANTS, getSectionLabel } from '../../../storefront/sections/sectionRegistry';
 import { SHADOW_PRESETS, WIDTH_PRESETS } from '../../../storefront/sections/SectionFallback';
 import MediaPicker from '../../../common/MediaPicker';
 import { getMediaUrl } from '../../../../utils/media';
@@ -262,8 +262,21 @@ const FieldGroup = ({ label, icon, defaultOpen = true, children }) => (
 );
 
 
-const BlockListEditor = ({ section, schema, onChange, onBlur, onBlockFocus, activeBlockKey, activeBlockIndex }) => {
-  const blocks = Array.isArray(section?.[schema.key]) ? section[schema.key] : [];
+const BlockListEditor = ({
+  section,
+  schema,
+  inheritedBlocks = [],
+  onChange,
+  onBlur,
+  onBlockFocus,
+  activeBlockKey,
+  activeBlockIndex,
+}) => {
+  const isCustomized = Array.isArray(section?.[schema.key]);
+  const blocks = isCustomized ? section[schema.key] : [];
+  const effectiveInherited = Array.isArray(inheritedBlocks) && inheritedBlocks.length > 0
+    ? inheritedBlocks
+    : [];
   const [expandedIndex, setExpandedIndex] = useState(0);
 
   useEffect(() => {
@@ -303,93 +316,180 @@ const BlockListEditor = ({ section, schema, onChange, onBlur, onBlockFocus, acti
   };
 
   return (
-    <FieldGroup label={schema.title} defaultOpen={activeBlockKey === schema.key} icon={<TextFieldsIcon sx={{ fontSize: 15 }} />}>
-      {blocks.length ? (
-        blocks.map((block, index) => (
-          <Accordion
-            key={`${schema.key}-${index}`}
-            expanded={expandedIndex === index}
-            onChange={handleAccordionChange(index)}
-            disableGutters
-            elevation={0}
-            sx={{ border: '1px solid', borderColor: 'divider', borderRadius: '8px !important', '&:before': { display: 'none' }, overflow: 'hidden' }}
-          >
-            <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ fontSize: 16 }} />} sx={{ px: 1.25, minHeight: 36, '& .MuiAccordionSummary-content': { my: 0.5, minWidth: 0 } }}>
-              <Typography variant="caption" fontWeight={800} noWrap>{schema.label(block, index)}</Typography>
-            </AccordionSummary>
-            <AccordionDetails sx={{ px: 1.25, pb: 1.5, pt: 0 }}>
-              <Stack spacing={1.25}>
-                {schema.fields.map((field) => (
-                  field.type === 'image' ? (
-                    <ImageField
-                      key={field.key}
-                      label={field.label}
-                      value={block?.[field.key] || ''}
-                      onChange={(value) => updateField(index, field.key, value)}
-                      onBlur={onBlur}
-                    />
-                  ) : field.type === 'select' ? (
-                    <FormControl key={field.key} size="small" fullWidth>
-                      <InputLabel>{field.label}</InputLabel>
-                      <Select
+    <FieldGroup label={schema.title} defaultOpen={activeBlockKey === schema.key || !activeBlockKey} icon={<TextFieldsIcon sx={{ fontSize: 15 }} />}>
+      {!isCustomized ? (
+        <Stack spacing={1.5}>
+          <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: 'action.hover', border: '1px dashed', borderColor: 'divider' }}>
+            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.6, display: 'block' }}>
+              This section is currently using default store content{effectiveInherited.length > 0 ? ` (${effectiveInherited.length} items active)` : ''}.
+            </Typography>
+          </Box>
+          <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ gap: 1 }}>
+            {effectiveInherited.length > 0 && (
+              <Button
+                size="small"
+                variant="contained"
+                onClick={() => {
+                  const cloned = effectiveInherited.map((item) => ({ ...item }));
+                  updateBlocks(cloned);
+                  setExpandedIndex(0);
+                  onBlockFocus?.(schema.key, 0);
+                }}
+                sx={{ textTransform: 'none', fontWeight: 700 }}
+              >
+                Customize existing content
+              </Button>
+            )}
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => {
+                updateBlocks([schema.create()]);
+                setExpandedIndex(0);
+                onBlockFocus?.(schema.key, 0);
+              }}
+              sx={{ textTransform: 'none' }}
+            >
+              {schema.addLabel}
+            </Button>
+          </Stack>
+        </Stack>
+      ) : blocks.length > 0 ? (
+        <Stack spacing={1.5}>
+          {blocks.map((block, index) => (
+            <Accordion
+              key={`${schema.key}-${index}`}
+              expanded={expandedIndex === index}
+              onChange={handleAccordionChange(index)}
+              disableGutters
+              elevation={0}
+              sx={{ border: '1px solid', borderColor: 'divider', borderRadius: '8px !important', '&:before': { display: 'none' }, overflow: 'hidden' }}
+            >
+              <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ fontSize: 16 }} />} sx={{ px: 1.25, minHeight: 36, '& .MuiAccordionSummary-content': { my: 0.5, minWidth: 0 } }}>
+                <Typography variant="caption" fontWeight={800} noWrap>{schema.label(block, index)}</Typography>
+              </AccordionSummary>
+              <AccordionDetails sx={{ px: 1.25, pb: 1.5, pt: 0 }}>
+                <Stack spacing={1.25}>
+                  {schema.fields.map((field) => (
+                    field.type === 'image' ? (
+                      <ImageField
+                        key={field.key}
                         label={field.label}
+                        value={block?.[field.key] || ''}
+                        onChange={(value) => updateField(index, field.key, value)}
+                        onBlur={onBlur}
+                      />
+                    ) : field.type === 'select' ? (
+                      <FormControl key={field.key} size="small" fullWidth>
+                        <InputLabel>{field.label}</InputLabel>
+                        <Select
+                          label={field.label}
+                          value={block?.[field.key] || ''}
+                          onChange={(event) => updateField(index, field.key, event.target.value)}
+                          onBlur={onBlur}
+                        >
+                          {(field.options || []).map((option) => (
+                            <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    ) : (
+                      <TextField
+                        key={field.key}
+                        label={field.label}
+                        type={field.type || 'text'}
                         value={block?.[field.key] || ''}
                         onChange={(event) => updateField(index, field.key, event.target.value)}
                         onBlur={onBlur}
-                      >
-                        {(field.options || []).map((option) => (
-                          <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  ) : (
-                    <TextField
-                      key={field.key}
-                      label={field.label}
-                      type={field.type || 'text'}
-                      value={block?.[field.key] || ''}
-                      onChange={(event) => updateField(index, field.key, event.target.value)}
-                      onBlur={onBlur}
-                      size="small"
-                      fullWidth
-                      multiline={Boolean(field.multiline)}
-                      rows={field.multiline ? 2 : undefined}
-                      InputLabelProps={field.type === 'color' ? { shrink: true } : undefined}
-                    />
-                  )
-                ))}
-                <Stack direction="row" spacing={0.75}>
-                  <Button size="small" variant="outlined" disabled={index === 0} onClick={() => moveBlock(index, -1)}>Move Up</Button>
-                  <Button size="small" variant="outlined" disabled={index === blocks.length - 1} onClick={() => moveBlock(index, 1)}>Move Down</Button>
-                  <Box sx={{ flex: 1 }} />
-                  <IconButton size="small" color="error" title="Delete block" onClick={() => {
-                    const nextBlocks = blocks.filter((_, blockIndex) => blockIndex !== index);
-                    updateBlocks(nextBlocks);
-                    const nextIndex = Math.min(index, Math.max(0, nextBlocks.length - 1));
-                    setExpandedIndex(nextIndex);
-                    if (nextBlocks.length > 0) onBlockFocus?.(schema.key, nextIndex);
-                  }}>
-                    <DeleteIcon sx={{ fontSize: 15 }} />
-                  </IconButton>
+                        size="small"
+                        fullWidth
+                        multiline={Boolean(field.multiline)}
+                        rows={field.multiline ? 2 : undefined}
+                        InputLabelProps={field.type === 'color' ? { shrink: true } : undefined}
+                      />
+                    )
+                  ))}
+                  <Stack direction="row" spacing={0.75}>
+                    <Button size="small" variant="outlined" disabled={index === 0} onClick={() => moveBlock(index, -1)}>Move Up</Button>
+                    <Button size="small" variant="outlined" disabled={index === blocks.length - 1} onClick={() => moveBlock(index, 1)}>Move Down</Button>
+                    <Box sx={{ flex: 1 }} />
+                    <IconButton size="small" color="error" title="Delete block" onClick={() => {
+                      const nextBlocks = blocks.filter((_, blockIndex) => blockIndex !== index);
+                      updateBlocks(nextBlocks);
+                      const nextIndex = Math.min(index, Math.max(0, nextBlocks.length - 1));
+                      setExpandedIndex(nextIndex);
+                      if (nextBlocks.length > 0) onBlockFocus?.(schema.key, nextIndex);
+                    }}>
+                      <DeleteIcon sx={{ fontSize: 15 }} />
+                    </IconButton>
+                  </Stack>
                 </Stack>
-              </Stack>
-            </AccordionDetails>
-          </Accordion>
-        ))
+              </AccordionDetails>
+            </Accordion>
+          ))}
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" sx={{ gap: 1 }}>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => {
+                updateBlocks([...blocks, schema.create()]);
+                setExpandedIndex(blocks.length);
+                onBlockFocus?.(schema.key, blocks.length);
+              }}
+              sx={{ alignSelf: 'flex-start', textTransform: 'none' }}
+            >
+              {schema.addLabel}
+            </Button>
+            <Button
+              size="small"
+              variant="text"
+              color="secondary"
+              onClick={() => updateBlocks(undefined)}
+              sx={{ textTransform: 'none', fontSize: '0.75rem' }}
+            >
+              Reset to default content
+            </Button>
+          </Stack>
+        </Stack>
       ) : (
-        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.6 }}>
-          No local blocks yet. Add one to override demo/fallback content for this section.
-        </Typography>
+        <Stack spacing={1.5}>
+          <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: 'warning.50', border: '1px dashed', borderColor: 'warning.main' }}>
+            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.6, display: 'block' }}>
+              No blocks in this section. This section will render empty on the storefront.
+            </Typography>
+          </Box>
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" sx={{ gap: 1 }}>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => {
+                updateBlocks([schema.create()]);
+                setExpandedIndex(0);
+                onBlockFocus?.(schema.key, 0);
+              }}
+              sx={{ textTransform: 'none' }}
+            >
+              {schema.addLabel}
+            </Button>
+            <Button
+              size="small"
+              variant="text"
+              color="secondary"
+              onClick={() => updateBlocks(undefined)}
+              sx={{ textTransform: 'none', fontSize: '0.75rem' }}
+            >
+              Reset to default content
+            </Button>
+          </Stack>
+        </Stack>
       )}
-      <Button size="small" variant="outlined" onClick={() => { updateBlocks([...blocks, schema.create()]); setExpandedIndex(blocks.length); onBlockFocus?.(schema.key, blocks.length); }} sx={{ alignSelf: 'flex-start', textTransform: 'none' }}>
-        {schema.addLabel}
-      </Button>
     </FieldGroup>
   );
 };
 
 const DesignerSectionEditor = ({
   section,
+  inheritedBlocks = [],
   onBack,
   onChange,
   onBlur,
@@ -434,9 +534,9 @@ const DesignerSectionEditor = ({
         </IconButton>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="subtitle2" fontWeight={800} noWrap sx={{ fontSize: '0.88rem' }}>
-            {section.title || section.type}
+            {section.title || getSectionLabel(section)}
           </Typography>
-          <Chip label={section.type} size="small" variant="outlined"
+          <Chip label={getSectionLabel(section)} size="small" variant="outlined"
             sx={{ height: 17, fontSize: '0.66rem', fontWeight: 700, letterSpacing: 0.2, mt: 0.25 }} />
         </Box>
         <IconButton size="small" title="Duplicate" onClick={() => onDuplicate(section)}>
@@ -588,23 +688,26 @@ const DesignerSectionEditor = ({
 
           {/* ── CONTENT (skip for pure system sections) ── */}
           {!isSystemSection && (
-          <FieldGroup label="Content" defaultOpen icon={<TextFieldsIcon sx={{ fontSize: 15 }} />}>
+          <FieldGroup label={isHero ? "Section Info" : "Content"} defaultOpen icon={<TextFieldsIcon sx={{ fontSize: 15 }} />}>
             <TextField
-              label="Title"
+              label={isHero ? "Section Name" : "Title"}
               value={section.title || ''}
               onChange={(e) => onChange('title', e.target.value)}
               onBlur={onBlur}
               size="small"
               fullWidth
+              helperText={isHero ? "Name shown in the designer sidebar. Slide headings are configured under Slides below." : undefined}
             />
-            <TextField
-              label="Subtitle"
-              value={section.subtitle || ''}
-              onChange={(e) => onChange('subtitle', e.target.value)}
-              onBlur={onBlur}
-              size="small"
-              fullWidth
-            />
+            {!isHero && (
+              <TextField
+                label="Subtitle"
+                value={section.subtitle || ''}
+                onChange={(e) => onChange('subtitle', e.target.value)}
+                onBlur={onBlur}
+                size="small"
+                fullWidth
+              />
+            )}
 
             {isNewsletter && (
               <TextField
@@ -715,7 +818,16 @@ const DesignerSectionEditor = ({
           )}
 
           {blockSchema && !isSystemSection && (
-            <BlockListEditor section={section} schema={blockSchema} onChange={onChange} onBlur={onBlur} onBlockFocus={onBlockFocus} activeBlockKey={activeBlockKey} activeBlockIndex={activeBlockIndex} />
+            <BlockListEditor
+              section={section}
+              schema={blockSchema}
+              inheritedBlocks={inheritedBlocks}
+              onChange={onChange}
+              onBlur={onBlur}
+              onBlockFocus={onBlockFocus}
+              activeBlockKey={activeBlockKey}
+              activeBlockIndex={activeBlockIndex}
+            />
           )}
 
           {/* ── LAYOUT ── */}

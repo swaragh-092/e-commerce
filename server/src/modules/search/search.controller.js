@@ -12,8 +12,8 @@ const { success } = require('../../utils/response');
 
 const search = async (req, res, next) => {
   try {
-    const { q, page, limit } = req.query;
-    const results = await SearchService.search(q, page, limit);
+    const { q, page, limit, hideEmpty } = req.query;
+    const results = await SearchService.search(q, page, limit, { hideEmpty });
 
     // Expose cache status as a header for observability / debugging
     res.set('X-Cache', results.fromCache ? 'HIT' : 'MISS');

@@ -1,6 +1,7 @@
 'use strict';
 
 const Joi = require('joi');
+const { hideEmptySchema } = require('../../utils/common.validation');
 
 const menuLocations = ['header', 'footer', 'mobile', 'sidebar'];
 const targetTypes = ['none', 'custom_url', 'page', 'category', 'category_tree', 'product', 'collection', 'system_route'];
@@ -99,6 +100,7 @@ const createMenuItemSchema = Joi.object({
         then: Joi.required(),
         otherwise: Joi.allow(null, '')
     }),
+    childDisplayLimit: Joi.number().integer().min(1).max(100).allow(null),
     syncChildren: Joi.boolean().default(false),
     url: safeUrlSchema.when('targetType', {
         is: Joi.valid('custom_url', 'system_route'),
@@ -121,6 +123,7 @@ const updateMenuItemSchema = Joi.object({
         then: Joi.required(),
         otherwise: Joi.allow(null, '')
     }),
+    childDisplayLimit: Joi.number().integer().min(1).max(100).allow(null),
     syncChildren: Joi.boolean(),
     url: safeUrlSchema.when('targetType', {
         is: Joi.valid('custom_url', 'system_route'),
@@ -150,6 +153,10 @@ const queryMenusSchema = Joi.object({
 
 const getPublicMenuSchema = Joi.object({
     location: Joi.string().valid(...menuLocations).required(),
+});
+
+const getPublicMenuBySlugSchema = Joi.object({
+    slug: Joi.string().trim().max(120).pattern(/^[a-z0-9-]+$/).required(),
 });
 
 const reorderMenusSchema = Joi.object({
@@ -183,7 +190,19 @@ const menuItemIdParamSchema = Joi.object({
 });
 
 
+const publicChildrenParamsSchema = Joi.object({
+    menuId: Joi.string().uuid().required(),
+    itemId: Joi.string().max(200).required(),
+});
+const publicChildrenQuerySchema = Joi.object({
+    hideEmpty: hideEmptySchema,
+    offset: Joi.number().integer().min(0).max(1000000).default(0),
+    limit: Joi.number().integer().min(1).max(100),
+});
+
 module.exports = {
+    publicChildrenParamsSchema,
+    publicChildrenQuerySchema,
     createMenuSchema,
     updateMenuSchema,
     createMenuItemSchema,
@@ -195,11 +214,11 @@ module.exports = {
     queryMenusSchema,
 
     getPublicMenuSchema,
+    getPublicMenuBySlugSchema,
     idParamSchema,
     menuIdParamSchema,
     menuItemIdParamSchema,
 };
-
 
 
 

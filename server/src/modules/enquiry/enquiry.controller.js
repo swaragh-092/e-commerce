@@ -51,7 +51,7 @@ exports.updateStatus = async (req, res, next) => {
       throw new AppError('VALIDATION_ERROR', 400, 'Status is required');
     }
 
-    const enquiry = await enquiryService.updateStatus(id, status);
+    const enquiry = await enquiryService.updateStatus(id, status, req.user?.id);
     return success(res, { enquiry }, 'Enquiry status updated');
   } catch (err) {
     next(err);

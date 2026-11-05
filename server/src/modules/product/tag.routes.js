@@ -22,7 +22,7 @@ router.get('/', authorizeAnyPermission(PERMISSIONS.PRODUCTS_READ, PERMISSIONS.PR
   } catch (err) { next(err); }
 });
 router.post('/', authorizeAnyPermission(PERMISSIONS.PRODUCTS_CREATE, PERMISSIONS.PRODUCTS_UPDATE), validate(tagWriteSchema), auditLog('Tag'), async (req, res, next) => {
-  try { return success(res, await service.addTag(req.validated.name, req.validated.description), 'Tag created', 201); }
+  try { return success(res, await service.addTag(req.validated.name, req.validated.description, req.validated.imageId), 'Tag created', 201); }
   catch (err) { next(err); }
 });
 router.patch('/products', authorizePermissions(PERMISSIONS.PRODUCTS_UPDATE), validate(bulkProductTagsSchema), auditLog('Product'), async (req, res, next) => {
@@ -33,7 +33,7 @@ router.patch('/products', authorizePermissions(PERMISSIONS.PRODUCTS_UPDATE), val
   } catch (err) { next(err); }
 });
 router.patch('/:id', authorizePermissions(PERMISSIONS.PRODUCTS_UPDATE), validate(idParamSchema, 'params'), validate(tagWriteSchema), auditLog('Tag'), async (req, res, next) => {
-  try { return success(res, await service.renameTag(req.params.id, req.validated.name, req.validated.description), 'Tag renamed'); }
+  try { return success(res, await service.renameTag(req.params.id, req.validated.name, req.validated.description, req.validated.imageId), 'Tag renamed'); }
   catch (err) { next(err); }
 });
 router.delete('/:id', authorizePermissions(PERMISSIONS.PRODUCTS_DELETE), validate(idParamSchema, 'params'), auditLog('Tag'), async (req, res, next) => {

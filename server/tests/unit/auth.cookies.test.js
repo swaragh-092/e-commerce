@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
+process.env.JWT_ACCESS_SECRET = 'test-cookie-secret-at-least-32-characters';
 const {
   ACCESS_COOKIE,
   REFRESH_COOKIE,

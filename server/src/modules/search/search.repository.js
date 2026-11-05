@@ -27,6 +27,7 @@ const {
 } = require('../index');
 const logger = require('../../utils/logger');
 const { buildSearchPattern } = require('./search.utils');
+const { buildCategorySearchSql } = require('./search.category');
 
 const { Op } = Sequelize;
 
@@ -79,29 +80,8 @@ const TRIGRAM_MIN_SIMILARITY = 0.2;
 
 // Category, brand, and tag data are stored outside products.search_vector.
 // Match them directly so the full search and catalog filter use the same terms.
-const categoryMatchSql = () => `EXISTS (
-  SELECT 1
-  FROM "product_categories" AS "search_product_categories"
-  INNER JOIN "categories" AS "search_categories"
-    ON "search_categories"."id" = "search_product_categories"."category_id"
-  WHERE "search_product_categories"."product_id" = "Product"."id"
-    AND (
-      LOWER("search_categories"."name") = LOWER($queryText)
-      OR LOWER("search_categories"."slug") = LOWER($queryText)
-    )
-)`;
-
-const categoryPartialMatchSql = () => `EXISTS (
-  SELECT 1
-  FROM "product_categories" AS "search_product_categories"
-  INNER JOIN "categories" AS "search_categories"
-    ON "search_categories"."id" = "search_product_categories"."category_id"
-  WHERE "search_product_categories"."product_id" = "Product"."id"
-    AND (
-      LOWER("search_categories"."name") LIKE LOWER($queryPattern)
-      OR LOWER("search_categories"."slug") LIKE LOWER($queryPattern)
-    )
-)`;
+const categoryMatchSql = () => buildCategorySearchSql('$queryText', { exact: true });
+const categoryPartialMatchSql = () => buildCategorySearchSql('$queryPattern');
 
 const exactBrandMatchSql = () => `EXISTS (
   SELECT 1
@@ -326,17 +306,18 @@ const searchBrands = async (queryText, limit = 5) => {
  * @param {number} limit
  * @returns {Category[]}
  */
-const searchCategories = async (queryText, limit = 5) => {
+const searchCategories = async (queryText, limit = 5, { populatedCategoryIds } = {}) => {
   try {
-    // Note: Category currently lacks visibility filters (isActive/status) in the schema.
-    // If these are added later, they should be included here.
+    const nameMatch = Sequelize.literal(`(
+      LOWER(name) LIKE LOWER($queryPattern)
+      OR LOWER(slug) LIKE LOWER($queryPattern)
+      OR name % $queryText
+      OR slug % $queryText
+    )`);
     return await Category.findAll({
-      where: Sequelize.literal(`(
-        LOWER(name) LIKE LOWER($queryPattern)
-        OR LOWER(slug) LIKE LOWER($queryPattern)
-        OR name % $queryText
-        OR slug % $queryText
-      )`),
+      where: populatedCategoryIds
+        ? { [Op.and]: [nameMatch, { id: { [Op.in]: [...populatedCategoryIds] } }] }
+        : nameMatch,
       attributes: ['id', 'name', 'slug', 'image'],
       order: [
         [Sequelize.literal(`
@@ -364,7 +345,7 @@ const searchCategories = async (queryText, limit = 5) => {
  * @param {string} queryText
  * @returns {string|null} suggested correction, or null
  */
-const suggestCorrection = async (queryText, { includeBrands = true } = {}) => {
+const suggestCorrection = async (queryText, { includeBrands = true, populatedCategoryIds } = {}) => {
   const MIN_CORRECTION_SIMILARITY = 0.2; // Catch common typos even on short words
   const normalizedQuery = queryText.toLowerCase();
 
@@ -402,6 +383,7 @@ const suggestCorrection = async (queryText, { includeBrands = true } = {}) => {
       : null;
 
     const [categoryMatch] = await Category.findAll({
+      ...(populatedCategoryIds && { where: { id: { [Op.in]: [...populatedCategoryIds] } } }),
       // Note: Category currently lacks visibility filters (isActive/status) in the schema.
       attributes: [
         'name',

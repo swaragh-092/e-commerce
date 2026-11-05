@@ -47,6 +47,12 @@ const updateProductAttribute = (productId, attributeRowId, data) =>
 const deleteProductAttribute = (productId, attributeRowId) =>
   api.delete(`/products/${productId}/attributes/${attributeRowId}`);
 
+const deleteProductAttributeGroup = (productId, attributeRowId) =>
+  api.delete(`/products/${productId}/attributes/${attributeRowId}/group`);
+
+const updateProductAttributeGroup = (productId, attributeRowId, data) =>
+  api.put(`/products/${productId}/attributes/${attributeRowId}/group`, data);
+
 const previewVariantGeneration = (productId) => api.get(`/products/${productId}/variants/preview`);
 
 const bulkGenerateVariants = (productId, data) =>
@@ -89,6 +95,8 @@ const attributeService = {
   reorderProductAttributes,
   updateProductAttribute,
   deleteProductAttribute,
+  deleteProductAttributeGroup,
+  updateProductAttributeGroup,
   bulkGenerateVariants,
   previewVariantGeneration,
   cloneVariants,

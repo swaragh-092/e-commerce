@@ -132,6 +132,7 @@ const SearchResultsPage = () => {
       <PageSEO
         title={normalizedQuery ? `Search results for "${normalizedQuery}"` : 'Search'}
         description={normalizedQuery ? `Browse search results for "${normalizedQuery}"` : 'Search our products'}
+        type="noindex"
       />
 
       {/* Search Header */}

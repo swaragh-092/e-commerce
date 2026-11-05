@@ -44,7 +44,7 @@ const variantInclude = {
     model: VariantOption,
     as: 'options',
     include: [
-      { model: AttributeTemplate, as: 'attribute', attributes: ATTRIBUTE_TEMPLATE_FIELDS },
+      { model: AttributeTemplate, as: 'attribute', attributes: ATTRIBUTE_TEMPLATE_FIELDS, paranoid: false },
       { model: AttributeValue, as: 'value', attributes: ATTRIBUTE_VALUE_FIELDS },
     ],
   }],

@@ -63,16 +63,32 @@ const logout = async (req, res, next) => {
   try {
     const refreshToken = getRefreshToken(req);
     if (refreshToken) await AuthService.logout(refreshToken, req.user?.id);
-    // Blocklist the current access token for its remaining lifetime, and kill
-    // its session id so any sibling access token for the session dies too.
+    // Persist the session revocation so every worker rejects this access token
+    // and any sibling access token from the same session.
     const accessToken = getAccessToken(req);
     if (accessToken) {
-      tokenBlocklist.add(accessToken);
       try {
         const jwt = require('jsonwebtoken');
-        const decoded = jwt.decode(accessToken);
-        if (decoded?.sid) tokenBlocklist.revokeSession(decoded.sid);
-      } catch { /* decode-only, never throws logout */ }
+        const decoded = jwt.verify(accessToken, process.env.JWT_ACCESS_SECRET, {
+          algorithms: ['HS256'],
+          issuer: process.env.JWT_ISSUER || 'ecommerce-pro',
+          audience: process.env.JWT_AUDIENCE || 'ecommerce-pro-client',
+        });
+        if (decoded.sid) {
+          const { RefreshToken } = require('../index');
+          await RefreshToken.update(
+            { revokedAt: new Date() },
+            { where: { id: decoded.sid, revokedAt: null } },
+          );
+          tokenBlocklist.revokeSession(decoded.sid);
+        } else {
+          tokenBlocklist.add(accessToken);
+        }
+      } catch (error) {
+        // Invalid/expired JWTs are already unusable. Persistence failures must
+        // reach the caller rather than report success with a live session.
+        if (!['JsonWebTokenError', 'TokenExpiredError', 'NotBeforeError'].includes(error.name)) throw error;
+      }
     }
     clearAuthCookies(res);
     return success(res, null, 'Logged out successfully');

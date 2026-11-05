@@ -432,8 +432,8 @@ const ProductDetailPage = () => {
             }}
         >
             <PageSEO
-                title={product.name}
-                description={product.shortDescription}
+                title={product.metaTitle || product.name}
+                description={product.metaDescription || product.shortDescription}
                 image={product.ogImage || product.images?.[0]?.url}
                 type="product"
                 url={resolvedPageUrl}

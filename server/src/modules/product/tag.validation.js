@@ -10,6 +10,7 @@ const tagNameSchema = Joi.string().custom((value, helpers) => {
 }).messages({ 'any.invalid': 'Tag names must contain 1–100 characters without commas or control characters' });
 const productTagsSchema = Joi.array().items(tagNameSchema).max(MAX_TAGS);
 const tagWriteSchema = Joi.object({
+  imageId: Joi.string().uuid().allow(null),
   name: tagNameSchema.required(),
   description: Joi.string().trim().max(2000).allow('', null),
 });
@@ -20,6 +21,9 @@ const bulkProductTagsSchema = Joi.object({
   tags: productTagsSchema.min(1).required(),
 });
 const tagListSchema = Joi.object({
+  usage: Joi.string().valid('all', 'used', 'unused').default('all'),
+  sortBy: Joi.string().valid('name', 'products').default('name'),
+  sortDir: Joi.string().valid('asc', 'desc').default('asc'),
   search: Joi.string().trim().max(100).allow(''),
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(20),

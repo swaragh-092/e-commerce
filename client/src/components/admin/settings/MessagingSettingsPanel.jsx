@@ -14,7 +14,6 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { sendTestNotification, updateSettings } from '../../../services/adminService';
 import { useNotification } from '../../../context/NotificationContext';
-import EmailRecipientsPanel from './EmailRecipientsPanel';
 
 const MessagingSettingsPanel = ({ form, set }) => {
   const { notify } = useNotification();
@@ -88,25 +87,6 @@ const MessagingSettingsPanel = ({ form, set }) => {
         Configure the messaging channels used by the notification system.
         Saved values here are used directly for email, SMS, and WhatsApp delivery.
       </Typography>
-
-      <EmailRecipientsPanel />
-
-      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>Customer enquiry acknowledgement</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          Send the customer an email confirming that their enquiry was received. Staff recipients are selected above.
-        </Typography>
-        <FormControlLabel
-          control={<Switch
-            checked={form['messaging.enquiryCustomerAcknowledgementEnabled'] !== false && form['messaging.enquiryCustomerAcknowledgementEnabled'] !== 'false'}
-            onChange={(event) => set('messaging.enquiryCustomerAcknowledgementEnabled', event.target.checked)}
-          />}
-          label="Email acknowledgement to customer"
-        />
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-          Use Save Settings to apply this change. Reply emails sent by staff are unaffected.
-        </Typography>
-      </Box>
 
       {/* Email Section */}
       <Accordion defaultExpanded variant="outlined" sx={{ mb: 2, borderRadius: 2, '&:before': { display: 'none' } }}>

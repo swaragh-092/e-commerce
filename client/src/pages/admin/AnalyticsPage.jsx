@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Box, Typography, Paper, Grid, Select, MenuItem, Skeleton, Alert, Button,
-  Table, TableBody, TableCell, TableHead, TableRow, Chip, IconButton, Tooltip,
+  Table, TableBody, TableHead, TableRow, Chip, IconButton, Tooltip,
   Switch, FormControlLabel, CircularProgress,
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -11,7 +11,12 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { useTheme } from '@mui/material/styles';
-import { useCurrency } from '../../hooks/useSettings';
+import { useCurrency, useSettings } from '../../hooks/useSettings';
+import { useAuth } from '../../hooks/useAuth';
+import { PERMISSIONS } from '../../utils/permissions';
+import { CATALOG_ANALYTICS_WIDGETS, SALES_ANALYTICS_WIDGETS } from '../../utils/analyticsWidgets';
+import CatalogAnalytics from '../../components/admin/analytics/CatalogAnalytics';
+import { AnalyticsDisplayProvider, AnalyticsCustomizeButton, AnalyticsWidget, AnalyticsField, useAnalyticsDisplay } from '../../components/admin/analytics/AnalyticsCustomization';
 import {
   getTopProducts, getAovTrend, getAbandonedCarts,
   getRevenueByCategory, getRepeatCustomers, getRefundRate,
@@ -55,10 +60,13 @@ const SectionHeader = ({ title, metric, params }) => (
   </Box>
 );
 
-const AnalyticsPage = () => {
+const SalesAnalyticsPage = () => {
   const theme = useTheme();
   const { formatPrice } = useCurrency();
   const pageRef = useRef(null);
+  const requestRef = useRef(0);
+  const { widgets, visible } = useAnalyticsDisplay();
+  const visibleIds = widgets.filter(({ id }) => visible(id)).map(({ id }) => id).join(',');
   const [period, setPeriod] = useState('30d');
   const [trendPeriod, setTrendPeriod] = useState('monthly');
   const [compare, setCompare] = useState(false);
@@ -118,47 +126,31 @@ const AnalyticsPage = () => {
   const fetchAll = () => {
     setLoading(true);
     setError('');
-    Promise.allSettled([
-      getTopProducts({ ...qp, limit: 10, sortBy: 'revenue' }),
-      getAovTrend(tp),
-      getAbandonedCarts(qp),
-      getRevenueByCategory({ ...qp, limit: 10 }),
-      getRepeatCustomers(qp),
-      getRefundRate(tp),
-      getGeographicSales({ ...qp, limit: 20 }),
-      getRevenueByPaymentMethod(qp),
-      getCustomerLifetimeValue({ ...qp, limit: 10 }),
-      getConversionRate(qp),
-      getTrafficSources({ ...qp, limit: 10 }),
-      getProductFunnel({ ...qp, limit: 10 }),
-      getUtmAttribution({ ...qp, limit: 20 }),
-      getCouponPerformance({ ...qp, limit: 10 }),
-      getCohortRetention({ period }),
-      getRfmSegmentation({ period }),
-      getOrderHeatmap(qp),
-      getRevenueForecast({ period }),
-    ]).then((results) => {
-      const d = (i) => results[i].status === 'fulfilled' ? results[i].value.data.data : null;
-      const raw = {
-        topProducts: d(0),
-        aovTrend: d(1),
-        abandonedCarts: d(2),
-        revenueByCategory: d(3),
-        repeatCustomers: d(4),
-        refundRate: d(5),
-        geographicSales: d(6),
-        paymentMethods: d(7),
-        clv: d(8),
-        conversionRate: d(9),
-        trafficSources: d(10),
-        productFunnel: d(11),
-        utmAttribution: d(12),
-        couponPerformance: d(13),
-        cohortRetention: d(14),
-        rfmSegmentation: d(15),
-        orderHeatmap: d(16),
-        revenueForecast: d(17),
-      };
+    const requestId = ++requestRef.current;
+    const requests = [
+      ['topProducts', () => getTopProducts({ ...qp, limit: 10, sortBy: 'revenue' })],
+      ['aovTrend', () => getAovTrend(tp)],
+      ['abandonedCarts', () => getAbandonedCarts(qp)],
+      ['revenueByCategory', () => getRevenueByCategory({ ...qp, limit: 10 })],
+      ['repeatCustomers', () => getRepeatCustomers(qp)],
+      ['refundRate', () => getRefundRate(tp)],
+      ['geographicSales', () => getGeographicSales({ ...qp, limit: 20 })],
+      ['paymentMethods', () => getRevenueByPaymentMethod(qp)],
+      ['clv', () => getCustomerLifetimeValue({ ...qp, limit: 10 })],
+      ['conversionRate', () => getConversionRate(qp)],
+      ['trafficSources', () => getTrafficSources({ ...qp, limit: 10 })],
+      ['productFunnel', () => getProductFunnel({ ...qp, limit: 10 })],
+      ['utmAttribution', () => getUtmAttribution({ ...qp, limit: 20 })],
+      ['couponPerformance', () => getCouponPerformance({ ...qp, limit: 10 })],
+      ['cohortRetention', () => getCohortRetention({ period })],
+      ['rfmSegmentation', () => getRfmSegmentation({ period })],
+      ['orderHeatmap', () => getOrderHeatmap(qp)],
+      ['revenueForecast', () => getRevenueForecast({ period })],
+    ].filter(([id]) => widgets.some((widget) => widget.id === id) && visible(id));
+    Promise.allSettled(requests.map(([, load]) => load())).then((results) => {
+      if (requestId !== requestRef.current) return;
+      const raw = Object.fromEntries(results.map((result, index) => [requests[index][0],
+        result.status === 'fulfilled' ? result.value.data.data : null]));
 
       if (compare) {
         const curr = {};
@@ -179,17 +171,21 @@ const AnalyticsPage = () => {
         setComparison({});
       }
 
-      if (results.every(r => r.status === 'rejected')) setError('Failed to load analytics data.');
-    }).finally(() => setLoading(false));
+      if (results.length > 0 && results.every(r => r.status === 'rejected')) setError('Failed to load analytics data.');
+    }).finally(() => { if (requestId === requestRef.current) setLoading(false); });
   };
 
-  useEffect(() => { fetchAll(); }, [period, trendPeriod, compare]);
+  useEffect(() => {
+    fetchAll();
+    return () => { requestRef.current += 1; };
+  }, [period, trendPeriod, compare, visibleIds]);
 
   return (
     <Box ref={pageRef}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
         <Typography variant="h5" component="h1" fontWeight={700}>Analytics</Typography>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+          <AnalyticsCustomizeButton />
           <FormControlLabel
             control={<Switch size="small" checked={compare} onChange={(e) => setCompare(e.target.checked)} />}
             label={<Typography variant="body2">Compare</Typography>}
@@ -213,9 +209,11 @@ const AnalyticsPage = () => {
 
       {error && <Alert severity="error" sx={{ mb: 2 }} action={<Button color="inherit" size="small" onClick={fetchAll}>Retry</Button>}>{error}</Alert>}
 
+      {!visibleIds && <Alert severity="info" sx={{ mb: 2 }}>All cards are hidden. Use Customize to choose cards or restore the defaults.</Alert>}
+
       {/* Conversion Rate Banner */}
       {!loading && data.conversionRate && (
-        <Paper sx={{ p: 2, mb: 3, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }} elevation={0}>
+        <AnalyticsWidget metric="conversionRate" component={Box}><Paper sx={{ p: 2, mb: 3, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }} elevation={0}>
           <Box>
             <Typography variant="body2" color="text.secondary">Visits</Typography>
             <Typography variant="h5" fontWeight={700}>{data.conversionRate.visits?.toLocaleString()}
@@ -235,12 +233,12 @@ const AnalyticsPage = () => {
             </Typography>
           </Box>
           {data.conversionRate.message && <Typography variant="caption" color="text.secondary">{data.conversionRate.message}</Typography>}
-        </Paper>
+        </Paper></AnalyticsWidget>
       )}
 
       <Grid container spacing={3}>
         {/* Product Funnel */}
-        <Grid item xs={12}>
+        <AnalyticsWidget metric="productFunnel" item xs={12}>
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Product Funnel (Views → Cart → Purchase)" metric="product-funnel" params={qp} />
             {loading ? <CardSkeleton /> : (
@@ -248,23 +246,23 @@ const AnalyticsPage = () => {
                 <Table size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell>Product</TableCell>
-                      <TableCell align="right">Views</TableCell>
-                      <TableCell align="right">Add to Cart</TableCell>
-                      <TableCell align="right">Purchased</TableCell>
-                      <TableCell align="right">View→Cart</TableCell>
-                      <TableCell align="right">Cart→Buy</TableCell>
+                      <AnalyticsField name="0">Product</AnalyticsField>
+                      <AnalyticsField name="1" align="right">Views</AnalyticsField>
+                      <AnalyticsField name="2" align="right">Add to Cart</AnalyticsField>
+                      <AnalyticsField name="3" align="right">Purchased</AnalyticsField>
+                      <AnalyticsField name="4" align="right">View→Cart</AnalyticsField>
+                      <AnalyticsField name="5" align="right">Cart→Buy</AnalyticsField>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {data.productFunnel.map((r) => (
                       <TableRow key={r.productId}>
-                        <TableCell>{r.name}</TableCell>
-                        <TableCell align="right">{r.views}</TableCell>
-                        <TableCell align="right">{r.addToCart}</TableCell>
-                        <TableCell align="right">{r.purchased}</TableCell>
-                        <TableCell align="right"><Chip size="small" label={`${r.viewToCartRate}%`} color={r.viewToCartRate > 10 ? 'success' : 'default'} /></TableCell>
-                        <TableCell align="right"><Chip size="small" label={`${r.cartToBuyRate}%`} color={r.cartToBuyRate > 30 ? 'success' : 'default'} /></TableCell>
+                        <AnalyticsField name="0">{r.name}</AnalyticsField>
+                        <AnalyticsField name="1" align="right">{r.views}</AnalyticsField>
+                        <AnalyticsField name="2" align="right">{r.addToCart}</AnalyticsField>
+                        <AnalyticsField name="3" align="right">{r.purchased}</AnalyticsField>
+                        <AnalyticsField name="4" align="right"><Chip size="small" label={`${r.viewToCartRate}%`} color={r.viewToCartRate > 10 ? 'success' : 'default'} /></AnalyticsField>
+                        <AnalyticsField name="5" align="right"><Chip size="small" label={`${r.cartToBuyRate}%`} color={r.cartToBuyRate > 30 ? 'success' : 'default'} /></AnalyticsField>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -272,10 +270,10 @@ const AnalyticsPage = () => {
               ) : <Typography color="text.secondary">No funnel data yet. Appears after product page visits are tracked.</Typography>
             )}
           </Paper>
-        </Grid>
+        </AnalyticsWidget>
 
         {/* Top Products */}
-        <Grid item xs={12} lg={6}>
+        <AnalyticsWidget metric="topProducts" item xs={12} lg={6}>
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Top Selling Products" metric="top-products" params={{ ...qp, sortBy: 'revenue' }} />
             {loading ? <CardSkeleton /> : (
@@ -291,10 +289,10 @@ const AnalyticsPage = () => {
                     </BarChart>
                   </ResponsiveContainer>
                   <Table size="small" sx={{ mt: 1 }}>
-                    <TableHead><TableRow><TableCell>#</TableCell><TableCell>Product</TableCell><TableCell align="right">Revenue</TableCell></TableRow></TableHead>
+                    <TableHead><TableRow><AnalyticsField name="0">#</AnalyticsField><AnalyticsField name="1">Product</AnalyticsField><AnalyticsField name="2" align="right">Revenue</AnalyticsField></TableRow></TableHead>
                     <TableBody>
                       {data.topProducts.map((p, i) => (
-                        <TableRow key={p.productId || i} hover sx={{ cursor: 'pointer' }} onClick={() => setDrillDown({ open: true, metric: 'product', filterValue: p.productId, label: p.name })}><TableCell>{i + 1}</TableCell><TableCell>{p.name}</TableCell><TableCell align="right">{formatPrice(p.revenue)}</TableCell></TableRow>
+                        <TableRow key={p.productId || i} hover sx={{ cursor: 'pointer' }} onClick={() => setDrillDown({ open: true, metric: 'product', filterValue: p.productId, label: p.name })}><AnalyticsField name="0">{i + 1}</AnalyticsField><AnalyticsField name="1">{p.name}</AnalyticsField><AnalyticsField name="2" align="right">{formatPrice(p.revenue)}</AnalyticsField></TableRow>
                       ))}
                     </TableBody>
                   </Table>
@@ -302,10 +300,10 @@ const AnalyticsPage = () => {
               ) : <Typography color="text.secondary">No sales data.</Typography>
             )}
           </Paper>
-        </Grid>
+        </AnalyticsWidget>
 
         {/* AOV Trend */}
-        <Grid item xs={12} lg={6}>
+        <AnalyticsWidget metric="aovTrend" item xs={12} lg={6}>
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Average Order Value" metric="aov-trend" params={tp} />
             {loading ? <CardSkeleton /> : (
@@ -324,48 +322,48 @@ const AnalyticsPage = () => {
               ) : <Typography color="text.secondary">No data.</Typography>
             )}
           </Paper>
-        </Grid>
+        </AnalyticsWidget>
 
         {/* UTM Attribution */}
-        <Grid item xs={12} lg={6}>
+        <AnalyticsWidget metric="utmAttribution" item xs={12} lg={6}>
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Marketing Attribution (UTM)" metric="utm-attribution" params={qp} />
             {loading ? <CardSkeleton /> : (
               data.utmAttribution?.length > 0 ? (
                 <Table size="small">
-                  <TableHead><TableRow><TableCell>Source</TableCell><TableCell>Medium</TableCell><TableCell>Campaign</TableCell><TableCell align="right">Orders</TableCell><TableCell align="right">Revenue</TableCell></TableRow></TableHead>
+                  <TableHead><TableRow><AnalyticsField name="0">Source</AnalyticsField><AnalyticsField name="1">Medium</AnalyticsField><AnalyticsField name="2">Campaign</AnalyticsField><AnalyticsField name="3" align="right">Orders</AnalyticsField><AnalyticsField name="4" align="right">Revenue</AnalyticsField></TableRow></TableHead>
                   <TableBody>
                     {data.utmAttribution.map((r, i) => (
-                      <TableRow key={i}><TableCell>{r.source}</TableCell><TableCell>{r.medium || '—'}</TableCell><TableCell>{r.campaign || '—'}</TableCell><TableCell align="right">{r.orders}</TableCell><TableCell align="right">{formatPrice(r.revenue)}</TableCell></TableRow>
+                      <TableRow key={i}><AnalyticsField name="0">{r.source}</AnalyticsField><AnalyticsField name="1">{r.medium || '—'}</AnalyticsField><AnalyticsField name="2">{r.campaign || '—'}</AnalyticsField><AnalyticsField name="3" align="right">{r.orders}</AnalyticsField><AnalyticsField name="4" align="right">{formatPrice(r.revenue)}</AnalyticsField></TableRow>
                     ))}
                   </TableBody>
                 </Table>
               ) : <Typography color="text.secondary">No UTM data yet. Share links with ?utm_source=... to track campaigns.</Typography>
             )}
           </Paper>
-        </Grid>
+        </AnalyticsWidget>
 
         {/* Coupon Performance */}
-        <Grid item xs={12} lg={6}>
+        <AnalyticsWidget metric="couponPerformance" item xs={12} lg={6}>
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Coupon Performance" metric="coupon-performance" params={qp} />
             {loading ? <CardSkeleton /> : (
               data.couponPerformance?.length > 0 ? (
                 <Table size="small">
-                  <TableHead><TableRow><TableCell>Code</TableCell><TableCell align="right">Used</TableCell><TableCell align="right">Revenue</TableCell><TableCell align="right">Discount Given</TableCell><TableCell align="right">Avg Discount</TableCell></TableRow></TableHead>
+                  <TableHead><TableRow><AnalyticsField name="0">Code</AnalyticsField><AnalyticsField name="1" align="right">Used</AnalyticsField><AnalyticsField name="2" align="right">Revenue</AnalyticsField><AnalyticsField name="3" align="right">Discount Given</AnalyticsField><AnalyticsField name="4" align="right">Avg Discount</AnalyticsField></TableRow></TableHead>
                   <TableBody>
                     {data.couponPerformance.map((c) => (
-                      <TableRow key={c.couponId}><TableCell><Chip label={c.code} size="small" /></TableCell><TableCell align="right">{c.timesUsed}</TableCell><TableCell align="right">{formatPrice(c.revenueGenerated)}</TableCell><TableCell align="right">{formatPrice(c.totalDiscountGiven)}</TableCell><TableCell align="right">{formatPrice(c.avgDiscount)}</TableCell></TableRow>
+                      <TableRow key={c.couponId}><AnalyticsField name="0"><Chip label={c.code} size="small" /></AnalyticsField><AnalyticsField name="1" align="right">{c.timesUsed}</AnalyticsField><AnalyticsField name="2" align="right">{formatPrice(c.revenueGenerated)}</AnalyticsField><AnalyticsField name="3" align="right">{formatPrice(c.totalDiscountGiven)}</AnalyticsField><AnalyticsField name="4" align="right">{formatPrice(c.avgDiscount)}</AnalyticsField></TableRow>
                     ))}
                   </TableBody>
                 </Table>
               ) : <Typography color="text.secondary">No coupon usage data.</Typography>
             )}
           </Paper>
-        </Grid>
+        </AnalyticsWidget>
 
         {/* Revenue by Payment */}
-        <Grid item xs={12} md={6} lg={4}>
+        <AnalyticsWidget metric="paymentMethods" item xs={12} md={6} lg={4}>
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Revenue by Payment" metric="revenue-by-payment" params={qp} />
             {loading ? <CardSkeleton /> : (
@@ -381,10 +379,10 @@ const AnalyticsPage = () => {
               ) : <Typography color="text.secondary">No data.</Typography>
             )}
           </Paper>
-        </Grid>
+        </AnalyticsWidget>
 
         {/* Abandoned Carts */}
-        <Grid item xs={12} md={6} lg={4}>
+        <AnalyticsWidget metric="abandonedCarts" item xs={12} md={6} lg={4}>
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Cart Abandonment" metric="abandoned-carts" params={qp} />
             {loading ? <CardSkeleton /> : (
@@ -404,10 +402,10 @@ const AnalyticsPage = () => {
               ) : <Typography color="text.secondary">No cart data.</Typography>
             )}
           </Paper>
-        </Grid>
+        </AnalyticsWidget>
 
         {/* Repeat Customers */}
-        <Grid item xs={12} md={6} lg={4}>
+        <AnalyticsWidget metric="repeatCustomers" item xs={12} md={6} lg={4}>
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Customer Retention" metric="repeat-customers" params={qp} />
             {loading ? <CardSkeleton /> : (
@@ -427,10 +425,10 @@ const AnalyticsPage = () => {
               ) : <Typography color="text.secondary">No data.</Typography>
             )}
           </Paper>
-        </Grid>
+        </AnalyticsWidget>
 
         {/* Revenue by Category */}
-        <Grid item xs={12} md={6}>
+        <AnalyticsWidget metric="revenueByCategory" item xs={12} md={6}>
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Revenue by Category" metric="revenue-by-category" params={qp} />
             {loading ? <CardSkeleton /> : (
@@ -446,10 +444,10 @@ const AnalyticsPage = () => {
               ) : <Typography color="text.secondary">No data.</Typography>
             )}
           </Paper>
-        </Grid>
+        </AnalyticsWidget>
 
         {/* Traffic Sources */}
-        <Grid item xs={12} md={6}>
+        <AnalyticsWidget metric="trafficSources" item xs={12} md={6}>
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Traffic Sources" metric="traffic-sources" params={qp} />
             {loading ? <CardSkeleton /> : (
@@ -466,48 +464,48 @@ const AnalyticsPage = () => {
               ) : <Typography color="text.secondary">No traffic data yet.</Typography>
             )}
           </Paper>
-        </Grid>
+        </AnalyticsWidget>
 
         {/* Geographic Sales */}
-        <Grid item xs={12} lg={6}>
+        <AnalyticsWidget metric="geographicSales" item xs={12} lg={6}>
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Geographic Sales" metric="geographic-sales" params={qp} />
             {loading ? <CardSkeleton /> : (
               data.geographicSales?.length > 0 ? (
                 <Table size="small">
-                  <TableHead><TableRow><TableCell>State</TableCell><TableCell>City</TableCell><TableCell align="right">Orders</TableCell><TableCell align="right">Revenue</TableCell></TableRow></TableHead>
+                  <TableHead><TableRow><AnalyticsField name="0">State</AnalyticsField><AnalyticsField name="1">City</AnalyticsField><AnalyticsField name="2" align="right">Orders</AnalyticsField><AnalyticsField name="3" align="right">Revenue</AnalyticsField></TableRow></TableHead>
                   <TableBody>
                     {data.geographicSales.map((r, i) => (
-                      <TableRow key={i} hover sx={{ cursor: 'pointer' }} onClick={() => setDrillDown({ open: true, metric: 'geographic-sales', filterValue: r.state, label: `${r.state} — ${r.city}` })}><TableCell>{r.state}</TableCell><TableCell>{r.city}</TableCell><TableCell align="right">{r.orders}</TableCell><TableCell align="right">{formatPrice(r.revenue)}</TableCell></TableRow>
+                      <TableRow key={i} hover sx={{ cursor: 'pointer' }} onClick={() => setDrillDown({ open: true, metric: 'geographic-sales', filterValue: r.state, label: `${r.state} — ${r.city}` })}><AnalyticsField name="0">{r.state}</AnalyticsField><AnalyticsField name="1">{r.city}</AnalyticsField><AnalyticsField name="2" align="right">{r.orders}</AnalyticsField><AnalyticsField name="3" align="right">{formatPrice(r.revenue)}</AnalyticsField></TableRow>
                     ))}
                   </TableBody>
                 </Table>
               ) : <Typography color="text.secondary">No geographic data.</Typography>
             )}
           </Paper>
-        </Grid>
+        </AnalyticsWidget>
 
         {/* CLV */}
-        <Grid item xs={12} lg={6}>
+        <AnalyticsWidget metric="clv" item xs={12} lg={6}>
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Customer Lifetime Value (Top 10)" metric="customer-lifetime-value" params={qp} />
             {loading ? <CardSkeleton /> : (
               data.clv?.length > 0 ? (
                 <Table size="small">
-                  <TableHead><TableRow><TableCell>Customer</TableCell><TableCell align="right">Orders</TableCell><TableCell align="right">LTV</TableCell></TableRow></TableHead>
+                  <TableHead><TableRow><AnalyticsField name="0">Customer</AnalyticsField><AnalyticsField name="1" align="right">Orders</AnalyticsField><AnalyticsField name="2" align="right">LTV</AnalyticsField></TableRow></TableHead>
                   <TableBody>
                     {data.clv.map((c) => (
-                      <TableRow key={c.id}><TableCell><Typography variant="body2" fontWeight={500}>{c.name}</Typography><Typography variant="caption" color="text.secondary">{c.email}</Typography></TableCell><TableCell align="right">{c.orders}</TableCell><TableCell align="right">{formatPrice(c.lifetimeValue)}</TableCell></TableRow>
+                      <TableRow key={c.id}><AnalyticsField name="0"><Typography variant="body2" fontWeight={500}>{c.name}</Typography><Typography variant="caption" color="text.secondary">{c.email}</Typography></AnalyticsField><AnalyticsField name="1" align="right">{c.orders}</AnalyticsField><AnalyticsField name="2" align="right">{formatPrice(c.lifetimeValue)}</AnalyticsField></TableRow>
                     ))}
                   </TableBody>
                 </Table>
               ) : <Typography color="text.secondary">No data.</Typography>
             )}
           </Paper>
-        </Grid>
+        </AnalyticsWidget>
 
         {/* Refund Rate */}
-        <Grid item xs={12}>
+        <AnalyticsWidget metric="refundRate" item xs={12}>
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Refund Trend" metric="refund-rate" params={tp} />
             {loading ? <CardSkeleton /> : (
@@ -527,10 +525,10 @@ const AnalyticsPage = () => {
               ) : <Typography color="text.secondary">No refund data.</Typography>
             )}
           </Paper>
-        </Grid>
+        </AnalyticsWidget>
 
         {/* Cohort Retention */}
-        <Grid item xs={12}>
+        <AnalyticsWidget metric="cohortRetention" item xs={12}>
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Cohort Retention" metric="cohort-retention" params={{ period }} />
             {loading ? <CardSkeleton /> : (
@@ -539,10 +537,10 @@ const AnalyticsPage = () => {
               ) : <Typography color="text.secondary">No cohort data yet. Requires customers with orders over multiple months.</Typography>
             )}
           </Paper>
-        </Grid>
+        </AnalyticsWidget>
 
         {/* RFM Segmentation */}
-        <Grid item xs={12} lg={6}>
+        <AnalyticsWidget metric="rfmSegmentation" item xs={12} lg={6}>
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Customer Segmentation (RFM)" metric="rfm-segmentation" params={{ period }} />
             {loading ? <CardSkeleton /> : (
@@ -560,21 +558,21 @@ const AnalyticsPage = () => {
                   <Table size="small" sx={{ mt: 1 }}>
                     <TableHead>
                       <TableRow>
-                        <TableCell>Segment</TableCell>
-                        <TableCell align="right">Customers</TableCell>
-                        <TableCell align="right">Avg Recency (days)</TableCell>
-                        <TableCell align="right">Avg Frequency</TableCell>
-                        <TableCell align="right">Avg Monetary</TableCell>
+                        <AnalyticsField name="0">Segment</AnalyticsField>
+                        <AnalyticsField name="1" align="right">Customers</AnalyticsField>
+                        <AnalyticsField name="2" align="right">Avg Recency (days)</AnalyticsField>
+                        <AnalyticsField name="3" align="right">Avg Frequency</AnalyticsField>
+                        <AnalyticsField name="4" align="right">Avg Monetary</AnalyticsField>
                       </TableRow>
                     </TableHead>
                     <TableBody>
                       {data.rfmSegmentation.map((r) => (
                         <TableRow key={r.segment}>
-                          <TableCell><Chip label={r.segment} size="small" /></TableCell>
-                          <TableCell align="right">{r.customers}</TableCell>
-                          <TableCell align="right">{r.avgRecencyDays}</TableCell>
-                          <TableCell align="right">{r.avgFrequency}</TableCell>
-                          <TableCell align="right">{formatPrice(r.avgMonetary)}</TableCell>
+                          <AnalyticsField name="0"><Chip label={r.segment} size="small" /></AnalyticsField>
+                          <AnalyticsField name="1" align="right">{r.customers}</AnalyticsField>
+                          <AnalyticsField name="2" align="right">{r.avgRecencyDays}</AnalyticsField>
+                          <AnalyticsField name="3" align="right">{r.avgFrequency}</AnalyticsField>
+                          <AnalyticsField name="4" align="right">{formatPrice(r.avgMonetary)}</AnalyticsField>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -583,10 +581,10 @@ const AnalyticsPage = () => {
               ) : <Typography color="text.secondary">No segmentation data yet.</Typography>
             )}
           </Paper>
-        </Grid>
+        </AnalyticsWidget>
 
         {/* Order Heatmap */}
-        <Grid item xs={12} lg={6}>
+        <AnalyticsWidget metric="orderHeatmap" item xs={12} lg={6}>
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Order Activity Heatmap" metric="order-heatmap" params={qp} />
             {loading ? <CardSkeleton /> : (
@@ -595,10 +593,10 @@ const AnalyticsPage = () => {
               ) : <Typography color="text.secondary">No order data for heatmap.</Typography>
             )}
           </Paper>
-        </Grid>
+        </AnalyticsWidget>
 
         {/* Revenue Forecast */}
-        <Grid item xs={12}>
+        <AnalyticsWidget metric="revenueForecast" item xs={12}>
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Revenue Forecast (30 Days)" metric="revenue-forecast" params={{ period }} />
             {loading ? <CardSkeleton /> : (
@@ -627,7 +625,7 @@ const AnalyticsPage = () => {
               ) : <Typography color="text.secondary">Not enough data for forecasting. Need at least 2 days of orders.</Typography>
             )}
           </Paper>
-        </Grid>
+        </AnalyticsWidget>
       </Grid>
 
       <DrillDownDialog
@@ -640,6 +638,21 @@ const AnalyticsPage = () => {
       />
     </Box>
   );
+};
+
+const AnalyticsPage = () => {
+  const { features, mode } = useSettings();
+  const { user, hasPermission } = useAuth();
+  if (!features) return <CardSkeleton />;
+  if (!features.analytics) return <Alert severity="info">Analytics is disabled in Platform Features.</Alert>;
+  const sales = mode === 'ecommerce' && features.orders === true && hasPermission(PERMISSIONS.ORDERS_READ);
+  const widgets = sales ? SALES_ANALYTICS_WIDGETS.filter(({ id }) =>
+    (id !== 'couponPerformance' || features.coupons === true) &&
+    (id !== 'clv' || hasPermission(PERMISSIONS.CUSTOMERS_READ))) : CATALOG_ANALYTICS_WIDGETS;
+  const storageKey = `analytics-display:${user?.id || 'staff'}:${mode}:${sales ? 'sales' : 'catalog'}`;
+  return <AnalyticsDisplayProvider key={storageKey} storageKey={storageKey} widgets={widgets}>
+    {sales ? <SalesAnalyticsPage /> : <CatalogAnalytics />}
+  </AnalyticsDisplayProvider>;
 };
 
 export default AnalyticsPage;

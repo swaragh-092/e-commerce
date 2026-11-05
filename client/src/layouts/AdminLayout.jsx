@@ -74,7 +74,7 @@ const slimDrawerWidth = 72;
 // Items with a `mode: 'ecommerce'` key are hidden entirely in catalog mode.
 const MENU_STRUCTURE = [
   { text: 'Dashboard', path: '/admin', icon: <DashboardIcon />, permission: PERMISSIONS.DASHBOARD_VIEW },
-  { text: 'Analytics', path: '/admin/analytics', icon: <AnalyticsIcon />, permissions: [PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.ORDERS_READ], requireAllPermissions: true, mode: 'ecommerce' },
+  { text: 'Analytics', path: '/admin/analytics', icon: <AnalyticsIcon />, permission: PERMISSIONS.DASHBOARD_VIEW, feature: 'analytics' },
   {
     title: 'Catalog',
     icon: <InventoryIcon />,
@@ -84,7 +84,6 @@ const MENU_STRUCTURE = [
       { text: 'Categories', path: '/admin/categories', icon: <CategoryIcon />, permission: PERMISSIONS.CATEGORIES_READ },
       { text: 'Brands', path: '/admin/brands', icon: <LocalOfferIcon />, permissions: [PERMISSIONS.BRANDS_READ, PERMISSIONS.BRANDS_MANAGE, PERMISSIONS.PRODUCTS_READ] },
       { text: 'Attributes', path: '/admin/attributes', icon: <TuneIcon />, permission: PERMISSIONS.ATTRIBUTES_READ },
-      { text: 'Gallery', path: '/admin/gallery', feature: 'gallery', icon: <PhotoLibraryIcon />, permission: PERMISSIONS.GALLERY_READ },
     ]
   },
   {
@@ -104,6 +103,8 @@ const MENU_STRUCTURE = [
     icon: <DescriptionIcon />,
     items: [
       { text: 'Media', path: '/admin/media', icon: <PhotoLibraryIcon />, permission: PERMISSIONS.MEDIA_READ },
+      { text: 'Gallery', path: '/admin/gallery', feature: 'gallery', icon: <PhotoLibraryIcon />, permission: PERMISSIONS.GALLERY_READ },
+      { text: 'Newsletter', path: '/admin/newsletter', feature: 'newsletter', icon: <MailOutlineIcon />, permissions: [PERMISSIONS.NEWSLETTER_READ, PERMISSIONS.NEWSLETTER_SUBSCRIBERS_READ] },
       { text: 'Pages', path: '/admin/pages', icon: <DescriptionIcon />, feature: 'pages', permission: PERMISSIONS.PAGES_READ },
       { text: 'Menu Builder', path: '/admin/menus', icon: <AccountTreeIcon />, permission: PERMISSIONS.MENUS_READ },
       { text: 'API Builder', path: '/admin/api-builder', icon: <ApiIcon />, feature: 'apiBuilder', permission: PERMISSIONS.API_BUILDER_READ },
@@ -126,7 +127,6 @@ const MENU_STRUCTURE = [
       { text: 'General', path: '/admin/settings', icon: <SettingsIcon />, permission: PERMISSIONS.SETTINGS_READ },
       { text: 'Store Templates', path: '/admin/themes', icon: <PhotoLibraryIcon />, feature: 'themes', permission: PERMISSIONS.SETTINGS_READ },
       { text: 'Store Designer', path: '/admin/store-designer', icon: <PhotoLibraryIcon />, feature: 'themes', permission: PERMISSIONS.SETTINGS_MANAGE, newTab: true },
-      { text: 'Newsletter', path: '/admin/newsletter', feature: 'newsletter', icon: <MailOutlineIcon />, permissions: [PERMISSIONS.NEWSLETTER_READ, PERMISSIONS.NEWSLETTER_SUBSCRIBERS_READ] },
       { text: 'Notifications', path: '/admin/email-templates', icon: <MailOutlineIcon />, permissions: [PERMISSIONS.SETTINGS_READ, PERMISSIONS.NOTIFICATIONS_MANAGE] },
       { text: 'Payment Gateways', path: '/admin/payment-gateways', icon: <PaymentIcon />, feature: 'payments', permission: PERMISSIONS.SETTINGS_READ, mode: 'ecommerce' },
       { text: 'Shipping', path: '/admin/shipping', icon: <LocalShippingIcon />, feature: 'shipping', permission: PERMISSIONS.SETTINGS_MANAGE, mode: 'ecommerce' },
@@ -151,6 +151,10 @@ const MENU_STRUCTURE = [
     ]
   },
 ];
+
+const MENU_PATHS = MENU_STRUCTURE.flatMap(item => item.items ? item.items.map(child => child.path) : [item.path]).filter(Boolean);
+const matchesMenuPath = (path, pathname) =>
+  path === '/admin' ? pathname === path : pathname === path || pathname.startsWith(`${path}/`);
 
 const AdminLayout = () => {
   const theme = useTheme();
@@ -259,8 +263,16 @@ const AdminLayout = () => {
     localStorage.setItem('admin_sidebar_group_order', JSON.stringify(newOrder));
   };
 
-  const isActive = (path) =>
-    path === '/admin' ? location.pathname === '/admin' : location.pathname.startsWith(path);
+  const isActive = (path) => {
+    if (!matchesMenuPath(path, location.pathname)) return false;
+    // Routes such as /admin/blogs/categories also start with /admin/blogs.
+    // Select only the most specific menu item that matches the current path.
+    return !MENU_PATHS.some(menuPath =>
+      menuPath.length > path.length
+      && menuPath.startsWith(`${path}/`)
+      && matchesMenuPath(menuPath, location.pathname)
+    );
+  };
 
   // Keyboard shortcut for search (Ctrl + /)
   const [searchFocusTrigger, setSearchFocusTrigger] = React.useState(0);
@@ -385,16 +397,16 @@ const AdminLayout = () => {
               borderRadius: isNested ? '9px' : '12px',
               mb: 0.5,
               py: isNested ? 0.75 : 1,
-              pl: isNested ? (itemCollapsed ? 1.5 : 2) : 2.5,
+              pl: itemCollapsed ? (isNested ? 1.5 : 2.5) : 1.5,
               pr: itemCollapsed ? 0 : 4,
               justifyContent: itemCollapsed ? 'center' : 'initial',
               bgcolor: isNested ? 'background.paper' : 'transparent',
               transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
               '&:hover': {
-                bgcolor: (theme) => alpha(theme.palette.primary.main, isNested ? 0.07 : 0.04),
+                bgcolor: 'action.hover',
                 '& .MuiListItemIcon-root': {
                   transform: 'translateX(3px)',
-                  color: 'primary.main',
+                  color: 'adminSelection.main',
                 },
               },
               ...(isNested ? {
@@ -404,10 +416,10 @@ const AdminLayout = () => {
                 },
               } : {}),
               '&.Mui-selected': {
-                bgcolor: (theme) => alpha(theme.palette.primary.main, 0.08),
-                color: 'primary.main',
-                '& .MuiListItemIcon-root': { color: 'primary.main', transform: 'scale(1.1)' },
-                '& .MuiListItemText-primary': { color: 'primary.main', fontWeight: 700 },
+                bgcolor: 'action.selected',
+                color: 'adminSelection.main',
+                '& .MuiListItemIcon-root': { color: 'adminSelection.main', transform: 'scale(1.1)' },
+                '& .MuiListItemText-primary': { color: 'adminSelection.main', fontWeight: 700 },
               },
             }}
           >
@@ -486,6 +498,7 @@ const AdminLayout = () => {
                 }}
                 sx={{
                   mx: 1,
+                  pl: navCollapsed ? undefined : 1,
                   borderRadius: 2,
                   justifyContent: navCollapsed ? 'center' : 'initial',
                   '&:hover .drag-handle': { opacity: 0.5 }
@@ -831,9 +844,13 @@ const AdminLayout = () => {
         component="main"
         sx={{
           flexGrow: 1,
-          p: isDesignerCanvasRoute ? { xs: 1, sm: 1.5 } : { xs: 2, sm: 3 },
+          p: isDesignerCanvasRoute ? 0 : { xs: 2, sm: 3 },
           bgcolor: 'background.default',
-          minHeight: '100vh',
+          minHeight: isDesignerCanvasRoute ? 0 : '100vh',
+          height: isDesignerCanvasRoute ? '100dvh' : undefined,
+          display: isDesignerCanvasRoute ? 'flex' : undefined,
+          flexDirection: isDesignerCanvasRoute ? 'column' : undefined,
+          overflow: isDesignerCanvasRoute ? 'hidden' : undefined,
           width: { xs: '100%', md: `calc(100% - ${desktopDrawerWidth}px)` },
           maxWidth: { xs: '100%', md: 'none' },
           transition: theme.transitions.create(['width', 'margin'], {
@@ -842,7 +859,7 @@ const AdminLayout = () => {
           }),
         }}
       >
-        <Toolbar />
+        <Toolbar sx={{ flexShrink: 0 }} />
         <UnitCatalogProvider><Outlet /></UnitCatalogProvider>
       </Box>
     </Box>

@@ -1,5 +1,4 @@
 import { useState, useEffect, useContext } from 'react';
-import { Link } from 'react-router-dom';
 import {
   Alert,
   Box,
@@ -20,7 +19,7 @@ import {
   InputAdornment,
 } from '@mui/material';
 import InventoryAlertSettingsPanel from '../../components/admin/settings/InventoryAlertSettingsPanel';
-import { updateSettings, getEmailTemplates, updateEmailTemplate, sendTestEmail as sendTestEmailApi } from '../../services/adminService';
+import { updateSettings } from '../../services/adminService';
 import { getAllSettings } from '../../services/settingsService';
 import { useNotification } from '../../context/NotificationContext';
 import { SettingsContext } from '../../context/ThemeContext';
@@ -37,7 +36,6 @@ import { getMediaUrl } from '../../utils/media';
 import { DEFAULT_STORE_NAME } from '../../utils/store';
 import { INDIAN_STATES } from '../../utils/indianStates';
 import { isDesignerOwnedSetting } from '../../utils/storeDesign';
-import { isNotificationTemplateVisible } from '../../utils/notificationTemplateVisibility';
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$',  name: 'US Dollar' },
@@ -119,10 +117,6 @@ const SettingsPage = () => {
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [emailTemplates, setEmailTemplates] = useState([]);
-  const [templateSaving, setTemplateSaving] = useState({});
-  const [templateTestEmail, setTemplateTestEmail] = useState('');
-  const [templateTesting, setTemplateTesting] = useState({});
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
   const [mediaPickerKey, setMediaPickerKey] = useState(null);
   const { notify } = useNotification();
@@ -178,10 +172,6 @@ const SettingsPage = () => {
         ),
       }));
     });
-    // Load email templates
-    getEmailTemplates()
-      .then((res) => setEmailTemplates(res.data?.data || []))
-      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -252,6 +242,7 @@ const SettingsPage = () => {
         group !== 'shipping'
         && !['features', 'visibility'].includes(group)
         && !(group === 'general' && key === 'mode')
+        && !(group === 'messaging' && (['eventRecipientUserIds', 'enquiryCustomerAcknowledgementEnabled'].includes(key) || key.startsWith('notificationRules_')))
         && (isSuperAdmin || !isSuperAdminOnlySettingsKey(group, key))
         && !isDesignerOwnedSetting(group, key)
         && !isMaskedSecret(value)
@@ -606,46 +597,7 @@ const SettingsPage = () => {
                   <Box sx={{ pointerEvents: canManageSettings ? 'auto' : 'none', opacity: canManageSettings ? 1 : 0.75 }}>
                     <MessagingSettingsPanel form={form} set={set} />
                   </Box>
-                  <Divider sx={{ my: 4 }} />
-                  {adminCart && <InventoryAlertSettingsPanel />}
-                  <Divider sx={{ my: 4 }} />
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 2 }}>
-                    <Box>
-                      <Typography variant="h6" fontWeight={700} sx={{ mb: 0.5 }}>Event notifications</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Choose who receives each event and write separate Email, SMS, and WhatsApp messages for customers, people, and roles. Preview messages before activating them.
-                      </Typography>
-                    </Box>
-                    <Button
-                      variant="contained"
-                      component={Link}
-                      to="/admin/email-templates"
-                      startIcon={<span style={{ fontSize: 18 }}>✉️</span>}
-                      sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
-                    >
-                      Manage notifications
-                    </Button>
-                  </Box>
-                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>
-                    {[
-                      { name: 'order_placed', icon: '🛍️', label: 'Order Placed' },
-                      { name: 'order_shipped', icon: '📦', label: 'Order Shipped' },
-                      { name: 'order_delivered', icon: '✅', label: 'Order Delivered' },
-                      { name: 'order_cancelled', icon: '❌', label: 'Order Cancelled' },
-                      { name: 'order_refunded', icon: '💳', label: 'Order Refunded' },
-                      { name: 'welcome', icon: '👋', label: 'Welcome' },
-                      { name: 'email_verification', icon: '✉️', label: 'Email Verification' },
-                      { name: 'password_reset', icon: '🔑', label: 'Password Reset' },
-                      { name: 'low_stock_alert', icon: '⚠️', label: 'Low Stock Alert' },
-                      { name: 'new_enquiry_admin', icon: '📬', label: 'New Enquiry — Staff' },
-                      { name: 'new_enquiry_customer', icon: '✉️', label: 'Enquiry Received — Customer' },
-                    ].filter(({ name }) => isNotificationTemplateVisible(name, resolvedFeatures)).map(({ icon, label }) => (
-                      <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-                        <Typography fontSize={20}>{icon}</Typography>
-                        <Typography variant="body2" fontWeight={500}>{label}</Typography>
-                      </Box>
-                    ))}
-                  </Box>
+                  {adminCart && <><Divider sx={{ my: 4 }} /><InventoryAlertSettingsPanel /></>}
                 </Box>
               ) : (
                 <Box sx={{ pointerEvents: canManageSettings ? 'auto' : 'none', opacity: canManageSettings ? 1 : 0.75 }}>

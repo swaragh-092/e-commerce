@@ -21,9 +21,12 @@ import SearchWidget from '../components/search/SearchWidget';
 import DarkModeToggle from '../components/layout/DarkModeToggle';
 import PageService from '../services/pageService';
 import MenuService from '../services/menuService';
+import MenuChildrenMore from '../components/layout/MenuChildrenMore';
+import { appendMenuChildren } from '../utils/menuPagination';
 import { ADMIN_ACCESS_PERMISSIONS } from '../utils/permissions';
 import { filterFeatureLinks } from '../utils/featureNavigation';
 import SEO from '../components/common/SEO';
+import StorefrontAnalytics from '../components/common/StorefrontAnalytics';
 import CategoryIcon from '../components/common/CategoryIcon';
 import { isExternalUrl } from '../utils/urls';
 import { getStoreName } from '../utils/store';
@@ -73,8 +76,8 @@ const StoreLayout = () => {
   useEffect(() => {
     const fetchTopLinks = async () => {
       const [headerMenuResult, mobileMenuResult, pageResult] = await Promise.allSettled([
-        MenuService.getPublicMenu('header'),
-        MenuService.getPublicMenu('mobile'),
+        MenuService.getPublicMenu('header', { hideEmpty: true }),
+        MenuService.getPublicMenu('mobile', { hideEmpty: true }),
         pagesEnabled ? PageService.getPublicPages('top') : Promise.resolve({ data: [] }),
       ]);
 
@@ -181,8 +184,13 @@ const StoreLayout = () => {
     setMobileMenuAnchor(null);
   };
 
+  const appendChildren = (menuId, parentId, page) => {
+    setHeaderMenu(menu => appendMenuChildren(menu, menuId, parentId, page));
+    setMobileMenu(menu => appendMenuChildren(menu, menuId, parentId, page));
+  };
+
   const renderDynamicMenuItems = (items = [], parentId, depth = 0) => items.map((item) => {
-    const hasChildren = item.children?.length > 0;
+    const hasChildren = item.children?.length > 0 || item.childrenPagination?.hasMore;
     const navigable = isNavigableItem(item);
     return (
       <Box key={item.id}>
@@ -195,12 +203,13 @@ const StoreLayout = () => {
           {item.label}
         </MenuItem>
         {hasChildren && renderDynamicMenuItems(item.children, parentId, depth + 1)}
+        <MenuChildrenMore item={item} onLoaded={appendChildren} menuItem sx={{ pl: 4 + depth * 2 }} />
       </Box>
     );
   });
 
   const renderHeaderLinks = (items = []) => items.map((item) => {
-    const hasChildren = item.children?.length > 0;
+    const hasChildren = item.children?.length > 0 || item.childrenPagination?.hasMore;
     if (hasChildren) {
       return (
         <Box key={item.id}>
@@ -233,6 +242,7 @@ const StoreLayout = () => {
             )}
             {isNavigableItem(item) && <Divider />}
             {renderDynamicMenuItems(item.children, item.id)}
+            <MenuChildrenMore item={item} onLoaded={appendChildren} menuItem />
           </Menu>
         </Box>
       );
@@ -262,7 +272,7 @@ const StoreLayout = () => {
   });
 
   const renderMobileMenuItems = (items = [], depth = 0) => items.map((item) => {
-    const hasChildren = item.children?.length > 0;
+    const hasChildren = item.children?.length > 0 || item.childrenPagination?.hasMore;
     const navigable = isNavigableItem(item);
 
     return (
@@ -276,13 +286,14 @@ const StoreLayout = () => {
           {item.label}
         </MenuItem>
         {hasChildren && renderMobileMenuItems(item.children, depth + 1)}
+        <MenuChildrenMore item={item} onLoaded={appendChildren} menuItem sx={{ pl: 4 + depth * 2 }} />
       </Box>
     );
   });
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <SEO />
+      <StorefrontAnalytics />
       <Box
         component="a"
         href="#main"
@@ -621,6 +632,8 @@ const StoreLayout = () => {
       </Box>
 
       {!isAuthPage && <StorefrontFooter />}
+      {/* Resolved entity metadata and URL overrides take precedence over page fallbacks. */}
+      <SEO />
     </Box>
   );
 };

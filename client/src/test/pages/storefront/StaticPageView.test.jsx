@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import StaticPageView from '../../../pages/storefront/StaticPageView';
 import PageService from '../../../services/pageService';
+import { SettingsContext } from '../../../context/ThemeContext';
 
 vi.mock('../../../services/pageService', () => ({
   default: {
@@ -14,6 +15,7 @@ vi.mock('../../../services/pageService', () => ({
 const renderPage = () =>
   render(
     <HelmetProvider>
+      <SettingsContext.Provider value={{ settings: { general: { storeName: 'Test Shop' } } }}>
       <MemoryRouter
         initialEntries={['/pages/about']}
         future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
@@ -22,6 +24,7 @@ const renderPage = () =>
           <Route path="/pages/:slug" element={<StaticPageView />} />
         </Routes>
       </MemoryRouter>
+      </SettingsContext.Provider>
     </HelmetProvider>
   );
 

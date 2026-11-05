@@ -27,6 +27,7 @@ const createAccessRole = (data) => api.post(`/${A}/access-control/roles`, data);
 const updateAccessRole = (id, data) => api.put(`/${A}/access-control/roles/${id}`, data);
 const deleteAccessRole = (id, replacementRoleId = null) => api.delete(`/${A}/access-control/roles/${id}`, { data: { replacementRoleId } });
 const updateAccessUserRole = (id, roleId) => api.put(`/${A}/access-control/users/${id}/role`, { roleId });
+const updateAccessUserStatus = (id, status, reason) => api.put(`/${A}/access-control/users/${id}/status`, { status, reason });
 const createAccessUser = (data) => api.post(`/${A}/access-control/users`, data);
 const deleteAccessUser = (id) => api.delete(`/${A}/access-control/users/${id}`);
 
@@ -122,6 +123,7 @@ const deleteSaleLabel = (id) => api.delete(`/settings/sale-labels/${id}`);
 const reorderSaleLabels = (labels) => api.put('/settings/sale-labels', { labels });
 
 // Analytics
+const getCatalogOverview = (params = {}) => api.get(withQueryString(`/${A}/analytics/catalog-overview`, params, { omitEmpty: true }));
 const getTopProducts = (params = {}) => api.get(withQueryString(`/${A}/analytics/top-products`, params, { omitEmpty: true }));
 const getAovTrend = (params = {}) => api.get(withQueryString(`/${A}/analytics/aov-trend`, params, { omitEmpty: true }));
 const getAbandonedCarts = (params = {}) => api.get(withQueryString(`/${A}/analytics/abandoned-carts`, params, { omitEmpty: true }));
@@ -155,9 +157,10 @@ const exportAnalyticsCsv = (metric, params = {}) => {
 };
 
 export {
+  getCatalogOverview,
   getStats, getSalesChart, getLowStock, getInventoryAlerts, updateInventoryAlert, getRecentOrders,
   getInventoryAlertConfig, saveInventoryAlertConfig, testInventoryAlertEmail,
-  getAccessRoles, getAccessPermissions, getAccessUsers, createAccessRole, updateAccessRole, deleteAccessRole, updateAccessUserRole, createAccessUser, deleteAccessUser,
+  getAccessRoles, getAccessPermissions, getAccessUsers, createAccessRole, updateAccessRole, deleteAccessRole, updateAccessUserRole, updateAccessUserStatus, createAccessUser, deleteAccessUser,
   getAuditLogs,
   getUsers, getUserById, updateUserStatus,
   getAdminReviews, updateReviewStatus, deleteReview,

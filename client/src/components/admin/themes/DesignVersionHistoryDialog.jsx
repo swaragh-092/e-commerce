@@ -9,7 +9,7 @@ const formatVersionDate = (value) => {
 };
 
 const DesignVersionHistoryDialog = ({ open, onClose, versions = [], loading, restoringId, onRestore }) => (
-  <Dialog open={open} onClose={loading ? undefined : onClose} maxWidth="sm" fullWidth>
+  <Dialog open={open} onClose={restoringId ? undefined : onClose} maxWidth="sm" fullWidth>
     <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       <HistoryIcon color="primary" fontSize="small" />
       Published design history

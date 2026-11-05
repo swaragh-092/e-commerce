@@ -96,8 +96,9 @@ const BrandDetailPage = () => {
     <Container maxWidth="xl" sx={{ py: 6 }}>
       <PageSEO
         title={brand?.name || 'Brand'}
-        description={brand?.description || meta.total > 0 ? `Shop ${meta.total} products from ${brand?.name}` : 'Brand products'}
+        description={brand?.description || `Shop products from ${brand?.name || 'this brand'}.`}
         image={brand?.image || undefined}
+        type="collection"
       />
 
       <Breadcrumbs aria-label="breadcrumb" sx={{ mb: 3 }}>

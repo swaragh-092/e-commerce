@@ -243,7 +243,7 @@ const AdminLoginPage = () => {
           />
 
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-            <Typography variant="body2" component={RouterLink} to="/forgot-password" sx={{ textDecoration: 'none', color: theme.palette.primary.main }}>
+            <Typography variant="body2" component={RouterLink} to="/admin/forgot-password" sx={{ textDecoration: 'none', color: theme.palette.primary.main }}>
               Forgot password?
             </Typography>
           </Box>

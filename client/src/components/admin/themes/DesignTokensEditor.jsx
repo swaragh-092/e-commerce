@@ -1,11 +1,16 @@
-import React, { useRef, useState, useCallback } from 'react';
-import { Box, Typography, Grid, FormControl, InputLabel, Select, MenuItem, TextField, Divider, Button, IconButton, Slider, Alert, Chip, Paper, LinearProgress } from '@mui/material';
+import React, { useRef, useState, useCallback, useMemo, useId } from 'react';
+import { Box, Typography, Grid, FormControl, InputLabel, Select, MenuItem, TextField, Divider, Button, IconButton, Slider, Alert, Chip, Paper, LinearProgress, ThemeProvider, createTheme, ToggleButton, ToggleButtonGroup, Accordion, AccordionSummary, AccordionDetails } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { mediaService } from '../../../services/mediaService';
 import { ThemeContrastPanel } from '../settings/ContrastBadge';
 import { getDesignComponentControlSchema } from '../../../utils/designRegistry';
 import { DesignSchemaFields } from './designer/DesignSchemaFields';
+import { DesignTokensContext } from '../../../context/ThemeContext';
+import { buildStorefrontTheme } from '../../../utils/theme';
+import { BUTTON_APPEARANCES, BUTTON_ROLES, BUTTON_STATES, resolveDesignTokens } from '../../../utils/designTokens';
+import StorefrontButton from '../../storefront/StorefrontButton';
 
 const SCALE_PRESETS = [
   { value: 'compact', label: 'Compact' },
@@ -66,16 +71,19 @@ const Field = ({ label, value, onChange, type = 'text', helperText, placeholder 
   />
 );
 
-const SelectField = ({ label, value, onChange, options }) => (
-  <FormControl fullWidth size="small">
-    <InputLabel>{label}</InputLabel>
-    <Select label={label} value={value} onChange={(event) => onChange(event.target.value)}>
-      {options.map((option) => (
-        <MenuItem key={option.value || option} value={option.value || option}>{option.label || option}</MenuItem>
-      ))}
-    </Select>
-  </FormControl>
-);
+const SelectField = ({ label, value, onChange, options }) => {
+  const labelId = useId();
+  return (
+    <FormControl fullWidth size="small">
+      <InputLabel id={labelId}>{label}</InputLabel>
+      <Select labelId={labelId} label={label} value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map((option) => (
+          <MenuItem key={option.value || option} value={option.value || option}>{option.label || option}</MenuItem>
+        ))}
+      </Select>
+    </FormControl>
+  );
+};
 
 const FontUploadField = ({ label, url, fontFamily, onUpload, onClear }) => {
   const inputRef = useRef(null);
@@ -169,93 +177,106 @@ const TypographyScalePreview = ({ typeScale, fontStacks, themeSettings }) => {
   );
 };
 
+const ROLE_LABELS = {
+  primary: 'Primary',
+  secondary: 'Secondary',
+  neutral: 'Neutral',
+  success: 'Success',
+  warning: 'Warning',
+  danger: 'Danger',
+  info: 'Info',
+};
+
+const capitalize = (word) => word.charAt(0).toUpperCase() + word.slice(1);
+
 export const ButtonPaletteShowcase = ({ value = {} }) => {
-  const isDark = value.mode === 'dark';
-  const primaryColor = value.primaryColor || '#0f766e';
-  const secondaryColor = value.secondaryColor || '#f97316';
-  const warningColor = value.warningColor || '#d97706';
-  const successColor = value.successColor || '#059669';
-  const infoColor = value.infoColor || '#0284c7';
-  const cancelButtonColor = value.cancelButtonColor || '#dc3545';
-  const buttonStyle = value.buttonStyle || 'solid';
-  const borderRadius = parseInt(value.borderRadius, 10) || 8;
-  const radius = buttonStyle === 'pill' ? 9999 : borderRadius;
-
-  const getPrimarySx = () => {
-    if (buttonStyle === 'outline') {
-      return { bgcolor: 'transparent', color: primaryColor, border: `1px solid ${primaryColor}` };
-    }
-    if (buttonStyle === 'soft') {
-      return { bgcolor: `${primaryColor}22`, color: primaryColor, border: '1px solid transparent' };
-    }
-    return { bgcolor: primaryColor, color: '#ffffff', border: '1px solid transparent' };
-  };
-
-  const getSecondarySx = () => {
-    if (buttonStyle === 'outline') {
-      return { bgcolor: 'transparent', color: secondaryColor, border: `1px solid ${secondaryColor}` };
-    }
-    if (buttonStyle === 'soft') {
-      return { bgcolor: `${secondaryColor}22`, color: secondaryColor, border: '1px solid transparent' };
-    }
-    return { bgcolor: secondaryColor, color: isDark ? '#1f2933' : '#ffffff', border: '1px solid transparent' };
-  };
-
-  const buttons = [
-    { label: 'Primary', sx: getPrimarySx() },
-    { label: 'Secondary', sx: getSecondarySx() },
-    { label: 'Success', sx: { bgcolor: successColor, color: '#ffffff', border: '1px solid transparent' } },
-    { label: 'Danger', sx: { bgcolor: '#dc3545', color: '#ffffff', border: '1px solid transparent' } },
-    { label: 'Cancel', sx: { bgcolor: 'transparent', color: cancelButtonColor, border: `1px solid ${cancelButtonColor}` } },
-    { label: 'Warning', sx: { bgcolor: warningColor, color: '#ffffff', border: '1px solid transparent' } },
-    { label: 'Info', sx: { bgcolor: infoColor, color: '#ffffff', border: '1px solid transparent' } },
-    { label: 'Light', sx: { bgcolor: isDark ? '#334155' : '#f8fafc', color: isDark ? '#f8fafc' : '#1e293b', border: `1px solid ${isDark ? '#475569' : '#e2e8f0'}` } },
-    { label: 'Dark', sx: { bgcolor: isDark ? '#0f172a' : '#212529', color: '#ffffff', border: `1px solid ${isDark ? '#1e293b' : '#212529'}` } },
-    { label: 'Link', sx: { bgcolor: 'transparent', color: primaryColor, border: 'none', textDecoration: 'underline', '&:hover': { bgcolor: 'transparent', textDecoration: 'underline' } } },
-  ];
+  const mode = value.mode === 'dark' ? 'dark' : 'light';
+  const [role, setRole] = useState('primary');
+  const tokens = useMemo(() => resolveDesignTokens(value, mode), [value, mode]);
+  const previewTheme = useMemo(() => createTheme(buildStorefrontTheme(value, mode)), [value, mode]);
+  const contextValue = useMemo(
+    () => ({ tokens, themeObj: value, cssVariables: {}, isAdminRoute: false }),
+    [tokens, value]
+  );
 
   return (
-    <Paper variant="outlined" sx={{ p: 2, my: 2, bgcolor: isDark ? 'background.default' : '#fcfdfe' }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, flexWrap: 'wrap', gap: 1 }}>
-        <Typography variant="subtitle2" fontWeight={800}>
-          Button Palette Showcase
-        </Typography>
-        <Chip
-          label="Delete & Danger Locked to Safety Red"
-          size="small"
-          color="error"
-          variant="outlined"
-          sx={{ fontWeight: 700, fontSize: '0.72rem' }}
-        />
-      </Box>
-      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-        Preview of standard semantic button variants under current theme (Style: <strong>{buttonStyle}</strong>, Radius: <strong>{radius}px</strong>).
+    <Box sx={{ minWidth: 0, mt: 2 }}>
+      <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>Button preview</Typography>
+      <DesignTokensContext.Provider value={contextValue}>
+        <ThemeProvider theme={previewTheme}>
+          <Box sx={{ p: 2, bgcolor: 'background.default', borderRadius: 2, display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
+            <StorefrontButton sx={{ minHeight: 40 }}>Shop now</StorefrontButton>
+            <StorefrontButton role="secondary" sx={{ minHeight: 40 }}>Learn more</StorefrontButton>
+          </Box>
+        </ThemeProvider>
+      </DesignTokensContext.Provider>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+        Primary highlights your main action. Secondary is a quieter alternative.
       </Typography>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.25, alignItems: 'center' }}>
-        {buttons.map((b) => (
-          <Button
-            key={b.label}
-            size="small"
-            sx={{
-              ...b.sx,
-              borderRadius: `${radius}px`,
-              textTransform: 'none',
-              fontWeight: 600,
-              px: 2,
-              py: 0.75,
-              boxShadow: 'none',
-              '&:hover': {
-                boxShadow: 'none',
-                opacity: 0.9,
-                ...b.sx?.['&:hover'],
-              },
-            }}
-          >
-            {b.label}
-          </Button>
-        ))}
-      </Box>
-    </Paper>
+      <Accordion disableGutters elevation={0} sx={{ mt: 2, '&:before': { display: 'none' }, bgcolor: 'transparent' }}>
+        <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ px: 0, minHeight: 44 }}>
+          <Typography variant="body2" fontWeight={600}>States &amp; other button roles</Typography>
+        </AccordionSummary>
+        <AccordionDetails sx={{ px: 0 }}>
+          <SelectField label="Preview role" value={role} onChange={setRole}
+            options={BUTTON_ROLES.map((key) => ({ value: key, label: ROLE_LABELS[key] }))} />
+          <DesignTokensContext.Provider value={contextValue}>
+            <ThemeProvider theme={previewTheme}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1, mt: 2 }}>
+                {BUTTON_STATES.map((state) => (
+                  <StorefrontButton key={state} role={role} forcedState={state}
+                    disabled={state === 'disabled'} loading={state === 'loading'}
+                    sx={{ minWidth: 0, minHeight: 40, px: 1 }}>
+                    {capitalize(state)}
+                  </StorefrontButton>
+                ))}
+              </Box>
+              <Typography variant="body2" sx={{ mt: 2, mb: 1 }}>On an image</Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, p: 2, borderRadius: 2, bgcolor: '#0f172a' }}>
+                {BUTTON_APPEARANCES.map((appearance) => (
+                  <StorefrontButton key={appearance} role={role} appearance={appearance} overImage
+                    sx={{ minHeight: 40, px: 1.5 }}>{capitalize(appearance)}</StorefrontButton>
+                ))}
+              </Box>
+            </ThemeProvider>
+          </DesignTokensContext.Provider>
+        </AccordionDetails>
+      </Accordion>
+    </Box>
+  );
+};
+
+const BUTTON_STYLE_OPTIONS = [
+  { value: 'solid', label: 'Filled', appearance: 'solid' },
+  { value: 'outline', label: 'Outline', appearance: 'outlined' },
+  { value: 'soft', label: 'Soft', appearance: 'soft' },
+  { value: 'pill', label: 'Pill', appearance: 'solid' },
+];
+
+const ButtonStylePicker = ({ value, onChange }) => {
+  const tokens = useMemo(() => resolveDesignTokens(value), [value]);
+  return (
+    <Box>
+      <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>Button style</Typography>
+      <ToggleButtonGroup exclusive value={value.buttonStyle || 'solid'} aria-label="Storefront button style"
+        onChange={(_, next) => next && onChange({ ...value, buttonStyle: next })}
+        sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1,
+          '& .MuiToggleButtonGroup-grouped': { m: 0, border: '1px solid', borderColor: 'divider', borderRadius: '8px !important' },
+          '& .MuiToggleButton-root': { minWidth: 0, flexDirection: 'column', gap: 1, py: 1.5, textTransform: 'none' },
+          '& .Mui-selected': { borderColor: 'primary.main', bgcolor: 'action.selected' } }}>
+        {BUTTON_STYLE_OPTIONS.map((option) => {
+          const state = tokens.buttons.primary[option.appearance].default;
+          return (
+            <ToggleButton key={option.value} value={option.value} aria-label={`${option.label} button style`}>
+              <Box component="span" aria-hidden="true" sx={{ display: 'block', px: 2, py: 0.75, fontSize: 12,
+                fontWeight: 700, bgcolor: state.bg, color: state.fg, border: '1px solid', borderColor: state.border,
+                borderRadius: option.value === 'pill' ? '999px' : '6px' }}>Shop now</Box>
+              <Typography component="span" variant="body2" fontWeight={600}>{option.label}</Typography>
+            </ToggleButton>
+          );
+        })}
+      </ToggleButtonGroup>
+    </Box>
   );
 };
 
@@ -264,6 +285,9 @@ export const ButtonPaletteShowcase = ({ value = {} }) => {
  * Controls the whole-storefront visual baseline: button style, card style, border radius, typography, etc.
  */
 export const DesignTokensEditor = ({ value = {}, onChange }) => {
+  const [category, setCategory] = useState('buttons');
+  const groups = getDesignComponentControlSchema('designTokens').groups;
+  const fieldsFor = (key, filter = () => true) => ({ groups: groups.filter((group) => group.key === key).map((group) => ({ ...group, fields: group.fields.filter(filter) })) });
   const patch = (key, nextValue) => onChange({ ...value, [key]: nextValue });
   const patchNested = (group, key, nextValue) => patch(group, { ...(value[group] || {}), [key]: nextValue });
 
@@ -278,13 +302,19 @@ export const DesignTokensEditor = ({ value = {}, onChange }) => {
   const hasVariableFont = Boolean(knownBodyPreset || knownHeadingPreset);
 
   const handleBodyFontUpload = (url, filename) => {
-    patchNested('customFonts', 'bodyUrl', url);
-    if (filename) patchNested('customFonts', 'bodyFamily', filename.replace(/\.[^.]+$/, ''));
+    patch('customFonts', {
+      ...customFonts,
+      bodyUrl: url,
+      ...(filename ? { bodyFamily: filename.replace(/\.[^.]+$/, '') } : {}),
+    });
   };
 
   const handleHeadingFontUpload = (url, filename) => {
-    patchNested('customFonts', 'headingUrl', url);
-    if (filename) patchNested('customFonts', 'headingFamily', filename.replace(/\.[^.]+$/, ''));
+    patch('customFonts', {
+      ...customFonts,
+      headingUrl: url,
+      ...(filename ? { headingFamily: filename.replace(/\.[^.]+$/, '') } : {}),
+    });
   };
 
   const updateAxisValue = (axisTag, newValue) => {
@@ -329,44 +359,51 @@ export const DesignTokensEditor = ({ value = {}, onChange }) => {
   }));
 
   return (
-    <Box>
-      <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>
-        Global Design Tokens
+    <Box sx={{ minWidth: 0, '& .MuiFormControl-root': { minWidth: 0 }, '& .MuiInputBase-root': { borderRadius: '8px' } }}>
+      <SelectField label="Edit storefront style" value={category} onChange={setCategory} options={[
+        { value: 'buttons', label: 'Buttons' }, { value: 'colors', label: 'Colors' },
+        { value: 'typography', label: 'Typography' }, { value: 'layout', label: 'Layout' },
+        { value: 'mobile', label: 'Mobile adjustments' },
+      ]} />
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, mb: 2.5 }}>
+        Changes apply across your storefront. Review the preview, then save your draft.
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        These controls affect the whole storefront — buttons, cards, backgrounds, border radius, typography rhythm, and density.
-      </Typography>
-
-      <DesignSchemaFields
-        schema={getDesignComponentControlSchema('designTokens')}
-        value={value}
-        onChange={onChange}
-      />
-
-      <Divider sx={{ my: 2 }} />
-      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-        These colors are the storefront foundation. Check the WCAG status before publishing changes.
-      </Typography>
-      <DesignSchemaFields
-        schema={{ groups: [getDesignComponentControlSchema('designTokens').groups[1]] }}
-        value={value}
-        onChange={onChange}
-      />
-      <ThemeContrastPanel
-        primaryColor={value.primaryColor || '#0f766e'}
-        secondaryColor={value.secondaryColor || '#f97316'}
-        backgroundColor={value.backgroundColor || '#f7f3ec'}
-        textColor={value.textColor || '#1f2933'}
-      />
-
-      <Divider sx={{ my: 2 }} />
-      <DesignSchemaFields
-        schema={{ groups: [getDesignComponentControlSchema('designTokens').groups[2]] }}
-        value={value}
-        onChange={onChange}
-      />
-      <ButtonPaletteShowcase value={value} />
-
+      {category === 'buttons' && (
+        <>
+          <ButtonStylePicker value={value} onChange={onChange} />
+          <Box sx={{ mt: 2 }}>
+            <Field label="Corner radius" value={value.borderRadius || '8px'}
+              helperText="Shared by buttons and cards. Pill buttons stay fully rounded."
+              onChange={(next) => patch('borderRadius', next)} />
+          </Box>
+          <ButtonPaletteShowcase value={value} />
+        </>
+      )}
+      {category === 'colors' && (
+        <>
+          <DesignSchemaFields schema={fieldsFor('brandColors')} value={value} onChange={onChange} />
+          <Box sx={{ mt: 2 }}><ThemeContrastPanel
+            primaryColor={value.primaryColor || '#0f766e'} secondaryColor={value.secondaryColor || '#f97316'}
+            backgroundColor={value.backgroundColor || '#f7f3ec'} textColor={value.textColor || '#1f2933'} />
+          </Box>
+          <Accordion disableGutters elevation={0} sx={{ mt: 2, '&:before': { display: 'none' } }}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ px: 0 }}>
+              <Typography variant="body2" fontWeight={600}>Status &amp; feedback colors</Typography>
+            </AccordionSummary>
+            <AccordionDetails sx={{ px: 0 }}>
+              <DesignSchemaFields schema={fieldsFor('stateColors')} value={value} onChange={onChange} />
+            </AccordionDetails>
+          </Accordion>
+        </>
+      )}
+      {category === 'layout' && (
+        <DesignSchemaFields schema={fieldsFor('foundation', (field) => ['cardStyle', 'backgroundStyle', 'headerStyle', 'borderRadius'].includes(field.key))}
+          value={value} onChange={onChange} />
+      )}
+      {category === 'typography' && (<>
+      <DesignSchemaFields schema={fieldsFor('typography')} value={value} onChange={onChange} />
+      <Box sx={{ mt: 2 }}><DesignSchemaFields schema={fieldsFor('foundation', (field) => ['lineHeight', 'letterSpacing', 'headingLetterSpacing'].includes(field.key))}
+        value={value} onChange={onChange} /></Box>
       <Divider sx={{ my: 2 }} />
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6}>
@@ -378,11 +415,7 @@ export const DesignTokensEditor = ({ value = {}, onChange }) => {
           ]} />
         </Grid>
       </Grid>
-      <DesignSchemaFields
-        schema={{ groups: [getDesignComponentControlSchema('designTokens').groups[3]] }}
-        value={value}
-        onChange={onChange}
-      />
+
 
       {/* Custom Font Uploads */}
       <Divider sx={{ my: 2 }} />
@@ -397,7 +430,7 @@ export const DesignTokensEditor = ({ value = {}, onChange }) => {
             url={customFonts.bodyUrl}
             fontFamily={customFonts.bodyFamily || value.fontFamily}
             onUpload={handleBodyFontUpload}
-            onClear={() => { patchNested('customFonts', 'bodyUrl', ''); patchNested('customFonts', 'bodyFamily', ''); }}
+            onClear={() => patch('customFonts', { ...customFonts, bodyUrl: '', bodyFamily: '' })}
           />
         </Grid>
         <Grid item xs={12} sm={6}>
@@ -406,7 +439,7 @@ export const DesignTokensEditor = ({ value = {}, onChange }) => {
             url={customFonts.headingUrl}
             fontFamily={customFonts.headingFamily || value.headingFont}
             onUpload={handleHeadingFontUpload}
-            onClear={() => { patchNested('customFonts', 'headingUrl', ''); patchNested('customFonts', 'headingFamily', ''); }}
+            onClear={() => patch('customFonts', { ...customFonts, headingUrl: '', headingFamily: '' })}
           />
         </Grid>
         {customFonts.bodyUrl && (
@@ -578,20 +611,22 @@ export const DesignTokensEditor = ({ value = {}, onChange }) => {
         themeSettings={value}
       />
 
-      <Divider sx={{ my: 2 }} />
-      <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>Mobile Overrides</Typography>
+      </>)}
+      {category === 'mobile' && (<>
+      <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>Mobile adjustments</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Leave a field empty to use your global style. Switch to the mobile preview to review changes.</Typography>
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6}>
-          <Field label="Mobile Primary" type="color" value={mobile.primaryColor || ''} onChange={(next) => patchNested('mobileOverrides', 'primaryColor', next)} />
+          <Field label="Mobile Primary" placeholder="Uses primary color" value={mobile.primaryColor || ''} onChange={(next) => patchNested('mobileOverrides', 'primaryColor', next)} />
         </Grid>
         <Grid item xs={12} sm={6}>
-          <Field label="Mobile Background" type="color" value={mobile.backgroundColor || ''} onChange={(next) => patchNested('mobileOverrides', 'backgroundColor', next)} />
+          <Field label="Mobile Background" placeholder="Uses background color" value={mobile.backgroundColor || ''} onChange={(next) => patchNested('mobileOverrides', 'backgroundColor', next)} />
         </Grid>
         <Grid item xs={12} sm={6}>
-          <Field label="Mobile Surface" type="color" value={mobile.surfaceColor || ''} onChange={(next) => patchNested('mobileOverrides', 'surfaceColor', next)} />
+          <Field label="Mobile Surface" placeholder="Uses surface color" value={mobile.surfaceColor || ''} onChange={(next) => patchNested('mobileOverrides', 'surfaceColor', next)} />
         </Grid>
         <Grid item xs={12} sm={6}>
-          <Field label="Mobile Text" type="color" value={mobile.textColor || ''} onChange={(next) => patchNested('mobileOverrides', 'textColor', next)} />
+          <Field label="Mobile Text" placeholder="Uses text color" value={mobile.textColor || ''} onChange={(next) => patchNested('mobileOverrides', 'textColor', next)} />
         </Grid>
         <Grid item xs={12} sm={6}>
           <Field label="Mobile Body Size" value={mobile.bodyFontSize || ''} placeholder="0.95rem" onChange={(next) => patchNested('mobileOverrides', 'bodyFontSize', next)} />
@@ -606,6 +641,7 @@ export const DesignTokensEditor = ({ value = {}, onChange }) => {
           <Field label="Mobile Container Padding" value={mobile.containerPadding || ''} placeholder="16px" onChange={(next) => patchNested('mobileOverrides', 'containerPadding', next)} />
         </Grid>
       </Grid>
+      </>)}
     </Box>
   );
 };

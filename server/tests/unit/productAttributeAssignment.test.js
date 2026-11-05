@@ -20,6 +20,7 @@ beforeEach(() => {
   vi.spyOn(db.AttributeTemplate, 'create').mockImplementation(async (data) => ({ ...data, id: attributeId }));
   vi.spyOn(db.AttributeValue, 'findAll').mockResolvedValue([{ id: valueId, value: '10', unitLabel: 'cm' }]);
   vi.spyOn(db.AttributeValue, 'findOne').mockResolvedValue(null);
+  vi.spyOn(db.VariantOption, 'findOne').mockResolvedValue(null);
   vi.spyOn(db.AttributeValue, 'create').mockImplementation(async (data) => ({ ...data, id: `value-${data.value}` }));
   vi.spyOn(db.ProductAttribute, 'findAll').mockImplementation(async () => [...assigned]);
   vi.spyOn(db.ProductAttribute, 'create').mockImplementation(async (data) => { const row = { ...data, update: vi.fn(async (updates) => Object.assign(row, updates)) }; assigned.push(row); return row; });
@@ -27,6 +28,14 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('unified product attribute assignment', () => {
+  it('blocks disabling existing assignments through the assignment endpoint when variants use the attribute', async () => {
+    const update = vi.fn();
+    assigned.push({ attributeId, valueId, isVariantAttr: true, update });
+    db.VariantOption.findOne.mockResolvedValue({ variantId: 'existing' });
+    await expect(assignProductAttribute('product', { attributeId, values: [{ valueId }], isVariantAttr: false })).rejects.toMatchObject({ statusCode: 409 });
+    expect(update).not.toHaveBeenCalled();
+    expect(db.ProductAttribute.create).not.toHaveBeenCalled();
+  });
   it('appends newly assigned values without resetting the saved product order', async () => {
     assigned.push({ id: 'old', attributeId: 'other', valueId: 'other-value', sortOrder: 9 });
     await assignProductAttribute('product', { attributeId, values: [{ valueId }] });

@@ -10,6 +10,8 @@ const AuditService = require('../audit/audit.service');
 const { ACTIONS, AUTH_TIME, ENTITIES } = require('../../config/constants');
 const { enrichUserAuthorization } = require('../../config/permissions');
 const logger = require('../../utils/logger');
+const { requiresAdminMfa, assertMfaEnrollment, assertMfaSession } = require('./mfaPolicy');
+const LoginAttemptStore = require('./loginAttemptStore');
 
 const { hashToken, generateTokens, signTempTwoFactorToken } = require('./tokenUtils');
 
@@ -36,62 +38,12 @@ const isEmailVerificationRequired = async () => {
 const JWT_ISS = process.env.JWT_ISSUER || 'ecommerce-pro';
 const JWT_AUD = process.env.JWT_AUDIENCE || 'ecommerce-pro-client';
 
-// Per-account login brute-force guard (in-memory; use Redis for
-// multi-instance — same caveat as tokenBlocklist).
-const LOGIN_FAIL_WINDOW_MS = 15 * 60 * 1000;
-const LOGIN_MAX_FAILS = 5;
-const LOGIN_LOCK_MS = 15 * 60 * 1000;
-const loginFailures = new Map(); // normalizedEmail -> { count, firstAt, lockedUntil }
-
-const checkLoginLock = (normalizedEmail) => {
-  const rec = loginFailures.get(normalizedEmail);
-  if (!rec) return;
-  const now = Date.now();
-  if (rec.lockedUntil && now < rec.lockedUntil) {
-    throw new AppError('TOO_MANY_REQUESTS', 429, 'Too many failed attempts for this account. Please try again later.');
-  }
-  if (now - rec.firstAt > LOGIN_FAIL_WINDOW_MS) loginFailures.delete(normalizedEmail);
-};
-
-const recordLoginFailure = (normalizedEmail) => {
-  const now = Date.now();
-  const rec = loginFailures.get(normalizedEmail);
-  if (!rec || now - rec.firstAt > LOGIN_FAIL_WINDOW_MS) {
-    loginFailures.set(normalizedEmail, { count: 1, firstAt: now, lockedUntil: null });
-    return;
-  }
-  rec.count += 1;
-  if (rec.count >= LOGIN_MAX_FAILS) rec.lockedUntil = now + LOGIN_LOCK_MS;
-};
-
 // Quiet per-email throttle for password-reset / verification mail so rotating
 // IPs can't inbox-spam a victim. Throttled requests return success silently
 // (no oracle, no duplicate mail).
-const EMAIL_SEND_QUIET_MS = 5 * 60 * 1000;
-const lastEmailSentAt = new Map(); // `${kind}:${email}` -> timestamp
-const isEmailThrottled = (kind, normalizedEmail) => {
-  const last = lastEmailSentAt.get(`${kind}:${normalizedEmail}`);
-  if (last && Date.now() - last < EMAIL_SEND_QUIET_MS) return true;
-  lastEmailSentAt.set(`${kind}:${normalizedEmail}`, Date.now());
-  return false;
-};
+const isEmailThrottled = (kind, normalizedEmail) => LoginAttemptStore.claimEmailSend(kind, normalizedEmail);
 
-// Bound the in-memory throttle maps — entries are short-lived, sweep them.
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, rec] of loginFailures) {
-    const lastActivity = Math.max(rec.firstAt || 0, rec.lockedUntil || 0);
-    if (now - lastActivity > LOGIN_FAIL_WINDOW_MS + LOGIN_LOCK_MS) loginFailures.delete(key);
-  }
-  for (const [key, ts] of lastEmailSentAt) {
-    if (now - ts > EMAIL_SEND_QUIET_MS * 2) lastEmailSentAt.delete(key);
-  }
-}, 5 * 60 * 1000).unref();
-
-const getClientBaseUrl = () => {
-  const url = process.env.CLIENT_URL || 'http://localhost:5173';
-  return url.split(',')[0].trim().replace(/\/+$/, '');
-};
+const { getClientBaseUrl } = require('./authRedirects');
 
 const register = async (payload, ipAddress = null) => {
   const normalizedEmail = String(payload.email || '').trim().toLowerCase();
@@ -235,7 +187,7 @@ const AccountEvents = require('./accountEvents');
 
 const login = async (email, password, ipAddress, rememberMe = false, userAgent, trustedDevice) => {
   const normalizedEmail = String(email || '').trim().toLowerCase();
-  checkLoginLock(normalizedEmail);
+  await LoginAttemptStore.checkLock(normalizedEmail);
   const user = await User.scope('withPassword').findOne({
     where: { email: normalizedEmail },
     include: authUserInclude,
@@ -247,10 +199,10 @@ const login = async (email, password, ipAddress, rememberMe = false, userAgent, 
     : await bcrypt.compare(password, DUMMY_HASH);
 
   if (!user || !isValid) {
-    recordLoginFailure(normalizedEmail);
+    await LoginAttemptStore.recordFailure(normalizedEmail);
     throw new AppError('UNAUTHORIZED', 401, 'Invalid email or password');
   }
-  loginFailures.delete(normalizedEmail);
+  await LoginAttemptStore.clear(normalizedEmail);
 
   if (user.status !== 'active') {
     throw new AppError('FORBIDDEN', 403, 'Your account is inactive or banned');
@@ -266,12 +218,14 @@ const login = async (email, password, ipAddress, rememberMe = false, userAgent, 
     }
   }
 
+  assertMfaEnrollment(user);
+
   // If 2FA is enabled, check trusted device cookie before requiring TOTP.
   // The cookie is a signed JWT (see authCookies.signTrustedDevice) — never a
   // deterministic hash, so it cannot be forged without the JWT secret.
   if (user.twoFactorEnabled) {
     const { verifyTrustedDevice } = require('./authCookies');
-    if (trustedDevice && verifyTrustedDevice(trustedDevice, user.id)) {
+    if (!requiresAdminMfa(user) && trustedDevice && verifyTrustedDevice(trustedDevice, user.id)) {
       // Trusted device — skip 2FA
     } else {
       return { requiresTwoFactor: true, tempToken: signTempTwoFactorToken(user.id) };
@@ -349,9 +303,27 @@ const refresh = async (refreshTokenStr, ipAddress, userAgent) => {
     const emailVerificationRequired = await isEmailVerificationRequired();
     const tokenHash = hashToken(refreshTokenStr);
 
-    return sequelize.transaction(
+    const result = await sequelize.transaction(
       { isolationLevel: Transaction.ISOLATION_LEVELS.READ_COMMITTED },
       async (t) => {
+        const user = await User.findByPk(decoded.id, {
+          include: authUserInclude,
+          transaction: t,
+          lock: { level: t.LOCK.UPDATE, of: User },
+        });
+        if (!user || user.status !== 'active') {
+          throw new AppError('FORBIDDEN', 403, 'User inactive');
+        }
+        if (user.scheduledDeletionAt && new Date(user.scheduledDeletionAt) <= new Date()) {
+          throw new AppError('FORBIDDEN', 403, 'Account deletion period has expired');
+        }
+
+        if (emailVerificationRequired) {
+          if (!user.emailVerified) {
+            throw new AppError('FORBIDDEN', 403, 'Please verify your email before logging in');
+          }
+        }
+
         const tokenRecord = await RefreshToken.findOne({
           where: { token: tokenHash },
           transaction: t,
@@ -367,6 +339,21 @@ const refresh = async (refreshTokenStr, ipAddress, userAgent) => {
 
         // Reuse detection — a revoked token being replayed signals theft.
         if (tokenRecord.revokedAt) {
+          // A logged-out/reset session is already dead. Only replay of a
+          // rotated token whose successor is still active signals theft.
+          let successorId = tokenRecord.replacedByTokenId;
+          let successor;
+          const seen = new Set([tokenRecord.id]);
+          while (successorId && !seen.has(successorId)) {
+            seen.add(successorId);
+            successor = await RefreshToken.findByPk(successorId, { transaction: t, lock: t.LOCK.UPDATE });
+            if (!successor || successor.userId !== tokenRecord.userId) break;
+            if (!successor.revokedAt) break;
+            successorId = successor.replacedByTokenId;
+          }
+          if (!successor || successor.userId !== tokenRecord.userId || successor.revokedAt) {
+            throw new AppError('UNAUTHORIZED', 401, 'Session has been revoked');
+          }
           await RefreshToken.update(
             { revokedAt: new Date() },
             { where: { userId: tokenRecord.userId, revokedAt: null }, transaction: t }
@@ -376,28 +363,16 @@ const refresh = async (refreshTokenStr, ipAddress, userAgent) => {
             replayedTokenId: tokenRecord.id,
             ipAddress,
           });
-          throw new AppError('UNAUTHORIZED', 401, 'Token reuse detected. All sessions revoked.');
+          const sessions = await RefreshToken.findAll({
+            where: { userId: tokenRecord.userId }, attributes: ['id'], transaction: t,
+          });
+          // Return the failure so the revocation commits; throwing here rolls it back.
+          return { reuseDetected: true, revokedSessionIds: sessions.map((session) => session.id) };
         }
 
-        const user = await User.findByPk(decoded.id, {
-          transaction: t,
-          lock: t.LOCK.UPDATE,
-        });
-        if (!user || user.status !== 'active') {
-          throw new AppError('FORBIDDEN', 403, 'User inactive');
-        }
-        if (user.scheduledDeletionAt && new Date(user.scheduledDeletionAt) <= new Date()) {
-          throw new AppError('FORBIDDEN', 403, 'Account deletion period has expired');
-        }
-
-        if (emailVerificationRequired) {
-          if (!user.emailVerified) {
-            throw new AppError('FORBIDDEN', 403, 'Please verify your email before logging in');
-          }
-        }
-
+        assertMfaSession(user, decoded);
         const sessionId = crypto.randomUUID();
-        const tokens = generateTokens(user, sessionId);
+        const tokens = generateTokens(user, sessionId, { mfaVerified: decoded.mfa === true });
 
         // Preserve the original session duration (remember-me 30d vs default 7d)
         // so a remember-me session doesn't shrink to 7d after the first rotation.
@@ -410,7 +385,7 @@ const refresh = async (refreshTokenStr, ipAddress, userAgent) => {
         } catch { rememberMe = false; }
         const newExpiry = new Date(Date.now() + (rememberMe ? AUTH_TIME.REMEMBER_ME_TTL_MS : AUTH_TIME.REFRESH_TOKEN_TTL_MS));
 
-        await tokenRecord.update({ revokedAt: new Date() }, { transaction: t });
+        await tokenRecord.update({ revokedAt: new Date(), replacedByTokenId: sessionId }, { transaction: t });
         await RefreshToken.create({
           id: sessionId,
           userId: user.id,
@@ -444,6 +419,12 @@ const refresh = async (refreshTokenStr, ipAddress, userAgent) => {
         return { tokens, rememberMe };
       }
     );
+    if (result.reuseDetected) {
+      const blocklist = require('../../utils/tokenBlocklist');
+      result.revokedSessionIds.forEach((id) => blocklist.revokeSession(id));
+      throw new AppError('UNAUTHORIZED', 401, 'Token reuse detected. All sessions revoked.');
+    }
+    return result;
   } catch (err) {
     if (err instanceof AppError) throw err;
     throw new AppError('UNAUTHORIZED', 401, 'Invalid or expired refresh token');
@@ -473,15 +454,20 @@ const logout = async (refreshTokenStr, userId) => {
       throw new AppError('FORBIDDEN', 403, 'You do not have permission to revoke this token');
     }
 
-    // Revoke ONLY the presented session. Use "revoke all others" or admin
-    // force-logout for full termination — single logout must not kill mobile+desktop.
-    await RefreshToken.update(
-      { revokedAt: new Date() },
-      { where: { id: tokenRecord.id, revokedAt: null } }
-    );
-    try {
-      require('../../utils/tokenBlocklist').revokeSession(tokenRecord.id);
-    } catch { /* kill-switch best-effort */ }
+    // Serialize with refresh using the user lock, then follow any rotation
+    // committed before logout. Other device sessions remain untouched.
+    await sequelize.transaction(async (t) => {
+      await User.findByPk(ownerId, { transaction: t, lock: t.LOCK.UPDATE });
+      let currentId = tokenRecord.id;
+      const visited = new Set();
+      while (currentId && !visited.has(currentId)) {
+        visited.add(currentId);
+        const current = await RefreshToken.findByPk(currentId, { transaction: t, lock: t.LOCK.UPDATE });
+        if (!current || current.userId !== ownerId) break;
+        await current.update({ revokedAt: new Date() }, { transaction: t });
+        currentId = current.replacedByTokenId;
+      }
+    });
   }
   
   try {
@@ -514,7 +500,7 @@ const forgotPassword = async (email) => {
   }
 
   // Quiet per-email throttle: rotating IPs must not inbox-spam one victim.
-  if (isEmailThrottled('forgot', normalizedEmail)) return;
+  if (await isEmailThrottled('forgot', normalizedEmail)) return;
 
   await sequelize.transaction(async (t) => {
     // Delete any existing unused tokens for this user
@@ -528,7 +514,8 @@ const forgotPassword = async (email) => {
       expiresAt: new Date(Date.now() + AUTH_TIME.PASSWORD_RESET_TTL_MS)
     }, { transaction: t });
 
-    const resetUrl = `${getClientBaseUrl()}/reset-password?token=${resetToken}`;
+    const resetPath = user.role === 'customer' ? '/reset-password' : '/admin/reset-password';
+    const resetUrl = `${getClientBaseUrl()}${resetPath}?token=${resetToken}`;
     if (process.env.NODE_ENV === 'development') {
       // Never log the raw token — dev logs persist in history/CI output.
       logger.info(`[Auth] Password reset link generated for ${user.email} (token redacted, 15m TTL)`);
@@ -624,7 +611,7 @@ const resendVerification = async (email) => {
     if (!user || user.emailVerified) return; // Silent return — no state leak
 
     // Quiet per-email throttle (same anti-spam rationale as forgot-password).
-    if (isEmailThrottled('resend', normalizedEmail)) return;
+    if (await isEmailThrottled('resend', normalizedEmail)) return;
 
     await EmailVerificationToken.destroy({ where: { userId: user.id }, transaction: t });
 
@@ -731,6 +718,8 @@ const verifyTwoFactor = async (tempToken, totpCode, ipAddress) => {
     throw new AppError('FORBIDDEN', 403, 'Account deletion period has expired');
   }
 
+  assertMfaEnrollment(user);
+  if (!user.twoFactorEnabled) throw new AppError('UNAUTHORIZED', 401, 'MFA is not enabled');
   const TwoFactorService = require('./twoFactor.service');
   let isValid = false;
   try {
@@ -744,7 +733,7 @@ const verifyTwoFactor = async (tempToken, totpCode, ipAddress) => {
   }
 
   const sessionId = crypto.randomUUID();
-  const tokens = generateTokens(user, sessionId);
+  const tokens = generateTokens(user, sessionId, { mfaVerified: true });
   await RefreshToken.create({
     id: sessionId,
     userId: user.id,
@@ -821,6 +810,8 @@ const loginByPhone = async (phone, ipAddress) => {
 
     return await User.findByPk(newUser.id, { include: authUserInclude, transaction: t });
   });
+
+  assertMfaEnrollment(user);
 
   // If 2FA is enabled, return temp token instead of full auth
   if (user.twoFactorEnabled) {

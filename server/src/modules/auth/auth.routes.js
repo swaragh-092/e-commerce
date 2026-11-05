@@ -32,6 +32,7 @@ const otpController = require('./otp.controller');
 const passport = require('passport');
 const { initializeGoogleStrategy } = require('./oauth.service');
 const { setAuthCookies } = require('./authCookies');
+const { getClientBaseUrl } = require('./authRedirects');
 
 initializeGoogleStrategy();
 
@@ -82,10 +83,10 @@ router.post('/otp/send', otpSendLimiter, validate(otpSendSchema), otpController.
 router.post('/otp/verify', otpVerifyLimiter, validate(otpVerifySchema), otpController.verifyOtp);
 
 // Google OAuth routes
-if (process.env.GOOGLE_CLIENT_ID) {
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  const clientUrl = getClientBaseUrl();
   router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'], session: false }));
-  router.get('/google/callback', passport.authenticate('google', { session: false, failureRedirect: `${process.env.CLIENT_URL || 'http://localhost:5173'}/login?error=oauth_failed` }), (req, res) => {
-    const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+  router.get('/google/callback', passport.authenticate('google', { session: false, failureRedirect: `${clientUrl}/login?error=oauth_failed` }), (req, res) => {
     if (req.user.requiresTwoFactor) {
       res.redirect(`${clientUrl}/login?requiresTwoFactor=true&tempToken=${encodeURIComponent(req.user.tempToken)}`);
     } else {

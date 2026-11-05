@@ -390,7 +390,7 @@ const VariantsPanel = ({
 
       <Grid container spacing={3}>
         <Grid item xs={12} lg={5} sx={{ minWidth: 0 }}>
-          <ProductAttributesSection productId={productId} rows={productAttributes} templates={attributes}
+          <ProductAttributesSection productId={productId} rows={productAttributes} templates={attributes} variants={variants}
             suggestions={suggestedAttributes} loading={loading} error={loadError} canManage={canManageAttributes && !variantBusy}
             onRowsChange={setProductAttributes} onRetry={loadAll} onBusyChange={setAttributesBusy} />
         </Grid>
@@ -404,11 +404,11 @@ const VariantsPanel = ({
               </Button>
             </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Manage stock quantity and SKU{pricingEnabled ? ', plus a price,' : ''} for each option combination.</Typography>
-            {!loading && !loadError && <VariantSetup productId={productId} rows={productAttributes} variants={variants} basePrice={productBasePrice}
+            {!loading && !loadError && <VariantSetup productId={productId} rows={productAttributes} variants={variants} basePrice={productBasePrice} pricingEnabled={pricingEnabled}
               disabled={saving || cloning || deleting || attributesBusy} canManage={canManageVariants} hasUnsavedChanges={hasVariantChanges}
               onBusyChange={setGenerating} onCreated={loadAll} />}
 
-            {!loading && !loadError && variants.length > 0 && <VariantPriceGroups rows={productAttributes} entries={variants}
+            {pricingEnabled && !loading && !loadError && variants.length > 0 && <VariantPriceGroups rows={productAttributes} entries={variants}
               disabled={!canEditVariants || attributesBusy} saveHint="Includes available and unavailable variants. Apply, review the variants, then click Save variant changes."
               onApply={(prices) => {
                 setVariants((current) => current.map((variant) => prices.has(variant.id) ? { ...variant, price: prices.get(variant.id), _dirty: true } : variant));

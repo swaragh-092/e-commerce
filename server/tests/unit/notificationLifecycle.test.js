@@ -9,6 +9,45 @@ const { DEFAULTS } = require('../../src/modules/notification/notification.defaul
 afterEach(() => vi.restoreAllMocks());
 
 describe('Account notification safety', () => {
+  it('queues email-change verification to the new address and includes the confirmation route', async () => {
+    const transaction = { LOCK: { UPDATE: 'UPDATE' } };
+    vi.spyOn(sequelize, 'transaction').mockImplementation((callback) => callback(transaction));
+    const user = {
+      id: 'staff', firstName: 'Staff', email: 'old@example.test', pendingEmail: null,
+      validatePassword: vi.fn().mockResolvedValue(true),
+      update: vi.fn().mockImplementation(async (changes) => Object.assign(user, changes)),
+    };
+    vi.spyOn(User, 'findByPk').mockResolvedValue(user);
+    vi.spyOn(User, 'findOne').mockResolvedValue(null);
+    vi.spyOn(EmailVerificationToken, 'destroy').mockResolvedValue(1);
+    vi.spyOn(EmailVerificationToken, 'create').mockResolvedValue({});
+    const send = vi.spyOn(notifications, 'send').mockResolvedValue(true);
+
+    await expect(users.requestEmailChange('staff', 'New@Example.Test', 'CurrentPassword1!')).resolves.toEqual({ sent: true });
+    expect(user.pendingEmail).toBe('new@example.test');
+    expect(send).toHaveBeenCalledWith('email_change_verification', 'new@example.test', expect.objectContaining({
+      name: 'Staff', verify_url: expect.stringMatching(/\/verify-email-change\?token=/),
+    }), 'staff', null, 'email', transaction);
+  });
+
+  it('does not claim verification was sent when the notification queue rejects it', async () => {
+    const transaction = { LOCK: { UPDATE: 'UPDATE' } };
+    vi.spyOn(sequelize, 'transaction').mockImplementation((callback) => callback(transaction));
+    const user = {
+      id: 'staff', firstName: 'Staff', email: 'old@example.test',
+      validatePassword: vi.fn().mockResolvedValue(true),
+      update: vi.fn().mockResolvedValue(undefined),
+    };
+    vi.spyOn(User, 'findByPk').mockResolvedValue(user);
+    vi.spyOn(User, 'findOne').mockResolvedValue(null);
+    vi.spyOn(EmailVerificationToken, 'destroy').mockResolvedValue(1);
+    vi.spyOn(EmailVerificationToken, 'create').mockResolvedValue({});
+    vi.spyOn(notifications, 'send').mockResolvedValue(false);
+
+    await expect(users.requestEmailChange('staff', 'new@example.test', 'CurrentPassword1!'))
+      .rejects.toMatchObject({ statusCode: 503, message: expect.stringContaining('verification email') });
+  });
+
   it('queues the email-change notice to the old address in the same transaction', async () => {
     const transaction = { LOCK: { UPDATE: 'UPDATE' } };
     vi.spyOn(sequelize, 'transaction').mockImplementation((callback) => callback(transaction));

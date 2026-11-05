@@ -37,9 +37,25 @@ const DEFAULT_ITEMS = [
 ];
 
 const TrustSection = ({ section = {}, items = DEFAULT_ITEMS, mode = 'live', onSelectComponent, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
-  const resolvedItems = Array.isArray(items) && items.length ? items : DEFAULT_ITEMS;
   const trustCardStyle = useComponentStyles('trustCard');
   const compact = mode === 'preview';
+  const hasCustomItems = Array.isArray(section?.items);
+  const resolvedItems = hasCustomItems
+    ? section.items
+    : (Array.isArray(items) && items.length ? items : DEFAULT_ITEMS);
+
+  if (!resolvedItems.length) {
+    if (compact) {
+      return (
+        <Box sx={{ p: 3, textAlign: 'center', bgcolor: 'action.hover', border: '1px dashed', borderColor: 'divider', borderRadius: 2, m: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            Trust Badges section has no items. Add an item or reset to default content in the sidebar.
+          </Typography>
+        </Box>
+      );
+    }
+    return null;
+  }
   const variant = section.variant || trustCardStyle.variant || 'icon-row';
   const cardGrid = variant === 'card-grid';
   const cardRadius = resolveRadius(trustCardStyle.radius);

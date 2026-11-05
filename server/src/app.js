@@ -12,6 +12,7 @@ const { errorHandler } = require('./middleware/errorHandler.middleware');
 const { globalLimiter } = require('./middleware/rateLimiter.middleware');
 const { success, error } = require('./utils/response');
 const logger = require('./utils/logger');
+const seoController = require('./modules/seo/seo.controller');
 
 const app = express();
 
@@ -141,7 +142,12 @@ app.use('/uploads', (req, res) => {
   res.status(404).sendFile(path.join(__dirname, '../public/no-image.png'));
 });
 
-// Serve public statically for robots.txt
+// Serve crawler discovery files from their standard public URLs. Keep these
+// ahead of express.static so the generated robots file and sitemap stay current.
+app.get('/sitemap.xml', seoController.getSitemap);
+app.get('/robots.txt', seoController.getRobots);
+
+// Serve remaining public assets.
 app.use(express.static(path.join(__dirname, '../public'), {
   setHeaders: (res) => {
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
@@ -229,6 +235,7 @@ app.use('/api/pages', pageRoutes);
 app.use('/api/menus', menuRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/enquiries', enquiryRoutes);
+app.use('/api/contact', require('./modules/contact/contact.routes'));
 app.use('/api/search', searchRoutes);
 app.use('/api/api-builder', apiBuilderRoutes);
 app.use('/api/blogs', blogRoutes);

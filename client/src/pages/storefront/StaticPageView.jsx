@@ -11,7 +11,7 @@ import {
 } from '@mui/material';
 import PageService from '../../services/pageService';
 import { getMediaUrl } from '../../utils/media';
-import { Helmet } from 'react-helmet-async';
+import PageSEO from '../../components/common/PageSEO';
 import DOMPurify from 'dompurify';
 
 const StaticPageView = () => {
@@ -62,12 +62,17 @@ const StaticPageView = () => {
     );
   }
 
+  const pageDescription = DOMPurify.sanitize(page.content || '', { ALLOWED_TAGS: [], ALLOWED_ATTR: [] }).replace(/\s+/g, ' ').trim();
+  const seoDescription = page.metaDescription || (pageDescription.length > 160 ? `${pageDescription.slice(0, 157)}...` : pageDescription) || page.title;
+
   return (
     <Box>
-      <Helmet>
-        <title>{page.metaTitle || page.title}</title>
-        {page.metaDescription && <meta name="description" content={page.metaDescription} />}
-      </Helmet>
+      <PageSEO
+        title={page.metaTitle || page.title}
+        description={seoDescription}
+        image={page.bannerUrl ? getMediaUrl(page.bannerUrl) : undefined}
+        type="page"
+      />
 
       {/* Banner Section */}
       {page.bannerUrl ? (

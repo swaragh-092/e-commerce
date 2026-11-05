@@ -32,6 +32,12 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: true,
             field: 'target_id',
         },
+        childDisplayLimit: {
+            type: DataTypes.INTEGER,
+            allowNull: true,
+            field: 'child_display_limit',
+            validate: { min: 1, max: 100 },
+        },
         syncChildren: {
             type: DataTypes.BOOLEAN,
             allowNull: false,

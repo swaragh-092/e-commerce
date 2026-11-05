@@ -7,6 +7,7 @@ const { Order, User, Product, ProductVariant, Role, Permission, Review } = db;
 const AppError = require('../../utils/AppError');
 const logger = require('../../utils/logger');
 const AuditService = require('../audit/audit.service');
+const { revokeUserSessions, revokeRoleSessions } = require('../auth/sessionRevocation');
 const { ACTIONS, ENTITIES, ROLES } = require('../../config/constants');
 const {
   PERMISSIONS,
@@ -616,6 +617,14 @@ const updateAccessRole = async (roleId, payload, actingUser) => {
       }
     }
 
+    const currentPermissionIds = (role.permissions || []).map(permission => permission.id).sort();
+    const permissionsChanged = payload.permissionIds !== undefined
+      && JSON.stringify([...new Set(permissionIdsToSave)].sort()) !== JSON.stringify(currentPermissionIds);
+    const baseRoleChanged = !role.isSystem && payload.baseRole && payload.baseRole !== role.baseRole;
+    if (permissionsChanged || baseRoleChanged) {
+      // Resolve affected members using the old role identity before a rename.
+      await revokeRoleSessions(role, transaction);
+    }
     if (payload.permissionIds !== undefined) {
       await role.setPermissions(permissionIdsToSave, { transaction });
     }
@@ -742,6 +751,7 @@ const deleteAccessRole = async (roleId, actingUser, replacementRoleId = null) =>
       assertDelegableRole(replacementRole, actingUser);
     }
 
+    await revokeUserSessions(assignedUsers.map(user => user.id), transaction);
     await role.setPermissions([], { transaction });
     await role.destroy({ transaction });
 
@@ -765,11 +775,13 @@ const deleteAccessRole = async (roleId, actingUser, replacementRoleId = null) =>
   });
 };
 
-const listAccessUsers = async ({ page, limit, search, roleId, includeCustomers = false }, actingUser = null) => {
+const listAccessUsers = async ({ page, limit, search, roleId, status, includeCustomers = false }, actingUser = null) => {
   const { limit: pageSize, offset } = getPagination(page, limit);
   const where = {};
   const andClauses = [];
   const include = [...userRoleInclude];
+
+  if (status) where.status = status;
 
   if (roleId) {
     const targetRole = await Role.findByPk(roleId);
@@ -909,8 +921,11 @@ const updateUserRole = async (userId, roleId, actingUser) => {
       }
     }
 
+    const assignmentChanged = user.role !== role.baseRole
+      || user.roles?.length !== 1 || user.roles[0].id !== role.id;
     await user.update({ role: role.baseRole }, { transaction });
     await user.setRoles([role], { transaction });
+    if (assignmentChanged) await revokeUserSessions([user.id], transaction);
 
     const updatedUser = await User.findByPk(user.id, { include: userRoleInclude, transaction });
 
@@ -927,6 +942,93 @@ const updateUserRole = async (userId, roleId, actingUser) => {
       }, transaction);
     } catch (error) {}
 
+    return serializeAccessUser(updatedUser, {}, actingUser);
+  });
+};
+
+const updateStaffStatus = async (userId, status, reason, actingUser) => {
+  const actingUserId = typeof actingUser === 'object' && actingUser ? actingUser.id : actingUser;
+  const isSuperAdmin = isSuperAdminUser(actingUser);
+  if (String(userId) === String(actingUserId)) {
+    throw new AppError('VALIDATION_ERROR', 400, 'You cannot suspend or reactivate your own account');
+  }
+
+  return db.sequelize.transaction(async (transaction) => {
+    const user = await User.findByPk(userId, {
+      include: userRoleInclude,
+      transaction,
+      lock: { level: 'UPDATE', of: User },
+    });
+    if (!user) throw new AppError('NOT_FOUND', 404, 'Staff account not found');
+    if (user.status === 'banned') {
+      throw new AppError('VALIDATION_ERROR', 400, 'Banned accounts cannot be reactivated through staff suspension controls');
+    }
+
+    const assignedRoles = user.roles || [];
+    const isCustomerOnly = user.role === ROLES.CUSTOMER
+      && !assignedRoles.some((role) => role.slug !== ROLES.CUSTOMER);
+    if (isCustomerOnly) {
+      throw new AppError('VALIDATION_ERROR', 400, 'Customer accounts must be managed from the Customers page');
+    }
+    if (user.id === actingUserId) {
+      throw new AppError('VALIDATION_ERROR', 400, 'You cannot suspend or reactivate your own account');
+    }
+
+    const isTargetSuperAdmin = user.role === ROLES.SUPER_ADMIN || assignedRoles.some(
+      (role) => role.slug === ROLES.SUPER_ADMIN || role.baseRole === ROLES.SUPER_ADMIN
+    );
+    if (isTargetSuperAdmin && !isSuperAdmin) {
+      throw new AppError('FORBIDDEN', 403, 'Only super admins can suspend or reactivate super admin accounts');
+    }
+    const isTargetAdmin = assignedRoles.some((role) => role.slug === ROLES.ADMIN)
+      || (user.role === ROLES.ADMIN && assignedRoles.length === 0);
+    if (isTargetAdmin && !isSuperAdmin) {
+      throw new AppError('FORBIDDEN', 403, 'Only super admins can suspend or reactivate admin accounts');
+    }
+
+    if (isTargetSuperAdmin && user.status === 'active' && status !== 'active') {
+      const activeSuperAdmins = await db.sequelize.query(
+        `SELECT u.id FROM users u
+         LEFT JOIN user_roles ur ON ur.user_id = u.id
+         LEFT JOIN roles r ON r.id = ur.role_id
+         WHERE u.status = 'active' AND u.deleted_at IS NULL
+           AND (u.role = 'super_admin' OR r.slug = 'super_admin')
+         FOR UPDATE OF u`,
+        { transaction, type: db.sequelize.QueryTypes.SELECT }
+      );
+      if (new Set(activeSuperAdmins.map((row) => row.id)).size <= 1) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Cannot suspend the last active super admin');
+      }
+    }
+
+    if (user.status === status) return serializeAccessUser(user, {}, actingUser);
+
+    const previousStatus = user.status;
+    await user.update({ status }, { transaction });
+
+    if (status !== 'active' && db.RefreshToken) {
+      const activeSessions = await db.RefreshToken.findAll({
+        where: { userId, revokedAt: null }, attributes: ['id'], transaction,
+      });
+      await db.RefreshToken.update(
+        { revokedAt: new Date() },
+        { where: { userId, revokedAt: null }, transaction }
+      );
+      try {
+        const tokenBlocklist = require('../../utils/tokenBlocklist');
+        activeSessions.forEach((session) => tokenBlocklist.revokeSession(session.id));
+      } catch { /* database revocation remains authoritative */ }
+    }
+
+    await AuditService.log({
+      userId: actingUserId,
+      action: ACTIONS.STATUS_CHANGE,
+      entity: ENTITIES.USER,
+      entityId: user.id,
+      changes: { status: { old: previousStatus, new: status }, reason: reason.trim() },
+    }, transaction);
+
+    const updatedUser = await User.findByPk(user.id, { include: userRoleInclude, transaction });
     return serializeAccessUser(updatedUser, {}, actingUser);
   });
 };
@@ -1211,6 +1313,7 @@ module.exports = {
   deleteAccessRole,
   listAccessUsers,
   updateUserRole,
+  updateStaffStatus,
   createStaffUser,
   deleteStaffUser,
 };

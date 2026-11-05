@@ -43,7 +43,7 @@ class EnquiryService {
       variant = await ProductVariant.findOne({
         where: { id: variantId, productId, isActive: true },
         include: [{ model: VariantOption, as: 'options', include: [
-          { model: AttributeTemplate, as: 'attribute' },
+          { model: AttributeTemplate, as: 'attribute', paranoid: false },
           { model: AttributeValue, as: 'value' },
         ] }],
       });
@@ -250,7 +250,7 @@ class EnquiryService {
       { model: Product, as: 'product', attributes: ['id', 'name', 'slug'], required: false },
       { model: ProductVariant, as: 'variant', attributes: ['id', 'sku'], required: false, include: [
         { model: VariantOption, as: 'options', separate: true, include: [
-          { model: AttributeTemplate, as: 'attribute' },
+          { model: AttributeTemplate, as: 'attribute', paranoid: false },
           { model: AttributeValue, as: 'value' },
         ] },
       ] },
@@ -292,21 +292,33 @@ class EnquiryService {
   /**
    * Update enquiry status
    */
-  async updateStatus(id, status) {
-    const validStatuses = ['pending', 'responded', 'closed'];
+  async updateStatus(id, status, adminUserId = null) {
+    const validStatuses = ['pending', 'responded', 'closed', 'closed_converted', 'closed_lost'];
     if (!validStatuses.includes(status)) {
       throw new AppError('VALIDATION_ERROR', 400, 'Invalid status');
     }
-
-    const enquiry = await Enquiry.findByPk(id);
-    if (!enquiry) {
-      throw new AppError('NOT_FOUND', 404, 'Enquiry not found');
-    }
-
-    enquiry.status = status;
-    await enquiry.save();
-
-    return enquiry;
+    return sequelize.transaction(async (transaction) => {
+      const enquiry = await Enquiry.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+      if (!enquiry) throw new AppError('NOT_FOUND', 404, 'Enquiry not found');
+      if (enquiry.status === status) return enquiry;
+      enquiry.status = status;
+      await enquiry.save({ transaction });
+      if (['closed_converted', 'closed_lost'].includes(status)) {
+        const product = enquiry.productId ? await Product.findByPk(enquiry.productId, { transaction }) : null;
+        const variables = {
+          enquiry_id: enquiry.id, notification_event_id: require('crypto').randomUUID(),
+          customerName: enquiry.name, message: enquiry.message,
+          productName: product?.name || (enquiry.cartItems ? 'Cart Items' : 'General Enquiry'),
+          status_label: status === 'closed_converted' ? 'Closed – Converted' : 'Closed – Lost',
+        };
+        const event = `enquiry_${status}`;
+        const routed = await notificationService.sendEvent(event, { variables, transaction });
+        if (routed === null) {
+          await notificationService.send(`${event}_customer`, enquiry.email, variables, adminUserId, null, 'email', transaction);
+        }
+      }
+      return enquiry;
+    });
   }
 
   /**
@@ -343,10 +355,23 @@ class EnquiryService {
     const transaction = await sequelize.transaction();
 
     try {
-      if (enquiry.status === 'pending') {
-        enquiry.status = 'responded';
-        await enquiry.save({ transaction });
-      }
+      // Serialize replies on this enquiry so simultaneous staff replies are retained.
+      const current = await Enquiry.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+      if (!current) throw new AppError('NOT_FOUND', 404, 'Enquiry not found');
+      const sender = adminUserId ? await User.findByPk(adminUserId, {
+        attributes: ['id', 'firstName', 'lastName', 'email'], transaction,
+      }) : null;
+      current.status = current.status === 'pending' ? 'responded' : current.status;
+      current.replies = [...(current.replies || []), {
+        id: templateVars.notification_event_id,
+        message: replyMessage.trim(),
+        senderId: adminUserId,
+        senderName: sender ? [sender.firstName, sender.lastName].filter(Boolean).join(' ') || sender.email : 'Staff',
+        createdAt: new Date().toISOString(),
+      }];
+      await current.save({ transaction });
+      enquiry.status = current.status;
+      enquiry.replies = current.replies;
 
       const routed = await notificationService.sendEvent('enquiry_replied', { variables: templateVars, transaction });
       const queued = routed === null ? await notificationService.send(
@@ -367,6 +392,7 @@ class EnquiryService {
     } catch (err) {
       await transaction.rollback();
       console.error('[EnquiryService] Failed to send reply email and update status:', err);
+      if (err instanceof AppError && err.statusCode < 500) throw err;
       throw new AppError('INTERNAL_SERVER_ERROR', 500, 'Failed to send reply email');
     }
 

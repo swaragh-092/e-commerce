@@ -3,9 +3,16 @@
 const MenuService = require('./menu.service');
 const { success } = require('../../utils/response');
 
+exports.getPublicMenuChildren = async (req, res, next) => {
+    try {
+        const page = await MenuService.getPublicMenuChildren(req.params.menuId, req.params.itemId, req.query);
+        return success(res, page, 'Menu children retrieved successfully');
+    } catch (err) { next(err); }
+};
+
 exports.getPublicMenu = async (req, res, next) => {
     try { 
-        const menu = await MenuService.getPublicMenuByLocation(req.params.location);
+        const menu = await MenuService.getPublicMenuByLocation(req.params.location, { hideEmpty: req.query.hideEmpty });
         return success(res, menu, 'Menu retrieved successfully');
     } catch (err) {
         next(err);
@@ -13,8 +20,7 @@ exports.getPublicMenu = async (req, res, next) => {
 };
 exports.getPublicCustomMenu = async (req, res, next) => {
     try {
-        console.log(req.params);
-        const menu = await MenuService.getPublicMenuBySlug(req.params.slug);
+        const menu = await MenuService.getPublicMenuBySlug(req.params.slug, { hideEmpty: req.query.hideEmpty });
         return success(res, menu, 'Menu retrieved successfully');
     } catch (err) {
         next(err);
@@ -147,6 +153,5 @@ exports.adminRestoreMenuItem = async (req, res, next) => {
         next(err);
     }
 };
-
 
 

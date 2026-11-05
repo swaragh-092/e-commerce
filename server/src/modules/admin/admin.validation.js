@@ -7,6 +7,20 @@ const updateUserRoleSchema = Joi.object({
   roleId: Joi.string().uuid().required(),
 });
 
+const updateStaffStatusSchema = Joi.object({
+  status: Joi.string().valid('active', 'inactive').required(),
+  reason: Joi.string().trim().min(5).max(500).required(),
+});
+
+const accessUsersQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(1000).default(20),
+  search: Joi.string().trim().max(200).allow(''),
+  roleId: Joi.string().uuid().allow(''),
+  status: Joi.string().valid('active', 'inactive', 'banned').allow(''),
+  includeCustomers: Joi.boolean().default(false),
+});
+
 const rolePayload = {
   name: Joi.string().max(100).required(),
   description: Joi.string().max(255).allow('', null),
@@ -56,10 +70,7 @@ const createStaffUserSchema = Joi.object({
   firstName: Joi.string().trim().min(1).max(100).required(),
   lastName: Joi.string().trim().min(1).max(100).required(),
   email: Joi.string().email({ tlds: { allow: false } }).required().lowercase().trim(),
-  password: Joi.string()
-    .min(8)
-    .pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])'))
-    .message('Password must be at least 8 characters long and include uppercase, lowercase, number, and special character (!@#$%^&*)')
+  password: require('../auth/passwordPolicy')
     .when('sendInvitation', { is: true, then: Joi.optional(), otherwise: Joi.required() }),
   roleId: Joi.string().uuid().required(),
 });
@@ -71,12 +82,18 @@ const analyticsQuerySchema = Joi.object({
   compare: Joi.boolean().default(false),
 });
 
+const catalogAnalyticsQuerySchema = Joi.object({
+  period: Joi.string().valid('7d', '30d', '90d', '12m').default('30d'),
+});
+
 const analyticsTrendSchema = Joi.object({
   period: Joi.string().valid('daily', 'weekly', 'monthly').default('monthly'),
 });
 
 module.exports = {
   updateUserRoleSchema,
+  updateStaffStatusSchema,
+  accessUsersQuerySchema,
   createRoleSchema,
   updateRoleSchema,
   deleteRoleSchema,
@@ -84,5 +101,6 @@ module.exports = {
   lowStockQuerySchema,
   createStaffUserSchema,
   analyticsQuerySchema,
+  catalogAnalyticsQuerySchema,
   analyticsTrendSchema,
 };

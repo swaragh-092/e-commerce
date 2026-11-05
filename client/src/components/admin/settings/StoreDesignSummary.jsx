@@ -135,6 +135,8 @@ const StoreDesignSummary = ({ scope = 'global', page, form = {}, homepageSection
             <Button
               component={Link}
               to={pageConfig.target}
+              target="_blank"
+              rel="noopener noreferrer"
               size="small"
               color="inherit"
               endIcon={<OpenInNewIcon fontSize="small" />}
@@ -167,6 +169,8 @@ const StoreDesignSummary = ({ scope = 'global', page, form = {}, homepageSection
           <Button
             component={Link}
             to={config.target}
+            target="_blank"
+            rel="noopener noreferrer"
             size="small"
             color="inherit"
             endIcon={<OpenInNewIcon fontSize="small" />}

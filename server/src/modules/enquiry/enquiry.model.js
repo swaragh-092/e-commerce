@@ -2,6 +2,7 @@ module.exports = (sequelize, DataTypes) => {
   const Enquiry = sequelize.define(
     'Enquiry',
     {
+      replies: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
       assignedUserId: { type: DataTypes.UUID, allowNull: true },
       id: {
         type: DataTypes.UUID,
@@ -30,7 +31,7 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: 1,
       },
       status: {
-        type: DataTypes.ENUM('pending', 'responded', 'closed'),
+        type: DataTypes.ENUM('pending', 'responded', 'closed', 'closed_converted', 'closed_lost'),
         allowNull: false,
         defaultValue: 'pending',
       }, 

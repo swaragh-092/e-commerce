@@ -195,8 +195,8 @@ const LoginPage = () => {
     }
   };
 
-  const handleGoogleLogin = () => {
-    window.location.href = authService.getGoogleOAuthUrl();
+  const handleGoogleLogin = async () => {
+    await authService.startGoogleOAuth();
   };
 
   const handleSendOtp = async () => {

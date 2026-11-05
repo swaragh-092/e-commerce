@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SettingsPage from '../../../pages/admin/SettingsPage';
 import { SettingsContext } from '../../../context/ThemeContext';
 import { updateSettings } from '../../../services/adminService';
+import { getAllSettings } from '../../../services/settingsService';
 import { PERMISSIONS } from '../../../utils/permissions';
 
 const state = vi.hoisted(() => ({ features: {}, mode: 'catalog', denied: [], superAdmin: true }));
@@ -24,13 +25,12 @@ vi.mock('../../../services/settingsService', () => ({
 }));
 vi.mock('../../../services/adminService', () => ({
   updateSettings: vi.fn(async () => ({})), getEmailTemplates: vi.fn(async () => ({ data: { data: [] } })),
-  updateEmailTemplate: vi.fn(), sendTestEmail: vi.fn(),
+  updateEmailTemplate: vi.fn(), sendTestEmail: vi.fn(), sendTestNotification: vi.fn(),
 }));
 vi.mock('../../../context/NotificationContext', () => ({ useNotification: () => ({ notify: vi.fn() }) }));
 vi.mock('../../../components/common/MediaPicker', () => ({ default: () => null }));
 vi.mock('../../../components/admin/settings/LiveStorefrontPreview', () => ({ default: () => null }));
 vi.mock('../../../components/admin/settings/SettingsPreviewPanel', () => ({ default: () => null }));
-vi.mock('../../../components/admin/settings/MessagingSettingsPanel', () => ({ default: () => <div>Messaging settings</div> }));
 vi.mock('../../../components/admin/settings/InventoryAlertSettingsPanel', () => ({ default: () => <div>Inventory alert configuration</div> }));
 vi.mock('../../../components/admin/settings/CssVarsPanel', () => ({ default: () => null }));
 
@@ -114,18 +114,50 @@ describe('Settings follow platform features and permissions', () => {
     expect(screen.queryByRole('link', { name: /Open Gateway Manager/ })).not.toBeInTheDocument();
   });
 
-  it('filters Notifications summaries by capabilities and avoids reverting platform switches on Save All', async () => {
+  it('keeps channel setup while removing recipient, acknowledgement and event sections from General Settings', async () => {
+    getAllSettings.mockResolvedValueOnce({
+      general: { storeName: 'Test Shop', mode: 'catalog' }, sku: { prefix: 'CAT' },
+      features: { themes: false }, visibility: { adminCart: true },
+      messaging: { emailEnabled: true, enquiryCustomerAcknowledgementEnabled: false,
+        eventRecipientUserIds: { enquiries: [] }, notificationRules_enquiry_received: { version: 1, rules: [] } },
+    });
     render(view());
     await screen.findByDisplayValue('Test Shop');
     openTab('Notifications');
-    expect(screen.getByText('Welcome', { exact: true })).toBeInTheDocument();
-    expect(screen.getByText('New Enquiry — Staff', { exact: true })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'SMTP Host' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Enable Email Notifications' })).toBeChecked();
+    expect(screen.queryByRole('link', { name: /Manage notifications/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Admin and staff email recipients')).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Use default admin recipients' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Customer enquiry acknowledgement')).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Email acknowledgement to customer' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Event notifications', { exact: true })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole('textbox', { name: 'SMTP Host' }), { target: { value: 'smtp.example.test' } });
+    fireEvent.click(screen.getByRole('button', { name: 'SMS (Twilio)' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Enable SMS Notifications' }));
+    fireEvent.click(screen.getByRole('button', { name: 'WhatsApp (Twilio)' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Enable WhatsApp Notifications' }));
+    expect(screen.queryByText('Welcome', { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByText('New Enquiry — Staff', { exact: true })).not.toBeInTheDocument();
     expect(screen.queryByText('Order Placed', { exact: true })).not.toBeInTheDocument();
     expect(screen.queryByText('Inventory alert configuration')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Save All' }));
     await waitFor(() => expect(updateSettings).toHaveBeenCalled());
     const payload = updateSettings.mock.calls[0][0];
     expect(payload).toContainEqual({ group: 'sku', key: 'prefix', value: 'CAT' });
+    expect(payload).toContainEqual({ group: 'messaging', key: 'emailEnabled', value: true });
+    expect(payload).toContainEqual({ group: 'messaging_credentials', key: 'smtp_host', value: 'smtp.example.test' });
+    expect(payload).toContainEqual({ group: 'messaging', key: 'smsEnabled', value: true });
+    expect(payload).toContainEqual({ group: 'messaging', key: 'whatsappEnabled', value: true });
+    expect(payload.some(({ group, key }) => group === 'messaging' && (['eventRecipientUserIds', 'enquiryCustomerAcknowledgementEnabled'].includes(key) || key.startsWith('notificationRules_')))).toBe(false);
     expect(payload.some(({ group, key }) => ['features', 'visibility'].includes(group) || (group === 'general' && key === 'mode'))).toBe(false);
+  });
+
+  it('keeps inventory delivery controls available when inventory is enabled', async () => {
+    state.features = { ...state.features, cart: true };
+    render(view());
+    await screen.findByDisplayValue('Test Shop');
+    openTab('Notifications');
+    expect(screen.getByText('Inventory alert configuration')).toBeInTheDocument();
   });
 });

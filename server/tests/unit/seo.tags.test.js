@@ -22,6 +22,13 @@ describe('tag SEO', () => {
     expect(html).toContain('Summer Planting | Store');
     expect(html).toContain('"@type":"CollectionPage"');
   });
+  it('normalizes long trailing slash runs without a regex and rejects nested tag paths', async () => {
+    const getPublicTag = vi.spyOn(tags, 'getPublicTagBySlug').mockResolvedValue({ name: 'Summer', slug: 'summer', description: '' });
+    const metadata = await seo.getMetadataByPath(`/tags/summer${'/'.repeat(5000)}?sort=price`);
+    expect(metadata.canonicalUrl).toBe('https://shop.example.test/tags/summer');
+    await expect(seo.getMetadataByPath('/tags/summer/extra')).rejects.toMatchObject({ statusCode: 404 });
+    expect(getPublicTag).toHaveBeenCalledTimes(1);
+  });
   it('uses a useful fallback description and excludes unavailable tags even when SEO overrides exist', async () => {
     vi.spyOn(tags, 'getPublicTagBySlug').mockResolvedValueOnce({ name: 'Summer', slug: 'summer', description: '' }).mockRejectedValue({ statusCode: 404 });
     expect((await seo.getMetadataByPath('/tags/summer')).description).toBe('Browse products tagged Summer.');
@@ -38,6 +45,12 @@ describe('tag SEO', () => {
     expect(metadata.canonicalUrl).toBe('https://shop.example.test/tags/summer');
   });
   it('adds only public tag slugs to the sitemap using the configured canonical origin', async () => {
+    vi.spyOn(db.Setting, 'findAll').mockResolvedValue([]);
+    vi.spyOn(db.Setting, 'findOne').mockResolvedValue(null);
+    vi.spyOn(db.SeoOverride, 'findAll').mockResolvedValue([]);
+    vi.spyOn(db.Page, 'findAll').mockResolvedValue([]);
+    vi.spyOn(db.BlogPost, 'findAll').mockResolvedValue([]);
+    vi.spyOn(db.Brand, 'findAll').mockResolvedValue([]);
     vi.spyOn(db.Product, 'findAll').mockResolvedValue([]);
     vi.spyOn(db.Category, 'findAll').mockResolvedValue([]);
     vi.spyOn(tags, 'getPublicTags').mockResolvedValue([{ slug: 'summer-planting' }]);
@@ -50,7 +63,7 @@ describe('tag SEO', () => {
     const html = seo.injectMetadataIntoHtml({ ...defaults, title: 'Summer', schemaType: 'CollectionPage', description, canonicalUrl: 'https://shop.example.test/tags/summer' }, '<html><head></head><body></body></html>');
     expect(html).not.toContain('</script><script>');
     const json = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1];
-    expect(JSON.parse(json).description).toBe(description);
+    expect(JSON.parse(json)['@graph'].find((node) => node['@type'] === 'CollectionPage').description).toBe(description);
   });
   it('returns a real 404 and noindex for crawler requests to unavailable tags', async () => {
     vi.spyOn(seo, 'renderHtmlForPath').mockRejectedValue({ statusCode: 404 });

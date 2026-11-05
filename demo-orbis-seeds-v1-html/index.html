@@ -18,6 +18,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@300;400;500;700;900&display=swap"
         rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&display=swap"
+        rel="stylesheet">
+    <link href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@100,200,300,400,500,700,800,900&display=swap"
+        rel="stylesheet">
     <!-- owlCarousel -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/OwlCarousel2/2.3.4/assets/owl.carousel.min.css"
         integrity="sha512-tS3S5qG0BlhnQROyJXvNjeEM4UpMXHrQfTGmbQ1gKmelCxlSEBUaxhRBj/EFTzpbP4RVSrpEikbmdJobCvhE3g=="
@@ -184,44 +188,51 @@
                 <input type="radio" id="banner1" class="sec-1-input" name="banner" checked>
                 <input type="radio" id="banner2" class="sec-1-input" name="banner">
                 <input type="radio" id="banner3" class="sec-1-input" name="banner">
-                <div class="slider">
-
-                    <div id="top-banner-1" class="banner">
-                        <div class="fluid-container">
-                            <div class="banner-inner-wrapper">
-                                <h2>Best Quality Seeds for the World</h2>
-                                <div class="common-btn-parent">
-                                    <a href="javascript:;" class="common-btn">Know More</a>
-                                </div>
+                <div class="slider" aria-hidden="true">
+                    <div id="top-banner-1" class="banner"></div>
+                    <div id="top-banner-2" class="banner"></div>
+                    <div id="top-banner-3" class="banner"></div>
+                </div>
+                <div class="banner-inner-wrapper fluid-container">
+                    <h2>Best Quality Seeds for the World</h2>
+                    <div class="reality banner-statistics" role="group" aria-label="Orbi Seeds in numbers">
+                        <div class="counter">
+                            <div class="count">
+                                <span class="counter-value" data-count="100">100</span>
+                                <span>+</span>
                             </div>
+                            <h3>Years of Collective Seed Industry Experience</h3>
+                        </div>
+                        <div class="counter">
+                            <div class="count">
+                                <span class="counter-value" data-count="25">25</span>
+                                <span>+</span>
+                            </div>
+                            <h3>Countries</h3>
+                        </div>
+                        <div class="counter">
+                            <div class="count">
+                                <span class="counter-value" data-count="500">500</span>
+                                <span>+</span>
+                            </div>
+                            <h3>Clients</h3>
+                        </div>
+                        <div class="counter">
+                            <div class="count">
+                                <span class="counter-value" data-count="1000">1000</span>
+                                <span>+</span>
+                            </div>
+                            <h3>Hybrids/<wbr>Varieties</h3>
                         </div>
                     </div>
-                    <div id="top-banner-2" class="banner">
-                        <div class="fluid-container">
-                            <div class="banner-inner-wrapper">
-                                <h2>Best Quality Seeds for the World</h2>
-                                <div class="common-btn-parent">
-                                    <a href="javascript:;" class="common-btn">Know More</a>
-                                </div>
-                            </div>
-                        </div>vision-mission-left-in
-                    </div>
-                    <div id="top-banner-3" class="banner">
-                        <div class="fluid-container">
-                            <div class="banner-inner-wrapper">
-                                <h2>Best Quality Seeds for the World</h2>
-                                <div class="common-btn-parent">
-                                    <a href="javascript:;" class="common-btn">Know More</a>
-                                </div>
-                            </div>
-                        </div>
+                    <div class="common-btn-parent">
+                        <a href="about-orbis.html" class="common-btn">Know More</a>
                     </div>
                 </div>
                 <nav>
                     <div class="controls-wrapper">
                         <div class="fluid-container">
                             <div class="controls">
-                                <input type="radio" id="banner1" name="banner">
                                 <label for="banner1">
                                     <button class="banner-1-go">
                                         <img src="images/icons/next.png" alt="Next icon">
@@ -233,7 +244,7 @@
                                 </label>
 
 
-                                <label for="banner1">
+                                <label for="banner2">
                                     <button class="banner-1-go">
                                         <img src="images/icons/next.png" alt="Next icon">
                                     </button>
@@ -243,7 +254,7 @@
                                     Innovating <br> Sustainable Farming Solutions
                                 </label>
 
-                                <label for="banner1">
+                                <label for="banner3">
                                     <button class="banner-1-go">
                                         <img src="images/icons/next.png" alt="Next icon">
                                     </button>
@@ -494,8 +505,9 @@
                 <div class="founded-inner">
                     <div class="founded-left">
                         <div class="founded-left-img">
-                            <img src="images/founded-bg.jpg" alt="Image">
+                            <img src="images/seeds-and-vegetables.jpg" alt="Vegetable seeds and fresh vegetables growing in a field">
                         </div>
+                        <img class="founded-logo" src="images/orbi-seeds-logo.png" alt="Orbi Seeds">
                         <h2>Founded In October 2016</h2>
                     </div>
 
@@ -511,7 +523,7 @@
                                 <div class="founder-img">
                                     <img src="images/founded/quality.png" alt="Image">
                                 </div>
-                                <h3>Assured Seed <br> Quality</h3>
+                                <h3>Assured Seed <br> Quality standards</h3>
                             </div>
                         </div>
 
@@ -526,7 +538,7 @@
                                 <div class="founder-img">
                                     <img src="images/founded/grade.png" alt="Image">
                                 </div>
-                                <h3>Breeding high-quality products <br> for global markets</h3>
+                                <h3>Premium breeding <br> for global markets</h3>
                             </div>
                         </div>
                     </div>
@@ -540,37 +552,6 @@
                     <h2>We Turn Your Dream Into Reality</h2>
                     <p>Looking for premium-quality seeds for higher yields and successful farming? You’ve come to the
                         right place!</p>
-
-                    <div class="reality">
-                        <div class="counter">
-                            <div class="count">
-                                <span class="counter-value" data-count="100"></span>
-                                <span>+</span>
-                            </div>
-                            <h3>Years of Collective Seed Industry Experience</h3>
-                        </div>
-                        <div class="counter">
-                            <div class="count">
-                                <span class="counter-value" data-count="25"></span>
-                                <span>+</span>
-                            </div>
-                            <h3>Countries</h3>
-                        </div>
-                        <div class="counter">
-                            <div class="count">
-                                <span class="counter-value" data-count="500"></span>
-                                <span>+</span>
-                            </div>
-                            <h3>Clients</h3>
-                        </div>
-                        <div class="counter">
-                            <div class="count">
-                                <span class="counter-value" data-count="1000"></span>
-                                <span>+</span>
-                            </div>
-                            <h3>Hybrids/Varieties</h3>
-                        </div>
-                    </div>
 
                     <div class="common-btn-parent">
                         <a href="research-and-development.html" class="common-btn">Know More</a>
@@ -636,8 +617,12 @@
                             </div>
                         </div>
                         <div class="research-right">
-                            <div class="research-faq">
-                                <div class="acc__card active">
+                            <p>Our Research & Development programme focuses on innovation in genetics, breeding and seed technology to develop high-performing, market-oriented and climate-resilient seed products. Our activities encompass germplasm collection, characterization and evaluation, parental line development, inbred advancement, hybrid development and trait-based selection in most of the vegetable crops. Breeding materials are systematically evaluated for yield, quality, earliness, adaptability, disease and pest resistance, abiotic stress tolerance and other commercially important traits. We also undertake molecular characterization, marker-assisted approaches and crop physiology studies to accelerate the development of superior genetic materials.</p>
+                            <div class="common-btn-parent">
+                                            <a href="research-and-development.html" class="common-btn">Know More</a>
+                                        </div>
+                            <!-- <div class="research-faq"> -->
+                                <!-- <div class="acc__card active">
                                     <div class="acc__title">
                                         <h3>01. Research On Tomato Seeds</h3>
                                     </div>
@@ -651,8 +636,8 @@
                                             <a href="research-and-development.html" class="common-btn">Know More</a>
                                         </div>
                                     </div>
-                                </div>
-                                <div class="acc__card">
+                                </div> -->
+                                <!-- <div class="acc__card">
                                     <div class="acc__title">
                                         <h3>02. Research On Cucumber Seeds</h3>
                                     </div>
@@ -680,15 +665,46 @@
                                             <a href="research-and-development.html" class="common-btn">Know More</a>
                                         </div>
                                     </div>
-                                </div>
-                            </div>
+                                </div> -->
+                            <!-- </div> -->
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="core-values-wrapper">
+
+
+
+        <section class="orbi-catalogue-hero">
+            <div class="fluid-container">
+                <div class="orbi-catalogue-content">
+
+                    <h2>Discover the ORBI Seed Collection</h2>
+                    <p>
+                        Explore innovative seed varieties designed to support
+                        quality crops and successful farming.
+                    </p>
+
+                    <div class="orbi-catalogue-cta">
+                        <div class="common-btn-parent">
+                            <a href="downloads/orbi-catalouge.pdf" class="common-btn" target="_blank">
+                                ORBI Catalogue
+                            </a>
+                        </div>
+
+                        <div class="common-btn-parent">
+                            <a href="downloads/exotic-catalouge.pdf" class="common-btn" target="_blank">
+                                Exotic ORBI Catalogue
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- <div class="core-values-wrapper">
             <div class="fluid-container">
                 <div class="core-value-inner">
                     <h2>Our Core Values</h2>
@@ -700,7 +716,7 @@
                             </div>
                             <div class="core-value-text">
                                 <h3>Accountability</h3>
-                                <a href="javascript:;" class="core-value-btn">Know More</a>
+                                
                             </div>
 
                         </div>
@@ -710,7 +726,7 @@
                             </div>
                             <div class="core-value-text">
                                 <h3>Integrity</h3>
-                                <a href="javascript:;" class="core-value-btn">Know More</a>
+                                
                             </div>
 
                         </div>
@@ -720,14 +736,14 @@
                             </div>
                             <div class="core-value-text">
                                 <h3>Respect</h3>
-                                <a href="javascript:;" class="core-value-btn">Know More</a>
+                                
                             </div>
 
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
+        </div> -->
 
         <div class="contact-us-wrapper">
             <div class="fluid-container">
@@ -739,7 +755,8 @@
                         <div class="section-heading">
                             <h2><span class="first-letter">Contact</span> <span class="first-letter">Us</span></h2>
                         </div>
-                        <form name="valid_cont" id="send" method="POST" action="index.html" onsubmit="return validationCont()">
+                        <form name="valid_cont" id="send" method="POST" action="index.html"
+                            onsubmit="return validationCont()">
                             <div class="form-div">
                                 <label for="name">Name:</label>
                                 <input type="text" id="name" name="textName">
@@ -770,7 +787,7 @@
                     <div class="testimonial-left">
                         <h2>Clients Testimonials</h2>
                         <div class="common-btn-parent">
-                            <a href="javascript:;" class="common-btn">Know More</a>
+                            <a href="testimonials.html" class="common-btn">Know More</a>
                         </div>
                     </div>
 
@@ -778,16 +795,13 @@
                         <div class="testimonial-1">
                             <div class="testimonial-img-name">
                                 <div class="testimonial-img">
-                                    <img src="images/testimonial-1.jpg" alt="Image">
+                                    <img src="images/testimonials/umit-abca.jpeg" alt="Image">
                                 </div>
-                                <h3>Shierley</h3>
+                                <h3>Umit Abca</h3>
                             </div>
-                            <p>Lorem ipsum dolor sit amet consectetur adipisicing elit. Magni reprehenderit ipsam
-                                incidunt
-                                obcaecati
-                                enim consequatur, architecto aut id sit amet consectetur adipisicing elit</p>
+                            <p>We highly value our cooperation with Orbs Seeds, a reliable and experienced partner in seed production and commercial seed supply...</p>
                         </div>
-                        <div class="testimonial-1">
+                        <!-- <div class="testimonial-1">
                             <div class="testimonial-img-name">
                                 <div class="testimonial-img">
                                     <img src="images/testimonial-1.jpg" alt="Image">
@@ -798,13 +812,13 @@
                                 incidunt
                                 obcaecati
                                 enim consequatur, architecto aut id sit amet consectetur adipisicing elit</p>
-                        </div>
+                        </div> -->
                     </div>
                 </div>
             </div>
         </div>
 
-       <!-- footer  -->
+        <!-- footer  -->
 
         <footer>
             <div class="footer-wrapper">
@@ -848,10 +862,9 @@
                                         </a>
                                     </li>
                                     <li>
-                                        <a href="javascript:;">
+                                        <a href="https://maps.app.goo.gl/aJMdXwMyNMD7sE7q6" target="_blank">
                                             <span><img src="images/icons/location.png" alt=""></span>
-                                            <p>#1241, HIG-KHB, 7th B Cross, B Sector, Yelahanka New Town, Bengaluru 560
-                                                064. </p>
+                                            <p>2073, 4th Cross Rd, Bengaluru, 560065, KA, IN</p>
                                         </a>
                                     </li>
                                 </ul>
@@ -866,15 +879,23 @@
                                         </a>
                                     </li>
                                     <li>
-                                        <a href="tel:+18316372149">
+                                        <!-- <a href="tel:+18316372149">
                                             <span><img src="images/icons/telephone.png" alt=""></span>
                                             <p>(+1) 8316372149</p>
+                                        </a> -->
+                                        <a href="tel:+18316372148">
+                                            <span><img src="images/icons/telephone.png" alt=""></span>
+                                            <p>(+1) 831 6372148 </p>
+                                        </a>
+
+                                        <a href="tel:+18316372149">
+                                            <p>(+1) 831 6372149 </p>
                                         </a>
                                     </li>
                                     <li>
-                                        <a href="javascript:;">
+                                        <a href="https://maps.app.goo.gl/ezjHhfFk9SNsYJqr7">
                                             <span><img src="images/icons/location.png" alt=""></span>
-                                            <p>#7600 Fairview Road Hollister, CA-95023</p>
+                                            <p>#7600 Fairview Road Hollister, CA-95023 USA</p>
                                         </a>
                                     </li>
                                 </ul>
@@ -902,7 +923,7 @@
             </div>
         </footer>
 
-<!-- footer  -->
+        <!-- footer  -->
 
         <a id="to-top" href="javascript:;" title="Back to top"><img src="images/go-to-top.png" alt="to-top"></a>
 
@@ -1023,7 +1044,7 @@
             $(".counter-value").each(function () {
                 var t = $(this);
                 var n = t.attr("data-count");
-                $({ countNum: t.text() }).animate({ countNum: n }, {
+                $({ countNum: 0 }).animate({ countNum: n }, {
                     duration: 4000,
                     easing: "swing",
                     step: function () {

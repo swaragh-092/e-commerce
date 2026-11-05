@@ -10,7 +10,7 @@ const signature = (options) => options.map((option) => option.valueId).sort().jo
 const validPrice = (value) => /^\d+(\.\d{0,2})?$/.test(String(value)) && Number(value) <= 99999999.99;
 const validStock = (value) => /^\d+$/.test(String(value)) && Number(value) <= 2147483647;
 
-export default function VariantSetup({ productId, rows, variants, basePrice, disabled, canManage, hasUnsavedChanges, onBusyChange, onCreated }) {
+export default function VariantSetup({ productId, rows, variants, basePrice, pricingEnabled = true, disabled, canManage, hasUnsavedChanges, onBusyChange, onCreated }) {
   const { notify } = useNotification();
   const [busy, setBusy] = useState(false);
   const [review, setReview] = useState(null);
@@ -53,10 +53,10 @@ export default function VariantSetup({ productId, rows, variants, basePrice, dis
     } catch (error) { notify(getApiErrorMessage(error), 'error'); }
     finally { setWorking(false); }
   };
-  const priceValid = validPrice(price);
+  const priceValid = !pricingEnabled || validPrice(price);
   const stockValid = validStock(stock);
   const chosen = entries.filter((entry) => entry.selected);
-  const invalidEntries = chosen.some((entry) => !validPrice(entry.price ?? price) || !validStock(entry.stockQty ?? stock));
+  const invalidEntries = chosen.some((entry) => (pricingEnabled && !validPrice(entry.price ?? price)) || !validStock(entry.stockQty ?? stock));
   const totalStock = chosen.reduce((sum, entry) => sum + Number(entry.stockQty ?? stock), 0);
   const stockOverflow = totalStock > 2147483647;
   const cannotApply = !review || busy || disabled || !canManage || hasUnsavedChanges || stale || Boolean(review?.blockedRemovalCount)
@@ -69,10 +69,10 @@ export default function VariantSetup({ productId, rows, variants, basePrice, dis
     try {
       await attributeService.bulkGenerateVariants(productId, {
         planToken: review.token, confirmRemovals: confirmed,
-        newVariants: chosen.map((entry) => ({ valueIds: entry.valueIds, price: Number(entry.price ?? price), stockQty: Number(entry.stockQty ?? stock) })),
+        newVariants: chosen.map((entry) => ({ valueIds: entry.valueIds, price: Number(pricingEnabled ? entry.price ?? price : basePrice || 0), stockQty: Number(entry.stockQty ?? stock) })),
       });
       setReview(null);
-      notify(variants.length ? 'Variant options updated with your prices and stock.' : 'Variants created with your prices and stock.', 'success');
+      notify(`${variants.length ? 'Variant options updated' : 'Variants created'} with your ${pricingEnabled ? 'prices and ' : ''}stock.`, 'success');
       await onCreated();
     } catch (error) {
       if (error?.response?.status === 409) setStale(true);
@@ -98,16 +98,16 @@ export default function VariantSetup({ productId, rows, variants, basePrice, dis
                 {busy ? 'Preparing preview…' : customSelection ? 'Add missing variants' : variants.length ? 'Review option changes' : `Create ${total} ${total === 1 ? 'variant' : 'variants'}`}
               </Button>
               <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.75 }}>{customSelection ? 'Deleted combinations stay removed unless you choose to add them again.' : 'Preview the combinations before applying changes.'}</Typography>
-            </> : <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Open a variant below to edit its price, stock, SKU, or images.</Typography>}
+            </> : <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Open a variant below to edit its {pricingEnabled ? 'price, ' : ''}stock, SKU, or images.</Typography>}
         </>}
-      {hasUnsavedChanges && <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>Save your price, stock, or image changes below before updating variant options.</Typography>}
+      {hasUnsavedChanges && <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>Save your {pricingEnabled ? 'price, ' : ''}stock, or image changes below before updating variant options.</Typography>}
     </Box>
 
     <Dialog open={Boolean(review)} onClose={() => { if (!busy) setReview(null); }} fullWidth maxWidth="md" aria-labelledby="variant-review-title">
       {review && <>
         <DialogTitle id="variant-review-title">{variants.length ? 'Review variant changes' : 'Create variants'}</DialogTitle>
         <DialogContent dividers sx={{ pt: 2.5 }}>
-          <Typography variant="body2" color="text.secondary">Choose the combinations you sell, then set the MRP and stock for each one. Unchecked combinations will not be created.</Typography>
+          <Typography variant="body2" color="text.secondary">Choose the combinations you sell, then set the {pricingEnabled ? 'MRP and ' : ''}stock for each one. Unchecked combinations will not be created.</Typography>
           <Stack direction="row" useFlexGap flexWrap="wrap" spacing={1} sx={{ my: 2 }}>
             <Chip label={`${chosen.length} selected to create`} color="primary" variant="outlined" />
             <Chip label={`${review.keptCount} unchanged`} variant="outlined" />
@@ -117,12 +117,12 @@ export default function VariantSetup({ productId, rows, variants, basePrice, dis
             <Typography variant="subtitle2" gutterBottom>Bulk defaults</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Defaults fill untouched fields. Edit individual combinations below, or apply these defaults to reset the selected combinations.</Typography>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <TextField label="Starting MRP" type="number" value={price} onChange={(event) => setPrice(event.target.value)} disabled={busy} fullWidth inputProps={{ min: 0, step: 0.01 }} error={!priceValid} helperText={!priceValid ? 'Enter a price with up to 2 decimals.' : 'Price per new variant'} />
+              {pricingEnabled && <TextField label="Starting MRP" type="number" value={price} onChange={(event) => setPrice(event.target.value)} disabled={busy} fullWidth inputProps={{ min: 0, step: 0.01 }} error={!priceValid} helperText={!priceValid ? 'Enter a price with up to 2 decimals.' : 'Price per new variant'} />}
               <TextField label="Starting stock" type="number" value={stock} onChange={(event) => setStock(event.target.value)} disabled={busy} fullWidth inputProps={{ min: 0, step: 1 }} error={!stockValid} helperText={!stockValid ? 'Enter a whole number, 0 or more.' : 'Quantity per new variant'} />
             </Stack>
-            <Button sx={{ mt: 1 }} disabled={busy || !priceValid || !stockValid || !chosen.length} onClick={() => setEntries((current) => current.map((entry) => entry.selected ? { ...entry, price: null, stockQty: null } : entry))}>Apply defaults to selected</Button>
+            <Button sx={{ mt: 1 }} disabled={busy || !priceValid || !stockValid || !chosen.length} onClick={() => setEntries((current) => current.map((entry) => entry.selected ? { ...entry, ...(pricingEnabled ? { price: null } : {}), stockQty: null } : entry))}>Apply defaults to selected</Button>
           </Box>}
-          {chosen.length > 0 && <VariantPriceGroups rows={rows} disabled={busy || disabled || !canManage}
+          {pricingEnabled && chosen.length > 0 && <VariantPriceGroups rows={rows} disabled={busy || disabled || !canManage}
             entries={chosen.map((entry) => ({ id: JSON.stringify([...entry.valueIds].sort()), price: entry.price ?? price,
               options: rows.filter((row) => row.isVariantAttr && entry.valueIds.includes(row.valueId)).map((row) => ({ attributeId: row.attributeId, valueId: row.valueId })) }))}
             saveHint="Applies only to selected new combinations. Existing variants and unchecked combinations stay unchanged. Review, then create the variants."
@@ -141,7 +141,7 @@ export default function VariantSetup({ productId, rows, variants, basePrice, dis
               return <Box key={combo.valueIds.join(',')} role="group" aria-label={combo.label} sx={{ p: 1.5, '& + &': { borderTop: 1, borderColor: 'divider' } }}>
                 {entry ? <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'flex-start' }}>
                   <FormControlLabel sx={{ flex: 1, m: 0, minWidth: 0 }} control={<Checkbox checked={entry.selected} disabled={busy} onChange={(_, selected) => changeEntry(combo.valueIds, { selected })} />} label={<Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>{combo.label}</Typography>} />
-                  <TextField label="MRP" type="number" size="small" value={entry.price ?? price} disabled={busy || !entry.selected} onChange={(event) => changeEntry(combo.valueIds, { price: event.target.value })} inputProps={{ min: 0, step: 0.01 }} sx={{ width: { xs: '100%', sm: 145 } }} error={entry.selected && !validPrice(entry.price ?? price)} helperText={entry.selected && !validPrice(entry.price ?? price) ? 'Up to 2 decimals, 0 or more.' : undefined} />
+                  {pricingEnabled && <TextField label="MRP" type="number" size="small" value={entry.price ?? price} disabled={busy || !entry.selected} onChange={(event) => changeEntry(combo.valueIds, { price: event.target.value })} inputProps={{ min: 0, step: 0.01 }} sx={{ width: { xs: '100%', sm: 145 } }} error={entry.selected && !validPrice(entry.price ?? price)} helperText={entry.selected && !validPrice(entry.price ?? price) ? 'Up to 2 decimals, 0 or more.' : undefined} />}
                   <TextField label="Stock" type="number" size="small" value={entry.stockQty ?? stock} disabled={busy || !entry.selected} onChange={(event) => changeEntry(combo.valueIds, { stockQty: event.target.value })} inputProps={{ min: 0, step: 1 }} sx={{ width: { xs: '100%', sm: 130 } }} error={entry.selected && !validStock(entry.stockQty ?? stock)} helperText={entry.selected && !validStock(entry.stockQty ?? stock) ? 'Whole number, 0 or more.' : undefined} />
                 </Stack> : <Stack direction="row" justifyContent="space-between" spacing={1}><Typography variant="body2">{combo.label}</Typography><Chip size="small" label="Already exists" /></Stack>}
               </Box>;
@@ -151,7 +151,7 @@ export default function VariantSetup({ productId, rows, variants, basePrice, dis
           <Typography variant="body2" sx={{ mt: 1.5 }} aria-live="polite">{chosen.length} to create · {review.addedCount - chosen.length} skipped · New stock: {Number.isFinite(totalStock) ? totalStock.toLocaleString() : '—'}</Typography>
           {!chosen.length && review.addedCount > 0 && <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Select at least one new combination to create, or go back to keep your current variants.</Typography>}
           {stockOverflow && <Alert severity="error" sx={{ mt: 1 }}>The combined stock is too large. Reduce the selected stock quantities.</Alert>}
-          {review.keptCount > 0 && <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>Unchanged variants keep their prices, stock, SKUs, images, and availability.</Typography>}
+          {review.keptCount > 0 && <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>Unchanged variants keep their {pricingEnabled ? 'prices, ' : ''}stock, SKUs, images, and availability.</Typography>}
           {!review.addedCount && !review.removedCount && <Typography variant="body2" sx={{ mt: 2 }}>These variants are already up to date. No option changes are needed.</Typography>}
           {review.removedCount > 0 && <Box sx={{ mt: 2 }}>
             <Divider sx={{ mb: 2 }} /><Typography variant="subtitle2">These variants no longer match your options</Typography>

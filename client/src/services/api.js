@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getSessionId } from './session';
+import { createRefreshCoordinator } from './refreshCoordinator';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
@@ -9,22 +10,26 @@ const api = axios.create({
   },
 });
 
-let isRefreshing = false;
-let failedQueue = [];
-
-const processQueue = (error, token = null) => {
-  failedQueue.forEach(prom => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve(token);
-    }
-  });
-  failedQueue = [];
+const refreshCoordinator = createRefreshCoordinator({
+  key: `auth:refresh-generation:${api.defaults.baseURL}`,
+  refresh: () => axios.post(`${api.defaults.baseURL}/auth/refresh`, {}, { withCredentials: true, timeout: 15000 }),
+});
+export const changeAuthSession = (operation, options) => refreshCoordinator.changeSession(operation, options);
+export const beginAuthSessionChange = () => refreshCoordinator.beginSessionChange();
+export const completeAuthSessionChange = () => refreshCoordinator.completeSessionChange();
+const clearedErrors = new WeakSet();
+const clearSession = error => {
+  if (error && typeof error === 'object') {
+    if (clearedErrors.has(error)) return;
+    clearedErrors.add(error);
+  }
+  try { localStorage.removeItem('userProfile'); } catch { /* Storage may be unavailable. */ }
+  window.dispatchEvent(new Event('auth:unauthorized'));
 };
 
 api.interceptors.request.use(
   (config) => {
+    config._authRefreshVersion = refreshCoordinator.getVersion();
     try {
       if (config && config.headers && !config.headers['X-Session-Id'] && !config.headers['x-session-id']) {
         const sessionId = getSessionId();
@@ -47,31 +52,21 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry && !['/auth/login', '/auth/refresh', '/auth/logout'].some((p) => originalRequest.url?.includes(p))) {
-      if (isRefreshing) {
-        return new Promise(function(resolve, reject) {
-          failedQueue.push({ resolve, reject });
-        }).then(() => {
-          return api(originalRequest);
-        }).catch(err => {
-          return Promise.reject(err);
-        });
+    const authEndpoint = ['/auth/login', '/auth/refresh', '/auth/logout', '/auth/2fa/verify', '/auth/otp/verify']
+      .some(path => originalRequest?.url?.includes(path));
+    if (error.response?.status === 401 && originalRequest && !authEndpoint) {
+      if (originalRequest._retry) {
+        clearSession(error);
+        return Promise.reject(error);
       }
-
       originalRequest._retry = true;
-      isRefreshing = true;
-
       try {
-        await axios.post(`${api.defaults.baseURL}/auth/refresh`, {}, { withCredentials: true });
-        processQueue(null, true);
-        return api(originalRequest);
+        await refreshCoordinator.ensureFresh(originalRequest._authRefreshVersion);
+        originalRequest.timeout ||= 15000;
+        return await refreshCoordinator.replay(originalRequest._authRefreshVersion, () => api(originalRequest));
       } catch (refreshError) {
-        processQueue(refreshError, null);
-        localStorage.removeItem('userProfile');
-        window.dispatchEvent(new Event('auth:unauthorized'));
+        if (refreshError.code !== 'SESSION_CHANGED') clearSession(refreshError);
         return Promise.reject(refreshError);
-      } finally {
-        isRefreshing = false;
       }
     }
 

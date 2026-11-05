@@ -10,9 +10,11 @@ import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { SettingsContext } from '../../../context/ThemeContext';
+import { DesignTokensContext, SettingsContext } from '../../../context/ThemeContext';
 import { buildStorefrontCssVariables, buildStorefrontTheme } from '../../../utils/theme';
+import { resolveDesignTokens } from '../../../utils/designTokens';
 import { getStoreName } from '../../../utils/store';
+import { getPageSections } from '../../../utils/designerSections';
 import SectionRenderer from '../../storefront/sections/SectionRenderer';
 import StorefrontFooter from '../../layout/StorefrontFooter';
 import api from '../../../services/api';
@@ -23,6 +25,16 @@ import PageService from '../../../services/pageService';
 import { useBrands } from '../../../context/BrandContext';
 import { needsCategoryData, needsProductData } from '../../storefront/sections/sectionRegistry';
 import { buildSectionRendererData } from '../../storefront/sections/sectionData';
+
+const PreviewLogo = ({ src, name, maxWidth, showName }) => {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
+  return <>
+    {src && !failed && <Box component="img" src={src} alt={showName ? '' : name} onError={() => setFailed(true)}
+      sx={{ maxWidth: maxWidth || 140, maxHeight: 36, objectFit: 'contain' }} />}
+    {(showName || !src || failed) && <Typography variant="h6" fontWeight={700} color="inherit" noWrap sx={{ maxWidth: 180 }}>{name}</Typography>}
+  </>;
+};
 
 const DEFAULT_ACTIONS_ORDER = ['search', 'cart', 'wishlist', 'account'];
 // Code-split the dev mock renderers — they only matter inside the admin
@@ -249,84 +261,6 @@ const getProductParams = (section) => ({
   status: 'published',
 });
 
-const getPageSections = (settingsObj, activePg, defaultLayoutSections) => {
-  if (activePg === 'home') {
-    return settingsObj?.homepage?.sections || defaultLayoutSections || [];
-  }
-  if (activePg === 'product') {
-    return settingsObj?.productPage?.sections || [
-      { id: 'prod-info',    type: 'product-info',    enabled: true },
-      { id: 'prod-trust',   type: 'value-props',     enabled: true },
-      { id: 'prod-reviews', type: 'product-reviews', enabled: true },
-      { id: 'prod-row',     type: 'product-row',     enabled: true, title: 'You May Also Like', source: 'featured', count: 3 },
-      { id: 'prod-recent',  type: 'recently-viewed', enabled: true },
-    ];
-  }
-  if (activePg === 'category') {
-    return settingsObj?.categoryPage?.sections || [
-      { id: 'cat-header',   type: 'category-header',   enabled: true },
-      { id: 'cat-products', type: 'category-products', enabled: true },
-      { id: 'cat-recent',   type: 'recently-viewed',   enabled: true },
-    ];
-  }
-  if (activePg === 'collection') {
-    return settingsObj?.catalog?.sections || [
-      { id: 'catalog-header',   type: 'catalog-header',   enabled: true },
-      { id: 'catalog-products', type: 'catalog-products', enabled: true },
-      { id: 'catalog-recent',   type: 'recently-viewed',  enabled: true },
-    ];
-  }
-  if (activePg === 'brand') {
-    return settingsObj?.brandsPage?.sections || [
-      { id: 'brands-header', type: 'brands-header', enabled: true },
-      { id: 'brands-list',   type: 'brands-list',   enabled: true },
-    ];
-  }
-  if (activePg === 'blog') {
-    return settingsObj?.blogPage?.sections || [
-      { id: 'blog-header', type: 'blog-header', enabled: true },
-      { id: 'blog-posts',  type: 'blog-posts',  enabled: true },
-    ];
-  }
-  if (activePg === 'account') {
-    return settingsObj?.accountPage?.sections || [
-      { id: 'account-main', type: 'account-main', enabled: true },
-    ];
-  }
-  if (activePg === 'cart') {
-    return settingsObj?.cartPage?.sections || [
-      { id: 'cart-main',   type: 'cart-main',       enabled: true },
-      { id: 'cart-recent', type: 'recently-viewed', enabled: true },
-    ];
-  }
-  if (activePg === 'checkout') {
-    return settingsObj?.checkoutPage?.sections || [
-      { id: 'checkout-main', type: 'checkout-main', enabled: true },
-    ];
-  }
-  if (activePg === 'wishlist') {
-    return settingsObj?.wishlistPage?.sections || [
-      { id: 'wishlist-main', type: 'wishlist-main', enabled: true },
-    ];
-  }
-  if (activePg === 'search') {
-    return settingsObj?.searchPage?.sections || [
-      { id: 'search-main', type: 'search-main', enabled: true },
-    ];
-  }
-  if (activePg === 'not-found') {
-    return settingsObj?.notFoundPage?.sections || [
-      { id: 'not-found-main', type: 'not-found-main', enabled: true },
-    ];
-  }
-  if (activePg === 'orders') {
-    return settingsObj?.ordersPage?.sections || [
-      { id: 'orders-main', type: 'orders-main', enabled: true },
-    ];
-  }
-  return [];
-};
-
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSettings, componentStyles: liveComponentStyles, selectedSectionId, onSelectSection, onSelectComponent, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus, onAddSectionAt, onReorderSection, activePage = "home", compareMode = false }) => {
@@ -445,9 +379,16 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
       ...(settingsSnapshot || {}),
     };
     const cssVariables = buildStorefrontCssVariables(scopedSettings.theme || scopedSettings);
+    const previewTokens = resolveDesignTokens(scopedSettings.theme || scopedSettings);
     const scopedContext = {
       ...parentSettingsContext,
       settings: scopedSettings,
+    };
+    const scopedDesignTokens = {
+      tokens: previewTokens,
+      themeObj: scopedSettings.theme || scopedSettings,
+      cssVariables,
+      isAdminRoute: false,
     };
 
     const announcementSettings = { ...(scopedSettings.announcement || {}), ...announcementStyle };
@@ -505,6 +446,7 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
     const handleCanvasDragEnd = () => setDragState(null);
 
     return (
+    <DesignTokensContext.Provider value={scopedDesignTokens}>
     <SettingsContext.Provider value={scopedContext}>
       <ThemeProvider theme={themeObj}>
         <CssBaseline enableColorScheme />
@@ -554,12 +496,7 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
               onClick={(event) => { event.stopPropagation(); onSelectComponent?.('headerLogo'); }}
               sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, minWidth: 0, cursor: onSelectComponent ? 'pointer' : 'default', px: 0.5, borderRadius: 1, '&:hover': onSelectComponent ? { outline: '2px dashed #ffffff' } : undefined }}
             >
-              {logoUrl ? (
-                <Box component="img" src={logoUrl} alt={storeName} sx={{ maxWidth: navSettings.logoMaxWidth || 140, maxHeight: 36, objectFit: 'contain' }} />
-              ) : null}
-              {navSettings.showStoreName !== false && (
-                <Typography variant="h6" fontWeight={700} color="inherit" noWrap sx={{ maxWidth: 180 }}>{storeName}</Typography>
-              )}
+              <PreviewLogo src={logoUrl} name={storeName} maxWidth={navSettings.logoMaxWidth} showName={navSettings.showStoreName !== false} />
             </Box>
             {navSettings.showMenu !== false && (
               <Stack
@@ -727,6 +664,7 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
         </Box>
       </ThemeProvider>
     </SettingsContext.Provider>
+    </DesignTokensContext.Provider>
     );
   };
 
@@ -780,7 +718,7 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
   }
 
   return (
-    <Box sx={{ width, mx: 'auto', transition: 'width 0.3s ease', overflow: 'hidden', border: mode !== 'desktop' ? '1px solid' : 'none', borderColor: 'divider', borderRadius: mode !== 'desktop' ? 2 : 0 }}>
+    <Box sx={{ width, maxWidth: '100%', mx: 'auto', overflow: 'hidden', border: mode !== 'desktop' ? '1px solid' : 'none', borderColor: 'divider', borderRadius: mode !== 'desktop' ? 2 : 0 }}>
       {previewContent(previewTheme, sections, demo, 'Preview', layout, templateSettings)}
     </Box>
   );

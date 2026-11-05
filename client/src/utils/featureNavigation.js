@@ -21,4 +21,4 @@ export const filterFeatureLinks = (items = [], features = {}) => items
   .map((item) => Array.isArray(item.children)
     ? { ...item, children: filterFeatureLinks(item.children, features) }
     : item)
-  .filter((item) => !(item.targetType === 'none' && item.children?.length === 0));
+  .filter((item) => !(item.targetType === 'none' && item.children?.length === 0 && !item.childrenPagination?.hasMore));

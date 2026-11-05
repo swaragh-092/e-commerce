@@ -18,10 +18,16 @@ import {
   MenuItem,
   Paper,
   Stack,
+  Alert,
+  Link,
+  Tooltip,
   InputAdornment,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import CloseIcon from '@mui/icons-material/Close';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import { Link as RouterLink } from 'react-router-dom';
 import ReplyIcon from '@mui/icons-material/Reply';
 import SearchIcon from '@mui/icons-material/Search';
 import api from '../../services/api';
@@ -30,6 +36,7 @@ import { useNotification } from '../../context/NotificationContext';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
 
+const STATUS_LABELS = { pending: 'Pending', responded: 'Responded', closed: 'Closed (legacy)', closed_converted: 'Closed – Converted', closed_lost: 'Closed – Lost' };
 const ADMIN_PREFIX = import.meta.env.VITE_ADMIN_ROUTE_PREFIX || 'admin';
 
 const useDebounceValue = (value, delay) => {
@@ -53,7 +60,10 @@ const EnquiriesPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [replyMode, setReplyMode] = useState(false);
   const [replyMessage, setReplyMessage] = useState('');
+  const [statusLoading, setStatusLoading] = useState(false);
   const [replyLoading, setReplyLoading] = useState(false);
+  const [replyFeedback, setReplyFeedback] = useState(null);
+  const [copiedField, setCopiedField] = useState('');
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
   const [sortModel, setSortModel] = useState([{ field: 'createdAt', sort: 'desc' }]);
 
@@ -91,17 +101,21 @@ const EnquiriesPage = () => {
   }, [statusFilter, debouncedSearchQuery]);
 
   const handleStatusChange = async (id, newStatus) => {
+    if (statusLoading) return;
+    setStatusLoading(true);
     try {
       await api.patch(`/${ADMIN_PREFIX}/enquiries/${id}/status`, { status: newStatus });
       setRows((prev) =>
         prev.map((eq) => (eq.id === id ? { ...eq, status: newStatus } : eq))
       );
       if (selectedEnquiry && selectedEnquiry.id === id) {
-        setSelectedEnquiry((prev) => ({ ...prev, status: newStatus }));
+        setSelectedEnquiry((prev) => prev?.id === id ? { ...prev, status: newStatus } : prev);
       }
       notify('Enquiry status updated successfully', 'success');
     } catch (err) {
       notify(getApiErrorMessage(err, 'Failed to update status'), 'error');
+    } finally {
+      setStatusLoading(false);
     }
   };
 
@@ -112,19 +126,15 @@ const EnquiriesPage = () => {
       const { data } = await api.post(`/${ADMIN_PREFIX}/enquiries/${selectedEnquiry.id}/reply`, {
         replyMessage: replyMessage.trim(),
       });
-      if (data?.data?.enquiry) {
-        setRows((prev) =>
-          prev.map((eq) => (eq.id === selectedEnquiry.id ? data.data.enquiry : eq))
-        );
-        notify('Reply sent successfully', 'success');
-      } else {
-        notify('Reply sent, but received malformed data from server', 'warning');
-      }
-      setSelectedEnquiry(null);
+      if (!data?.data?.enquiry) throw new Error('The reply response was incomplete. Refresh the enquiry before trying again.');
+      const updated = { ...selectedEnquiry, ...data.data.enquiry };
+      setRows((prev) => prev.map((eq) => eq.id === updated.id ? { ...eq, ...updated } : eq));
+      setSelectedEnquiry(updated);
+      setReplyFeedback({ type: 'success', message: 'Reply sent.' });
       setReplyMode(false);
       setReplyMessage('');
     } catch (err) {
-      notify(getApiErrorMessage(err, 'Failed to send reply'), 'error');
+      setReplyFeedback({ type: 'error', message: getApiErrorMessage(err, 'Failed to send reply. Please try again.') });
     } finally {
       setReplyLoading(false);
     }
@@ -134,6 +144,8 @@ const EnquiriesPage = () => {
     setSelectedEnquiry(null);
     setReplyMode(false);
     setReplyMessage('');
+    setReplyFeedback(null);
+    setCopiedField('');
   };
 
   const handleDialogClose = (event, reason) => {
@@ -147,7 +159,9 @@ const EnquiriesPage = () => {
     switch (status) {
       case 'pending': return 'warning';
       case 'responded': return 'info';
-      case 'closed': return 'success';
+      case 'closed_converted': return 'success';
+      case 'closed_lost': return 'error';
+      case 'closed': return 'default';
       default: return 'default';
     }
   };
@@ -193,8 +207,8 @@ const EnquiriesPage = () => {
     {
       field: 'status',
       headerName: 'Status',
-      width: 130,
-      renderCell: ({ value }) => <Chip label={value} size="small" color={getStatusColor(value)} />,
+      width: 190,
+      renderCell: ({ value }) => <Chip label={STATUS_LABELS[value] || value} size="small" color={getStatusColor(value)} />,
     },
     {
       field: 'actions',
@@ -206,7 +220,7 @@ const EnquiriesPage = () => {
         <IconButton
           size="small"
           color="primary"
-          onClick={() => setSelectedEnquiry(row)}
+          onClick={() => { setSelectedEnquiry(row); setReplyFeedback(null); setCopiedField(''); }}
           aria-label={`View enquiry from ${row.email}`}
         >
           <VisibilityIcon fontSize="small" />
@@ -250,7 +264,9 @@ const EnquiriesPage = () => {
                 <MenuItem value="">All</MenuItem>
                 <MenuItem value="pending">Pending</MenuItem>
                 <MenuItem value="responded">Responded</MenuItem>
-                <MenuItem value="closed">Closed</MenuItem>
+                <MenuItem value="closed_converted">Closed – Converted</MenuItem>
+                <MenuItem value="closed_lost">Closed – Lost</MenuItem>
+                <MenuItem value="closed">Closed (legacy)</MenuItem>
               </Select>
             </FormControl>
           </Box>
@@ -282,6 +298,7 @@ const EnquiriesPage = () => {
         <DataGrid
           rows={rows}
           columns={columns}
+          rowHeight={76}
           rowCount={rowCount}
           loading={loading}
           paginationMode="server"
@@ -299,25 +316,47 @@ const EnquiriesPage = () => {
         <Dialog
           open={Boolean(selectedEnquiry)}
           onClose={handleDialogClose}
-          maxWidth="sm"
+          maxWidth="md"
+          aria-labelledby="enquiry-details-title"
           fullWidth
           disableEscapeKeyDown={replyLoading}
         >
-          <DialogTitle>Enquiry Details</DialogTitle>
+          <DialogTitle id="enquiry-details-title" sx={{ pr: 7 }}>
+            {selectedEnquiry.product?.name ? `${selectedEnquiry.product.name} enquiry` : selectedEnquiry.cartItems?.length ? 'Cart enquiry' : 'Enquiry details'}
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+              <Typography variant="body2" color="text.secondary">
+                {new Date(selectedEnquiry.createdAt || selectedEnquiry.created_at).toLocaleString()}
+              </Typography>
+              <Chip size="small" label={STATUS_LABELS[selectedEnquiry.status] || selectedEnquiry.status} color={getStatusColor(selectedEnquiry.status)} />
+            </Stack>
+            <IconButton aria-label="Close enquiry" onClick={closeDialog} disabled={replyLoading} sx={{ position: 'absolute', top: 12, right: 12 }}><CloseIcon /></IconButton>
+          </DialogTitle>
           <DialogContent dividers>
-            <StaffAssignment kind="enquiries" recordId={selectedEnquiry.id} />
+            <StaffAssignment key={selectedEnquiry.id} kind="enquiries" recordId={selectedEnquiry.id} />
             <Box sx={{ mb: 2 }}>
               <Typography variant="subtitle2" color="text.secondary">Customer Info</Typography>
               <Typography variant="body2"><strong>Name:</strong> {selectedEnquiry.name}</Typography>
-              <Typography variant="body2"><strong>Email:</strong> {selectedEnquiry.email}</Typography>
-              <Typography variant="body2"><strong>Phone:</strong> {selectedEnquiry.phone || 'N/A'}</Typography>
+              {[['Email', selectedEnquiry.email, 'mailto:'], ['Phone', selectedEnquiry.phone, 'tel:']].map(([label, value, prefix]) => (
+                <Stack key={label} direction="row" spacing={1} alignItems="center" sx={{ minHeight: 32 }}>
+                  <Typography variant="body2" fontWeight={600}>{label}:</Typography>
+                  {value ? <>
+                    <Link href={`${prefix}${prefix === 'tel:' ? value.replace(/[^+0-9]/g, '') : value}`} variant="body2" sx={{ overflowWrap: 'anywhere' }}>{value}</Link>
+                    <Tooltip title={`Copy ${label.toLowerCase()}`}><IconButton size="small" aria-label={`Copy ${label.toLowerCase()}`} onClick={async () => {
+                      try { await navigator.clipboard.writeText(value); setCopiedField(label); }
+                      catch { notify(`Could not copy ${label.toLowerCase()}. Please copy it manually.`, 'error'); }
+                    }}><ContentCopyIcon fontSize="inherit" /></IconButton></Tooltip>
+                    {copiedField === label && <Typography variant="caption" role="status">Copied</Typography>}
+                  </> : <Typography variant="body2" color="text.secondary">Not provided</Typography>}
+                </Stack>
+              ))}
             </Box>
 
             <Box sx={{ mb: 2 }}>
               <Typography variant="subtitle2" color="text.secondary">Subject</Typography>
               {selectedEnquiry.product ? (
                 <Box>
-                  <Typography variant="body2">Product: {selectedEnquiry.product.name} (Qty: {selectedEnquiry.quantity})</Typography>
+                  <Link component={RouterLink} to={`/admin/products/${selectedEnquiry.product.id}/edit`} variant="body2">{selectedEnquiry.product.name}</Link>
+                  <Typography variant="body2" sx={{ mt: 0.5 }}>Quantity: {selectedEnquiry.quantity || 1}</Typography>
                   {selectedEnquiry.variant && <Typography variant="body2" color="text.secondary">
                     {getVariantOptionLabel(selectedEnquiry.variant) || selectedEnquiry.variant.sku || 'Selected variant'}
                     {selectedEnquiry.variant.sku ? ` · SKU: ${selectedEnquiry.variant.sku}` : ''}
@@ -329,9 +368,9 @@ const EnquiriesPage = () => {
                   <Box component="ul" sx={{ m: 0, pl: 2.5, color: 'text.secondary' }}>
                     {selectedEnquiry.cartItems.map((item, index) => (
                       <Typography component="li" key={item.id || index} variant="body2" sx={{ py: 0.5 }}>
-                        <strong>{item.product?.name || 'Unknown Product'}</strong>
+                        {item.product?.id || item.productId ? <Link component={RouterLink} to={`/admin/products/${item.product?.id || item.productId}/edit`}>{item.product?.name || 'View product'}</Link> : <strong>{item.product?.name || 'Unknown Product'}</strong>}
                         {item.variant ? ` (${item.variant.optionLabel || item.variant.sku || 'Variant'})` : ''}
-                        {' - '}Qty: {item.quantity}
+                        <Typography component="span" display="block" variant="body2">Quantity: {item.quantity}</Typography>
                       </Typography>
                     ))}
                   </Box>
@@ -348,18 +387,32 @@ const EnquiriesPage = () => {
               </Paper>
             </Box>
 
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>Replies</Typography>
+              {selectedEnquiry.replies?.length ? selectedEnquiry.replies.map((reply) => (
+                <Paper key={reply.id} variant="outlined" sx={{ p: 2, mt: 1 }}>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={0.5} sx={{ mb: 1 }}>
+                    <Typography variant="body2" fontWeight={600}>{reply.senderName || 'Staff'}</Typography>
+                    <Typography component="time" dateTime={reply.createdAt} variant="caption" color="text.secondary">{new Date(reply.createdAt).toLocaleString()}</Typography>
+                  </Stack>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{reply.message}</Typography>
+                </Paper>
+              )) : <Typography variant="body2" color="text.secondary">No saved replies yet.</Typography>}
+            </Box>
+
             <Box>
               <Typography variant="subtitle2" color="text.secondary" gutterBottom>Change Status</Typography>
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                {['pending', 'responded', 'closed'].map((status) => (
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                {['pending', 'responded', 'closed_converted', 'closed_lost'].map((status) => (
                   <Button
                     key={status}
                     size="small"
                     variant={selectedEnquiry.status === status ? 'contained' : 'outlined'}
                     color={getStatusColor(status)}
+                    disabled={statusLoading || replyLoading || selectedEnquiry.status === status}
                     onClick={() => handleStatusChange(selectedEnquiry.id, status)}
                   >
-                    {status}
+                    {STATUS_LABELS[status]}
                   </Button>
                 ))}
               </Box>
@@ -372,6 +425,8 @@ const EnquiriesPage = () => {
                   fullWidth
                   multiline
                   rows={4}
+                  label="Reply message"
+                  autoFocus
                   placeholder="Type your reply here. It will be sent via email to the customer."
                   value={replyMessage}
                   onChange={(e) => setReplyMessage(e.target.value)}
@@ -380,17 +435,18 @@ const EnquiriesPage = () => {
               </Box>
             )}
           </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
+          <DialogActions sx={{ px: 3, pb: 2, flexWrap: 'wrap', gap: 1 }}>
+            {replyFeedback && <Alert severity={replyFeedback.type} role="status" sx={{ mr: 'auto' }}>{replyFeedback.message}</Alert>}
             <Button onClick={closeDialog} disabled={replyLoading}>Close</Button>
             {!replyMode ? (
-              <Button onClick={() => setReplyMode(true)} variant="contained" startIcon={<ReplyIcon />}>
+              <Button disabled={statusLoading} onClick={() => { setReplyMode(true); setReplyFeedback(null); }} variant="contained" startIcon={<ReplyIcon />}>
                 Reply via Email
               </Button>
             ) : (
               <Button
                 onClick={handleReply}
                 variant="contained"
-                disabled={replyLoading || !replyMessage.trim()}
+                disabled={statusLoading || replyLoading || !replyMessage.trim()}
               >
                 {replyLoading ? <CircularProgress size={24} color="inherit" /> : 'Send Reply'}
               </Button>

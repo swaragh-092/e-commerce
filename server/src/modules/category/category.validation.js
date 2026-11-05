@@ -1,6 +1,7 @@
 'use strict';
 
 const Joi = require('joi');
+const { hideEmptySchema } = require('../../utils/common.validation');
 
 const createCategorySchema = Joi.object({
     name: Joi.string().max(255).required(),
@@ -33,6 +34,7 @@ const updateCategorySchema = Joi.object({
 }).min(1);
 
 const getCategoryProductsQuerySchema = Joi.object({
+    hideEmpty: hideEmptySchema,
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(1000).default(20),
     sort: Joi.string().valid('newest', 'price_asc', 'price_desc', 'name_asc').default('newest'),

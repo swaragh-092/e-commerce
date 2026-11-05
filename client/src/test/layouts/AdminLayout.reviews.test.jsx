@@ -23,9 +23,9 @@ vi.mock('../../context/UnitCatalogContext', () => ({
 }));
 
 const theme = createTheme();
-const view = () => (
+const view = (initialPath = '/admin/features') => (
   <ThemeProvider theme={theme}>
-    <MemoryRouter initialEntries={['/admin/features']}>
+    <MemoryRouter initialEntries={[initialPath]}>
       <AdminLayout />
     </MemoryRouter>
   </ThemeProvider>
@@ -35,10 +35,22 @@ beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('admin_sidebar_favorites', JSON.stringify(['/admin/reviews', '/admin/pages', '/admin/customers']));
   localStorage.setItem('admin_sidebar_group_order', JSON.stringify(['Sales', 'Content']));
-  state.features = { reviews: true, pages: true, customers: true };
+  state.features = { reviews: true, pages: true, customers: true, blogs: true };
 });
 
 describe('Optional sidebar feature visibility', () => {
+  it('selects only Blog Categories on the categories route while keeping Posts selected on edit routes', async () => {
+    localStorage.setItem('admin_sidebar_group_order', JSON.stringify(['Sales', 'Content', 'Blogs']));
+    const { unmount } = render(view('/admin/blogs/categories'));
+    expect(await screen.findByRole('link', { name: 'Categories' })).toHaveClass('Mui-selected');
+    expect(screen.getByRole('link', { name: 'Posts' })).not.toHaveClass('Mui-selected');
+
+    unmount();
+    render(view('/admin/blogs/edit/post-1'));
+    expect(await screen.findByRole('link', { name: 'Posts' })).toHaveClass('Mui-selected');
+    expect(screen.getByRole('link', { name: 'Categories' })).not.toHaveClass('Mui-selected');
+  });
+
   it.each([
     ['catalog', 'reviews', 'Reviews'], ['ecommerce', 'reviews', 'Reviews'],
     ['catalog', 'pages', 'Pages'], ['ecommerce', 'pages', 'Pages'],

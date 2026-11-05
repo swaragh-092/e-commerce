@@ -20,6 +20,16 @@ export const userService = {
     const response = await api.put('/users/me/password', passwordData);
     return response.data;
   },
+
+  requestEmailChange: async (request) => {
+    const response = await api.post('/users/me/email/request', request);
+    return response.data.data;
+  },
+
+  confirmEmailChange: async (token) => {
+    const response = await api.post('/users/me/email/confirm', { token });
+    return response.data.data;
+  },
   
   createAddress: async (addressData) => {
     const response = await api.post('/users/me/addresses', addressData);

@@ -216,6 +216,31 @@ describe('Validation, changes and queued delivery', () => {
     expect(result.rules.find(rule => rule.audience === 'customer').isActive).toBe(false);
   });
 
+  it.each([true, false])('uses the saved enquiry event for recipients and customer acknowledgement (%s), overriding legacy settings', async customerEnabled => {
+    config = null;
+    const legacyRecipients = vi.spyOn(require('../../src/modules/notification/notificationRecipients.service'), 'getConfiguredRecipients').mockResolvedValue([]);
+    vi.spyOn(settings, 'getByGroup').mockResolvedValue({ enquiryCustomerAcknowledgementEnabled: false });
+    vi.spyOn(NotificationTemplate, 'findAll').mockResolvedValue(['new_enquiry_customer', 'new_enquiry_admin'].map(name => ({ name, channel: 'email', isActive: true, ...message('Saved enquiry') })));
+    const imported = await routing.read('enquiry_received');
+    expect(imported.rules.every(rule => !rule.isActive)).toBe(true);
+    const rules = imported.rules.map(rule => rule.audience === 'customer'
+      ? { ...rule, isActive: customerEnabled }
+      : { ...rule, isActive: true, recipients: { defaultAdmins: false, userIds: [ids.staff], roleIds: [], contacts: [] } });
+    vi.spyOn(sequelize, 'transaction').mockImplementation(callback => callback({ id: 'tx' }));
+    vi.spyOn(sequelize, 'query').mockResolvedValue([]);
+    vi.spyOn(Setting, 'upsert').mockImplementation(async record => { config = record.value; });
+    vi.spyOn(audit, 'log').mockResolvedValue({});
+    const saved = await routing.save('enquiry_received', { revision: null, rules }, { id: ids.staff });
+    expect(saved.managed).toBe(true);
+    expect(saved.rules.find(rule => rule.audience === 'customer').isActive).toBe(customerEnabled);
+    legacyRecipients.mockClear();
+    vi.spyOn(Enquiry, 'findByPk').mockResolvedValue({ id: 'enquiry-1', name: 'Enquirer', email: 'enquirer@example.test', phone: '' });
+    await notifications.sendEvent('enquiry_received', { variables: { enquiry_id: 'enquiry-1' } });
+    expect([...jobs.values()].map(job => job.recipientEmail).sort()).toEqual(customerEnabled
+      ? ['alex@example.test', 'enquirer@example.test'] : ['alex@example.test']);
+    expect(legacyRecipients).not.toHaveBeenCalled();
+  });
+
   it('reports simulated development tests honestly without calling a real provider', async () => {
     vi.stubEnv('NODE_ENV', 'development');
     vi.spyOn(routing, 'preview').mockResolvedValue({ subject: 'Test', html: '<p>Test</p>', text: 'Test' });

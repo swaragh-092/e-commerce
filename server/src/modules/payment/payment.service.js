@@ -69,6 +69,26 @@ const buildAttemptMetadata = (existingPayment, extra = {}) => {
     return { ...prevMeta, ...extra, ...(attempts.length ? { attempts } : {}) };
 };
 
+// A dedupe marker only becomes visible when its business changes commit too.
+// This prevents a provider retry from being acknowledged after a partial failure.
+const processWebhookEvent = async (eventId, eventType, handler) => {
+    let duplicateEvent = false;
+    try {
+        return await sequelize.transaction(async (transaction) => {
+            try {
+                await WebhookEvent.create({ id: eventId, eventType, processedAt: new Date() }, { transaction });
+            } catch (err) {
+                if (err.name === 'SequelizeUniqueConstraintError') duplicateEvent = true;
+                throw err;
+            }
+            return (await handler(transaction)) || { received: true };
+        });
+    } catch (err) {
+        if (duplicateEvent) return { received: true, duplicate: true };
+        throw err;
+    }
+};
+
 const extractOrderIdFromCashfreeId = (cashfreeOrderId) => {
     if (!cashfreeOrderId || typeof cashfreeOrderId !== 'string') return null;
     const m = cashfreeOrderId.match(/^cf_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})_/i);
@@ -512,19 +532,15 @@ const handleStripeWebhook = async (rawBody, signature) => {
     }
 
     const eventId = `stripe:${event.id}`;
-    try {
-        await WebhookEvent.create({ id: eventId, eventType: event.type, processedAt: new Date() });
-    } catch (err) {
-        if (err.name === 'SequelizeUniqueConstraintError') return { received: true, duplicate: true };
-        throw err;
-    }
+    return processWebhookEvent(eventId, event.type, async (transaction) => {
+        if (event.type === 'checkout.session.completed') {
+            const session = event.data.object;
+            const orderId = session.metadata?.orderId || session.client_reference_id;
+            if (session.payment_status !== 'paid' || !orderId) return { received: true, skipped: true };
 
-    if (event.type === 'checkout.session.completed') {
-        const session = event.data.object;
-        const orderId = session.metadata?.orderId || session.client_reference_id;
-        if (session.payment_status === 'paid' && orderId) {
-            // Amount binding on webhook path as well (verify path already checks).
-            const webhookOrder = await Order.findByPk(orderId);
+            // Amount and currency checks remain inside the same transaction as
+            // the event marker and settlement state.
+            const webhookOrder = await Order.findByPk(orderId, { transaction });
             if (webhookOrder && session.amount_total != null) {
                 const expected = Math.round(Number(webhookOrder.total) * 100);
                 if (Number(session.amount_total) !== expected) {
@@ -533,31 +549,31 @@ const handleStripeWebhook = async (rawBody, signature) => {
                 }
             }
             if (webhookOrder && session.currency) {
-                const paymentRow = await Payment.findOne({ where: { orderId, provider: 'stripe' } });
+                const paymentRow = await Payment.findOne({ where: { orderId, provider: 'stripe' }, transaction });
                 if (paymentRow?.currency && String(session.currency).toUpperCase() !== String(paymentRow.currency).toUpperCase()) {
                     logger.error('Stripe webhook currency mismatch', { orderId });
                     return { received: true, skipped: true };
                 }
             }
             await markOrderPaid({
-                orderId: orderId,
+                orderId,
                 provider: 'stripe',
                 transactionId: session.payment_intent || session.id,
                 metadata: { sessionId: session.id, paymentStatus: session.payment_status },
+                transaction,
             });
-        }
-    } else if (event.type === 'checkout.session.expired' || event.type === 'payment_intent.payment_failed') {
-        const session = event.data.object;
-        const orderId = session.metadata?.orderId || session.client_reference_id;
-        if (orderId) {
-            try {
-                await markPaymentFailed({ orderId, provider: 'stripe', reason: event.type });
-            } catch (err) {
-                logger.error('Stripe failure webhook handling failed', { orderId, errorMessage: err.message });
+        } else if (event.type === 'checkout.session.expired' || event.type === 'payment_intent.payment_failed') {
+            const session = event.data.object;
+            const orderId = session.metadata?.orderId || session.client_reference_id;
+            if (orderId) {
+                const order = await Order.findByPk(orderId, { transaction });
+                if (order?.status === 'pending_payment') {
+                    await markPaymentFailed({ orderId, provider: 'stripe', reason: event.type, transaction });
+                }
             }
         }
-    }
-    return { received: true };
+        return { received: true };
+    });
 };
 
 const ensurePayUConfig = async () => {
@@ -834,12 +850,12 @@ const validateRazorpayPayment = (providerPayment, { order, payment, expectedOrde
     return providerPayment;
 };
 
-const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }) => {
+const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {}, transaction = null }) => {
     let sendOrderPlacedNotification = false;
     let notificationPayload = null;
     let lateSettlement = false;
 
-    await sequelize.transaction(async (t) => {
+    const applySettlement = async (t) => {
         const lockedOrder = await Order.findByPk(orderId, {
             transaction: t,
             lock: t.LOCK.UPDATE,
@@ -993,9 +1009,12 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }
                 errorMessage: err.message,
             });
         }
-    });
+    };
+    if (transaction) await applySettlement(transaction);
+    else await sequelize.transaction(applySettlement);
 
-    if (sendOrderPlacedNotification && notificationPayload) {
+    const sendNotification = async () => {
+      if (!sendOrderPlacedNotification || !notificationPayload) return;
         try {
             const user = await User.findByPk(notificationPayload.userId, {
                 include: [{ model: UserProfile, as: 'profile', required: false }],
@@ -1021,7 +1040,9 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {} }
                 error: err.message,
             });
         }
-    }
+    };
+    if (transaction) transaction.afterCommit(sendNotification);
+    else await sendNotification();
     return { lateSettlement };
 };
 
@@ -1119,39 +1140,33 @@ const handleCashfreeWebhook = async (rawBody, headers = {}) => {
         return { received: true, skipped: true };
     }
 
-    try {
-        await WebhookEvent.create({
-            id: eventId,
-            eventType,
-            processedAt: new Date(),
-        });
-    } catch (err) {
-        if (err.name === 'SequelizeUniqueConstraintError') {
-            return { received: true, duplicate: true };
-        }
-        throw err;
-    }
-
     const orderStatus = orderEntity.order_status || payload?.order_status;
     const paymentStatus = paymentEntity.payment_status || payload?.payment_status;
 
-    if (orderStatus === 'PAID' || paymentStatus === 'SUCCESS') {
-        let payment = await Payment.findOne({
-            where: { provider: 'cashfree', transactionId: cashfreeOrderId },
-        });
-        // Retry orphan fallback: superseded ids live in metadata.attempts.
-        if (!payment) {
-            const orderIdFromCf = extractOrderIdFromCashfreeId(cashfreeOrderId);
-            if (orderIdFromCf) {
-                const byOrder = await Payment.findOne({ where: { orderId: orderIdFromCf, provider: 'cashfree' } });
-                const attempts = Array.isArray(byOrder?.metadata?.attempts) ? byOrder.metadata.attempts : [];
-                if (byOrder && (byOrder.transactionId === cashfreeOrderId || attempts.includes(cashfreeOrderId))) {
-                    payment = byOrder;
+    return processWebhookEvent(eventId, eventType, async (transaction) => {
+        if (orderStatus === 'PAID' || paymentStatus === 'SUCCESS') {
+            let payment = await Payment.findOne({
+                where: { provider: 'cashfree', transactionId: cashfreeOrderId },
+                transaction,
+            });
+            // Retry orphan fallback: superseded ids live in metadata.attempts.
+            if (!payment) {
+                const orderIdFromCf = extractOrderIdFromCashfreeId(cashfreeOrderId);
+                if (orderIdFromCf) {
+                    const byOrder = await Payment.findOne({
+                        where: { orderId: orderIdFromCf, provider: 'cashfree' },
+                        transaction,
+                    });
+                    const attempts = Array.isArray(byOrder?.metadata?.attempts) ? byOrder.metadata.attempts : [];
+                    if (byOrder && (byOrder.transactionId === cashfreeOrderId || attempts.includes(cashfreeOrderId))) {
+                        payment = byOrder;
+                    }
                 }
             }
-        }
 
-        if (payment) {
+            if (!payment) {
+                throw new AppError('PAYMENT_ERROR', 503, 'Cashfree payment does not match a local order yet');
+            }
             await markOrderPaid({
                 orderId: payment.orderId,
                 provider: 'cashfree',
@@ -1164,27 +1179,36 @@ const handleCashfreeWebhook = async (rawBody, headers = {}) => {
                     webhookEventType: eventType,
                     webhookAt: new Date().toISOString(),
                 },
+                transaction,
             });
-        }
-    } else if (orderStatus === 'FAILED' || paymentStatus === 'FAILED') {
-        // Record terminal failure so the order does not sit in limbo; the
-        // reservation-timeout job still owns inventory/coupon release.
-        const failed = await Payment.findOne({ where: { provider: 'cashfree', transactionId: cashfreeOrderId } });
-        if (failed && !['paid_online', 'refunded'].includes(failed.status)) {
-            const failedOrder = await Order.findByPk(failed.orderId);
-            if (failedOrder?.status === 'pending_payment') {
-                await markPaymentFailed({
-                    orderId: failed.orderId,
-                    provider: 'cashfree',
-                    reason: orderStatus === 'FAILED' ? 'Cashfree payment failed' : 'Cashfree payment was declined',
-                });
-            } else {
-                await failed.update({ status: 'payment_failed', metadata: { ...(failed.metadata || {}), orderStatus, paymentStatus, failedAt: new Date().toISOString() } });
+        } else if (orderStatus === 'FAILED' || paymentStatus === 'FAILED') {
+            // Record terminal failure so the order does not sit in limbo; the
+            // reservation-timeout job still owns inventory/coupon release.
+            const failed = await Payment.findOne({
+                where: { provider: 'cashfree', transactionId: cashfreeOrderId },
+                transaction,
+            });
+            if (failed && !['paid_online', 'refunded'].includes(failed.status)) {
+                const failedOrder = await Order.findByPk(failed.orderId, { transaction });
+                if (failedOrder?.status === 'pending_payment') {
+                    await markPaymentFailed({
+                        orderId: failed.orderId,
+                        provider: 'cashfree',
+                        reason: orderStatus === 'FAILED' ? 'Cashfree payment failed' : 'Cashfree payment was declined',
+                        transaction,
+                    });
+                } else if (!failedOrder) {
+                    throw new AppError('PAYMENT_ERROR', 503, 'Cashfree webhook order is not available yet');
+                } else {
+                    await failed.update({
+                        status: 'payment_failed',
+                        metadata: { ...(failed.metadata || {}), orderStatus, paymentStatus, failedAt: new Date().toISOString() },
+                    }, { transaction });
+                }
             }
         }
-    }
-
-    return { received: true };
+        return { received: true };
+    });
 };
 
 const verifyPayment = async (userId, orderId, paymentData) => {
@@ -1279,49 +1303,32 @@ const handleWebhook = async (rawOrParsedBody, signature) => {
     const providerEventId = payload.id ? String(payload.id) : `${event}:${paymentId}`;
     const razorpayEventId = `razorpay:${providerEventId}`;
 
-    try {
-        await sequelize.transaction(async (t) => {
-            await WebhookEvent.create(
-                { id: razorpayEventId, eventType: event, processedAt: new Date() },
-                { transaction: t }
-            );
-
-        });
-    } catch (err) {
-        // Sequelize unique constraint violation = duplicate event — safe to ignore
-        if (err.name === 'SequelizeUniqueConstraintError') {
-            return { received: true, duplicate: true };
-        }
-        throw err;
-    }
-
-    if (capturedOrderId) {
-        try {
+    return processWebhookEvent(razorpayEventId, event, async (transaction) => {
+        if (capturedOrderId) {
             await markOrderPaid({
                 orderId: capturedOrderId,
                 provider: 'razorpay',
                 transactionId: paymentEntity.id,
                 metadata: { webhookEvent: event },
+                transaction,
             });
-        } catch (error) {
-            // Let Razorpay retry if settlement failed after the event was
-            // recorded; otherwise the dedupe row would suppress recovery.
-            await WebhookEvent.destroy({ where: { id: razorpayEventId } });
-            throw error;
+        } else if (failedOrderId) {
+            const order = await Order.findByPk(failedOrderId, { transaction });
+            if (order?.status === 'pending_payment') {
+                await markPaymentFailed({
+                    orderId: failedOrderId,
+                    provider: 'razorpay',
+                    reason: paymentEntity.error_description || 'payment.failed webhook',
+                    transaction,
+                });
+            }
         }
-    } else if (failedOrderId) {
-        try {
-            await markPaymentFailed({ orderId: failedOrderId, provider: 'razorpay', reason: paymentEntity.error_description || 'payment.failed webhook' });
-        } catch (err) {
-            logger.error('Razorpay failure webhook handling failed', { orderId: failedOrderId, errorMessage: err.message });
-        }
-    }
-
-    return { received: true };
+        return { received: true };
+    });
 };
 
-const markPaymentFailed = async ({ orderId, provider, reason }) => {
-    const result = await sequelize.transaction(async (t) => {
+const markPaymentFailed = async ({ orderId, provider, reason, transaction = null }) => {
+    const applyFailure = async (t) => {
         const order = await Order.findByPk(orderId, { transaction: t, lock: t.LOCK.UPDATE });
         if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
         if (order.status !== 'pending_payment') {
@@ -1343,8 +1350,10 @@ const markPaymentFailed = async ({ orderId, provider, reason }) => {
             changedBy: order.userId, metadata: { reason: reason || null, provider },
         }, { transaction: t });
         return { success: true, orderId, status: 'payment_failed' };
-    });
-    try {
+    };
+    const result = transaction ? await applyFailure(transaction) : await sequelize.transaction(applyFailure);
+    const sendFailureNotifications = async () => {
+      try {
         const order = await Order.findByPk(orderId);
         const payment = await Payment.findOne({ where: { orderId, provider } });
         const user = order?.userId ? await User.findByPk(order.userId) : null;
@@ -1363,9 +1372,12 @@ const markPaymentFailed = async ({ orderId, provider, reason }) => {
             await NotificationService.send('payment_failed_customer', user.email, variables, user.id, orderId);
         }
         await NotificationService.sendToAdmins('admin_order_failed', ['email'], variables, orderId);
-    } catch (error) {
+      } catch (error) {
         logger.error('Failed to queue payment failure notifications', { orderId, errorMessage: error.message });
-    }
+      }
+    };
+    if (transaction) transaction.afterCommit(sendFailureNotifications);
+    else await sendFailureNotifications();
     return result;
 };
 

@@ -59,6 +59,78 @@ describe('Theme package schema validation', () => {
     const { error } = packageSchema.validate(pkg, { abortEarly: false });
     expect(error).toBeDefined();
   });
+
+  it('accepts typography, mobile, font, and semantic colour tokens saved by the designer', () => {
+    const pkg = buildMinimalPackage();
+    pkg.design.theme = {
+      ...pkg.design.theme,
+      errorColor: '#dc3545',
+      cancelButtonColor: '#e11d48',
+      warningColor: '#d97706',
+      successColor: '#059669',
+      infoColor: '#0284c7',
+      fontVariationSettings: '"opsz" 32, "wght" 650',
+      lineHeightH1: '1.05',
+      lineHeightH2: '1.1',
+      typographyScale: {
+        preset: 'custom',
+        fluid: true,
+        h1: 'clamp(2rem, 5vw, 3.25rem)',
+        body1: '1rem',
+        fluidConfig: { bodyMin: '0.95', bodyMax: '1.05', minVw: '320', maxVw: '1280' },
+      },
+      mobileOverrides: {
+        primaryColor: '#0f766e',
+        bodyFontSize: '0.95rem',
+        headingScale: '0.86',
+        sectionPadding: '32px',
+        containerPadding: '16px',
+      },
+      customFonts: {
+        bodyUrl: 'https://cdn.example.com/fonts/store-body.woff2',
+        bodyFamily: 'Store Body',
+        bodyFormat: 'woff2',
+      },
+      variableFontAxes: {
+        wght: { enabled: true, value: 650, default: 400, min: 100, max: 900 },
+      },
+      darkPalette: {
+        primaryColor: '#4fd1a5',
+        errorColor: '#dc3545',
+        cancelButtonColor: '#e11d48',
+        warningColor: '#d97706',
+        successColor: '#059669',
+        infoColor: '#0284c7',
+      },
+    };
+
+    const { error } = packageSchema.validate(pkg, { abortEarly: false, stripUnknown: false });
+    expect(error).toBeUndefined();
+  });
+
+  it('rejects unknown keys inside saved typography tokens', () => {
+    const pkg = buildMinimalPackage();
+    pkg.design.theme.typographyScale = { preset: 'custom', malicious: 'body { display: none; }' };
+    const { error } = packageSchema.validate(pkg, { abortEarly: false });
+    expect(error).toBeDefined();
+    expect(error.message).toContain('malicious');
+  });
+
+  it('rejects unsupported custom font formats', () => {
+    const pkg = buildMinimalPackage();
+    pkg.design.theme.customFonts = { bodyUrl: 'https://cdn.example.com/font.exe', bodyFormat: 'exe' };
+    const { error } = packageSchema.validate(pkg, { abortEarly: false });
+    expect(error).toBeDefined();
+    expect(error.message).toContain('bodyFormat');
+  });
+
+  it('rejects non-http custom font URLs', () => {
+    const pkg = buildMinimalPackage();
+    pkg.design.theme.customFonts = { bodyUrl: 'javascript:alert(1)', bodyFormat: 'woff2' };
+    const { error } = packageSchema.validate(pkg, { abortEarly: false });
+    expect(error).toBeDefined();
+    expect(error.message).toContain('bodyUrl');
+  });
 });
 
 // ─── Data Source Security Tests ─────────────────────────────────────────────

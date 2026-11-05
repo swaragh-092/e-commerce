@@ -55,6 +55,7 @@ const RegisterPage = lazy(() => import('../pages/storefront/RegisterPage'));
 const ForgotPasswordPage = lazy(() => import('../pages/storefront/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('../pages/storefront/ResetPasswordPage'));
 const VerifyEmailPage = lazy(() => import('../pages/storefront/VerifyEmailPage'));
+const VerifyEmailChangePage = lazy(() => import('../pages/storefront/VerifyEmailChangePage'));
 const OAuthCallbackPage = lazy(() => import('../pages/storefront/OAuthCallbackPage'));
 const AccountPage = lazy(() => import('../pages/storefront/AccountPage'));
 const AllOrdersPage = lazy(() => import('../pages/storefront/AllOrdersPage/index'));
@@ -178,6 +179,7 @@ const AppRoutes = () => (
         <Route path="forgot-password" element={<ForgotPasswordPage />} />
         <Route path="reset-password" element={<ResetPasswordPage />} />
         <Route path="verify-email" element={<VerifyEmailPage />} />
+        <Route path="verify-email-change" element={<VerifyEmailChangePage />} />
         <Route path="oauth/callback" element={<OAuthCallbackPage />} />
 
         {/* Feature-gated: cart & checkout — hidden in catalog mode */}
@@ -209,6 +211,8 @@ const AppRoutes = () => (
 
       {/* Admin Login Route */}
       <Route path="/admin/login" element={<AdminLoginPage />} />
+      <Route path="/admin/forgot-password" element={<ForgotPasswordPage admin />} />
+      <Route path="/admin/reset-password" element={<ResetPasswordPage admin />} />
 
       {/* Admin Routes — permission-gated foundation */}
       <Route path="/admin" element={<ProtectedRoute permissions={ADMIN_ACCESS_PERMISSIONS} />}>
@@ -220,8 +224,8 @@ const AppRoutes = () => (
         <Route element={<AdminLayout />}>
           <Route index element={<AdminIndex />} />
           <Route path="profile" element={<AdminProfilePage />} />
-          <Route element={<ModeRoute requiredMode="ecommerce" />}>
-            <Route element={<ProtectedRoute permissions={[PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.ORDERS_READ]} requireAllPermissions />}>
+          <Route element={<FeatureRoute feature="analytics" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.DASHBOARD_VIEW} />}>
               <Route path="analytics" element={<AnalyticsPage />} />
             </Route>
           </Route>

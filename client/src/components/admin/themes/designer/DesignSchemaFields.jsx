@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import {
   Box,
   FormControl,
@@ -24,6 +25,7 @@ const getFieldValue = (value, field) => {
 };
 
 const SchemaField = ({ field, value, onChange }) => {
+  const labelId = useId();
   if (!isDesignControlVisible(field, value)) return null;
 
   const currentValue = getFieldValue(value, field);
@@ -47,8 +49,9 @@ const SchemaField = ({ field, value, onChange }) => {
   if (field.type === 'select') {
     return (
       <FormControl fullWidth size="small">
-        <InputLabel>{field.label}</InputLabel>
+        <InputLabel id={labelId}>{field.label}</InputLabel>
         <Select
+          labelId={labelId}
           label={field.label}
           value={currentValue}
           onChange={(event) => onChange(field.key, event.target.value)}

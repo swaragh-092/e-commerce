@@ -2,11 +2,7 @@
 
 const Joi = require('joi');
 
-const passwordPolicy = Joi.string()
-  .min(8)
-  .pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])'))
-  .message('Password must be at least 8 characters long and include uppercase, lowercase, number, and special character')
-  .required();
+const passwordPolicy = require('./passwordPolicy').required();
 
 const registerSchema = Joi.object({
   firstName: Joi.string().trim().min(1).required().max(50),
