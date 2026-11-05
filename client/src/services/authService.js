@@ -7,6 +7,19 @@ import api, {
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const OAUTH_ATTEMPT_KEY = 'auth:google-oauth-attempt';
 
+// Recover expired authentication after releasing the session-change lock.
+const changeMfa = async (path, code) => {
+  const change = () => changeAuthSession(
+    () => api.post(path, { code }, { skipAuthRefresh: true }),
+    { restoreOnRejectedLoginResponse: true },
+  );
+  try { return await change(); } catch (error) {
+    if (error.response?.status !== 401) throw error;
+    await api.get('/users/me');
+    return change();
+  }
+};
+
 const authService = {
   getMfaPolicy: async () => (await api.get('/auth/mfa-policy')).data.data,
   updateMfaPolicy: async (payload) => (await api.put('/auth/mfa-policy', payload)).data.data,
@@ -39,12 +52,12 @@ const authService = {
   },
 
   enable2FA: async (code) => {
-    const response = await changeAuthSession(() => api.post('/auth/2fa/enable', { code }));
+    const response = await changeMfa('/auth/2fa/enable', code);
     return response.data.data;
   },
 
   disable2FA: async (code) => {
-    const response = await changeAuthSession(() => api.post('/auth/2fa/disable', { code }));
+    const response = await changeMfa('/auth/2fa/disable', code);
     return response.data.data;
   },
 

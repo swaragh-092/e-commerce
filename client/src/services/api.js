@@ -54,7 +54,7 @@ api.interceptors.response.use(
 
     const authEndpoint = ['/auth/login', '/auth/refresh', '/auth/logout', '/auth/2fa/verify', '/auth/otp/verify']
       .some(path => originalRequest?.url?.includes(path));
-    if (error.response?.status === 401 && originalRequest && !authEndpoint) {
+    if (error.response?.status === 401 && originalRequest && !authEndpoint && !originalRequest.skipAuthRefresh) {
       if (originalRequest._retry) {
         clearSession(error);
         return Promise.reject(error);
