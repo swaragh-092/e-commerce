@@ -1,6 +1,16 @@
 'use strict';
 const mediaService = require('./media.service');
 const { success } = require('../../utils/response');
+const editingService = require('./mediaEditing.service');
+
+exports.replaceImage = async (req, res, next) => {
+    try { return success(res, { media: await editingService.replace(req.params.id, req.file) }, 'Image updated everywhere it is used'); }
+    catch (error) { next(error); }
+};
+exports.revertImage = async (req, res, next) => {
+    try { return success(res, { media: await editingService.revert(req.params.id) }, 'Original image restored'); }
+    catch (error) { next(error); }
+};
 
 exports.upload = async (req, res, next) => {
     try {

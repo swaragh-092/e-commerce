@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BulkMediaCropDialog from '../../components/common/BulkMediaCropDialog';
 import { mediaService } from '../../services/mediaService';
 import * as edits from '../../utils/imageEditing';
-vi.mock('../../services/mediaService', () => ({ mediaService: { uploadMedia: vi.fn() } }));
+vi.mock('../../services/mediaService', () => ({ mediaService: { uploadMedia: vi.fn(), replaceImage: vi.fn() } }));
 vi.mock('../../utils/imageEditing', async (original) => ({ ...(await original()), loadImage: vi.fn(), editPreview: vi.fn(), exportEditedImage: vi.fn() }));
 vi.mock('../../components/common/MediaImageEditor', () => ({ default: ({ initialSettings, onApplySettings }) => <Dialog open><button onClick={() => onApplySettings({ ...initialSettings, width: 600, rotation: 90 })}>Apply individual crop</button></Dialog> }));
 const files = [1, 2].map(id => ({ id: String(id), originalName: `product-${id}.png`, url: `/product-${id}.png`, mimeType: 'image/png', type: 'image' }));
@@ -19,6 +19,16 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 const ready = () => waitFor(() => expect(screen.getByRole('button', { name: 'Save 2 images' })).toBeEnabled());
 describe('bulk media crop review', () => {
+  it('updates existing IDs when launched in replace mode', async () => {
+    mediaService.replaceImage.mockResolvedValue({});
+    render(<BulkMediaCropDialog replaceExisting files={files} onClose={vi.fn()} />);
+    await ready();
+    expect(screen.getByText(/Saving updates each image everywhere/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save 2 images' }));
+    await waitFor(() => expect(mediaService.replaceImage).toHaveBeenCalledTimes(2));
+    expect(mediaService.replaceImage.mock.calls.map(([id]) => id)).toEqual(['1', '2']);
+    expect(mediaService.uploadMedia).not.toHaveBeenCalled();
+  });
   it('shows a separate preview for every image before saving', async () => {
     render(<BulkMediaCropDialog files={files} onClose={vi.fn()} />);
     await ready();

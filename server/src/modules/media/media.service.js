@@ -231,6 +231,7 @@ exports.deleteMedia = async (id) => {
   }
 
   await mediaRecord.destroy();
+  await storage.delete(filename, '.originals');
   return true;
 };
 

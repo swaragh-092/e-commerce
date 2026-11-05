@@ -161,3 +161,46 @@ node tests/integration/cropPresets.postgres.check.js
 ```
 
 The PostgreSQL probe refuses production or non-local database hosts. Other environments need their normal migration deployment before the preset API is used. Authenticated browser end-to-end verification was not performed; database behavior and UI behavior were verified separately.
+
+## Update existing images and restore originals — 2026-11-05
+
+This follow-up supersedes the earlier copy-only behavior for **existing library images**. Crop → Save image now updates the same Media ID, URL, filename, originalName, and original encoding. Existing database references and URL-backed placements continue to point at the edited image. Bulk cropping launched from the library uses the same update operation. Editing a newly selected upload still prepares a new upload normally.
+
+Existing-image editing requires MEDIA_UPDATE, including bulk crop selection; MEDIA_UPLOAD alone cannot replace a saved image. Both permissions can read crop presets; managing shared presets still requires MEDIA_UPLOAD. The single editor explains that saving affects every placement. Once edited, it offers Revert to original with confirmation. Reversion restores the exact original source bytes and regenerated renditions. Multiple edits never replace the first original backup.
+
+The private original lives in the persistent uploads volume under `.originals/`, with restricted permissions and static dotfile access denied. Backup publication is atomic and happens before public replacement. Public files use atomic rename per rendition; a database or write failure triggers restoration of prior bytes. PostgreSQL row locks serialize simultaneous edits of one Media record. Individual file renames are atomic, but the filesystem and database cannot form a crash-atomic distributed transaction; the durable original remains available after a process interruption. Keep `.originals/` when backing up or migrating the upload volume. Deleting a media record also removes its original backup.
+
+Upload responses now revalidate rather than using a one-year immutable cache. The media URL helper uses a migration marker to bypass former immutable browser caches for local upload URLs, and the library/editor also includes the media revision. Already-open storefront pages need a reload to request the changed image; this does not push live updates into existing browser tabs. Rendering that directly uses a legacy raw URL without the shared URL helper may require a hard refresh for a previously cached immutable response.
+
+Only local static JPEG, PNG, and WebP images can be replaced. GIF and animated images are rejected. Output preserves the saved format, caps decoded pixels at 40 million, and rejects an encoded replacement above 5 MB. The local migration `20261105120000-add-media-edit-state.js` was applied; production needs it before deployment. No production changes were made.
+
+### Files changed in this follow-up
+
+- server/migrations/20261105120000-add-media-edit-state.js
+- server/src/modules/media/mediaEditing.service.js
+- server/src/modules/media/media.model.js
+- server/src/modules/media/media.controller.js
+- server/src/modules/media/media.routes.js
+- server/src/modules/media/media.service.js
+- server/src/utils/storage/LocalStorage.js
+- server/src/app.js (only the uploads cache/dotfile configuration)
+- server/tests/unit/mediaEditing.test.js
+- server/tests/integration/mediaEditing.postgres.check.js
+- client/src/services/mediaService.js
+- client/src/utils/media.js
+- client/src/components/common/MediaImageEditor.jsx
+- client/src/components/common/BulkMediaCropDialog.jsx
+- client/src/pages/admin/MediaPage.jsx
+- client/src/test/components/MediaImageEditor.test.jsx
+- client/src/test/components/BulkMediaCropDialog.test.jsx
+- client/src/test/pages/admin/MediaPage.test.jsx
+- client/src/test/utils/media.test.js
+- docs/plans/media-editor-and-duplicates.md
+
+### Verification
+
+65 client media/URL tests, 26 server edit/duplicate/preset tests, production build, and whitespace checks passed. The real PostgreSQL probe verified concurrent saves, stable image identity/name/URL/format, the first original surviving repeated edits, and exact restoration. Its temporary media record and temporary files were removed. Authenticated browser end-to-end testing was not performed. PR #167 was already merged; this follow-up is prepared independently against the current main branch.
+
+Commands from client/: `npx vitest run src/test/components/BulkMediaCropDialog.test.jsx src/test/components/MediaImageEditor.test.jsx src/test/utils/media.test.js src/test/pages/admin/MediaPage.test.jsx src/test/components/MediaUploader.test.jsx src/test/components/MediaPicker.uploads.test.jsx src/test/components/CropPresets.integration.test.jsx src/test/components/CropPresetManager.test.jsx src/test/utils/imageEditing.test.js` and `npm run build`.
+
+Commands from server/: `npx vitest run tests/unit/mediaEditing.test.js tests/unit/media.duplicates.test.js tests/unit/media.cropPresets.test.js` and `node tests/integration/mediaEditing.postgres.check.js`.
