@@ -6,7 +6,7 @@ const readline = require('node:readline/promises');
 const { stdin, stdout } = require('node:process');
 const { sequelize, User } = require('../modules');
 const TwoFactorService = require('../modules/auth/twoFactor.service');
-const { requiresAdminMfa } = require('../modules/auth/mfaPolicy');
+const { classifyUser } = require('../modules/auth/mfaPolicy');
 
 const main = async () => {
   if (!stdin.isTTY || !stdout.isTTY) throw new Error('Interactive operator terminal required');
@@ -14,7 +14,7 @@ const main = async () => {
   try {
     const email = (await prompt.question('Administrator email: ')).trim().toLowerCase();
     const user = await User.findOne({ where: { email }, include: ['roles'] });
-    if (!user || user.status !== 'active' || !requiresAdminMfa(user)) {
+    if (!user || user.status !== 'active' || !classifyUser(user).administrative) {
       throw new Error('An active administrator account is required');
     }
     if (user.twoFactorEnabled) throw new Error('MFA is already enabled; this tool does not reset it');

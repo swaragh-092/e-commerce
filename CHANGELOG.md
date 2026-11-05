@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## [1.4.0.0] - 2026-11-05
+
+### Added
+- Let super administrators require authenticator MFA for administrators, all staff, or selected staff roles from Security Settings; customers keep voluntary MFA.
+- Let administrators manage their authenticator factor and backup codes from their profile while safely rotating their active session.
+
+### Changed
+- Apply saved MFA requirements immediately across password, phone, Google, refresh, and protected-session authentication.
+
 ## [1.3.0.0] - 2026-11-03
 
 ### Changed

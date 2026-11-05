@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const require = createRequire(import.meta.url);
 process.env.JWT_ACCESS_SECRET = 'test-access-secret-32chars-long!!';
 process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-32chars-long!';
@@ -9,6 +9,7 @@ const otp = require('../../src/modules/auth/otp.service');
 const { generateTokens } = require('../../src/modules/auth/tokenUtils');
 const features = require('../../src/middleware/featureGate.middleware');
 const LoginAttemptStore = require('../../src/modules/auth/loginAttemptStore');
+beforeEach(() => vi.spyOn(db.Setting, 'findOne').mockResolvedValue(null));
 afterEach(() => vi.restoreAllMocks());
 
 describe('Authentication security regressions', () => {

@@ -4,13 +4,14 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useAuth } from '../../hooks/useAuth';
 import { userService } from '../../services/userService';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import TwoFactorSetup from '../../components/storefront/TwoFactorSetup';
 
 const readable = (value = '') => value.replace(/[_.-]/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
 const profileFor = user => ({ firstName: user?.firstName || '', lastName: user?.lastName || '', phone: user?.profile?.phone || '' });
 const emptyPasswords = { currentPassword: '', newPassword: '', confirmPassword: '' };
 
 const AdminProfilePage = () => {
-  const { user, roles = [], permissions = [], updateProfile } = useAuth();
+  const { user, roles = [], permissions = [], updateProfile, refreshUser } = useAuth();
   const [form, setForm] = useState(() => profileFor(user));
   const [saved, setSaved] = useState(() => profileFor(user));
   const [profileFeedback, setProfileFeedback] = useState(null);
@@ -158,6 +159,7 @@ const AdminProfilePage = () => {
           </Stack>
         </Paper>
       </Box>
+      <TwoFactorSetup user={user} onUpdate={refreshUser} />
       <Accordion disableGutters elevation={0} sx={{ mt: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
         <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="profile-permissions" id="profile-permissions-heading"><Typography fontWeight={600}>View permissions ({new Set(permissions).size})</Typography></AccordionSummary>
         <AccordionDetails id="profile-permissions">

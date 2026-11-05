@@ -9,6 +9,7 @@ import { getAllSettings } from '../../../services/settingsService';
 import { PERMISSIONS } from '../../../utils/permissions';
 
 const state = vi.hoisted(() => ({ features: {}, mode: 'catalog', denied: [], superAdmin: true }));
+vi.mock('../../../components/admin/settings/MfaSecurityPanel', () => ({ default: () => <div>Dedicated security policy editor</div> }));
 vi.mock('../../../hooks/useAuth', () => ({
   useAuth: () => ({ hasPermission: permission => !state.denied.includes(permission) }),
   useIsSuperAdmin: () => state.superAdmin,
@@ -45,6 +46,19 @@ beforeEach(() => {
 });
 
 describe('Settings follow platform features and permissions', () => {
+  it('opens the independent security editor and excludes its policy from Save All', async () => {
+    getAllSettings.mockResolvedValueOnce({ general: { storeName: 'Test Shop' }, auth: { mfaPolicy: {
+      requireAdministrators: false, staffMode: 'optional', requiredRoleIds: [],
+    } } });
+    render(view());
+    await screen.findByDisplayValue('Test Shop');
+    fireEvent.click(screen.getByRole('button', { name: 'Save All' }));
+    await waitFor(() => expect(updateSettings).toHaveBeenCalled());
+    expect(updateSettings.mock.calls[0][0]).not.toContainEqual(expect.objectContaining({ group: 'auth', key: 'mfaPolicy' }));
+    openTab('Security');
+    expect(screen.getByText('Dedicated security policy editor')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save All' })).toBeDisabled();
+  });
   it('hides unavailable designer tabs and links while preserving catalog and menu operations', async () => {
     render(view());
     await screen.findByDisplayValue('Test Shop');

@@ -127,8 +127,9 @@ Body: { tempToken, code }
 - TOTP is tried first; if it fails/throws, backup code is attempted
 - Backup codes are single-use (removed atomically with row lock after use)
 - Rate limit: 5 requests / 15 min
-- Administrators, including custom roles with an administrative base role, must complete operator-assisted MFA enrollment before sign-in. Admin trusted-device bypass and self-service MFA disable are denied.
-- Use the operator-assisted process in [Accounts and login security](ACCOUNT-LOGIN-SECURITY.md); do not reset an administrator's MFA with direct SQL. Recovery for an already enrolled administrator requires a separately approved identity-verification procedure.
+- MFA enrollment requirements are configurable in **Admin → Settings → Security** for administrators, all staff, or selected active custom staff roles. Before an administrator-managed policy is saved, `REQUIRE_ADMIN_MFA` supplies the fallback; the saved policy then takes precedence. Customer MFA remains voluntary.
+- Accounts whose current role requires MFA must enroll before sign-in. Use the operator-assisted process in [Accounts and login security](ACCOUNT-LOGIN-SECURITY.md); do not reset an administrator's MFA with direct SQL. Recovery for an already enrolled administrator requires a separately approved identity-verification procedure.
+- Enrolled administrators and staff must complete MFA for each session and cannot use trusted-device bypass. Self-service disable is allowed only when the account's current role is outside the required policy; required factors can be disabled only through the operator recovery procedure.
 
 ### Disable
 ```
@@ -352,6 +353,10 @@ CREDENTIAL_ENCRYPTION_KEY=<another random 32+ chars — NOT same as JWT secrets>
 
 ### Auth Features (Optional)
 ```env
+# MFA fallback before an administrator-managed policy is first saved (default: true)
+# false makes administrator and staff enrollment optional until a policy is saved
+REQUIRE_ADMIN_MFA=true
+
 # Google OAuth (leave empty to disable)
 GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
@@ -403,12 +408,11 @@ cd server && npx sequelize-cli db:migrate
 
 ---
 
-## Client-Side (Account → Security Tab)
+## Client-Side MFA Controls
 
-The Security tab contains:
-1. **Two-Factor Authentication** — Setup, enable/disable, backup codes
-2. **Active Sessions** — View all devices, revoke individual or all
-3. **Delete Account** — Schedule deletion with 30-day grace period
+- **Admin → Profile**: set up or enable authenticator MFA, view one-time backup codes, regenerate codes, or disable an optional factor after verification. Enabling or disabling MFA signs out other sessions and replaces the current session.
+- **Admin → Settings → Security**: super administrators with settings management permission can require MFA for administrators, all staff, or selected active custom staff roles. The server rejects stricter policies until every affected active account has enrolled. This policy does not enroll accounts automatically.
+- **Customer account security**: customers retain the voluntary MFA setup and disable flow. Customer MFA cannot be made mandatory through administrator policy.
 
 ---
 
@@ -416,7 +420,8 @@ The Security tab contains:
 
 ```
 User submits credentials through password, phone OTP, or Google
-├── Administrator without MFA enrollment → Deny; contact operator
-├── MFA enabled → Verify TOTP or one-use backup code → Full session
-└── Customer without MFA enabled → Full session
+├── Determine requirement from saved administrator/staff policy (or REQUIRE_ADMIN_MFA fallback)
+├── Required account without enrollment → Deny; operator-assisted enrollment is needed
+├── MFA enabled → Verify TOTP or one-use backup code (optional customer trusted-device bypass may apply)
+└── MFA not required and not enabled → Full session
 ```

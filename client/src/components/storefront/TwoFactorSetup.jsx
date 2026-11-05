@@ -33,7 +33,8 @@ const TwoFactorSetup = ({ user, onUpdate }) => {
       setBackupCodes(data.backupCodes);
       setStep('showCodes');
       setCode(''); setQrData(null);
-      if (onUpdate) onUpdate();
+      // Keep one-time backup codes visible before reauthentication.
+      setSuccess('MFA enabled. Save your backup codes securely. Other sessions have been signed out.');
     } catch (err) { setError(getApiErrorMessage(err, 'Invalid code.')); }
     finally { setLoading(false); }
   };
@@ -43,7 +44,7 @@ const TwoFactorSetup = ({ user, onUpdate }) => {
     try {
       await authService.disable2FA(disableCode);
       setSuccess('2FA disabled.'); setDisableCode('');
-      if (onUpdate) onUpdate();
+      if (onUpdate) Promise.resolve(onUpdate()).catch(() => {});
     } catch (err) { setError(getApiErrorMessage(err, 'Invalid code.')); }
     finally { setLoading(false); }
   };
@@ -96,7 +97,7 @@ const TwoFactorSetup = ({ user, onUpdate }) => {
               Download
             </Button>
           </Box>
-          <Button variant="contained" onClick={() => { setStep('idle'); setBackupCodes(null); }}>
+          <Button variant="contained" onClick={() => { setStep('idle'); setBackupCodes(null); if (onUpdate) Promise.resolve(onUpdate()).catch(() => {}); }}>
             I've saved my codes
           </Button>
         </Box>

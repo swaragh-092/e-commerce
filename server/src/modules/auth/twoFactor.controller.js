@@ -2,6 +2,7 @@
 
 const TwoFactorService = require('./twoFactor.service');
 const { success } = require('../../utils/response');
+const { setAuthCookies, stripAuthTokens } = require('./authCookies');
 
 const setup = async (req, res, next) => {
   try {
@@ -12,15 +13,17 @@ const setup = async (req, res, next) => {
 
 const enable = async (req, res, next) => {
   try {
-    const result = await TwoFactorService.enable(req.user.id, req.validated.code);
-    return success(res, result, '2FA enabled successfully');
+    const result = await TwoFactorService.enable(req.user.id, req.validated.code, { createSession: true, ipAddress: req.ip });
+    setAuthCookies(res, result.tokens);
+    return success(res, stripAuthTokens(result), '2FA enabled successfully');
   } catch (err) { next(err); }
 };
 
 const disable = async (req, res, next) => {
   try {
-    const result = await TwoFactorService.disable(req.user.id, req.validated.code);
-    return success(res, result, '2FA disabled successfully');
+    const result = await TwoFactorService.disable(req.user.id, req.validated.code, { createSession: true, ipAddress: req.ip });
+    setAuthCookies(res, result.tokens);
+    return success(res, stripAuthTokens(result), '2FA disabled successfully');
   } catch (err) { next(err); }
 };
 

@@ -1,6 +1,6 @@
 # Documentation Index
 
-> Last updated: 2026-11-03
+> Last updated: 2026-11-05
 
 ## Reading Order
 
@@ -27,7 +27,8 @@
 - [Implementation requirements](ACCOUNT-LOGIN-SECURITY.md)
 - [Verification and rollout limits](ACCOUNT-LOGIN-SECURITY-2026-11-03.md)
 - [Security learning guide](SECURITY-LEARNING-GUIDE.md)
-- [Authentication architecture decision](adr/0014-authentication-session-security.md)
+- [Authentication/session security decision](adr/0014-authentication-session-security.md)
+- [Configurable administrator and staff MFA decision](adr/0015-configurable-staff-mfa.md)
 
 ## Documentation Map
 

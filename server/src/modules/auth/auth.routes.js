@@ -37,6 +37,20 @@ const { getClientBaseUrl } = require('./authRedirects');
 initializeGoogleStrategy();
 
 const Joi = require('joi');
+const { authorizePermissions } = require('../../middleware/role.middleware');
+const { PERMISSIONS } = require('../../config/permissions');
+const mfaSettings = require('./mfaSettings.controller');
+const { policySchema } = require('./mfaPolicy');
+const mfaSettingsSchema = Joi.object({
+  policy: policySchema.required(),
+  verification: Joi.object({
+    currentPassword: Joi.string().max(1024).required(),
+    code: Joi.string().pattern(/^\d{6}$/).optional(),
+  }).required(),
+});
+router.get('/mfa-policy', authenticate, authorizePermissions(PERMISSIONS.SETTINGS_READ), mfaSettings.get);
+router.put('/mfa-policy', authenticate, authorizePermissions(PERMISSIONS.SETTINGS_MANAGE), twoFactorLimiter,
+  validate(mfaSettingsSchema), mfaSettings.update);
 const totpCodeSchema = Joi.object({ code: Joi.string().length(6).pattern(/^\d+$/).required() });
 // Disable accepts a TOTP code OR a single-use backup code (lost-device recovery).
 const disableTwoFactorSchema = Joi.object({

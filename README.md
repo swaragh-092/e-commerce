@@ -20,6 +20,7 @@ This platform is engineered as a **reusable foundation** for high-scale e-commer
 ### 🔐 Authentication & Access Control (RBAC)
 - **Advanced Permissions**: Granular permission gates (e.g., `products.read`, `orders.manage`) for every feature.
 - **Dynamic Roles**: Super-admins can create custom roles with specific inherited permissions.
+- **Configurable MFA**: Super-admins can require authenticator MFA for administrators, all staff, or selected staff roles; customer MFA remains voluntary. See [Accounts and login security](docs/ACCOUNT-LOGIN-SECURITY.md).
 - **Security-Hardened**: JWT with refresh token rotation, bcrypt hashing (cost 12), and per-route rate limiting.
 - **Session Protection**: Brute-force protection and automated refresh token revocation on logout.
 

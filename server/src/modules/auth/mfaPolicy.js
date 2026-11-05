@@ -1,23 +1,59 @@
 'use strict';
 const AppError = require('../../utils/AppError');
 
-// Include both the legacy role and persisted custom-role base roles.
-const requiresAdminMfa = (user) => {
-  if (process.env.REQUIRE_ADMIN_MFA === 'false' && !user?.twoFactorEnabled) return false;
-  const isAdmin = (role) => ['admin', 'super_admin'].includes(role);
-  return isAdmin(user?.role) || (user?.roles || []).some((role) =>
-    typeof role === 'string' ? isAdmin(role) : isAdmin(role.baseRole) || isAdmin(role.slug)
-  );
+const Joi = require('joi');
+const POLICY_KEY = 'mfaPolicy';
+const POLICY_GROUP = 'auth';
+const policySchema = Joi.object({
+  requireAdministrators: Joi.boolean().strict().required(),
+  staffMode: Joi.string().valid('optional', 'all', 'selected').required(),
+  requiredRoleIds: Joi.array().items(Joi.string().uuid()).unique().max(100).required(),
+}).unknown(false);
+
+// Persisted custom admin roles represent staff. Do not let their legacy
+// user.role=admin alias override the selected-role policy.
+const classifyUser = (user) => {
+  const roles = (user?.roles || []).map(role => typeof role === 'string' ? { slug: role } : role);
+  const staffRoles = roles.filter(role => role?.baseRole === 'admin' && !['admin', 'super_admin'].includes(role.slug));
+  const administrator = user?.role === 'super_admin'
+    || roles.some(role => ['admin', 'super_admin'].includes(role?.slug) || role?.baseRole === 'super_admin')
+    || (user?.role === 'admin' && !staffRoles.length);
+  return { administrator, staffRoles, administrative: administrator || staffRoles.length > 0 };
 };
-const assertMfaEnrollment = (user) => {
-  if (requiresAdminMfa(user) && !user.twoFactorEnabled) {
-    throw new AppError('MFA_REQUIRED', 403, 'Administrator MFA enrollment is required. Contact your operator.');
+const environmentPolicy = () => ({
+  requireAdministrators: process.env.REQUIRE_ADMIN_MFA !== 'false',
+  staffMode: process.env.REQUIRE_ADMIN_MFA === 'false' ? 'optional' : 'all',
+  requiredRoleIds: [],
+});
+const loadMfaPolicy = async (user, transaction) => {
+  if (user && !classifyUser(user).administrative) return environmentPolicy();
+  const { Setting } = require('../index');
+  const saved = await Setting.findOne({ where: { group: POLICY_GROUP, key: POLICY_KEY }, transaction });
+  if (!saved) return environmentPolicy();
+  const { error, value } = policySchema.validate(saved.value);
+  if (error) throw new AppError('MFA_POLICY_INVALID', 503, 'MFA settings are invalid. Contact your operator.');
+  return value;
+};
+const isEnrollmentRequired = (user, policy = environmentPolicy()) => {
+  const { administrator, staffRoles } = classifyUser(user);
+  return (administrator && policy.requireAdministrators)
+    || (staffRoles.length > 0 && (policy.staffMode === 'all'
+      || (policy.staffMode === 'selected' && staffRoles.some(role => policy.requiredRoleIds.includes(role.id)))));
+};
+const requiresAdminMfa = (user, policy = environmentPolicy()) =>
+  isEnrollmentRequired(user, policy) || (classifyUser(user).administrative && user?.twoFactorEnabled === true);
+const assertMfaEnrollment = (user, policy) => {
+  if (isEnrollmentRequired(user, policy) && !user.twoFactorEnabled) {
+    throw new AppError('MFA_REQUIRED', 403, 'Staff MFA enrollment is required. Contact your operator.');
   }
 };
-const assertMfaSession = (user, claims) => {
-  assertMfaEnrollment(user);
-  if (requiresAdminMfa(user) && claims.mfa !== true) {
-    throw new AppError('UNAUTHORIZED', 401, 'Sign in again with administrator MFA.');
+const assertMfaSession = (user, claims, policy) => {
+  assertMfaEnrollment(user, policy);
+  if (requiresAdminMfa(user, policy) && claims.mfa !== true) {
+    throw new AppError('UNAUTHORIZED', 401, 'Sign in again with MFA.');
   }
 };
-module.exports = { requiresAdminMfa, assertMfaEnrollment, assertMfaSession };
+module.exports = {
+  POLICY_KEY, POLICY_GROUP, policySchema, classifyUser, environmentPolicy, loadMfaPolicy,
+  isEnrollmentRequired, requiresAdminMfa, assertMfaEnrollment, assertMfaSession,
+};
