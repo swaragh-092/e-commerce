@@ -20,6 +20,8 @@ const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayTy
 const ATTRIBUTE_VALUE_FIELDS = ['id', 'value', 'slug', 'sortOrder', 'displayLabel', 'swatchColor', 'imageUrl', 'unitLabel', 'metadata'];
 
 const syncProductVariantStock = async (productId, transaction = null) => {
+    const product = await Product.findByPk(productId, { transaction });
+    if (product?.type === 'simple') return Number(product.quantity || 0);
     const [stockSum, reservedSum] = await Promise.all([
         ProductVariant.sum('stockQty', {
             where: { productId, isActive: true },
@@ -633,6 +635,9 @@ const addProductVariant = async (productId, data) => {
 };
 
 const updateProductVariant = async (productId, variantId, data, auditContext = null) => {
+    const product = await Product.findByPk(productId);
+    if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
+    assertVariableProduct(product);
     const variant = await ProductVariant.findOne({ where: { id: variantId, productId } });
     if (!variant) throw new AppError('NOT_FOUND', 404, 'Variant not found');
     if (Array.isArray(data.images)) {

@@ -19,11 +19,12 @@ const validateProductTypeChange = (product, data, { hasVariants = false, hasComb
     if (nextType !== product.type && Number(product.reservedQty || 0) > 0) {
         throw new AppError('CONFLICT', 409, 'Finish or cancel orders reserving this product before changing its type.');
     }
-    const resetInventory = product.type === 'simple' && nextType !== 'simple' && !hasVariants && Number(product.quantity || 0) > 0;
-    if (resetInventory && !data.confirmInventoryReset) {
-        throw new AppError('VALIDATION_ERROR', 400, 'Confirm clearing the standalone stock before switching to variant or bundle inventory. Stock is not automatically distributed to variants.');
+    const resetInventory = product.type === 'simple' && nextType !== 'simple' && Number(product.quantity || 0) > 0;
+    const resetVariantInventory = product.type === 'simple' && nextType === 'variable' && hasVariants;
+    if ((resetInventory || resetVariantInventory) && !data.confirmInventoryReset) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Confirm clearing standalone stock and any historical variant stock before switching inventory type. Stock is not automatically distributed to variants.');
     }
-    return { nextType, resetInventory };
+    return { nextType, resetInventory, resetVariantInventory };
 };
 
 module.exports = { assertVariableProduct, validateProductTypeChange };

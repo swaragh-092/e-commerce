@@ -986,14 +986,20 @@ exports.updateProduct = async (id, data, auditContext = null) => {
 
     const variantsExist = await productHasVariants(id, transaction);
     const hasComboItems = await ProductComboItem.count({ where: { comboProductId: id }, transaction }) > 0;
-    const { nextType, resetInventory } = validateProductTypeChange(product, data, { hasVariants: variantsExist, hasComboItems });
+    const { nextType, resetInventory, resetVariantInventory } = validateProductTypeChange(product, data, { hasVariants: variantsExist, hasComboItems });
     if (variantsExist && data.variants !== undefined) throw new AppError('VALIDATION_ERROR', 400, 'Use the variant editor to update existing combinations. Product updates cannot replace variant history.');
     delete data.confirmInventoryReset;
-    if ((nextType !== 'simple' || variantsExist) && data.quantity !== undefined) {
+    if (nextType !== 'simple' && data.quantity !== undefined) {
       throw new AppError('VALIDATION_ERROR', 400, 'Stock is managed by variants or bundle items. Edit their stock instead.');
     }
     if (resetInventory) {
       await inventoryService.adjust({ productId: id, newQuantity: 0, reason: `Change inventory type from simple to ${nextType}`, createdBy: auditContext?.userId || null, transaction });
+    }
+    if (resetVariantInventory) {
+      const variantReserved = Number(await ProductVariant.sum('reservedQty', { where: { productId: id }, transaction }) || 0);
+      if (variantReserved > 0) {
+        throw new AppError('CONFLICT', 409, 'Finish or cancel orders reserving historical variants before switching this product to Variable.');
+      }
     }
     validateProductStock(data, product);
     validateSellingReadiness(data, product, updateFeatures.pricing);
@@ -1005,7 +1011,7 @@ exports.updateProduct = async (id, data, auditContext = null) => {
     const adjustmentReason = data.stockAdjustmentReason;
     delete data.stockAdjustmentReason;
 
-    if (stockChanged && !variantsExist) {
+    if (stockChanged && nextType === 'simple') {
       await inventoryService.adjust({
         productId: id,
         newQuantity: Number(data.quantity),
@@ -1028,6 +1034,9 @@ exports.updateProduct = async (id, data, auditContext = null) => {
       await replaceVariantsWithOptions(id, data.variants, transaction);
       await syncProductVariantStock(id, transaction);
     } else if (nextType === 'variable') {
+      if (resetVariantInventory) {
+        await ProductVariant.update({ stockQty: 0, reservedQty: 0 }, { where: { productId: id }, transaction });
+      }
       await syncProductVariantStock(id, transaction);
     }
 

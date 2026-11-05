@@ -1158,6 +1158,7 @@ const placeOrder = async (userId, payload) => {
 
         let variant = null;
         if (buyNowItem.variantId) {
+            if (product.type !== 'variable') throw new AppError('VALIDATION_ERROR', 400, 'This product uses standalone stock. Buy it without a variant.');
             variant = await ProductVariant.findOne({
                 where: { id: buyNowItem.variantId, productId: buyNowItem.productId, isActive: true },
             });
@@ -1166,10 +1167,7 @@ const placeOrder = async (userId, payload) => {
                 throw new AppError('NOT_FOUND', 404, 'Selected product variant not found or is currently unavailable');
             }
         } else {
-            const variantCount = await ProductVariant.count({
-                where: { productId: buyNowItem.productId },
-            });
-            if (product.type === 'variable' || variantCount > 0) {
+            if (product.type === 'variable') {
                 throw new AppError('VALIDATION_ERROR', 400, `Please select an option for "${product.name}" before checkout.`);
             }
         }
@@ -1323,6 +1321,7 @@ const placeOrder = async (userId, payload) => {
             let currentPrice = getVariantUnitPrice(plainCurrentProduct, null);
 
             if (item.variantId) {
+                if (currentProduct.type !== 'variable') throw new AppError('VALIDATION_ERROR', 400, `"${product.name}" now uses standalone stock. Remove it and add it again without an option.`);
                 const currentVariant = await ProductVariant.findOne({
                     where: { id: item.variantId, productId: product.id, isActive: true },
                     transaction: t,
@@ -1334,11 +1333,7 @@ const placeOrder = async (userId, payload) => {
                 currentPrice = getVariantUnitPrice(plainCurrentProduct, currentVariant);
                 item.variant = currentVariant;
             } else {
-                const variantCount = await ProductVariant.count({
-                    where: { productId: product.id },
-                    transaction: t,
-                });
-                if (currentProduct.type === 'variable' || variantCount > 0) {
+                if (currentProduct.type === 'variable') {
                     throw new AppError('VALIDATION_ERROR', 400, `Please select a product option for "${product.name}" before checkout.`);
                 }
             }

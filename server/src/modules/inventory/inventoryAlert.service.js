@@ -244,7 +244,7 @@ const buildInventoryTargets = (products, threshold, now = new Date()) => {
   for (const product of products || []) {
     if (product.status !== 'published' || product.isEnabled === false) continue;
     const variants = Array.isArray(product.variants) ? product.variants : [];
-    const tracksVariants = product.type === 'variable' || variants.length > 0;
+    const tracksVariants = product.type === 'variable';
 
     if (tracksVariants) {
       for (const variant of variants) {

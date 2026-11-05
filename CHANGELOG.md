@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## [1.4.2.0] - 2026-11-05
+
+### Fixed
+- Use the saved product type for inventory: Simple products use their own stock even when historical variant rows exist; Variable products retain per-SKU alerts.
+- Preserve Simple stock and new reservations when fulfilling, releasing, or returning historical variant orders.
+- Require confirmation and clear stale historical variant quantities before switching a Simple product back to Variable, including after its standalone stock reaches zero.
+- Keep obsolete variant options out of Simple product purchases, and require confirmation before replacing Simple stock during a type change.
+- Show SKU stock breakdowns for Variable products and retain the selected variant when opening an inventory alert.
+
 ## [1.4.1.0] - 2026-11-05
 
 ### Fixed
