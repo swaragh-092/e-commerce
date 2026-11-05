@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## [1.4.1.0] - 2026-11-05
+
+### Fixed
+- Show on-hand, reserved, and available inventory with separate active and disabled variant totals.
+- Identify variant SKUs in inventory warnings and refresh alerts after products are disabled or restocked.
+- Prevent unpublished products and legacy products with disabled variants from using standalone stock during cart and checkout operations.
+
 ## [1.4.0.0] - 2026-11-05
 
 ### Added

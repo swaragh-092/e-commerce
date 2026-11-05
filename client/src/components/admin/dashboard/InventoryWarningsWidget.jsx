@@ -17,38 +17,45 @@ const InventoryWarningsWidget = ({ lowStock, loading, spacing, stats }) => {
         <Typography variant="h6" fontWeight={600}>Inventory Warnings ({totalAtRisk})</Typography>
       </Box>
 
+      <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>Available = on hand − reserved. Alerts count individual active SKUs.</Typography>
       {!loading && totalAtRisk === 0 && lowStock.length === 0 ? (
         <Typography variant="body2" color="text.secondary">No inventory warnings right now.</Typography>
       ) : !loading && lowStock.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
-          {outOfStockCount > 0 ? `${outOfStockCount} product${outOfStockCount === 1 ? '' : 's'} are out of stock.` : 'Inventory items need attention.'}
+          {outOfStockCount > 0 ? `${outOfStockCount} item${outOfStockCount === 1 ? '' : 's'} are out of stock.` : 'Inventory items need attention.'}
         </Typography>
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           {criticalItems.slice(0, 3).map((item) => (
             <Box
-              key={item.id}
+              key={item.inventoryKey || item.variantId || item.id}
               onClick={() => navigate(`/admin/products/${item.id}/edit`)}
               sx={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1,
                 p: 0.5, borderRadius: 1, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' }
               }}
             >
-              <Typography variant="body2" noWrap>{item.name}</Typography>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="body2" noWrap>{item.name}</Typography>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ overflowWrap: 'anywhere' }}>{item.variantId ? 'Variant' : 'Product'} · SKU: {item.sku || '—'}</Typography>
+              </Box>
               <Chip label="Out" color="error" size="small" />
             </Box>
           ))}
           {warningItems.map((item) => (
             <Box
-              key={item.id}
+              key={item.inventoryKey || item.variantId || item.id}
               onClick={() => navigate(`/admin/products/${item.id}/edit`)}
               sx={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1,
                 p: 0.5, borderRadius: 1, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' }
               }}
             >
-              <Typography variant="body2" noWrap>{item.name}</Typography>
-              <Chip label={`${item.availableQty} left`} color="warning" size="small" />
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="body2" noWrap>{item.name}</Typography>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ overflowWrap: 'anywhere' }}>{item.variantId ? 'Variant' : 'Product'} · SKU: {item.sku || '—'}</Typography>
+              </Box>
+              <Chip label={`${item.availableQty} available`} color="warning" size="small" />
             </Box>
           ))}
         </Box>

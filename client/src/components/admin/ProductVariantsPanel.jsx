@@ -115,7 +115,7 @@ const VariantsPanel = ({
       })));
       setAttributes(attrData);
       setProductBasePrice(getProductBasePrice(product));
-      onStockTotalChange?.(stockTotal, activeVariantRows.length, Number(product?.quantity || 0), varData.length);
+      onStockTotalChange?.(stockTotal, activeVariantRows.length, Number(product?.quantity || 0), varData.length, varData);
 
     } catch (error) {
       setLoadError(true);
@@ -141,7 +141,7 @@ const VariantsPanel = ({
   useEffect(() => {
     const activeVariantRows = variants.filter((variant) => variant?.isActive !== false);
     const stockTotal = activeVariantRows.reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0);
-    onStockTotalChange?.(stockTotal, activeVariantRows.length, undefined, variants.length);
+    onStockTotalChange?.(stockTotal, activeVariantRows.length, undefined, variants.length, variants);
   }, [variants, onStockTotalChange]);
 
   useEffect(() => {
@@ -457,7 +457,7 @@ const VariantsPanel = ({
                     >
                       <Box sx={{ minWidth: 0, flex: 1, py: 0.5 }}>
                         <Typography variant="body2" fontWeight={600} sx={{ overflowWrap: 'anywhere' }}>{getVariantOptionLabel(variant) || 'Variant SKU'}</Typography>
-                        <Typography variant="caption" color="text.secondary">{pricingEnabled ? `MRP: ${Number(variant.price || 0).toLocaleString()} · ` : ''}Stock: {variant.stockQty || 0} · {variant.isActive === false ? 'Hidden' : 'Available'}{variant._dirty ? ' · Unsaved' : ''}</Typography>
+                        <Typography variant="caption" color="text.secondary">{pricingEnabled ? `MRP: ${Number(variant.price || 0).toLocaleString()} · ` : ''}On hand: {variant.stockQty || 0} · Reserved: {variant.reservedQty || 0} · Available: {variant.isActive === false ? 0 : Math.max(Number(variant.stockQty || 0) - Number(variant.reservedQty || 0), 0)} · {variant.isActive === false ? 'Disabled' : 'Active'}{variant._dirty ? ' · Unsaved' : ''}</Typography>
                       </Box>
                       <IconButton
                         size="small"
@@ -586,7 +586,7 @@ const VariantsPanel = ({
                             disabled={!canEditVariants}
                             inputProps={{ min: 0 }}
                             error={variant._dirty && !validStock(variant)}
-                            helperText={variant._dirty && !validStock(variant) ? `Enter a whole number, at least ${variant.reservedQty || 0}.` : Number(variant.reservedQty || 0) > 0 ? `${variant.reservedQty} reserved` : undefined}
+                            helperText={variant._dirty && !validStock(variant) ? `Enter a whole number, at least ${variant.reservedQty || 0}.` : `${variant.reservedQty || 0} reserved · ${variant.isActive === false ? 0 : Math.max(Number(variant.stockQty || 0) - Number(variant.reservedQty || 0), 0)} available${variant.isActive === false ? ' · Disabled; stock and reservations retained' : ''}`}
                           />
                         </Grid>
                         <Grid item xs={12} sm={8}>

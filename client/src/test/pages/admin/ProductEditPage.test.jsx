@@ -63,6 +63,27 @@ describe('product type and inventory editor', () => {
     expect(screen.getByTestId('variant-editor')).toHaveAttribute('data-pricing-enabled', String(pricing && showPrices));
   });
 
+  it('shows available stock after reservations for a simple product', async () => {
+    getProductById.mockResolvedValue({ data: { ...product, quantity: 30, reservedQty: 26 } });
+    mount(); await loaded();
+    expect(screen.getByLabelText('Inventory stock breakdown')).toHaveTextContent('On hand: 30');
+    expect(screen.getByLabelText('Inventory stock breakdown')).toHaveTextContent('Reserved: 26');
+    expect(screen.getByLabelText('Inventory stock breakdown')).toHaveTextContent('Available to sell: 4');
+  });
+  it('does not show stale parent stock when every legacy variant is disabled', async () => {
+    getProductById.mockResolvedValue({ data: { ...product, quantity: 50, variants: [{ stockQty: 22, reservedQty: 19, isActive: false }] } });
+    mount(); await loaded();
+    expect(screen.getByLabelText('Total variant stock')).toHaveValue(0);
+    const summary = screen.getByLabelText('Inventory stock breakdown');
+    expect(summary).toHaveTextContent('Available to sell: 0');
+    expect(summary).toHaveTextContent('Disabled variants: 22 on hand, 19 reserved');
+  });
+  it('explains that disabling a product retains its inventory and reservations', async () => {
+    getProductById.mockResolvedValue({ data: { ...product, isEnabled: false, quantity: 30, reservedQty: 26 } });
+    mount(); await loaded();
+    expect(screen.getByLabelText('Inventory stock breakdown')).toHaveTextContent('Disabled product');
+    expect(screen.getByLabelText('Inventory stock breakdown')).toHaveTextContent('Reserved: 26');
+  });
   it('creates a catalog product without price or shipping measurements', async () => {
     disabledFeatures.add('pricing');
     disabledFeatures.add('shipping');
@@ -165,7 +186,7 @@ describe('product type and inventory editor', () => {
   ])('saves a photo on a Simple product with %s variants without changing type or stock', async (_, variants) => {
     getProductById.mockResolvedValue({ data: { ...product, variants } });
     mount(); await loaded();
-    if (variants.length) expect(screen.getByLabelText('Stock Quantity *')).toHaveAttribute('readonly');
+    if (variants.length) expect(screen.getByLabelText('Total variant stock')).toHaveAttribute('readonly');
     fireEvent.click(screen.getByRole('button', { name: 'Add Product Media' }));
     fireEvent.click(screen.getByRole('button', { name: 'Choose product photo' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));

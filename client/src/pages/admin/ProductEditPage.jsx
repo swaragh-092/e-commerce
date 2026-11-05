@@ -75,6 +75,7 @@ import ProductCustomTabs from '../../components/admin/ProductCustomTabs';
 import ProductComboBuilder from '../../components/admin/ProductComboBuilder';
 import TaxConfigSection from '../../components/admin/ProductTaxConfig';
 import VariantsPanel from '../../components/admin/ProductVariantsPanel';
+import InventoryStockSummary from '../../components/admin/InventoryStockSummary';
 import ProductAssistantPanel from '../../components/admin/ProductAssistantPanel';
 import UnitSelector from '../../components/admin/UnitSelector';
 import { toDateTimeLocal } from '../../utils/dates';
@@ -297,7 +298,7 @@ const ProductEditPage = () => {
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
   const [ogPickerOpen, setOgPickerOpen] = useState(false);
   const [dbProduct, setDbProduct] = useState(null);
-  const [hasVariants, setHasVariants] = useState(false);
+  const [inventoryVariants, setInventoryVariants] = useState([]);
   const [variantCount, setVariantCount] = useState(0);
   const [variantStockTotal, setVariantStockTotal] = useState(0);
   const [globalPrimaryVersion, setGlobalPrimaryVersion] = useState(0);
@@ -332,9 +333,8 @@ const ProductEditPage = () => {
             setDbProduct(p);
 
             const activeVariants = Array.isArray(p.variants) ? p.variants.filter((variant) => variant?.isActive !== false) : [];
-            const nextHasVariants = activeVariants.length > 0;
             const nextVariantStockTotal = activeVariants.reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0);
-            setHasVariants(nextHasVariants);
+            setInventoryVariants(p.variants || []);
             setVariantCount(Array.isArray(p.variants) ? p.variants.length : 0);
             setVariantStockTotal(nextVariantStockTotal);
 
@@ -350,7 +350,7 @@ const ProductEditPage = () => {
               saleStartAt: toDateTimeLocal(p.saleStartAt),
               saleEndAt: toDateTimeLocal(p.saleEndAt),
               saleLabel: p.saleLabel || '',
-              quantity: nextHasVariants ? nextVariantStockTotal : (p.quantity || 0),
+              quantity: p.type === 'variable' || p.variants?.length > 0 ? nextVariantStockTotal : (p.quantity || 0),
               status: p.status || 'draft',
               type: p.type || 'simple',
               isEnabled: p.isEnabled ?? true,
@@ -454,11 +454,11 @@ const ProductEditPage = () => {
   const discountAmount = hasValidDiscount ? priceNum - salePriceNum : 0;
   const discountPercent = hasValidDiscount ? Math.round(((priceNum - salePriceNum) / priceNum) * 100) : 0;
 
-  const handleVariantStockChange = useCallback((total, count, fallbackQuantity, totalCount) => {
+  const handleVariantStockChange = useCallback((total, count, fallbackQuantity, totalCount, rows) => {
     setVariantStockTotal(total);
     if (totalCount !== undefined) setVariantCount(totalCount);
-    setHasVariants(count > 0);
-    if (count > 0) {
+    if (rows) setInventoryVariants(rows);
+    if (count > 0 || totalCount > 0) {
       setFormData((prev) => ({ ...prev, quantity: total }));
       setErrors((prev) => ({ ...prev, quantity: undefined }));
     } else if (fallbackQuantity !== undefined) {
@@ -517,7 +517,7 @@ const ProductEditPage = () => {
       return;
     }
 
-    const effectiveQuantity = formData.type === 'variable' || hasVariants ? variantStockTotal : formData.quantity;
+    const effectiveQuantity = formData.type === 'variable' || variantCount > 0 ? variantStockTotal : formData.quantity;
     const errs = validate({ ...formData, quantity: effectiveQuantity, _features: { pricing: pricingCapability, shipping: shippingCapability } });
 
     // Block type change if invariants are violated
@@ -606,6 +606,7 @@ const ProductEditPage = () => {
         const res = await updateProduct(id, payload);
         if (res?.data) {
           setDbProduct(res.data);
+          if (Array.isArray(res.data.variants)) setInventoryVariants(res.data.variants);
           if (payload.type === 'variable') {
             const active = (res.data.variants || []).filter((variant) => variant.isActive !== false);
             setVariantStockTotal(active.reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0));
@@ -1361,15 +1362,23 @@ const ProductEditPage = () => {
 
                 <TextField
                   fullWidth
-                  label={formData.type === 'variable' ? 'Total variant stock' : 'Stock Quantity *'}
+                  label={formData.type === 'variable' || variantCount > 0 ? 'Total variant stock' : 'Stock Quantity *'}
                   type="number"
                   margin="normal"
                   inputProps={{ min: 0 }}
-                  value={formData.type === 'variable' ? variantStockTotal : formData.quantity}
+                  value={formData.type === 'variable' || variantCount > 0 ? variantStockTotal : formData.quantity}
                   InputProps={{ readOnly: formData.type === 'variable' || variantCount > 0 }}
                   onChange={(e) => setField('quantity', e.target.value)}
                   error={Boolean(errors.quantity)}
                   helperText={errors.quantity || (formData.type === 'variable' ? 'Calculated from active variants. Set each combination’s stock below; no variants means 0 stock.' : variantCount > 0 ? 'Existing variants manage stock. Save this product as Variable Product.' : 'Stock for this single product.')}
+                />
+                <InventoryStockSummary
+                  quantity={formData.quantity}
+                  reservedQty={dbProduct?.reservedQty}
+                  variants={inventoryVariants}
+                  tracksVariants={formData.type === 'variable' || variantCount > 0}
+                  enabled={formData.isEnabled !== false}
+                  published={formData.status === 'published'}
                 />
               </Paper>
             )}
