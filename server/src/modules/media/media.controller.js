@@ -5,7 +5,7 @@ const { success } = require('../../utils/response');
 exports.upload = async (req, res, next) => {
     try {
         const type = req.body?.type || req.query?.type || 'image';
-        const media = await mediaService.uploadMedia(req.file, type);
+        const media = await mediaService.uploadMedia(req.file, type, { allowDuplicate: req.body?.allowDuplicate === 'true' });
         return success(res, { media }, 'File uploaded successfully', 201);
     } catch (err) {
         next(err);
@@ -23,8 +23,8 @@ exports.uploadFont = async (req, res, next) => {
 
 exports.list = async (req, res, next) => {
     try {
-        const { page, limit, sortBy, sortDir, type = 'image' } = req.query;
-        const result = await mediaService.listMedia(page, limit, sortBy, sortDir, type);
+        const { page, limit, sortBy, sortDir, type = 'image', usage = 'all' } = req.query;
+        const result = await mediaService.listMedia(page, limit, sortBy, sortDir, type, usage);
         return success(res, result.data, 'Media found', 200, {
             total: result.totalItems,
             page: result.currentPage,

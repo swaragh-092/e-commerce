@@ -1,0 +1,66 @@
+import React from 'react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import MediaImageEditor from '../../components/common/MediaImageEditor';
+import BulkMediaCropDialog from '../../components/common/BulkMediaCropDialog';
+import { mediaService } from '../../services/mediaService';
+import * as editing from '../../utils/imageEditing';
+vi.mock('../../services/mediaService', () => ({ mediaService: { listCropPresets: vi.fn(), createCropPreset: vi.fn(), uploadMedia: vi.fn() } }));
+vi.mock('../../utils/imageEditing', async original => ({ ...(await original()), loadImage: vi.fn(), drawCrop: vi.fn(), editPreview: vi.fn(), exportEditedImage: vi.fn() }));
+const portrait = { id: 'custom:portrait', recordId: 'portrait', label: 'Social portrait', width: 800, height: 1000, ratio: 0.8, custom: true };
+let saved;
+beforeEach(() => {
+  vi.clearAllMocks(); saved = [];
+  mediaService.listCropPresets.mockImplementation(async () => ({ data: saved }));
+  mediaService.createCropPreset.mockImplementation(async () => { saved = [portrait]; return { data: portrait }; });
+  editing.loadImage.mockResolvedValue({ naturalWidth: 1800, naturalHeight: 1200 });
+  editing.editPreview.mockImplementation((_image, settings) => ({ preview: 'data:image/png;base64,preview', output: { width: settings.width, height: Math.round(settings.width / (settings.presetDefinition?.ratio || 1)) } }));
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} });
+  URL.createObjectURL = vi.fn(() => 'blob:preview'); URL.revokeObjectURL = vi.fn();
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(callback => callback(new Blob(['preview'], { type: 'image/png' })));
+});
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+describe('presets shared between single and bulk editors', () => {
+  it('creates a preset in the image editor and reuses it in the bulk editor', async () => {
+    const editor = render(<MediaImageEditor source="/image.png" name="image.png" onSave={vi.fn()} onClose={vi.fn()} />);
+    await screen.findByText('Output: 1800 × 1200 px');
+    fireEvent.click(screen.getByRole('button', { name: 'Manage custom presets' }));
+    fireEvent.change(screen.getByLabelText('Preset name'), { target: { value: 'Social portrait' } });
+    fireEvent.change(screen.getByLabelText('Preset width (px)'), { target: { value: '800' } });
+    fireEvent.change(screen.getByLabelText('Preset height (px)'), { target: { value: '1000' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save preset' }));
+    await screen.findByText('Preset “Social portrait” saved.');
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Custom crop presets' })).not.toBeInTheDocument());
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Crop preset' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Social portrait (800 × 1000)' }));
+    expect(screen.getByText('Output: 800 × 1000 px')).toBeInTheDocument();
+    editor.unmount();
+    render(<BulkMediaCropDialog files={[{ id: 'one', url: '/image.png', originalName: 'image.png', mimeType: 'image/png' }]} onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save 1 image' })).toBeEnabled());
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Batch preset' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Social portrait (800 × 1000)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to all unfinished images' }));
+    expect(await screen.findByText('800 × 1000 px · Social portrait')).toBeInTheDocument();
+  });
+  it('keeps built-in presets usable if the custom preset request fails', async () => {
+    mediaService.listCropPresets.mockRejectedValue(new Error('Offline'));
+    render(<MediaImageEditor source="/image.png" name="image.png" onSave={vi.fn()} onClose={vi.fn()} />);
+    await screen.findByText('Custom presets unavailable. Built-in presets still work.');
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Crop preset' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Product square' }));
+    expect(screen.getByText('Output: 1200 × 1200 px')).toBeInTheDocument();
+  });
+  it('keeps a reviewed custom crop stable after another admin changes or removes the preset', async () => {
+    saved = [portrait];
+    render(<MediaImageEditor source="/image.png" name="image.png" onSave={vi.fn()} onClose={vi.fn()} />);
+    await screen.findByText('Output: 1800 × 1200 px');
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Crop preset' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Social portrait (800 × 1000)' }));
+    expect(screen.getByText('Output: 800 × 1000 px')).toBeInTheDocument();
+    saved = [];
+    window.dispatchEvent(new Event('media:crop-presets-changed'));
+    await waitFor(() => expect(mediaService.listCropPresets).toHaveBeenCalledTimes(2));
+    expect(screen.getByText('Output: 800 × 1000 px')).toBeInTheDocument();
+  });
+});

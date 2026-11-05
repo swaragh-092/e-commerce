@@ -14,4 +14,11 @@ exports.listMediaSchema = Joi.object({
     sortBy: Joi.string().valid('createdAt', 'size', 'originalName', 'filename', 'date', 'name').optional().default('createdAt'),
     sortDir: Joi.string().valid('asc', 'desc').optional().default('desc'),
     type: Joi.string().valid('image', 'icon', 'font', 'all').optional().default('image'),
+    usage: Joi.string().valid('all', 'used', 'unused').optional().default('all'),
+});
+
+exports.cropPresetSchema = Joi.object({
+    name: Joi.string().trim().min(1).max(60).required(),
+    width: Joi.number().integer().min(1).max(4096).required(),
+    height: Joi.number().integer().min(1).max(4096).required(),
 });

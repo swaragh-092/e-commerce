@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const mediaController = require('./media.controller');
+const cropPresetController = require('./cropPreset.controller');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { auditLog } = require('../audit/audit.middleware');
@@ -10,7 +11,14 @@ const { mediaUploadLimiter } = require('../../middleware/rateLimiter.middleware'
 const { PERMISSIONS } = require('../../config/permissions');
 const { validate } = require('../../middleware/validate.middleware');
 const { idParamSchema } = require('../../utils/common.validation');
-const { updateMediaSchema, listMediaSchema } = require('./media.validation');
+const { updateMediaSchema, listMediaSchema, cropPresetSchema } = require('./media.validation');
+
+// Keep named routes before the generic /:id media routes.
+router.get('/crop-presets', authenticate, authorizePermissions(PERMISSIONS.MEDIA_UPLOAD), cropPresetController.list);
+router.post('/crop-presets', authenticate, authorizePermissions(PERMISSIONS.MEDIA_UPLOAD), validate(cropPresetSchema), auditLog('CropPreset'), cropPresetController.create);
+router.patch('/crop-presets/:id', authenticate, authorizePermissions(PERMISSIONS.MEDIA_UPLOAD), validate(idParamSchema, 'params'), validate(cropPresetSchema), auditLog('CropPreset'), cropPresetController.update);
+router.delete('/crop-presets/:id', authenticate, authorizePermissions(PERMISSIONS.MEDIA_UPLOAD), validate(idParamSchema, 'params'), auditLog('CropPreset'), cropPresetController.remove);
+router.post('/crop-presets/:id/restore', authenticate, authorizePermissions(PERMISSIONS.MEDIA_UPLOAD), validate(idParamSchema, 'params'), auditLog('CropPreset'), cropPresetController.restore);
 
 router.post('/upload',
     authenticate,

@@ -1,0 +1,32 @@
+import React from 'react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import MediaPicker from '../../components/common/MediaPicker';
+import { mediaService } from '../../services/mediaService';
+vi.mock('../../services/mediaService', () => ({ mediaService: { uploadMedia: vi.fn(), list: vi.fn() } }));
+vi.mock('../../context/NotificationContext', () => ({ useNotification: () => ({ notify: vi.fn() }) }));
+beforeEach(() => {
+  vi.clearAllMocks();
+  Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: vi.fn(() => 'blob:preview') });
+  Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: vi.fn() });
+  vi.stubGlobal('IntersectionObserver', class { observe() {} unobserve() {} disconnect() {} });
+  mediaService.list.mockResolvedValue({ data: [], meta: { page: 1, totalPages: 1 } });
+});
+afterEach(() => vi.unstubAllGlobals());
+it('finishes the whole upload batch before changing tabs and preserves both selections', async () => {
+  const first = { id: 'first', url: '/first.png' };
+  const second = { id: 'second', url: '/second.png' };
+  let finishSecond;
+  mediaService.uploadMedia.mockResolvedValueOnce({ data: { media: first } }).mockImplementationOnce(() => new Promise(resolve => { finishSecond = resolve; }));
+  const select = vi.fn();
+  render(<MediaPicker open multiple onClose={vi.fn()} onSelect={select} />);
+  fireEvent.change(screen.getByLabelText('Choose images'), { target: { files: ['one', 'two'].map(name => new File(['image'], `${name}.png`, { type: 'image/png' })) } });
+  fireEvent.click(screen.getByRole('button', { name: 'Upload 2 images' }));
+  await waitFor(() => expect(mediaService.uploadMedia).toHaveBeenCalledTimes(2));
+  expect(screen.getByRole('tab', { name: 'Upload Files' })).toHaveAttribute('aria-selected', 'true');
+  expect(mediaService.uploadMedia.mock.calls[1][2].aborted).toBe(false);
+  finishSecond({ data: { media: second } });
+  await waitFor(() => expect(screen.getByRole('tab', { name: 'Media Library' })).toHaveAttribute('aria-selected', 'true'));
+  fireEvent.click(screen.getByRole('button', { name: 'Select 2 items' }));
+  expect(select).toHaveBeenCalledWith([first, second]);
+});
