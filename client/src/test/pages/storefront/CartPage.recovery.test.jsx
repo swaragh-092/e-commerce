@@ -5,10 +5,11 @@ import CartPage from '../../../pages/storefront/CartPage';
 import { CartProvider } from '../../../context/CartContext';
 import { AuthContext } from '../../../context/AuthContext';
 import cartService from '../../../services/cartService';
+import { useCart } from '../../../hooks/useCart';
 
 const { notify } = vi.hoisted(() => ({ notify: vi.fn() }));
 vi.mock('../../../services/cartService', () => ({ default: {
-  getCart: vi.fn(), updateItem: vi.fn(), removeItem: vi.fn(), clearCart: vi.fn(),
+  getCart: vi.fn(), addItem: vi.fn(), updateItem: vi.fn(), removeItem: vi.fn(), clearCart: vi.fn(),
 } }));
 vi.mock('../../../hooks/useSettings', () => ({
   useSettings: () => ({ settings: {} }),
@@ -27,9 +28,13 @@ const item = {
   product: { id: 'product-1', name: 'Test product', slug: 'test-product', price: 10, quantity: 10 },
 };
 const response = items => ({ data: { data: { items } } });
+const AddProduct = () => {
+  const { addItem } = useCart();
+  return <button onClick={() => addItem('product-1')}>Add product</button>;
+};
 const mount = () => render(
   <MemoryRouter><AuthContext.Provider value={{ user: null }}>
-    <CartProvider><CartPage /></CartProvider>
+    <CartProvider><AddProduct /><CartPage /></CartProvider>
   </AuthContext.Provider></MemoryRouter>
 );
 
@@ -39,6 +44,16 @@ beforeEach(() => {
 });
 
 describe('cart failure recovery', () => {
+  it('clears a previous load error when adding a product succeeds', async () => {
+    cartService.getCart.mockRejectedValueOnce(new Error('Offline'));
+    cartService.addItem.mockResolvedValue(response([item]));
+    mount();
+    await screen.findByRole('alert');
+    fireEvent.click(screen.getByRole('button', { name: 'Add product' }));
+    expect(await screen.findByText('Test product')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('distinguishes a failed load from an empty cart and retries', async () => {
     cartService.getCart.mockRejectedValueOnce(new Error('Offline'));
     mount();

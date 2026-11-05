@@ -35,24 +35,28 @@ export const CartProvider = ({ children }) => {
   const addItem = async (productId, quantity = 1, variantId = null) => {
     const res = await cartService.addItem(productId, quantity, variantId);
     setCart(res.data.data);
+    setError('');
     return res.data.data;
   };
 
   const updateItem = async (cartItemId, quantity) => {
     const res = await cartService.updateItem(cartItemId, quantity);
     setCart(res.data.data);
+    setError('');
     return res.data.data;
   };
 
   const removeItem = async (cartItemId) => {
     const res = await cartService.removeItem(cartItemId);
     setCart(res.data.data);
+    setError('');
     return res.data.data;
   };
 
   const clearCart = async () => {
     await cartService.clearCart();
     setCart(null);
+    setError('');
   };
 
   const value = {
