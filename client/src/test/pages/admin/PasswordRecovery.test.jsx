@@ -10,6 +10,22 @@ vi.mock('../../../services/authService', () => ({ default: { forgotPassword: vi.
 
 beforeEach(() => vi.clearAllMocks());
 describe('Password recovery destinations', () => {
+  it.each([true, false])('offers a way out of a missing reset link (admin=%s)', (admin) => {
+    render(<MemoryRouter><ResetPasswordPage admin={admin} /></MemoryRouter>);
+    expect(screen.getByRole('link', { name: 'Request a new reset link' })).toHaveAttribute('href', admin ? '/admin/forgot-password' : '/forgot-password');
+    expect(authService.resetPassword).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])('offers a new link after a rejected reset token (admin=%s)', async (admin) => {
+    authService.resetPassword.mockRejectedValue({ response: { data: { error: { message: 'Reset token expired.' } } } });
+    render(<MemoryRouter initialEntries={['/reset-password?token=expired']}><ResetPasswordPage admin={admin} /></MemoryRouter>);
+    fireEvent.change(screen.getByLabelText(/^New Password/), { target: { value: 'NewPassword1!' } });
+    fireEvent.change(screen.getByLabelText(/^Confirm New Password/), { target: { value: 'NewPassword1!' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Reset Password' }));
+    await screen.findByText('Reset token expired.');
+    expect(screen.getByRole('link', { name: 'Request a new reset link' })).toHaveAttribute('href', admin ? '/admin/forgot-password' : '/forgot-password');
+  });
+
   it.each([true, false])('keeps the correct login destination (admin=%s)', async (admin) => {
     authService.forgotPassword.mockResolvedValue({ message: 'Check your email.' });
     render(<MemoryRouter><ForgotPasswordPage admin={admin} /></MemoryRouter>);
