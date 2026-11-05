@@ -25,5 +25,7 @@ Apply migrations before serving the new code, drain older workers, and plan reau
 
 ## References
 
+- [Configurable administrator and staff MFA](0015-configurable-staff-mfa.md) supersedes environment-only policy management when a policy is explicitly saved.
+
 - [Accounts/login requirements and implementation](../ACCOUNT-LOGIN-SECURITY.md)
 - [Verification and rollout limitations](../ACCOUNT-LOGIN-SECURITY-2026-11-03.md)

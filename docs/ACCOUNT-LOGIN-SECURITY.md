@@ -6,7 +6,7 @@ Date: 2026-11-02. Scope: accounts/login only. Status: local implementation in pr
 
 ## Confirmed requirements
 
-- Mandatory administrator MFA is controlled by `REQUIRE_ADMIN_MFA` (enforced by default). The owner may set `REQUIRE_ADMIN_MFA=false` during rollout to allow password login without enrollment. Set it to `true` after enrolling administrators to enforce it again. Voluntarily enabled MFA continues to require verification.
+- Administrator MFA requirements can be managed in **Admin → Settings → Security**. Choose administrator requirements and optional, all, or selected staff roles. Customer MFA stays voluntary. Before the first explicit save, preserve the deployment's `REQUIRE_ADMIN_MFA` setting; after saving, the database policy takes precedence. Voluntarily enabled staff MFA continues to require verification.
 - Infrastructure in scope: AWS EC2, GitHub, PostgreSQL.
 - Do not infer deployment topology, change live credentials, or suspend identities based only on an email address.
 - PostgreSQL runs on the AWS EC2 instance. Test both locally and at `https://eshopadmin.swaragh.org.in/admin`.
@@ -17,7 +17,7 @@ Date: 2026-11-02. Scope: accounts/login only. Status: local implementation in pr
 | Requirement | Repository evidence and local changes | Remaining verification/work |
 |---|---|---|
 | Remove demo/default accounts | Disabled `20260402100001-demo-users.js`; it no longer creates shared-password admin/customer accounts. Its rollback no longer deletes every user/profile. | Operator must identify and suspend any existing demo identities, revoke sessions, and rotate compromised credentials. No live database was inspected or changed. |
-| Mandatory admin/infrastructure MFA | New MFA policy covers legacy admin/super-admin and custom roles based on those roles. Password, phone, Google, refresh, mandatory and optional authentication enforce the policy. Tokens record completed MFA. Admin trusted-device bypass and self-disable are denied. Fixed backup-code verification loading hashes through the default scope that excluded them; protected hashes are now loaded under lock. | Enroll actual admins; validate live flows. Infrastructure MFA is separate and unverified. Old admin sessions require a new MFA login. |
+| Mandatory admin/infrastructure MFA | Configurable app MFA policy covers legacy admin/super-admin and selected custom staff roles. Password, phone, Google, refresh, mandatory and optional authentication enforce the policy. Tokens record completed MFA. Admin trusted-device bypass is denied. Factor disable is denied only when the user's current role requires MFA. Backup-code verification loads protected hashes under lock. | Enroll actual admins; validate live flows. Infrastructure MFA is separate and unverified. Old admin sessions require a new MFA login. |
 | Hashing/password rules/change | User model hashes with bcrypt cost 12. Registration/reset/change/staff creation retain the existing 8-character complexity rule and now share a 72 UTF-8 byte upper bound to prevent silent bcrypt truncation. | Agree whether to replace the existing minimum/complexity policy. Verify live password change and notification delivery. Existing longer passwords remain accepted at login. |
 | Rate limits | Auth and abuse-prone route limiters use the shared PostgreSQL store; login failures and quiet reset/verification email throttles are persisted as hashed identifiers. High-volume global/public traffic shaping remains per-process. | Apply the shared-security-state migration. Confirm trusted proxy configuration and observe the added database writes under production traffic. |
 | Reset/OTP expiry and single use | Reset token is hashed, expires after 15m and is consumed under a row lock. OTP expiry is 5m with 3 attempts. Fixed OTP consumption race using a transaction/row lock; failed-attempt increments and deletion commit before errors are returned. | Real PostgreSQL concurrency tests, exact expiry boundaries, concurrent OTP sends, reset/reissue race, and delivery failures still need verification. |
@@ -34,7 +34,17 @@ A transaction is an all-or-nothing boundary. Sequelize managed transactions roll
 
 Single-use means more than deleting a token after reading it: two requests can both read before either deletes. A database row lock serializes OTP verification. Failed attempts also need to survive the rejection response, so those changes commit before returning the validation error.
 
-MFA enrollment and an MFA-authenticated session are different facts. A user enabling MFA must not make older password-only sessions administrative. The server signs MFA evidence only after the MFA verifier succeeds and preserves that evidence during rotation. Enabling MFA alone does not mint a session.
+MFA enrollment and an MFA-authenticated session are different facts. A user enabling MFA must not make older password-only sessions administrative. After factor confirmation, authenticated setup replaces the current session with signed MFA evidence and revokes old sessions transactionally. The operator tool enrolls without issuing a session. Rotation preserves verified MFA evidence.
+
+### Managing MFA in the admin interface
+
+Use **Admin → Profile** to scan the authenticator QR code, confirm the current code, and save the eight one-time backup codes. Profile controls also regenerate recovery codes and disable an optional factor after verification. Required factors cannot be disabled there. Other browser sessions are signed out when a factor is enabled or disabled.
+
+Use **Admin → Settings → Security** to require MFA for administrators, all staff, or selected active custom staff roles. Only a super administrator with settings management permission may save changes. Confirm the current password and, when MFA is enabled, a current authenticator code. Saved verification credentials never enter settings or audit data. All affected active accounts must enroll first; otherwise the server rejects the policy change without saving it. The ordinary Save All control cannot change MFA policy.
+
+The Security tab is read-only for other settings readers. Customers keep their existing **My Account → Security** voluntary setup. Saving or viewing this feature does not automatically enroll anyone. Resetting a lost administrator factor still requires a separately verified operator recovery process.
+
+New staff created or reassigned into a required scope need operator-assisted enrollment before signing in. This retains the owner's selected deny-until-enrolled policy; it does not introduce a pre-login setup bypass. The operator enrollment tool can enroll an active administrative account regardless of whether the current scope is optional or mandatory.
 
 bcrypt limits input by bytes, not characters. The new upper bound checks UTF-8 bytes, including multibyte characters, across all new-password schemas. Login intentionally retains compatibility with existing credentials.
 
