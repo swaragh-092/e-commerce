@@ -95,8 +95,8 @@ const getTypeGroup = (mimeType) => {
 
 // ─── MediaCard ───────────────────────────────────────────────────────────────
 
-const MediaCard = ({ file, canDeleteMedia, canUpdateMedia, canUploadMedia, onTransform, onCopy, onDelete, onEdit, selected, onSelect, busy }) => {
-  const url = getMediaUrl(file.url);
+const MediaCard = ({ file, canDeleteMedia, canUpdateMedia, canEditImage, onTransform, onCopy, onDelete, onEdit, selected, onSelect, busy }) => {
+  const url = getMediaUrl(file.url, file.updatedAt);
   const usageCount = Number(file.usageCount) || 0;
   return (
     <Card
@@ -120,7 +120,7 @@ const MediaCard = ({ file, canDeleteMedia, canUpdateMedia, canUploadMedia, onTra
           alt={file.alt || file.originalName || file.filename || 'media'}
           sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
         />
-        {(canDeleteMedia || canUploadMedia) && <Checkbox checked={selected} disabled={busy} onChange={() => onSelect(file)}
+        {(canDeleteMedia || canEditImage) && <Checkbox checked={selected} disabled={busy} onChange={() => onSelect(file)}
           inputProps={{ 'aria-label': `Select ${file.originalName || file.filename || 'image'}` }}
           sx={{ position: 'absolute', top: 8, left: 8, bgcolor: 'background.paper', borderRadius: 1, '&:hover': { bgcolor: 'background.paper' } }} />}
       </Box>
@@ -143,7 +143,7 @@ const MediaCard = ({ file, canDeleteMedia, canUpdateMedia, canUploadMedia, onTra
             <ContentCopyIcon fontSize="small" />
           </IconButton>
         </Tooltip>
-        {canUploadMedia && (
+        {canEditImage && (
           <Tooltip title={file.mimeType === 'image/gif' ? 'GIF editing is unavailable to preserve animation' : 'Crop, rotate and resize'}>
             <span><IconButton size="small" aria-label={`Edit image ${file.originalName || file.filename}`} disabled={busy || file.mimeType === 'image/gif'} onClick={() => onTransform(file)}><CropIcon fontSize="small" /></IconButton></span>
           </Tooltip>
@@ -489,7 +489,7 @@ const MediaPage = () => {
             file={file}
             canDeleteMedia={canDeleteMedia}
             canUpdateMedia={canUpdateMedia}
-            canUploadMedia={canUploadMedia}
+            canEditImage={canUpdateMedia}
             onTransform={setTransformingFile}
             onCopy={copyUrl}
             onDelete={handleDelete}
@@ -636,7 +636,7 @@ const MediaPage = () => {
         </Box>
       </Box>
 
-      {(canDeleteMedia || canUploadMedia) && <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2, mb: 2 }}>
+      {(canDeleteMedia || canUpdateMedia) && <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2, mb: 2 }}>
         <FormControlLabel label="Select all loaded images" control={<Checkbox
           checked={files.length > 0 && files.every((file) => selectedIds.has(file.id))}
           indeterminate={files.some((file) => selectedIds.has(file.id)) && !files.every((file) => selectedIds.has(file.id))}
@@ -644,7 +644,7 @@ const MediaPage = () => {
           onChange={(event) => selectLoaded(event.target.checked)} />} />
         <Typography variant="body2" role="status">{selectedFiles.length} selected · {files.length} loaded of {totalItems}</Typography>
         {selectedFiles.length > 0 && <Button disabled={batchDeleting} onClick={() => { setSelectedFiles([]); setDeleteFailures([]); }}>Clear selection</Button>}
-        {canUploadMedia && <Button variant="outlined" startIcon={<CropIcon />} disabled={!selectedFiles.length || batchDeleting || loading} onClick={() => {
+        {canUpdateMedia && <Button variant="outlined" startIcon={<CropIcon />} disabled={!selectedFiles.length || batchDeleting || loading} onClick={() => {
           if (selectedFiles.length > 50) { notify('Select up to 50 images per crop batch.', 'warning'); return; }
           setBulkCropFiles([...selectedFiles]);
         }}>Crop selected ({selectedFiles.length})</Button>}
@@ -921,31 +921,34 @@ const MediaPage = () => {
       </Dialog>
 
       {bulkCropFiles && <Suspense fallback={<CircularProgress aria-label="Loading bulk crop editor" />}>
-        <BulkMediaCropDialog files={bulkCropFiles} onClose={() => setBulkCropFiles(null)} onResults={({ saved, reused }) => {
+        <BulkMediaCropDialog replaceExisting allowManagePresets={canUploadMedia} files={bulkCropFiles} onClose={() => setBulkCropFiles(null)} onResults={({ saved }) => {
           fetchMedia(1);
-          notify(`${saved} new images saved${reused ? `; ${reused} existing images reused` : ''}. Originals are kept.`, 'success');
+          notify(`${saved} images updated wherever they are used. Originals are available for restoration.`, 'success');
         }} />
       </Suspense>}
 
       {transformingFile && <Suspense fallback={<CircularProgress aria-label="Loading image editor" />}>
         <MediaImageEditor
-          source={getMediaUrl(transformingFile.url)}
+          source={getMediaUrl(transformingFile.url, transformingFile.updatedAt)}
           name={transformingFile.originalName || transformingFile.filename}
-          saveLabel="Save as new image"
+          saveLabel="Save image"
+          allowManagePresets={canUploadMedia}
+          replaceExisting
+          onRevert={transformingFile.isEdited ? async () => {
+            if (!(await confirm('Revert to original', 'Restore the original image everywhere it is used? Current edits will be replaced.', 'warning'))) return;
+            await mediaService.revertImage(transformingFile.id);
+            setTransformingFile(null); fetchMedia(1);
+            notify('Original image restored everywhere it is used.', 'success');
+          } : undefined}
           saving={savingImage}
           onClose={() => setTransformingFile(null)}
-          onReuseExisting={() => {
-            setTransformingFile(null);
-            fetchMedia(1);
-            notify('This edited version is already in your library.', 'info');
-          }}
-          onSave={async (file, options) => {
+          onSave={async (file) => {
             setSavingImage(true);
             try {
-              await mediaService.uploadMedia(file, transformingFile.type || 'image', undefined, options);
+              await mediaService.replaceImage(transformingFile.id, file);
               setTransformingFile(null);
               fetchMedia(1);
-              notify('Edited image saved. Your original is kept.', 'success');
+              notify('Image updated everywhere it is used. You can revert to the original.', 'success');
             } finally { setSavingImage(false); }
           }}
         />

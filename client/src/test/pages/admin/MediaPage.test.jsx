@@ -4,13 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MediaPage from '../../../pages/admin/MediaPage';
 import { mediaService } from '../../../services/mediaService';
 
-const access = vi.hoisted(() => ({ canDelete: true, canUpload: true }));
+const access = vi.hoisted(() => ({ canDelete: true, canUpload: true, canUpdate: true }));
 const { notify, confirm } = vi.hoisted(() => ({
   notify: vi.fn(),
   confirm: vi.fn(),
 }));
 
-vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: (permission) => (permission !== 'media.delete' || access.canDelete) && (permission !== 'media.upload' || access.canUpload) }) }));
+vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: (permission) => (permission !== 'media.delete' || access.canDelete) && (permission !== 'media.upload' || access.canUpload) && (permission !== 'media.update' || access.canUpdate) }) }));
 vi.mock('../../../context/NotificationContext', () => ({ useNotification: () => ({ notify, confirm }) }));
 vi.mock('../../../services/mediaService', () => ({
   mediaService: {
@@ -30,6 +30,7 @@ describe('Media Library tabs', () => {
     vi.clearAllMocks();
     access.canDelete = true;
     access.canUpload = true;
+    access.canUpdate = true;
     confirm.mockResolvedValue(true);
     mediaService.delete.mockResolvedValue({});
     observers = [];
@@ -210,9 +211,9 @@ describe('Media Library tabs', () => {
     expect(screen.getByRole('button', { name: 'Crop selected (0)' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: /Delete selected/ })).not.toBeInTheDocument();
   });
-  it('hides crop selection when neither upload nor delete permission is granted', async () => {
+  it('hides crop selection when neither update nor delete permission is granted', async () => {
     access.canDelete = false;
-    access.canUpload = false;
+    access.canUpdate = false;
     render(<MediaPage />);
     await screen.findByText('Used 2 times');
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();

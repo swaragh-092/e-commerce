@@ -126,10 +126,12 @@ const UPLOADS_SERVE_DIR = !process.env.UPLOAD_DIR
     : path.resolve(SERVER_ROOT, process.env.UPLOAD_DIR);
 logger.info(`Serving uploads from: ${UPLOADS_SERVE_DIR}`);
 app.use('/uploads', express.static(UPLOADS_SERVE_DIR, {
-  maxAge: '1y',
-  immutable: true,
+  maxAge: 0,
+  immutable: false,
+  dotfiles: 'deny',
   setHeaders: (res) => {
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Cache-Control', 'no-cache');
   }
 }));
 

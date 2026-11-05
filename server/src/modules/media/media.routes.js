@@ -4,7 +4,7 @@ const router = express.Router();
 const mediaController = require('./media.controller');
 const cropPresetController = require('./cropPreset.controller');
 const { authenticate } = require('../../middleware/auth.middleware');
-const { authorizePermissions } = require('../../middleware/role.middleware');
+const { authorizePermissions, authorizeAnyPermission } = require('../../middleware/role.middleware');
 const { auditLog } = require('../audit/audit.middleware');
 const { memoryUpload, fontUpload } = require('../../middleware/upload.middleware');
 const { mediaUploadLimiter } = require('../../middleware/rateLimiter.middleware');
@@ -14,7 +14,7 @@ const { idParamSchema } = require('../../utils/common.validation');
 const { updateMediaSchema, listMediaSchema, cropPresetSchema } = require('./media.validation');
 
 // Keep named routes before the generic /:id media routes.
-router.get('/crop-presets', authenticate, authorizePermissions(PERMISSIONS.MEDIA_UPLOAD), cropPresetController.list);
+router.get('/crop-presets', authenticate, authorizeAnyPermission(PERMISSIONS.MEDIA_UPLOAD, PERMISSIONS.MEDIA_UPDATE), cropPresetController.list);
 router.post('/crop-presets', authenticate, authorizePermissions(PERMISSIONS.MEDIA_UPLOAD), validate(cropPresetSchema), auditLog('CropPreset'), cropPresetController.create);
 router.patch('/crop-presets/:id', authenticate, authorizePermissions(PERMISSIONS.MEDIA_UPLOAD), validate(idParamSchema, 'params'), validate(cropPresetSchema), auditLog('CropPreset'), cropPresetController.update);
 router.delete('/crop-presets/:id', authenticate, authorizePermissions(PERMISSIONS.MEDIA_UPLOAD), validate(idParamSchema, 'params'), auditLog('CropPreset'), cropPresetController.remove);
@@ -57,6 +57,11 @@ router.get('/',
     validate(listMediaSchema, 'query'),
     mediaController.list
 );
+
+router.put('/:id/image', authenticate, authorizePermissions(PERMISSIONS.MEDIA_UPDATE),
+    validate(idParamSchema, 'params'), mediaUploadLimiter, memoryUpload.single('file'), auditLog('Media'), mediaController.replaceImage);
+router.post('/:id/revert', authenticate, authorizePermissions(PERMISSIONS.MEDIA_UPDATE),
+    validate(idParamSchema, 'params'), mediaUploadLimiter, auditLog('Media'), mediaController.revertImage);
 
 router.patch('/:id',
     authenticate,

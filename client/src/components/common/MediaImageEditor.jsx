@@ -10,7 +10,7 @@ import CropPresetManager from './CropPresetManager';
 import useCropPresets from '../../hooks/useCropPresets';
 import { IMAGE_PRESETS, centeredCrop, cropPixels, drawCrop, exportEditedImage, loadImage, outputSize, rotatedSize } from '../../utils/imageEditing';
 
-export default function MediaImageEditor({ source, name, onClose, onSave, onReuseExisting, initialSettings, onApplySettings, saveLabel = 'Apply changes', saving = false }) {
+export default function MediaImageEditor({ source, name, onClose, onSave, onReuseExisting, onRevert, replaceExisting = false, allowManagePresets = true, initialSettings, onApplySettings, saveLabel = 'Apply changes', saving = false }) {
   const theme = useTheme();
   const fullscreen = useMediaQuery(theme.breakpoints.down('sm'));
   const presetStore = useCropPresets();
@@ -122,6 +122,7 @@ export default function MediaImageEditor({ source, name, onClose, onSave, onReus
   return <><Dialog open fullScreen={fullscreen} maxWidth="lg" fullWidth onClose={() => !busy && onClose()} aria-labelledby="image-editor-title">
     <DialogTitle id="image-editor-title">Edit image<Typography variant="body2" color="text.secondary" noWrap>{name}</Typography></DialogTitle>
     <DialogContent dividers sx={{ p: { xs: 2, sm: 3 } }}>
+      {replaceExisting && <Alert severity="info" sx={{ mb: 2 }}>Saving updates this image everywhere it is used. Its name and position stay the same. You can revert to the original later.</Alert>}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {!image && !error && <Stack role="status" alignItems="center" spacing={2} sx={{ p: 6 }}><CircularProgress /><Typography>Loading image…</Typography></Stack>}
       {image && <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 260px' }, gap: 3 }}>
@@ -145,7 +146,7 @@ export default function MediaImageEditor({ source, name, onClose, onSave, onReus
               {!presetStore.presets.some(item => item.id === preset) && <MenuItem value={preset}>{selectedPreset.label} (current crop)</MenuItem>}
             </Select>
           </FormControl>
-          <Button disabled={busy} onClick={() => setManagingPresets(true)}>Manage custom presets</Button>
+          {allowManagePresets && <Button disabled={busy} onClick={() => setManagingPresets(true)}>Manage custom presets</Button>}
           {presetStore.error && <Alert severity="warning" action={<Button onClick={presetStore.reload}>Retry</Button>}>Custom presets unavailable. Built-in presets still work.</Alert>}
           {selectedPreset.width && <Typography variant="body2" color="text.secondary">Suggested: {selectedPreset.width} × {Math.round(selectedPreset.width / selectedPreset.ratio)} px. Smaller images keep their available resolution.</Typography>}
           <TextField label="Output width (px)" type="number" value={width} disabled={busy} onChange={(e) => setWidth(e.target.value)} error={!validWidth} helperText={!validWidth ? 'Enter a whole number from 1 to 4096.' : 'Height stays proportional. Images are never enlarged.'} inputProps={{ min: 1, max: 4096, step: 1 }} />
@@ -153,11 +154,13 @@ export default function MediaImageEditor({ source, name, onClose, onSave, onReus
           <Divider />
           <Typography variant="subtitle2">Preview</Typography>
           <Box sx={{ p: 1, bgcolor: 'action.hover', borderRadius: 1, textAlign: 'center', minHeight: 80 }}><canvas ref={previewCanvas} aria-label="Cropped image preview" style={{ maxWidth: '100%', maxHeight: 180, objectFit: 'contain' }} /></Box>
-          <Typography variant="body2" color="text.secondary">{onApplySettings ? 'Apply this crop to the batch preview. The original image is kept.' : 'Saved as a new image. The original and its existing placements are kept.'}</Typography>
+          <Typography variant="body2" color="text.secondary">{onApplySettings ? 'Apply this crop to the batch preview.' : replaceExisting ? 'Updates the existing image. The original is retained privately for restoration.' : 'Saved as a new image. The original and its existing placements are kept.'}</Typography>
         </Stack>
       </Box>}
     </DialogContent>
-    <DialogActions sx={{ p: 2, gap: 1 }}><Button disabled={busy} onClick={onClose}>Cancel</Button><Button variant="contained" disabled={busy || !image || !preview || !crop || crop.width <= 0 || crop.height <= 0 || !validWidth} onClick={save}>{busy ? 'Saving…' : saveLabel}</Button></DialogActions>
+    <DialogActions sx={{ p: 2, gap: 1, flexWrap: 'wrap' }}>
+      {onRevert && <Button disabled={busy} onClick={async () => { setExporting(true); setError(''); try { await onRevert(); } catch (err) { if (mounted.current) setError(err.response?.data?.error?.message || err.message || 'Could not restore the original.'); } finally { if (mounted.current) setExporting(false); } }}>Revert to original</Button>}
+      <Button disabled={busy} onClick={onClose}>Cancel</Button><Button variant="contained" disabled={busy || !image || !preview || !crop || crop.width <= 0 || crop.height <= 0 || !validWidth} onClick={save}>{busy ? 'Saving…' : saveLabel}</Button></DialogActions>
   </Dialog>
     {managingPresets && <CropPresetManager store={presetStore} initialWidth={output?.width} initialHeight={output?.height} onClose={() => setManagingPresets(false)} />}
     <DuplicateMediaDialog media={duplicate?.media} onCancel={() => setDuplicate(null)} onSkip={() => setDuplicate(null)} onReuse={() => { onReuseExisting?.(duplicate.media); setDuplicate(null); }} onCopy={async () => {
