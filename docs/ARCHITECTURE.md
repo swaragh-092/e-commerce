@@ -939,7 +939,7 @@ Built with **MUI DataGrid** for tables and **Recharts** for charts.
 - Total Revenue (today / week / month)
 - Total Orders (by status)
 - Total Customers
-- **Low Stock Alerts** (products where `quantity - reservedQty < threshold`)
+- **Low Stock Alerts** (enabled, published Simple products or active Variable SKUs whose available stock, on hand minus reserved, is at or below the threshold)
 
 **Admin Pages**:
 | Page      | Features                                                 |

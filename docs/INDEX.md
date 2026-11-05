@@ -48,6 +48,8 @@
 | Doc | What It Covers |
 |-----|---------------|
 | [FEATURES.md](FEATURES.md) | Complete feature catalog — admin + customer-facing, feature flags, permissions matrix |
+| [Product types and inventory](PRODUCT-TYPES.md) | Simple, Variable, and Combo product workflows and stock entry |
+| [Inventory stock and availability](inventory/stock-and-availability.md) | Alerts, reservations, disabled items, historical variants, and type changes |
 | [STORE-TEMPLATES.md](STORE-TEMPLATES.md) | Store Templates system, theme marketplace, template composer, section registry, preview system, import/export, activation history |
 | [THEME-SYSTEM-COMPETITOR-GAP-ROADMAP.md](THEME-SYSTEM-COMPETITOR-GAP-ROADMAP.md) | Roadmap for editable cards, component styles, page templates beyond homepage, and competitor-level theme editing |
 | [AUTH-GUIDE.md](AUTH-GUIDE.md) | Authentication flows, JWT, sessions, RBAC, role management, brute-force protection, email verification |
