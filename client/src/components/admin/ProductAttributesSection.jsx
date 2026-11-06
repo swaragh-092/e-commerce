@@ -22,12 +22,17 @@ const ProductAttributesSection = ({ productId, rows, templates, variants = [], c
     map.get(key).rows.push(row);
     return map;
   }, new Map()).values()];
-  const usedByVariants = (group) => Boolean(group.rows[0]?.attributeId && variants.some((variant) => !variant.deletedAt
-    && variant.options?.some((option) => (option.attributeId || option.attribute?.id) === group.rows[0].attributeId)));
-  const removalReason = (group) => usedByVariants(group)
-    ? 'Delete all variants using this attribute, then turn off “Use for variants” before removing this attribute or its values.'
-    : group.rows.some((row) => row.attributeId && row.isVariantAttr)
-      ? 'Turn off “Use for variants” before removing this attribute or its values.' : '';
+  const usedByVariants = (group, row = null) => Boolean(group.rows[0]?.attributeId && variants.some((variant) => !variant.deletedAt
+    && variant.options?.some((option) => (option.attributeId || option.attribute?.id) === group.rows[0].attributeId
+      && (!row || (option.valueId || option.value?.id) === row.valueId))));
+  const removalReason = (group, row = null) => {
+    if (row && group.rows.length > 1) return usedByVariants(group, row)
+      ? 'This value is used by existing variants. Delete those variants before removing it.' : '';
+    return usedByVariants(group)
+      ? 'Delete all variants using this attribute, then turn off “Use for variants” before removing this attribute.'
+      : group.rows.some((item) => item.attributeId && item.isVariantAttr)
+        ? 'Turn off “Use for variants” before removing this attribute.' : '';
+  };
   const reorder = async ({ source, destination, type }) => {
     if (!destination || !canManage || busy || loading || error || (source.index === destination.index && source.droppableId === destination.droppableId)) return;
     const next = groups.map((group) => ({ ...group, rows: [...group.rows] }));
@@ -70,7 +75,7 @@ const ProductAttributesSection = ({ productId, rows, templates, variants = [], c
   };
   const remove = async (group, row = null) => {
     if (!canManage || busy || loading || error) return;
-    const reason = removalReason(group);
+    const reason = removalReason(group, row);
     if (reason) { notify(reason, 'warning'); return; }
     if (!(await confirm({
       title: row ? 'Remove value from product?' : 'Remove attribute from product?',
@@ -122,7 +127,7 @@ const ProductAttributesSection = ({ productId, rows, templates, variants = [], c
                     <Chip label={row.value ? formatAttributeValue(row.value, row.attribute) : row.customValue}
                     icon={row.value?.imageUrl ? <Box component="img" src={row.value.imageUrl} alt="" sx={{ width: 18, height: 18, objectFit: 'cover', borderRadius: 0.75 }} />
                       : getSwatchColor(row.value) ? <Box component="span" sx={{ bgcolor: getSwatchColor(row.value), width: 18, height: 18, borderRadius: '50%', border: 1, borderColor: 'divider' }} /> : undefined}
-                    onDelete={canManage && !busy && !removalReason(group) ? () => remove(group, row) : undefined} sx={{ maxWidth: '100%' }} />
+                    onDelete={canManage && !busy && !removalReason(group, row) ? () => remove(group, row) : undefined} sx={{ maxWidth: '100%' }} />
                     </Box>}
                   </Draggable>)}
                   {valuesProvided.placeholder}</Box>}
@@ -130,14 +135,14 @@ const ProductAttributesSection = ({ productId, rows, templates, variants = [], c
                 {group.attribute ? <Box sx={{ mt: 1.5 }}><FormControlLabel sx={{ m: 0 }} control={<Switch size="small" checked={group.rows.every((row) => row.isVariantAttr)} disabled={!canManage || busy || (group.rows.every((row) => row.isVariantAttr) && usedByVariants(group))} onChange={(_, checked) => toggleGroup(group, checked)} inputProps={{ 'aria-label': `Use ${group.name} for variants` }} />} label={<Typography variant="body2">Use for variants</Typography>} />
                   {group.rows.some((row) => row.isVariantAttr) && !group.rows.every((row) => row.isVariantAttr) && <Typography variant="caption" color="text.secondary" display="block">Some values currently create variants. Turn on to include all values.</Typography>}
                 </Box> : <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1.5 }}>Product-only specification · display only</Typography>}
-                {removalReason(group) && <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>{removalReason(group)}</Typography>}
+                {removalReason(group) && <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>{removalReason(group)}{group.rows.length > 1 && ' Unused values can be removed directly.'}</Typography>}
               </Box>}
               </Draggable>)}
               {provided.placeholder}</Box>}
             </Droppable></DragDropContext>}
         </>}
     {busy && <Typography variant="caption" role="status" color="text.secondary" sx={{ mt: 1.5, display: 'block' }}>Updating product attributes…</Typography>}
-    {picker && <ProductAttributeDialog productId={productId} templates={templates} rows={rows} initialTemplate={picker.initial} onClose={() => setPicker(null)} onSaved={(nextRows) => { onRowsChange(nextRows); setPicker(null); }} />}
+    {picker && <ProductAttributeDialog productId={productId} templates={templates} rows={rows} variants={variants} initialTemplate={picker.initial} onClose={() => setPicker(null)} onSaved={(nextRows) => { onRowsChange(nextRows); setPicker(null); }} />}
   </Paper>;
 };
 

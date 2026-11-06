@@ -36,6 +36,37 @@ beforeEach(() => {
 });
 
 describe('product attributes and variant drafts', () => {
+  it('adds new values of an existing variant attribute directly to missing variants without another toggle', async () => {
+    const expandedHeight = { ...height, values: [...height.values, { id: 'twenty', value: '20', unitLabel: 'cm' }] };
+    const existingRow = { ...row, isVariantAttr: true };
+    const addedRow = { ...row, id: 'twenty-row', valueId: 'twenty', value: expandedHeight.values[1], isVariantAttr: true };
+    attributeService.getProductAttributes.mockResolvedValue({ data: { data: [existingRow] } });
+    attributeService.getAttributeById.mockResolvedValue({ data: { data: expandedHeight } });
+    attributeService.getProductVariants.mockResolvedValue({ data: { data: [{
+      id: 'variant', optionLabel: 'Height: 10cm', sku: 'HEIGHT-10', price: 100, stockQty: 2, isActive: true,
+      options: [{ attributeId: 'height', valueId: 'ten' }], images: [],
+    }] } });
+    attributeService.assignProductAttribute.mockResolvedValue({ data: { data: [existingRow, addedRow] } });
+    render(tree());
+    expect(await screen.findByRole('checkbox', { name: 'Use Height for variants' })).toBeChecked();
+    expect(screen.queryByRole('button', { name: 'Add missing variants' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Add values', exact: true }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Add attribute' }));
+    await waitFor(() => expect(dialog.getByRole('checkbox', { name: '20cm', exact: true })).toBeEnabled());
+    expect(dialog.queryByRole('checkbox', { name: 'Use these values to create variants' })).not.toBeInTheDocument();
+    fireEvent.click(dialog.getByRole('checkbox', { name: '20cm', exact: true }));
+    fireEvent.click(dialog.getByRole('button', { name: 'Add to product' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(attributeService.assignProductAttribute).toHaveBeenCalledWith('product', {
+      attributeId: 'height', values: [{ valueId: 'twenty' }], isVariantAttr: true,
+    });
+    expect(screen.getByRole('button', { name: 'Add missing variants' })).toBeEnabled();
+    expect(screen.getByRole('checkbox', { name: 'Use Height for variants' })).toBeChecked();
+    expect(screen.getByRole('button', { name: 'Height: 10cm', exact: true })).toBeInTheDocument();
+    expect(screen.getByText('1 variant · Total stock: 2')).toBeInTheDocument();
+    expect(attributeService.updateProductAttributeGroup).not.toHaveBeenCalled();
+    expect(attributeService.bulkGenerateVariants).not.toHaveBeenCalled();
+  });
   it('unlocks attribute removal only after deleting the last dependent variant and disabling variant use', async () => {
     attributeService.getProductAttributes.mockResolvedValue({ data: { data: [{ ...row, isVariantAttr: true }] } });
     attributeService.getProductVariants.mockResolvedValue({ data: { data: [{ id: 'variant', optionLabel: 'Height option', price: 100, stockQty: 0, isActive: false, options: [{ attributeId: 'height', valueId: 'ten' }], images: [] }] } });
