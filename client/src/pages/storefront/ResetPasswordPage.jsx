@@ -8,6 +8,7 @@ import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const ResetPasswordPage = ({ admin = false }) => {
   const loginPath = admin ? '/admin/login' : '/login';
+  const recoveryPath = admin ? '/admin/forgot-password' : '/forgot-password';
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
   const navigate = useNavigate();
@@ -55,7 +56,7 @@ const ResetPasswordPage = ({ admin = false }) => {
       setStatus({ type: 'success', message: 'Password has been reset successfully.' });
       setTimeout(() => navigate(loginPath), 3000); // Redirect to login after 3 seconds
     } catch (err) {
-      setStatus({ type: 'error', message: getApiErrorMessage(err, 'Failed to reset password. The token may be expired.') });
+      setStatus({ type: 'error', message: getApiErrorMessage(err, 'Failed to reset password. The token may be expired.'), canRequestLink: true });
     } finally {
       setLoading(false);
     }
@@ -66,6 +67,9 @@ const ResetPasswordPage = ({ admin = false }) => {
           <PasswordRecoveryLayout admin={admin}>
             <Box sx={{ maxWidth: 400, mx: 'auto', mt: admin ? 0 : 8 }}>
                 <Alert severity="error">Invalid link. Please request a new password reset.</Alert>
+                <Button fullWidth component={RouterLink} to={recoveryPath} sx={{ mt: 2 }}>
+                    Request a new reset link
+                </Button>
             </Box>
           </PasswordRecoveryLayout>
       );
@@ -79,6 +83,11 @@ const ResetPasswordPage = ({ admin = false }) => {
         </Typography>
       
         {status.message && <Alert severity={status.type} sx={{ mb: 3 }}>{status.message}</Alert>}
+        {status.canRequestLink && (
+            <Button component={RouterLink} to={recoveryPath} sx={{ mb: 2 }}>
+                Request a new reset link
+            </Button>
+        )}
 
         {status.type !== 'success' && (
           <Box component="form" onSubmit={handleSubmit}>
