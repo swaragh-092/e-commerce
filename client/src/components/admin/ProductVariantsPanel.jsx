@@ -31,6 +31,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { Link } from 'react-router-dom';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import useCategoryAttributes from '../../hooks/useCategoryAttributes';
 
 const EMPTY_LIST = [];
 const validPrice = (value) => value !== '' && value != null && /^\d+(\.\d{0,2})?$/.test(String(value)) && Number(value) <= 99999999.99;
@@ -77,7 +78,7 @@ const VariantsPanel = ({
   const [cloneCatProducts, setCloneCatProducts] = useState([]);
   const [cloneCatProductsLoading, setCloneCatProductsLoading] = useState(false);
   const [cloneCatSelectedProduct, setCloneCatSelectedProduct] = useState(null);
-  const [suggestedAttributes, setSuggestedAttributes] = useState([]);
+  const categorySuggestions = useCategoryAttributes(categoryIds, Boolean(productId && canManageAttributes));
   const cloneSearchTimer = useRef(null);
   const cloneRequests = useRef({ search: 0, category: 0 });
   useEffect(() => () => { clearTimeout(cloneSearchTimer.current); cloneRequests.current.search++; cloneRequests.current.category++; }, []);
@@ -126,17 +127,6 @@ const VariantsPanel = ({
   }, [productId, notify, onStockTotalChange]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
-
-  const categoryKey = categoryIds.join(',');
-  useEffect(() => {
-    if (!categoryKey) { setSuggestedAttributes([]); return; }
-    let active = true;
-    attributeService.getCategoryAttributes(categoryKey.split(','), true)
-      .then((response) => { if (active) setSuggestedAttributes(response?.data?.data || []); })
-      .catch(() => { if (active) setSuggestedAttributes([]); });
-    return () => { active = false; };
-  }, [categoryKey]);
-
 
   useEffect(() => {
     const activeVariantRows = variants.filter((variant) => variant?.isActive !== false);
@@ -391,7 +381,7 @@ const VariantsPanel = ({
       <Grid container spacing={3}>
         <Grid item xs={12} lg={5} sx={{ minWidth: 0 }}>
           <ProductAttributesSection productId={productId} rows={productAttributes} templates={attributes} variants={variants}
-            suggestions={suggestedAttributes} loading={loading} error={loadError} canManage={canManageAttributes && !variantBusy}
+            categorySuggestions={categorySuggestions} loading={loading} error={loadError} canManage={canManageAttributes && !variantBusy}
             onRowsChange={setProductAttributes} onRetry={loadAll} onBusyChange={setAttributesBusy} />
         </Grid>
 

@@ -202,6 +202,41 @@ describe('product attributes and variant drafts', () => {
     expect(screen.getByLabelText('MRP')).toHaveValue(175);
     expect(attributeService.getProductVariants).toHaveBeenCalledTimes(1);
   });
+  it('offers category suggestion retry without clearing unsaved variant edits', async () => {
+    attributeService.getCategoryAttributes.mockRejectedValueOnce(new Error('Connection lost.')).mockResolvedValueOnce({ data: { data: [height] } });
+    render(tree({ categoryIds: ['child'] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Variant SKU' }));
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'MRP', exact: true }), { target: { value: '175' } });
+    expect(screen.getByText(/Category suggestions could not be loaded/)).toBeInTheDocument();
+    expect(screen.queryByText(/No attributes are linked/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry suggestions' }));
+    expect(await screen.findByRole('button', { name: 'Height', exact: true })).toBeEnabled();
+    expect(screen.getByLabelText('MRP')).toHaveValue(175);
+    expect(attributeService.getProductVariants).toHaveBeenCalledTimes(1);
+    expect(attributeService.getProductAttributes).toHaveBeenCalledTimes(1);
+  });
+  it('opens an inherited suggestion outside the initial template page and assigns its values', async () => {
+    const maturity = { id: 'maturity', name: 'Maturity', values: [{ id: 'sixty', value: '60 days' }], sources: [{ id: 'parent', name: 'Vegetables', isDirect: false }] };
+    attributeService.getCategoryAttributes.mockResolvedValue({ data: { data: [maturity] } });
+    attributeService.getAttributeById.mockResolvedValue({ data: { data: maturity } });
+    attributeService.assignProductAttribute.mockResolvedValue({ data: { data: [{ id: 'maturity-row', attributeId: 'maturity', attribute: maturity, valueId: 'sixty', value: maturity.values[0], isVariantAttr: false }] } });
+    render(tree({ categoryIds: ['child'] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Maturity', exact: true }));
+    expect(screen.getByRole('combobox', { name: 'Attribute', exact: true })).toHaveValue('Maturity');
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: '60 days', exact: true })).toBeEnabled());
+    fireEvent.click(screen.getByRole('checkbox', { name: '60 days', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add to product' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByText('60 days')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Maturity', exact: true })).not.toBeInTheDocument();
+    expect(attributeService.assignProductAttribute).toHaveBeenCalledWith('product', expect.objectContaining({ attributeId: 'maturity', values: [{ valueId: 'sixty' }] }));
+  });
+  it('distinguishes categories without linked attributes from a request failure', async () => {
+    render(tree({ categoryIds: ['child'] }));
+    expect(await screen.findByText('No attributes are linked to the selected categories or their parents.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry suggestions' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add attribute', exact: true })).toBeEnabled();
+  });
   it('does not send requests for an unsaved product', async () => {
     render(tree({ productId: undefined }));
     expect(screen.getByText('Save the product before adding attributes or variants.')).toBeInTheDocument();
