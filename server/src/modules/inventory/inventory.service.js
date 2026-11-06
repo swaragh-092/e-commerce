@@ -53,7 +53,7 @@ const createLedgerEntry = async ({
   }, { transaction });
 };
 
-const syncParentProductFromVariants = async (productId, transaction) => {
+const syncParentProductFromVariants = async (productId, transaction, { stockDelta = 0, reservedDelta = 0, synchronize = true } = {}) => {
   if (!productId) return null;
   assertTransaction(transaction);
 
@@ -62,6 +62,19 @@ const syncParentProductFromVariants = async (productId, transaction) => {
     lock: Transaction.LOCK.UPDATE,
   });
   if (!product) return null;
+
+  // A Simple product owns its inventory. Historical variant order operations
+  // apply only their deltas; recomputing from old rows would erase newer stock.
+  if (product.type === 'simple') {
+    const quantity = Number(product.quantity || 0) + stockDelta;
+    const reservedQty = Number(product.reservedQty || 0) + reservedDelta;
+    if (quantity < 0 || reservedQty < 0 || reservedQty > quantity) {
+      throw new AppError('CONFLICT', 409, 'Historical variant inventory conflicts with the current product stock. Reconcile inventory before continuing.');
+    }
+    if (stockDelta || reservedDelta) await product.update({ quantity, reservedQty }, { transaction });
+    return { productId, quantity, reservedQty };
+  }
+  if (!synchronize) return null;
 
   const [stockSum, reservedSum] = await Promise.all([
     ProductVariant.sum('stockQty', {
@@ -146,7 +159,7 @@ const reserve = async ({
       transaction,
     });
 
-    if (syncParent) await syncParentProductFromVariants(productId, transaction);
+    await syncParentProductFromVariants(productId, transaction, { stockDelta: 0, reservedDelta: quantity, synchronize: syncParent });
 
     return {
       productId,
@@ -272,7 +285,7 @@ const release = async ({
       transaction,
     });
 
-    if (syncParent) await syncParentProductFromVariants(productId, transaction);
+    await syncParentProductFromVariants(productId, transaction, { stockDelta: 0, reservedDelta: -releasedQty, synchronize: syncParent });
 
     return {
       productId,
@@ -399,7 +412,7 @@ const shipDeduct = async ({
       transaction,
     });
 
-    if (syncParent) await syncParentProductFromVariants(productId, transaction);
+    await syncParentProductFromVariants(productId, transaction, { stockDelta: -quantity, reservedDelta: -quantity, synchronize: syncParent });
 
     return {
       productId,
@@ -507,7 +520,7 @@ const restockReturn = async ({
       transaction,
     });
 
-    if (syncParent) await syncParentProductFromVariants(productId, transaction);
+    await syncParentProductFromVariants(productId, transaction, { stockDelta: quantity, reservedDelta: 0, synchronize: syncParent });
 
     return {
       productId,
@@ -610,7 +623,7 @@ const adjust = async ({
       transaction,
     });
 
-    if (syncParent) await syncParentProductFromVariants(productId, transaction);
+    await syncParentProductFromVariants(productId, transaction, { stockDelta: newQty - beforeStock, reservedDelta: 0, synchronize: syncParent });
     return { productId, variantId, changed: true, beforeStock, afterStock: newQty };
   }
 
@@ -628,9 +641,6 @@ const adjust = async ({
 
   if (product.type === 'variable' || product.type === 'combo') {
     throw new AppError('VALIDATION_ERROR', 400, 'Adjust variant or bundle component stock instead of the product total.');
-  }
-  if (product.type === 'simple' && await ProductVariant.count({ where: { productId }, transaction }) > 0) {
-    throw new AppError('VALIDATION_ERROR', 400, 'This product has variants. Change its type to Variable Product and adjust individual variant stock.');
   }
   if (beforeStock === newQty) return { productId, variantId: null, changed: false };
   await product.update({ quantity: newQty }, { transaction });

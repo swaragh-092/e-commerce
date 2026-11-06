@@ -118,7 +118,7 @@ const ProductDetailPage = () => {
             }
             setProduct(nextProduct);
             trackRecentlyViewed(nextProduct);
-            if (nextProduct?.variants?.length > 0) {
+            if (nextProduct?.type === 'variable' && nextProduct?.variants?.length > 0) {
                 const requestedVariant = new URLSearchParams(location.search).get('variant');
                 const requestedVariantMatch = requestedVariant
                     ? nextProduct.variants.find((variant) => (
@@ -149,7 +149,7 @@ const ProductDetailPage = () => {
     }, [slug]);
 
     const activeVariants = useMemo(
-        () => (Array.isArray(product?.variants) ? product.variants.filter((variant) => variant?.isActive !== false) : []),
+        () => (product?.type === 'variable' && Array.isArray(product?.variants) ? product.variants.filter((variant) => variant?.isActive !== false) : []),
         [product]
     );
     const displayAttributes = useMemo(() => {
@@ -343,7 +343,7 @@ const ProductDetailPage = () => {
 
     const productStructuredData = [productJsonLd, breadcrumbStructuredData].filter(Boolean);
 
-    const hasVariants = product.type === 'variable' || (Array.isArray(product?.variants) && product.variants.some((v) => v?.isActive !== false));
+    const hasVariants = product.type === 'variable';
 
     const handleVariantSelect = (variant) => {
         setSelectedVariant(variant);

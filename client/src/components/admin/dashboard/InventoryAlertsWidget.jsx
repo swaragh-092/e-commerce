@@ -5,6 +5,7 @@ import {
 } from '@mui/material';
 import WarningIcon from '@mui/icons-material/Warning';
 import { useNavigate } from 'react-router-dom';
+import { getInventoryEditPath } from '../../../utils/inventoryNavigation';
 import { updateInventoryAlert } from '../../../services/adminService';
 import { useNotification } from '../../../context/NotificationContext';
 import { PERMISSIONS } from '../../../utils/permissions';
@@ -87,7 +88,7 @@ const InventoryAlertsWidget = ({ lowStock = [], inventoryAlerts, loading, spacin
               const availableQty = Number(alert.availableQty) || 0;
               const outOfStock = alert.severity === 'out_of_stock' || availableQty <= 0;
               return (
-                <TableRow key={alert.inventoryKey || alert.id} hover onClick={() => navigate(`/admin/products/${productId}/edit`)} sx={{ cursor: 'pointer' }}>
+                <TableRow key={alert.inventoryKey || alert.id} hover onClick={() => navigate(getInventoryEditPath(productId, alert.variantId || alert.variant?.id))} sx={{ cursor: 'pointer' }}>
                   <TableCell>
                     <Typography variant="body2" fontWeight={600}>{product.name || alert.name}</Typography>
                     <Typography variant="caption" color="text.secondary" display="block">{alert.variantId ? 'Variant stock' : 'Product stock'}</Typography>

@@ -1,9 +1,30 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import InventoryStockSummary from '../../components/admin/InventoryStockSummary';
 
 describe('inventory stock breakdown', () => {
+  it('shows the warned SKU separately from the combined product total', () => {
+    render(<InventoryStockSummary tracksVariants enabled published selectedVariantId="warned" variants={[
+      { id: 'warned', sku: 'iga-FRUITs-WEIGHTs', stockQty: 22, reservedQty: 19 },
+      { id: 'other', sku: 'iga-other', stockQty: 28, reservedQty: 8 },
+    ]} />);
+    expect(screen.getByText(/On hand:/)).toHaveTextContent('On hand: 50 · Reserved: 27 · Available to sell: 23');
+    const row = screen.getByRole('row', { name: /iga-FRUITs-WEIGHTs/ });
+    expect(row).toHaveAttribute('aria-selected', 'true');
+    expect(within(row).getAllByRole('cell').map((cell) => cell.textContent)).toEqual([
+      expect.stringContaining('Selected from inventory alert'), '22', '19', '3',
+    ]);
+  });
+  it('shows disabled SKU stock and reservations while excluding it from availability', () => {
+    render(<InventoryStockSummary tracksVariants enabled published variants={[{ id: 'disabled', sku: 'IGA-DISABLED', stockQty: 22, reservedQty: 19, isActive: false }]} />);
+    const row = screen.getByRole('row', { name: /IGA-DISABLED/ });
+    expect(within(row).getAllByRole('cell').map((cell) => cell.textContent)).toEqual(['IGA-DISABLEDDisabled', '22', '19', '0']);
+  });
+  it('reports an unavailable deep-linked variant instead of highlighting another SKU', () => {
+    render(<InventoryStockSummary tracksVariants enabled published selectedVariantId="deleted" variants={[]} />);
+    expect(screen.getByRole('alert')).toHaveTextContent('selected variant is no longer available');
+  });
   it('keeps disabled reservations separate from active available stock', () => {
     render(<InventoryStockSummary tracksVariants enabled published variants={[
       { stockQty: 22, reservedQty: 19 },

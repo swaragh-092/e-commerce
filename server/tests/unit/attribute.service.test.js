@@ -96,6 +96,7 @@ describe('Attribute Templates Search & Filters', () => {
   });
 
   describe('updateProductVariant', () => {
+    beforeEach(() => { db.Product.findByPk = vi.fn().mockResolvedValue({ type: 'variable' }); });
     it('updates stockQty and records an InventoryTransaction when stock changes', async () => {
       const mockVariant = {
         id: 'var-1',

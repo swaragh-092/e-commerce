@@ -227,6 +227,7 @@ const ProductEditPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const inventoryVariantId = new URLSearchParams(location.search).get('variantId');
   const returnTo = location.state?.returnTo || '/admin/products';
   const { notify, confirm } = useNotification();
   const { settings } = useSettings();
@@ -350,7 +351,7 @@ const ProductEditPage = () => {
               saleStartAt: toDateTimeLocal(p.saleStartAt),
               saleEndAt: toDateTimeLocal(p.saleEndAt),
               saleLabel: p.saleLabel || '',
-              quantity: p.type === 'variable' || p.variants?.length > 0 ? nextVariantStockTotal : (p.quantity || 0),
+              quantity: p.type === 'variable' ? nextVariantStockTotal : (p.quantity || 0),
               status: p.status || 'draft',
               type: p.type || 'simple',
               isEnabled: p.isEnabled ?? true,
@@ -517,7 +518,7 @@ const ProductEditPage = () => {
       return;
     }
 
-    const effectiveQuantity = formData.type === 'variable' || variantCount > 0 ? variantStockTotal : formData.quantity;
+    const effectiveQuantity = formData.type === 'variable' ? variantStockTotal : formData.quantity;
     const errs = validate({ ...formData, quantity: effectiveQuantity, _features: { pricing: pricingCapability, shipping: shippingCapability } });
 
     // Block type change if invariants are violated
@@ -538,8 +539,10 @@ const ProductEditPage = () => {
     }
 
     let confirmInventoryReset = false;
-    if (!isNew && dbProduct?.type === 'simple' && formData.type !== 'simple' && !variantCount && Number(dbProduct.quantity || 0) > 0) {
-      confirmInventoryReset = await confirm({ title: 'Change how stock is managed?', message: `This product has ${dbProduct.quantity} units of standalone stock. Switching type clears that total. Set stock on each variant or bundle component afterward; units are not distributed automatically.`, confirmText: 'Change type and clear stock', cancelText: 'Keep editing', severity: 'warning' });
+    if (!isNew && dbProduct?.type === 'simple' && formData.type !== 'simple' && (Number(dbProduct.quantity || 0) > 0 || (formData.type === 'variable' && variantCount > 0))) {
+      const standaloneStock = Number(dbProduct.quantity || 0);
+      const legacyVariantMessage = formData.type === 'variable' && variantCount > 0 ? ' Historical variant stock will also be cleared so sold Simple stock cannot become available again.' : '';
+      confirmInventoryReset = await confirm({ title: 'Change how stock is managed?', message: `This product has ${standaloneStock} units of standalone stock. Switching type clears that total.${legacyVariantMessage} Set stock on each variant or bundle component afterward; units are not distributed automatically.`, confirmText: 'Change type and clear stock', cancelText: 'Keep editing', severity: 'warning' });
       if (!confirmInventoryReset) return;
     }
     setSaving(true);
@@ -585,7 +588,7 @@ const ProductEditPage = () => {
 
       // Variant and bundle stock is managed by their own editors.
       delete payload.quantity;
-      if (payload.type === 'simple' && variantCount === 0) {
+      if (payload.type === 'simple') {
         payload.quantity = parseInt(formData.quantity) || 0;
       }
       if (confirmInventoryReset) payload.confirmInventoryReset = true;
@@ -1218,7 +1221,7 @@ const ProductEditPage = () => {
                   label="Product Type"
                   onChange={(e) => {
                     const newType = e.target.value;
-                    if (newType !== 'variable' && variantCount > 0) { notify('Remove all variants, including inactive ones, before changing to Simple or Combo.', 'warning'); return; }
+                    if (newType !== 'variable' && variantCount > 0 && !(newType === 'simple' && dbProduct?.type === 'simple')) { notify('Remove all variants, including inactive ones, before changing to Simple or Combo.', 'warning'); return; }
                     if (newType !== 'combo' && dbProduct?.comboItems?.length > 0) { notify('Clear the bundle items before changing this product type.', 'warning'); return; }
                     setField('type', newType);
                   }}
@@ -1230,7 +1233,7 @@ const ProductEditPage = () => {
                 {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
                 <FormHelperText>{formData.type === 'variable' ? 'Customers choose a variant. Manage prices and stock per combination below.' : formData.type === 'combo' ? 'Bundle existing products. Stock depends on the included products.' : 'One version with its own price and stock quantity.'}</FormHelperText>
               </FormControl>
-              {formData.type === 'simple' && variantCount > 0 && <Alert severity="warning" action={<Button onClick={() => setField('type', 'variable')} disabled={!canSaveProduct}>Use Variable Product</Button>}>This product has existing variants. Images and product details can still be saved. Select Variable Product and save to manage variants.</Alert>}
+              {formData.type === 'simple' && variantCount > 0 && <Alert severity="info">This Simple product uses its own stock quantity. Older variant records are retained for existing orders and do not control current stock or alerts.</Alert>}
 
             </Paper>
 
@@ -1364,21 +1367,22 @@ const ProductEditPage = () => {
 
                 <TextField
                   fullWidth
-                  label={formData.type === 'variable' || variantCount > 0 ? 'Total variant stock' : 'Stock Quantity *'}
+                  label={formData.type === 'variable' ? 'Total variant stock' : 'Stock Quantity *'}
                   type="number"
                   margin="normal"
                   inputProps={{ min: 0 }}
-                  value={formData.type === 'variable' || variantCount > 0 ? variantStockTotal : formData.quantity}
-                  InputProps={{ readOnly: formData.type === 'variable' || variantCount > 0 }}
+                  value={formData.type === 'variable' ? variantStockTotal : formData.quantity}
+                  InputProps={{ readOnly: formData.type === 'variable' }}
                   onChange={(e) => setField('quantity', e.target.value)}
                   error={Boolean(errors.quantity)}
-                  helperText={errors.quantity || (formData.type === 'variable' ? 'Calculated from active variants. Set each combination’s stock below; no variants means 0 stock.' : variantCount > 0 ? 'Existing variants manage stock. Save this product as Variable Product.' : 'Stock for this single product.')}
+                  helperText={errors.quantity || (formData.type === 'variable' ? 'Calculated from active variants. Set each combination’s stock below; no variants means 0 stock.' : 'Stock for this single product.')}
                 />
                 <InventoryStockSummary
                   quantity={formData.quantity}
                   reservedQty={dbProduct?.reservedQty}
-                  variants={inventoryVariants}
-                  tracksVariants={formData.type === 'variable' || variantCount > 0}
+                  variants={formData.type === 'variable' ? inventoryVariants : []}
+                  selectedVariantId={inventoryVariantId}
+                  tracksVariants={formData.type === 'variable'}
                   enabled={formData.isEnabled !== false}
                   published={formData.status === 'published'}
                 />
