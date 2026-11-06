@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Button, Chip, CircularProgress, FormControlLabel, IconButton, Paper, Stack, Switch, Tooltip, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, CircularProgress, FormControlLabel, IconButton, Paper, Stack, Switch, Tooltip, Typography } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
@@ -10,8 +10,9 @@ import { formatAttributeValue, getSwatchColor } from '../../utils/attributePrese
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import ProductAttributeDialog from './ProductAttributeDialog';
 
-const ProductAttributesSection = ({ productId, rows, templates, variants = [], suggestions = [], loading, error, canManage, onRowsChange, onRetry, onBusyChange }) => {
+const ProductAttributesSection = ({ productId, rows, templates, variants = [], categorySuggestions = {}, loading, error, canManage, onRowsChange, onRetry, onBusyChange }) => {
   const { notify, confirm } = useNotification();
+  const { attributes: suggestions = [], loading: suggestionsLoading, error: suggestionsError, hasCategories, retry: retrySuggestions } = categorySuggestions;
   const [picker, setPicker] = useState(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
@@ -21,12 +22,17 @@ const ProductAttributesSection = ({ productId, rows, templates, variants = [], s
     map.get(key).rows.push(row);
     return map;
   }, new Map()).values()];
-  const usedByVariants = (group) => Boolean(group.rows[0]?.attributeId && variants.some((variant) => !variant.deletedAt
-    && variant.options?.some((option) => (option.attributeId || option.attribute?.id) === group.rows[0].attributeId)));
-  const removalReason = (group) => usedByVariants(group)
-    ? 'Delete all variants using this attribute, then turn off “Use for variants” before removing this attribute or its values.'
-    : group.rows.some((row) => row.attributeId && row.isVariantAttr)
-      ? 'Turn off “Use for variants” before removing this attribute or its values.' : '';
+  const usedByVariants = (group, row = null) => Boolean(group.rows[0]?.attributeId && variants.some((variant) => !variant.deletedAt
+    && variant.options?.some((option) => (option.attributeId || option.attribute?.id) === group.rows[0].attributeId
+      && (!row || (option.valueId || option.value?.id) === row.valueId))));
+  const removalReason = (group, row = null) => {
+    if (row && group.rows.length > 1) return usedByVariants(group, row)
+      ? 'This value is used by existing variants. Delete those variants before removing it.' : '';
+    return usedByVariants(group)
+      ? 'Delete all variants using this attribute, then turn off “Use for variants” before removing this attribute.'
+      : group.rows.some((item) => item.attributeId && item.isVariantAttr)
+        ? 'Turn off “Use for variants” before removing this attribute.' : '';
+  };
   const reorder = async ({ source, destination, type }) => {
     if (!destination || !canManage || busy || loading || error || (source.index === destination.index && source.droppableId === destination.droppableId)) return;
     const next = groups.map((group) => ({ ...group, rows: [...group.rows] }));
@@ -69,7 +75,7 @@ const ProductAttributesSection = ({ productId, rows, templates, variants = [], s
   };
   const remove = async (group, row = null) => {
     if (!canManage || busy || loading || error) return;
-    const reason = removalReason(group);
+    const reason = removalReason(group, row);
     if (reason) { notify(reason, 'warning'); return; }
     if (!(await confirm({
       title: row ? 'Remove value from product?' : 'Remove attribute from product?',
@@ -98,8 +104,11 @@ const ProductAttributesSection = ({ productId, rows, templates, variants = [], s
     {error ? <Stack direction="row" alignItems="center" justifyContent="space-between"><Typography variant="body2" color="text.secondary">Attributes could not be loaded. Retry before making changes.</Typography><Button onClick={onRetry}>Retry</Button></Stack>
       : loading ? <Box sx={{ p: 3, textAlign: 'center' }}><CircularProgress size={24} aria-label="Loading product attributes" /></Box>
         : <>
-          {canManage && suggestions.some((item) => !groups.some((group) => group.attribute?.id === item.id)) && <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center" sx={{ mb: 2 }}>
-            <Typography variant="caption" color="text.secondary">Suggested for this category:</Typography>
+          {canManage && suggestionsLoading && <Stack direction="row" spacing={1} alignItems="center" role="status" sx={{ mb: 2 }}><CircularProgress size={16} /><Typography variant="body2" color="text.secondary">Loading category suggestions…</Typography></Stack>}
+          {canManage && suggestionsError && <Alert severity="warning" sx={{ mb: 2 }} action={<Button color="inherit" size="small" onClick={retrySuggestions}>Retry suggestions</Button>}>Category suggestions could not be loaded. {suggestionsError}</Alert>}
+          {canManage && hasCategories && !suggestionsLoading && !suggestionsError && suggestions.length === 0 && <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>No attributes are linked to the selected categories or their parents.</Typography>}
+          {canManage && !suggestionsLoading && !suggestionsError && suggestions.some((item) => !groups.some((group) => group.attribute?.id === item.id)) && <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center" sx={{ mb: 2 }}>
+            <Typography variant="caption" color="text.secondary">Suggested from categories and parents:</Typography>
             {suggestions.filter((item) => !groups.some((group) => group.attribute?.id === item.id)).map((item) => <Chip key={item.id} label={item.name} size="small" variant="outlined" onClick={() => open(item)} disabled={busy} />)}
           </Stack>}
           {!groups.length ? <Box sx={{ py: 4, textAlign: 'center', border: '1px dashed', borderColor: 'divider', borderRadius: 2 }}><Typography fontWeight={600}>No attributes assigned</Typography><Typography variant="body2" color="text.secondary">Add details such as height, color, or package size.</Typography></Box>
@@ -118,7 +127,7 @@ const ProductAttributesSection = ({ productId, rows, templates, variants = [], s
                     <Chip label={row.value ? formatAttributeValue(row.value, row.attribute) : row.customValue}
                     icon={row.value?.imageUrl ? <Box component="img" src={row.value.imageUrl} alt="" sx={{ width: 18, height: 18, objectFit: 'cover', borderRadius: 0.75 }} />
                       : getSwatchColor(row.value) ? <Box component="span" sx={{ bgcolor: getSwatchColor(row.value), width: 18, height: 18, borderRadius: '50%', border: 1, borderColor: 'divider' }} /> : undefined}
-                    onDelete={canManage && !busy && !removalReason(group) ? () => remove(group, row) : undefined} sx={{ maxWidth: '100%' }} />
+                    onDelete={canManage && !busy && !removalReason(group, row) ? () => remove(group, row) : undefined} sx={{ maxWidth: '100%' }} />
                     </Box>}
                   </Draggable>)}
                   {valuesProvided.placeholder}</Box>}
@@ -126,14 +135,14 @@ const ProductAttributesSection = ({ productId, rows, templates, variants = [], s
                 {group.attribute ? <Box sx={{ mt: 1.5 }}><FormControlLabel sx={{ m: 0 }} control={<Switch size="small" checked={group.rows.every((row) => row.isVariantAttr)} disabled={!canManage || busy || (group.rows.every((row) => row.isVariantAttr) && usedByVariants(group))} onChange={(_, checked) => toggleGroup(group, checked)} inputProps={{ 'aria-label': `Use ${group.name} for variants` }} />} label={<Typography variant="body2">Use for variants</Typography>} />
                   {group.rows.some((row) => row.isVariantAttr) && !group.rows.every((row) => row.isVariantAttr) && <Typography variant="caption" color="text.secondary" display="block">Some values currently create variants. Turn on to include all values.</Typography>}
                 </Box> : <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1.5 }}>Product-only specification · display only</Typography>}
-                {removalReason(group) && <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>{removalReason(group)}</Typography>}
+                {removalReason(group) && <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>{removalReason(group)}{group.rows.length > 1 && ' Unused values can be removed directly.'}</Typography>}
               </Box>}
               </Draggable>)}
               {provided.placeholder}</Box>}
             </Droppable></DragDropContext>}
         </>}
     {busy && <Typography variant="caption" role="status" color="text.secondary" sx={{ mt: 1.5, display: 'block' }}>Updating product attributes…</Typography>}
-    {picker && <ProductAttributeDialog productId={productId} templates={templates} rows={rows} initialTemplate={picker.initial} onClose={() => setPicker(null)} onSaved={(nextRows) => { onRowsChange(nextRows); setPicker(null); }} />}
+    {picker && <ProductAttributeDialog productId={productId} templates={templates} rows={rows} variants={variants} initialTemplate={picker.initial} onClose={() => setPicker(null)} onSaved={(nextRows) => { onRowsChange(nextRows); setPicker(null); }} />}
   </Paper>;
 };
 

@@ -44,10 +44,44 @@ describe('product attribute removal rules', () => {
     await service.deleteProductAttribute('product', 'small-row');
     expect(rows.map((row) => row.id)).toEqual(['large-row', 'color-row']);
   });
-  it.each(['deleteProductAttribute', 'deleteProductAttributeGroup'])('blocks %s while any value in the group is enabled, even before variants exist', async (method) => {
+  it('blocks whole-attribute removal while any value in the group is enabled, even before variants exist', async () => {
     rows[1].isVariantAttr = true;
-    await expect(service[method]('product', 'small-row')).rejects.toMatchObject({ code: 'CONFLICT', statusCode: 409, message: expect.stringContaining('Turn off') });
+    await expect(service.deleteProductAttributeGroup('product', 'small-row')).rejects.toMatchObject({ code: 'CONFLICT', statusCode: 409, message: expect.stringContaining('Turn off') });
     for (const row of rows) expect(row.destroy).not.toHaveBeenCalled();
+  });
+  it.each([false, true])('removes an unused value without disabling variant use or deleting sibling variants: flag=%s', async (isVariantAttr) => {
+    rows[0].isVariantAttr = rows[1].isVariantAttr = isVariantAttr;
+    db.VariantOption.findOne.mockImplementation(async ({ where }) => where.attributeId === 'size' && (!where.valueId || where.valueId === 'large')
+      ? { variantId: 'large-variant' } : null);
+    await service.deleteProductAttribute('product', 'small-row');
+    expect(rows.map((row) => row.id)).toEqual(['large-row', 'color-row']);
+    expect(rows[0].isVariantAttr).toBe(isVariantAttr);
+    expect(rows[0].update).not.toHaveBeenCalled();
+    expect(db.VariantOption.findOne).toHaveBeenCalledWith(expect.objectContaining({
+      where: { attributeId: 'size', valueId: 'small' }, transaction: tx,
+      include: [{ model: db.ProductVariant, as: 'variant', attributes: [], required: true, where: { productId: 'product' } }],
+    }));
+    expect(db.AttributeTemplate.destroy).not.toHaveBeenCalled();
+    expect(db.AttributeValue.destroy).not.toHaveBeenCalled();
+  });
+  it('removes an unused enabled value before any variants are created', async () => {
+    rows[0].isVariantAttr = rows[1].isVariantAttr = true;
+    await service.deleteProductAttribute('product', 'small-row');
+    expect(rows.map((row) => row.id)).toEqual(['large-row', 'color-row']);
+    expect(rows[0].isVariantAttr).toBe(true);
+  });
+  it.each([false, true])('blocks removing a value referenced by an existing variant: flag=%s', async (isVariantAttr) => {
+    rows[0].isVariantAttr = isVariantAttr;
+    db.VariantOption.findOne.mockResolvedValue({ variantId: 'small-variant' });
+    await expect(service.deleteProductAttribute('product', 'small-row')).rejects.toMatchObject({
+      code: 'CONFLICT', statusCode: 409, message: expect.stringContaining('This value is used'),
+    });
+    for (const row of rows) expect(row.destroy).not.toHaveBeenCalled();
+  });
+  it('keeps whole-attribute protection when deleting the last enabled value', async () => {
+    rows = [makeRow('small-row', 'small', true)];
+    await expect(service.deleteProductAttribute('product', 'small-row')).rejects.toMatchObject({ statusCode: 409, message: expect.stringContaining('Turn off') });
+    expect(rows[0].destroy).not.toHaveBeenCalled();
   });
   it.each(['deleteProductAttribute', 'deleteProductAttributeGroup'])('blocks %s for legacy display-only assignments still referenced by variants', async (method) => {
     db.VariantOption.findOne.mockResolvedValue({ variantId: 'existing' });

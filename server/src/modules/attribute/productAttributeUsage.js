@@ -23,11 +23,22 @@ const assertAttributeNotUsedByVariants = async (productId, attributeId, transact
         'This attribute is used by existing variants. Delete those variants before turning off “Use for variants” or removing/changing the attribute.');
 };
 
+const assertAttributeValueNotUsedByVariants = async (productId, row, transaction) => {
+    if (!row.attributeId || !row.valueId) return;
+    const dependency = await VariantOption.findOne({
+        where: { attributeId: row.attributeId, valueId: row.valueId },
+        include: [{ model: ProductVariant, as: 'variant', attributes: [], required: true, where: { productId } }],
+        transaction,
+    });
+    if (dependency) throw new AppError('CONFLICT', 409,
+        'This value is used by existing variants. Delete those variants before removing it.');
+};
+
 const assertAttributeRemovalAllowed = async (productId, rows, transaction) => {
     if (rows.some((row) => row.attributeId && row.isVariantAttr)) {
-        throw new AppError('CONFLICT', 409, 'Turn off “Use for variants” before removing this attribute or its values. Delete any variants using it first.');
+        throw new AppError('CONFLICT', 409, 'Turn off “Use for variants” before removing this attribute. Delete any variants using it first.');
     }
     await assertAttributeNotUsedByVariants(productId, rows[0]?.attributeId, transaction);
 };
 
-module.exports = { lockProductVariantChanges, assertAttributeNotUsedByVariants, assertAttributeRemovalAllowed };
+module.exports = { lockProductVariantChanges, assertAttributeNotUsedByVariants, assertAttributeValueNotUsedByVariants, assertAttributeRemovalAllowed };

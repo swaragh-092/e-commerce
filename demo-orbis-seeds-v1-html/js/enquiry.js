@@ -156,9 +156,9 @@ $(document).ready(function () {
                 (item.variantLabel ? '<p class="cart-variant">' + esc(item.variantLabel) + '</p>' : '') +
                 (item.sku ? '<p class="cart-variant">SKU: ' + esc(item.sku) + '</p>' : '') +
                 (item.unit ? '<p class="cart-unit">Unit: ' + esc(item.unit) + '</p>' : '') +
-                '<div class="cart-bottom"><div class="quantity"><button type="button" class="qty-btn minus" aria-label="Decrease quantity">-</button>' +
+                '<div class="cart-bottom"><div class="quantity"><button type="button" class="qty-btn minus" aria-label="Decrease quantity"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M5 12h14"/></svg></button>' +
                 '<input type="number" class="qty-input" min="1" max="99999" step="1" value="' + item.quantity + '" aria-label="Quantity for ' + esc(item.name + ' ' + (item.variantLabel || '')) + '">' +
-                '<button type="button" class="qty-btn plus" aria-label="Increase quantity">+</button></div></div></div>');
+                '<button type="button" class="qty-btn plus" aria-label="Increase quantity"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M5 12h14M12 5v14"/></svg></button></div></div></div>');
             $row.find('img').on('error', function () { if (this.getAttribute('src') !== 'images/orbi-seeds-logo.png') this.src = 'images/orbi-seeds-logo.png'; });
             $container.append($row);
         });
