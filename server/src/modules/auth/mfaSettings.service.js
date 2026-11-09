@@ -47,6 +47,9 @@ const update = async (actingUser, input, request = {}) => {
   if (!await actor.validatePassword(input.verification.currentPassword)) {
     throw new AppError('REAUTHENTICATION_FAILED', 403, 'Security verification failed. Check your current password and verification code.');
   }
+  if (policy.allowEmailCodes && !actor.twoFactorEnabled) {
+    throw new AppError('REAUTHENTICATION_FAILED', 403, 'Set up an authenticator before enabling email codes.');
+  }
   if (actor.twoFactorEnabled) {
     let verified = false;
     try { verified = factors.verify(actor, input.verification.code); } catch { /* Use one generic verification error. */ }

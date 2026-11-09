@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## [1.5.0.0] - 2026-11-09
+
+### Added
+- Allow administrators to enable verified email codes as an alternate MFA method after an authenticator sign-in binds the current password.
+- Rate-limit email MFA delivery and verification, with single-use five-minute codes, secure SMTP delivery, and session checks against the live policy.
+
 ## [1.4.1.0] - 2026-11-05
 
 ### Fixed

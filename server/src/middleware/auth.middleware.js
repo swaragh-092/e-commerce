@@ -66,7 +66,7 @@ const authenticate = async (req, res, next) => {
 
     // Check if user still exists (could be deleted)
     const user = await User.findByPk(decoded.id, {
-      attributes: ['id', 'email', 'role', 'status', 'twoFactorEnabled'],
+      attributes: ['id', 'email', 'role', 'status', 'twoFactorEnabled', 'emailVerified'],
       include: authUserInclude,
     });
 
@@ -116,7 +116,7 @@ const optionalAuth = async (req, res, next) => {
     }
 
     const user = await User.findByPk(decoded.id, {
-      attributes: ['id', 'email', 'role', 'status', 'twoFactorEnabled'],
+      attributes: ['id', 'email', 'role', 'status', 'twoFactorEnabled', 'emailVerified'],
       include: authUserInclude,
     });
 

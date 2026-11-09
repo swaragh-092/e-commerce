@@ -46,6 +46,16 @@ const authService = {
     return response.data.data;
   },
 
+  sendEmailMfaCode: async emailChallenge => api.post('/auth/2fa/email/send', { emailChallenge }, { skipAuthRefresh: true }),
+
+  verifyEmailMfaCode: async (emailChallenge, code) => {
+    const response = await changeAuthSession(
+      () => api.post('/auth/2fa/email/verify', { emailChallenge, code }, { skipAuthRefresh: true }),
+      { restoreOnRejectedLoginResponse: true },
+    );
+    return response.data.data;
+  },
+
   setup2FA: async () => {
     const response = await api.post('/auth/2fa/setup');
     return response.data.data;

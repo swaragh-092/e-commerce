@@ -20,6 +20,7 @@ import authService from '../../../services/authService';
 
 const emptyPolicy = () => ({
   requireAdministrators: false,
+  allowEmailCodes: false,
   staffMode: 'optional',
   requiredRoleIds: [],
 });
@@ -46,6 +47,7 @@ export default function MfaSecurityPanel() {
       setConfig(result);
       setPolicy({
         requireAdministrators: Boolean(result.policy?.requireAdministrators),
+        allowEmailCodes: result.policy?.allowEmailCodes === true,
         staffMode: result.policy?.staffMode || 'optional',
         requiredRoleIds: Array.isArray(result.policy?.requiredRoleIds) ? [...result.policy.requiredRoleIds] : [],
       });
@@ -79,6 +81,7 @@ export default function MfaSecurityPanel() {
     const payload = {
       policy: {
         requireAdministrators: policy.requireAdministrators,
+        ...(policy.allowEmailCodes ? { allowEmailCodes: true } : {}),
         staffMode: policy.staffMode,
         requiredRoleIds: policy.staffMode === 'selected' ? [...policy.requiredRoleIds] : [],
       },
@@ -93,6 +96,7 @@ export default function MfaSecurityPanel() {
         setConfig(result);
         setPolicy({
           requireAdministrators: Boolean(result.policy.requireAdministrators),
+          allowEmailCodes: result.policy.allowEmailCodes === true,
           staffMode: result.policy.staffMode || 'optional',
           requiredRoleIds: Array.isArray(result.policy.requiredRoleIds) ? [...result.policy.requiredRoleIds] : [],
         });
@@ -147,6 +151,14 @@ export default function MfaSecurityPanel() {
           control={<Switch checked={policy.requireAdministrators} disabled={!canManage || saving} onChange={event => updatePolicy('requireAdministrators', event.target.checked)} />}
           label="Require MFA for administrators"
         />
+        <FormControlLabel
+          control={<Switch checked={policy.allowEmailCodes} disabled={!canManage || saving} onChange={event => updatePolicy('allowEmailCodes', event.target.checked)} />}
+          label="Allow email codes after password sign-in"
+        />
+        <Typography variant="body2" color="text.secondary">
+          Staff and admins with a verified email must first sign in with their password and authenticator.
+          After a password or email change, they need to use their authenticator again before email codes are available.
+        </Typography>
         <FormControl fullWidth size="small" disabled={!canManage || saving}>
           <InputLabel id="mfa-staff-mode-label">Staff MFA requirement</InputLabel>
           <Select

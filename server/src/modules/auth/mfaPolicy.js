@@ -5,6 +5,7 @@ const Joi = require('joi');
 const POLICY_KEY = 'mfaPolicy';
 const POLICY_GROUP = 'auth';
 const policySchema = Joi.object({
+  allowEmailCodes: Joi.boolean().strict().optional(),
   requireAdministrators: Joi.boolean().strict().required(),
   staffMode: Joi.string().valid('optional', 'all', 'selected').required(),
   requiredRoleIds: Joi.array().items(Joi.string().uuid()).unique().max(100).required(),
@@ -42,6 +43,9 @@ const isEnrollmentRequired = (user, policy = environmentPolicy()) => {
 };
 const requiresAdminMfa = (user, policy = environmentPolicy()) =>
   isEnrollmentRequired(user, policy) || (classifyUser(user).administrative && user?.twoFactorEnabled === true);
+const canUseEmailMfa = (user, policy) => policy.allowEmailCodes === true
+  && classifyUser(user).administrative && user.twoFactorEnabled === true
+  && user.emailVerified === true && Boolean(user.email) && !user.email.endsWith('@phone.local');
 const assertMfaEnrollment = (user, policy) => {
   if (isEnrollmentRequired(user, policy) && !user.twoFactorEnabled) {
     throw new AppError('MFA_REQUIRED', 403, 'Staff MFA enrollment is required. Contact your operator.');
@@ -49,11 +53,14 @@ const assertMfaEnrollment = (user, policy) => {
 };
 const assertMfaSession = (user, claims, policy) => {
   assertMfaEnrollment(user, policy);
+  if (claims.mfaMethod === 'email' && !canUseEmailMfa(user, policy)) {
+    throw new AppError('UNAUTHORIZED', 401, 'Sign in again with your authenticator.');
+  }
   if (requiresAdminMfa(user, policy) && claims.mfa !== true) {
     throw new AppError('UNAUTHORIZED', 401, 'Sign in again with MFA.');
   }
 };
 module.exports = {
   POLICY_KEY, POLICY_GROUP, policySchema, classifyUser, environmentPolicy, loadMfaPolicy,
-  isEnrollmentRequired, requiresAdminMfa, assertMfaEnrollment, assertMfaSession,
+  isEnrollmentRequired, requiresAdminMfa, canUseEmailMfa, assertMfaEnrollment, assertMfaSession,
 };

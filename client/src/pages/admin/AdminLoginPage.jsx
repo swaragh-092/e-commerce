@@ -10,13 +10,14 @@ import { getFirstAccessibleAdminPath } from '../../utils/permissions';
 import { validateEmail, validateRequired } from '../../utils/authValidation';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { EmailOutlined, LockOutlined } from '@mui/icons-material';
+import EmailMfaStep from '../../components/auth/EmailMfaStep';
 import AuthPageShell from '../../components/storefront/AuthPageShell';
 
 const AdminLoginPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, verifyTwoFactor, isAuthenticated, user, hasRole } = useAuth();
+  const { login, verifyTwoFactor, finalizeAuthenticatedSession, isAuthenticated, user, hasRole } = useAuth();
   
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [fieldErrors, setFieldErrors] = useState({});
@@ -26,6 +27,8 @@ const AdminLoginPage = () => {
 
   // 2FA state
   const [twoFactorStep, setTwoFactorStep] = useState(false);
+  const [emailChallenge, setEmailChallenge] = useState('');
+  const [emailStep, setEmailStep] = useState(false);
   const [tempToken, setTempToken] = useState('');
   const [totpCode, setTotpCode] = useState('');
   const [useBackupCode, setUseBackupCode] = useState(false);
@@ -89,6 +92,7 @@ const AdminLoginPage = () => {
       if (data.requiresTwoFactor) {
         setTwoFactorStep(true);
         setTempToken(data.tempToken);
+        setEmailChallenge(data.emailChallenge || '');
         setLoading(false);
         return;
       }
@@ -143,7 +147,15 @@ const AdminLoginPage = () => {
           <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>
         )}
 
-        {twoFactorStep ? (
+        {emailStep ? (
+          <EmailMfaStep challenge={emailChallenge} onBack={() => setEmailStep(false)} onComplete={async () => {
+            const signedInUser = await finalizeAuthenticatedSession();
+            const adminPath = getFirstAccessibleAdminPath(signedInUser);
+            if (!adminPath) throw new Error('Your account does not have admin access.');
+            const fromPath = location.state?.from?.pathname;
+            navigate(fromPath?.startsWith('/admin') ? fromPath : adminPath, { replace: true });
+          }} />
+        ) : twoFactorStep ? (
           <Box component="form" onSubmit={handleTwoFactorSubmit}>
             <Typography sx={{ mb: 2, fontSize: 14, color: '#475569' }}>
               {useBackupCode ? 'Enter one of your 8-character backup codes.' : 'Enter the 6-digit code from your authenticator app.'}
@@ -174,6 +186,24 @@ const AdminLoginPage = () => {
             >
               {useBackupCode ? 'Use authenticator code instead' : 'Lost your device? Use a backup code'}
             </Button>
+            {emailChallenge && (
+              <Button type="button" fullWidth disabled={loading} onClick={() => { setError(''); setEmailStep(true); }}>
+                Use an email code
+              </Button>
+            )}
+            {emailChallenge && (
+              <Button type="button" fullWidth disabled={loading} onClick={() => {
+                setTwoFactorStep(false);
+                setTempToken('');
+                setEmailChallenge('');
+                setTotpCode('');
+                setUseBackupCode(false);
+                setError('');
+                setFormData(current => ({ ...current, password: '' }));
+              }}>
+                Back to sign in
+              </Button>
+            )}
           </Box>
         ) : (
         <Box component="form" onSubmit={handleSubmit}>

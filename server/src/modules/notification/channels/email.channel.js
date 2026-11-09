@@ -60,7 +60,7 @@ const requireSetting = (value, label) => {
     return String(value).trim();
 };
 
-const createTransporter = async () => {
+const createTransporter = async (sensitive = false) => {
     const smtp = await getSmtpConfig();
     const host = requireSetting(smtp.host, 'SMTP Host');
     const port = Number.parseInt(smtp.port, 10) || 587;
@@ -85,6 +85,7 @@ const createTransporter = async () => {
         host,
         port,
         secure: isSecure,
+        requireTLS: sensitive && !isSecure,
         family: 4, // Force IPv4 to prevent hanging on broken or unrouted IPv6 VPS networks
         auth: {
             user,
@@ -107,7 +108,7 @@ const createTransporter = async () => {
  * @param {Object} [payload.headers]   - Optional extra headers (e.g. List-Unsubscribe)
  * @returns {Promise<boolean>}
  */
-const send = async ({ to, subject, html, text, headers }) => {
+const send = async ({ to, subject, html, text, headers, sensitive = false }) => {
     if (process.env.NODE_ENV === 'test') {
         // Skip actual delivery in test environments — log only
         logger.debug(`[email.channel] TEST MODE — skipping send to ${to}`);
@@ -118,6 +119,7 @@ const send = async ({ to, subject, html, text, headers }) => {
 
     // In development mode, if SMTP credentials are placeholder or unconfigured, simulate email
     if (process.env.NODE_ENV === 'development' && (isPlaceholderCredential(smtp.user) || isPlaceholderCredential(smtp.pass))) {
+        if (sensitive) throw new Error('SMTP is not configured for secure delivery.');
         logger.warn(
             `[email.channel] SMTP credentials are not configured or are placeholder (${smtp.user || 'none'}). Real email was not delivered over network. ` +
             `To deliver real emails to inbox, configure valid SMTP credentials in .env or Admin Settings > Notifications.`
@@ -132,7 +134,7 @@ const send = async ({ to, subject, html, text, headers }) => {
         return true;
     }
 
-    const transporter = await createTransporter();
+    const transporter = await createTransporter(sensitive);
     const general = await SettingsService.getByGroup('general');
 
     const storeName = general.storeName || 'E-Commerce Store';
@@ -149,7 +151,7 @@ const send = async ({ to, subject, html, text, headers }) => {
         });
         return true;
     } catch (err) {
-        if (process.env.NODE_ENV === 'development') {
+        if (!sensitive && process.env.NODE_ENV === 'development') {
             logger.error(`[email.channel] SMTP delivery failed: ${err.message}. Email body for ${to}:\n${text || html}`);
         }
         throw err;
