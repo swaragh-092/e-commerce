@@ -11,7 +11,7 @@ const run = () => {
     logger.info('Running couponExpiry job...');
     try {
       const [updatedCount] = await Coupon.update(
-        { isActive: false },
+        { isActive: false, campaignStatus: 'paused' },
         { 
           where: { 
             isActive: true,

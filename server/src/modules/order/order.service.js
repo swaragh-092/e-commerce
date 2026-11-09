@@ -75,7 +75,7 @@ const { normalizeDateOnly, isDateOnOrAfter } = require('./orderDate.utils');
 const { getPagination } = require('../../utils/pagination');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 const CANCELLATION_REASONS = require('../../../../shared/cancellation-reasons.json');
-const { getVariantUnitPrice, resolveSaleLabel } = require('../product/product.pricing');
+const { getVariantUnitPrice, resolveSaleLabel, isSaleActive } = require('../product/product.pricing');
 const { getSaleLabels } = require('../settings/saleLabel.service');
 const productComboService = require('../product/productCombo.service');
 const {
@@ -790,6 +790,33 @@ const restockOrderItemInventory = async ({ item, quantity, orderId, reason, crea
     });
 };
 
+const releaseOrderCoupons = async (order, transaction) => {
+    const appliedCouponIds = Array.from(new Set([
+        ...(Array.isArray(order.appliedDiscounts) ? order.appliedDiscounts.map((item) => item.couponId).filter(Boolean) : []),
+        order.couponId,
+    ].filter(Boolean)));
+
+    if (appliedCouponIds.length === 0) return;
+
+    const usages = await CouponUsage.findAll({
+        where: { orderId: order.id, couponId: { [Op.in]: appliedCouponIds } },
+        transaction,
+    });
+
+    const actualCouponIds = [...new Set(usages.map((u) => u.couponId).filter(Boolean))];
+    if (actualCouponIds.length > 0) {
+        await CouponUsage.destroy({
+            where: { orderId: order.id, couponId: { [Op.in]: actualCouponIds } },
+            transaction,
+        });
+
+        await Coupon.update(
+            { usedCount: sequelize.literal('GREATEST(used_count - 1, 0)') },
+            { where: { id: { [Op.in]: actualCouponIds } }, transaction }
+        );
+    }
+};
+
 const releaseOrderReservationsAndCoupons = async (order, transaction) => {
     if (order.inventoryReleasedAt) {
         return [];
@@ -839,29 +866,7 @@ const releaseOrderReservationsAndCoupons = async (order, transaction) => {
     }
 
     await order.update({ inventoryReleasedAt: new Date() }, { transaction });
-
-    const appliedCouponIds = Array.from(new Set([
-        ...(Array.isArray(order.appliedDiscounts) ? order.appliedDiscounts.map((item) => item.couponId).filter(Boolean) : []),
-        order.couponId,
-    ].filter(Boolean)));
-
-    if (appliedCouponIds.length > 0) {
-        const usages = await CouponUsage.findAll({
-            where: { orderId: order.id, couponId: { [Op.in]: appliedCouponIds } },
-            transaction,
-        });
-
-        for (const usage of usages) {
-            await usage.destroy({ transaction });
-        }
-
-        if (usages.length > 0) {
-            await Coupon.update(
-                { usedCount: sequelize.literal(`GREATEST(used_count - 1, 0)`) },
-                { where: { id: { [Op.in]: appliedCouponIds } }, transaction }
-            );
-        }
-    }
+    await releaseOrderCoupons(order, transaction);
 
     return eventBuffer;
 };
@@ -968,15 +973,73 @@ const getRefundedAmountForReturn = async (returnId, transaction) => {
     return money(refunds.reduce((sum, refund) => sum + Number(refund.amount || 0), 0));
 };
 
-const getReturnRequestItemAmount = (returnRequest) => {
+const getReturnRequestItemAmount = (returnRequest, order = {}) => {
     const items = returnRequest?.items || [];
+    const orderSubtotal = Number(order?.subtotal || 0);
+
+    // Collect per-line discounts from order.appliedDiscounts.lineDiscounts or individual applied coupon lineDiscounts
+    const combinedLineDiscounts = {};
+    let orderProductDiscount = 0;
+
+    if (order?.appliedDiscounts) {
+        if (typeof order.appliedDiscounts === 'object' && !Array.isArray(order.appliedDiscounts)) {
+            if (order.appliedDiscounts.lineDiscounts && typeof order.appliedDiscounts.lineDiscounts === 'object') {
+                Object.assign(combinedLineDiscounts, order.appliedDiscounts.lineDiscounts);
+            }
+            orderProductDiscount = Number(order.appliedDiscounts.orderDiscount || 0);
+        } else if (Array.isArray(order.appliedDiscounts)) {
+            for (const discount of order.appliedDiscounts) {
+                orderProductDiscount += Number(discount?.orderDiscount || 0);
+                if (discount?.lineDiscounts && typeof discount.lineDiscounts === 'object') {
+                    for (const [key, val] of Object.entries(discount.lineDiscounts)) {
+                        combinedLineDiscounts[key] = (combinedLineDiscounts[key] || 0) + Number(val || 0);
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback if appliedDiscounts had no orderDiscount specified:
+    // Do NOT include shipping discounts in product return calculations!
+    if (orderProductDiscount <= 0 && Number(order?.discountAmount || 0) > 0) {
+        const shippingDiscountAmount = Array.isArray(order?.appliedDiscounts)
+            ? order.appliedDiscounts.reduce((sum, d) => sum + Number(d?.shippingDiscount || 0), 0)
+            : 0;
+        orderProductDiscount = Math.max(0, Number(order.discountAmount) - shippingDiscountAmount);
+    }
+
+    const hasLineDiscounts = Object.keys(combinedLineDiscounts).length > 0;
+
     return money(items.reduce((sum, item) => {
         const orderItem = item.orderItem || {};
         const orderedQty = Number(orderItem.quantity || 0);
         const returnedQty = Number(item.quantity || 0);
         const itemTotal = Number(orderItem.total || 0);
         if (orderedQty <= 0 || returnedQty <= 0 || itemTotal <= 0) return sum;
-        return sum + (itemTotal * (returnedQty / orderedQty));
+
+        const returnedRatio = returnedQty / orderedQty;
+        const lineItemAmount = itemTotal * returnedRatio;
+
+        // Deduct discount: allocate from lineDiscounts first, then fall back to product-discount proration
+        let itemDiscount = 0;
+        const itemKey = orderItem.variantId ? `${orderItem.productId}:${orderItem.variantId}` : orderItem.productId;
+
+        if (hasLineDiscounts) {
+            const lineDiscount = Number(combinedLineDiscounts[itemKey] ?? combinedLineDiscounts[orderItem.productId] ?? 0);
+            itemDiscount = lineDiscount * returnedRatio;
+        } else if (orderProductDiscount > 0 && orderSubtotal > 0) {
+            itemDiscount = (lineItemAmount / orderSubtotal) * orderProductDiscount;
+        }
+
+        const netItemSubtotal = Math.max(0, lineItemAmount - itemDiscount);
+
+        // Include proportional tax if available
+        let itemTax = 0;
+        if (orderItem.taxBreakdown && typeof orderItem.taxBreakdown.totalTax === 'number') {
+            itemTax = Number(orderItem.taxBreakdown.totalTax) * returnedRatio;
+        }
+
+        return sum + netItemSubtotal + itemTax;
     }, 0));
 };
 
@@ -1051,6 +1114,10 @@ const createRefundRecord = async ({
             fullyRefundedAt: isFullOrderRefund ? new Date().toISOString() : payment.metadata?.fullyRefundedAt,
         },
     }, { transaction });
+
+    if (isFullOrderRefund) {
+        await releaseOrderCoupons(order, transaction);
+    }
 
     await logOrderHistory({
         orderId: order.id,
@@ -1158,7 +1225,6 @@ const placeOrder = async (userId, payload) => {
 
         let variant = null;
         if (buyNowItem.variantId) {
-            if (product.type !== 'variable') throw new AppError('VALIDATION_ERROR', 400, 'This product uses standalone stock. Buy it without a variant.');
             variant = await ProductVariant.findOne({
                 where: { id: buyNowItem.variantId, productId: buyNowItem.productId, isActive: true },
             });
@@ -1167,7 +1233,10 @@ const placeOrder = async (userId, payload) => {
                 throw new AppError('NOT_FOUND', 404, 'Selected product variant not found or is currently unavailable');
             }
         } else {
-            if (product.type === 'variable') {
+            const activeVariantCount = await ProductVariant.count({
+                where: { productId: buyNowItem.productId, isActive: true },
+            });
+            if (product.type === 'variable' || activeVariantCount > 0) {
                 throw new AppError('VALIDATION_ERROR', 400, `Please select an option for "${product.name}" before checkout.`);
             }
         }
@@ -1305,7 +1374,7 @@ const placeOrder = async (userId, payload) => {
             }
 
             const currentProduct = await Product.findByPk(product.id, { transaction: t, lock: Transaction.LOCK.UPDATE });
-            if (!currentProduct || currentProduct.status !== 'published' || currentProduct.isEnabled === false) {
+            if (!currentProduct) {
                 throw new AppError(
                     'VALIDATION_ERROR',
                     400,
@@ -1321,7 +1390,6 @@ const placeOrder = async (userId, payload) => {
             let currentPrice = getVariantUnitPrice(plainCurrentProduct, null);
 
             if (item.variantId) {
-                if (currentProduct.type !== 'variable') throw new AppError('VALIDATION_ERROR', 400, `"${product.name}" now uses standalone stock. Remove it and add it again without an option.`);
                 const currentVariant = await ProductVariant.findOne({
                     where: { id: item.variantId, productId: product.id, isActive: true },
                     transaction: t,
@@ -1333,7 +1401,11 @@ const placeOrder = async (userId, payload) => {
                 currentPrice = getVariantUnitPrice(plainCurrentProduct, currentVariant);
                 item.variant = currentVariant;
             } else {
-                if (currentProduct.type === 'variable') {
+                const activeVariantCount = await ProductVariant.count({
+                    where: { productId: product.id, isActive: true },
+                    transaction: t,
+                });
+                if (currentProduct.type === 'variable' || activeVariantCount > 0) {
                     throw new AppError('VALIDATION_ERROR', 400, `Please select a product option for "${product.name}" before checkout.`);
                 }
             }
@@ -1387,6 +1459,7 @@ const placeOrder = async (userId, payload) => {
 
         // Harden: Check if coupons feature is enabled before resolving
         const couponCodesToResolve = features.coupons ? requestedCouponCodes : [];
+        const normalizedGuestEmail = !userId && payload.guestEmail ? payload.guestEmail.trim().toLowerCase() : null;
 
         couponBenefits = await CouponService.resolveCoupons(couponCodesToResolve, userId, {
             cartSubtotal: subtotal,
@@ -1394,6 +1467,7 @@ const placeOrder = async (userId, payload) => {
             shippingCost: quotedShippingCost,
             transaction: t,
             guestSessionId,
+            guestEmail: normalizedGuestEmail,
         });
 
         orderDiscountAmount = Number(couponBenefits?.orderDiscount || 0);
@@ -1410,6 +1484,11 @@ const placeOrder = async (userId, payload) => {
 
         let totalTax = 0;
         const itemTaxBreakdowns = [];
+        const checkSaleItem = (prod) => {
+            const plain = prod?.get ? prod.get({ plain: true }) : prod;
+            return plain?.isSaleActive !== undefined ? Boolean(plain.isSaleActive) : isSaleActive(plain);
+        };
+
         for (const item of checkoutItems) {
             const effectiveTax = TaxService.getEffectiveTax(item.currentProduct, settingsMap);
             const itemSubtotal = item.currentPrice * item.quantity;
@@ -1424,7 +1503,7 @@ const placeOrder = async (userId, payload) => {
                     productId: item.productId,
                     brandId: item.currentProduct.brandId || item.currentProduct.brand?.id,
                     categoryIds: Array.isArray(item.currentProduct.categories) ? item.currentProduct.categories.map((c) => c.id) : [],
-                    isSaleItem: Boolean(item.currentProduct.isSaleActive),
+                    isSaleItem: checkSaleItem(item.currentProduct),
                 }) : true;
                 if (isEligible) {
                     const eligibleSubtotal = checkoutItems.reduce((sum, ci) => {
@@ -1432,7 +1511,7 @@ const placeOrder = async (userId, payload) => {
                             productId: ci.productId,
                             brandId: ci.currentProduct.brandId || ci.currentProduct.brand?.id,
                             categoryIds: Array.isArray(ci.currentProduct.categories) ? ci.currentProduct.categories.map((c) => c.id) : [],
-                            isSaleItem: Boolean(ci.currentProduct.isSaleActive),
+                            isSaleItem: checkSaleItem(ci.currentProduct),
                         }) : true;
                         return match ? sum + (ci.currentPrice * ci.quantity) : sum;
                     }, 0);
@@ -1587,6 +1666,7 @@ const placeOrder = async (userId, payload) => {
                 orderDiscount: Number(coupon.orderDiscount || 0),
                 shippingDiscount: Number(coupon.shippingDiscount || 0),
                 totalDiscount: Number(coupon.totalDiscount || 0),
+                lineDiscounts: coupon.lineDiscounts || null,
             })),
             shippingAddressSnapshot,
             notes
@@ -1873,6 +1953,20 @@ const claimGuestOrders = async (userId, rawToken) => {
                 metadata: { orderNumber: order.orderNumber, email: normalizedEmail },
                 transaction,
             });
+        }
+
+        const orderIds = orders.map((o) => o.id);
+        if (orderIds.length > 0) {
+            await CouponUsage.update(
+                { userId, guestSessionId: null },
+                {
+                    where: {
+                        orderId: { [Op.in]: orderIds },
+                        userId: null,
+                    },
+                    transaction,
+                }
+            );
         }
         await token.update({ usedAt: new Date() }, { transaction });
         return { linkedCount: orders.length };
@@ -3787,7 +3881,7 @@ const processRefund = async (orderId, payload, actingUserId, isAdmin, auditConte
             if (!['pickup_completed', 'return_completed'].includes(returnStatus)) {
                 throw new AppError('VALIDATION_ERROR', 400, 'Cannot refund before pickup or return completion');
             }
-            const returnItemAmount = getReturnRequestItemAmount(returnRequest);
+            const returnItemAmount = getReturnRequestItemAmount(returnRequest, order);
             const returnRefundedAmount = await getRefundedAmountForReturn(returnRequest.id, t);
             const remainingReturnRefundable = money(Math.max(returnItemAmount - returnRefundedAmount, 0));
             if (remainingReturnRefundable <= 0) {
@@ -3817,7 +3911,7 @@ const processRefund = async (orderId, payload, actingUserId, isAdmin, auditConte
             status: 'refund_initiated',
             reason: payload.reason || (returnRequest ? 'Return refund' : 'Manual refund'),
             metadata: {
-                returnItemAmount: returnRequest ? getReturnRequestItemAmount(returnRequest) : null,
+                returnItemAmount: returnRequest ? getReturnRequestItemAmount(returnRequest, order) : null,
                 requestedBy: actingUserId,
                 ...(isOfflineRefund ? { refundMethod: 'offline', manualReference: String(payload.offlineRefundReference).trim() } : {}),
             },
@@ -3924,7 +4018,7 @@ const finalizeProviderRefund = async (refundId, providerResult, actorId = null) 
         reason: refund.reason,
         actingUserId: actorId,
         returnId: refund.returnId,
-        refundScopeAmount: returnRequest ? getReturnRequestItemAmount(returnRequest) : null,
+        refundScopeAmount: returnRequest ? getReturnRequestItemAmount(returnRequest, order) : null,
         metadata: { ...(refund.metadata || {}), providerRefundId: providerResult.providerRefundId || refund.providerRefundId, providerStatus: 'succeeded' },
         transaction: t,
         existingRefund: refund,
@@ -4024,4 +4118,7 @@ module.exports = {
     hashOrderIntent,
     assertMatchingOrderIntent,
     getOrderIdempotencyWhere,
+    getReturnRequestItemAmount,
+    releaseOrderCoupons,
+    createRefundRecord,
 };

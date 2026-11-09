@@ -12,6 +12,7 @@ const {
     CartItem,
     ProductVariant,
     Order,
+    Payment,
     User,
 } = require('../index');
 const AppError = require('../../utils/AppError');
@@ -176,13 +177,25 @@ const buildCombinationResult = (evaluations, context, { source = 'manual' } = {}
 
     const hasFreeShippingBenefit = shippingDiscount > 0 || safeEvaluations.some((evaluation) => Boolean(evaluation.freeShipping || evaluation.coupon?.type === 'free_shipping'));
 
-    return {
-        appliedCoupons: safeEvaluations.map((evaluation) => ({
+    let remainingShippingBudget = shippingDiscount;
+    const appliedCoupons = safeEvaluations.map((evaluation) => {
+        const evalShipping = Number(toNumber(evaluation.shippingDiscount).toFixed(2));
+        const allocatedShipping = Math.min(remainingShippingBudget, evalShipping);
+        remainingShippingBudget = Number((remainingShippingBudget - allocatedShipping).toFixed(2));
+
+        const evalOrder = Number(toNumber(evaluation.orderDiscount).toFixed(2));
+        const total = Number((evalOrder + allocatedShipping).toFixed(2));
+        return {
             ...evaluation.coupon,
-            orderDiscount: Number(toNumber(evaluation.orderDiscount).toFixed(2)),
-            shippingDiscount: Number(toNumber(evaluation.shippingDiscount).toFixed(2)),
-            totalDiscount: Number(toNumber(evaluation.totalDiscount).toFixed(2)),
-        })),
+            orderDiscount: evalOrder,
+            shippingDiscount: allocatedShipping,
+            totalDiscount: total,
+            lineDiscounts: evaluation.lineDiscounts || null,
+        };
+    });
+
+    return {
+        appliedCoupons,
         primaryCoupon: safeEvaluations[0]?.coupon || null,
         orderDiscount,
         shippingDiscount,
@@ -225,13 +238,13 @@ const chooseStackedEvaluations = (evaluations, context, seedEvaluations = []) =>
 
 const getCouponStatus = (coupon, referenceDate = new Date()) => {
     if (coupon.campaignStatus === 'draft') return 'draft';
-    if (coupon.campaignStatus === 'paused') return 'paused';
     if (coupon.campaignStatus === 'archived') return 'archived';
-    if (!coupon.isActive) return 'paused';
 
     const now = referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
     if (coupon.endDate && now > new Date(coupon.endDate)) return 'expired';
     if (coupon.startDate && now < new Date(coupon.startDate)) return 'scheduled';
+
+    if (coupon.campaignStatus === 'paused' || !coupon.isActive) return 'paused';
 
     if (coupon.usageLimit !== null && coupon.usageLimit !== undefined && coupon.usedCount >= coupon.usageLimit) {
         return 'usage_limit_reached';
@@ -350,19 +363,23 @@ const normalizeCouponPayload = (payload, existing = {}) => {
         normalized.applicableIds = [];
     }
 
+    if ('code' in payload) {
+        normalized.code = String(payload.code || '').trim().toUpperCase();
+    }
+
     const nextType = payload.type ?? existing.type;
     if (nextType === 'free_shipping') {
         normalized.value = 0;
         normalized.maxDiscount = null;
     } else if ('value' in payload) {
-        normalized.value = toNumber(payload.value);
+        normalized.value = Number(toNumber(payload.value).toFixed(2));
     }
 
     if ('maxDiscount' in payload) {
-        normalized.maxDiscount = payload.maxDiscount === null || payload.maxDiscount === '' ? null : toNumber(payload.maxDiscount);
+        normalized.maxDiscount = payload.maxDiscount === null || payload.maxDiscount === '' ? null : Number(toNumber(payload.maxDiscount).toFixed(2));
     }
     if ('minOrderAmount' in payload) {
-        normalized.minOrderAmount = toNumber(payload.minOrderAmount);
+        normalized.minOrderAmount = Number(toNumber(payload.minOrderAmount).toFixed(2));
     }
     if ('priority' in payload) {
         normalized.priority = Number(payload.priority || 0);
@@ -380,6 +397,9 @@ const assertCouponRules = (coupon) => {
     }
     if (coupon.type !== 'free_shipping' && toNumber(coupon.value) <= 0) {
         throw new AppError('VALIDATION_ERROR', 400, 'Coupon value must be greater than 0');
+    }
+    if (toNumber(coupon.value) > 99999999.99 || toNumber(coupon.minOrderAmount) > 99999999.99 || toNumber(coupon.maxDiscount) > 99999999.99) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Coupon amounts cannot exceed 99,999,999.99');
     }
     if (coupon.type === 'free_shipping' && toNumber(coupon.value) !== 0) {
         throw new AppError('VALIDATION_ERROR', 400, 'Free shipping coupons must have a value of 0');
@@ -520,20 +540,38 @@ const remove = async (id, actingUserId) => {
 
 const mapCartLine = (item, labelPresets = []) => {
     const product = item.currentProduct || item.product;
-    if (!product) return null;
+    if (!product) {
+        if (Number.isFinite(Number(item.lineSubtotal)) || Number.isFinite(Number(item.subtotal))) {
+            const lineSubtotal = Number(item.lineSubtotal ?? item.subtotal ?? 0);
+            return {
+                productId: item.productId || 'unknown',
+                variantId: item.variantId || null,
+                productName: item.name || 'Item',
+                brandId: item.brandId || null,
+                categoryIds: Array.isArray(item.categoryIds) ? item.categoryIds : [],
+                quantity: Number(item.quantity || 1),
+                unitPrice: Number(item.unitPrice || lineSubtotal),
+                lineSubtotal: Number.isFinite(lineSubtotal) ? lineSubtotal : 0,
+                isSaleItem: Boolean(item.isSaleItem),
+            };
+        }
+        return null;
+    }
 
     const plainProduct = typeof product.toJSON === 'function' ? product.toJSON() : { ...product };
     if (!plainProduct.saleLabelResolved && plainProduct.saleLabel) {
         plainProduct.saleLabelResolved = resolveSaleLabel(plainProduct.saleLabel, labelPresets);
     }
 
-    const unitPrice = item.unitPrice !== undefined && Number.isFinite(Number(item.unitPrice))
+    const rawUnitPrice = item.unitPrice !== undefined && Number.isFinite(Number(item.unitPrice))
         ? Number(item.unitPrice)
         : getVariantUnitPrice(plainProduct, item.variant);
+    const unitPrice = Number.isFinite(Number(rawUnitPrice)) ? Number(rawUnitPrice) : 0;
     const quantity = Number(item.quantity || 0);
-    const lineSubtotal = item.lineSubtotal !== undefined && Number.isFinite(Number(item.lineSubtotal))
+    const rawLineSubtotal = item.lineSubtotal !== undefined && Number.isFinite(Number(item.lineSubtotal))
         ? Number(item.lineSubtotal)
         : Number((unitPrice * quantity).toFixed(2));
+    const lineSubtotal = Number.isFinite(Number(rawLineSubtotal)) ? Number(rawLineSubtotal) : 0;
 
     return {
         productId: plainProduct.id,
@@ -575,6 +613,28 @@ const loadActiveCartLines = async (userId, guestSessionId = null) => {
     return cart.items.map((item) => mapCartLine(item, labelPresets)).filter(Boolean);
 };
 
+const expandCategoryIdsWithDescendants = async (categoryIds = []) => {
+    const inputIds = ensureArray(categoryIds);
+    if (inputIds.length === 0) return [];
+    try {
+        const all = await Category.findAll({ attributes: ['id', 'parentId'] });
+        const result = new Set(inputIds);
+        const queue = [...inputIds];
+        while (queue.length) {
+            const current = queue.shift();
+            all.filter((c) => c.parentId === current).forEach((c) => {
+                if (!result.has(c.id)) {
+                    result.add(c.id);
+                    queue.push(c.id);
+                }
+            });
+        }
+        return Array.from(result);
+    } catch (err) {
+        return inputIds;
+    }
+};
+
 const buildValidationContext = async (userId, rawContext = {}) => {
     const legacyContext = typeof rawContext === 'number' ? { cartSubtotal: rawContext } : (rawContext || {});
     const labelPresets = await getSaleLabels().catch(() => []);
@@ -586,9 +646,13 @@ const buildValidationContext = async (userId, rawContext = {}) => {
         cartItems = await loadActiveCartLines(userId, legacyContext.guestSessionId);
     }
 
-    const cartSubtotal = Number.isFinite(Number(legacyContext.cartSubtotal))
-        ? Number(legacyContext.cartSubtotal)
-        : cartItems.reduce((sum, item) => sum + item.lineSubtotal, 0);
+    const computedSubtotal = cartItems.length > 0
+        ? cartItems.reduce((sum, item) => sum + (Number.isFinite(Number(item.lineSubtotal)) ? Number(item.lineSubtotal) : 0), 0)
+        : NaN;
+
+    const cartSubtotal = Number.isFinite(computedSubtotal) && computedSubtotal > 0
+        ? Number(computedSubtotal.toFixed(2))
+        : (Number.isFinite(Number(legacyContext.cartSubtotal)) ? Number(legacyContext.cartSubtotal) : 0);
 
     return {
         cartItems,
@@ -596,6 +660,8 @@ const buildValidationContext = async (userId, rawContext = {}) => {
         shippingCost: Number(toNumber(legacyContext.shippingCost).toFixed(2)),
         transaction: rawContext.transaction,
         guestSessionId: isGuestSessionId(legacyContext.guestSessionId) ? legacyContext.guestSessionId : null,
+        guestEmail: legacyContext.guestEmail || legacyContext.email || null,
+        strictShippingCheck: Boolean(legacyContext.strictShippingCheck),
     };
 };
 
@@ -623,7 +689,7 @@ const matchesCouponTarget = (coupon, line) => {
     return true;
 };
 
-const assertCouponIsUsable = async (couponInput, userId, cartSubtotal, transaction, guestSessionId = null) => {
+const assertCouponIsUsable = async (couponInput, userId, cartSubtotal, transaction, guestSessionId = null, guestEmail = null) => {
     let coupon = couponInput;
     if (transaction) {
         const lockedRecord = await Coupon.findByPk(couponInput.id, { transaction, lock: Transaction.LOCK.UPDATE });
@@ -654,31 +720,92 @@ const assertCouponIsUsable = async (couponInput, userId, cartSubtotal, transacti
 
         // Serialize first-order coupon checks per customer. Without this lock,
         // concurrent checkouts using different first-order coupons could both pass.
-        if (transaction) {
+        let userEmail = null;
+        if (userId && transaction) {
             const user = await User.findByPk(userId, { transaction, lock: Transaction.LOCK.UPDATE });
             if (!user) throw new AppError('NOT_FOUND', 404, 'Customer account not found');
+            userEmail = user.email ? user.email.trim().toLowerCase() : null;
+        } else if (userId) {
+            const user = await User.findByPk(userId, { attributes: ['id', 'email'] });
+            userEmail = user?.email ? user.email.trim().toLowerCase() : null;
+        } else if (guestEmail) {
+            userEmail = guestEmail.trim().toLowerCase();
         }
 
         // An active order reserves first-order eligibility while payment is in
-        // progress. Reservation timeout/cancellation restores eligibility; a
-        // completed, closed, or otherwise non-cancelled order consumes it.
-        const priorOrderCount = await Order.count({
-            where: {
-                userId,
-                status: { [Op.ne]: 'cancelled' },
-            },
-            transaction,
-        });
+        // progress. Reservation timeout/cancellation of unpaid orders restores eligibility.
+        // Completed, closed, or paid (and later refunded/cancelled) orders consume it.
+        const identityConditions = [
+            ...(userId ? [{ userId }] : []),
+            ...(userEmail ? [{ guestEmail: userEmail, userId: null }] : []),
+            ...(!userId && !userEmail && guestSessionId ? [{ guestSessionId, userId: null }] : []),
+        ];
 
-        if (priorOrderCount > 0) {
-            throw new AppError('VALIDATION_ERROR', 400, 'This coupon is only available on your first order');
+        if (identityConditions.length > 0) {
+            const priorOrders = await Order.findAll({
+                where: {
+                    [Op.or]: identityConditions,
+                },
+                attributes: ['id', 'status'],
+                include: [{
+                    model: Payment,
+                    attributes: ['id', 'status'],
+                    required: false,
+                }],
+                transaction,
+            });
+
+            const settledPaymentStatuses = ['paid_online', 'paid_cod', 'completed', 'refunded', 'partially_refunded'];
+
+            const hasPriorOrder = priorOrders.some((ord) => {
+                if (ord.status !== 'cancelled') {
+                    return true;
+                }
+                const paymentStatus = ord.Payment?.status;
+                if (paymentStatus && settledPaymentStatuses.includes(paymentStatus)) {
+                    return true;
+                }
+                return false;
+            });
+
+            if (hasPriorOrder) {
+                throw new AppError('VALIDATION_ERROR', 400, 'This coupon is only available on your first order');
+            }
         }
     }
 
-    const usageWhere = userId
-        ? { couponId: coupon.id, userId }
-        : { couponId: coupon.id, userId: null, guestSessionId };
-    const userCount = await CouponUsage.count({ where: usageWhere, transaction });
+    let userCount = 0;
+    if (userId) {
+        userCount = await CouponUsage.count({
+            where: { couponId: coupon.id, userId },
+            transaction,
+        });
+    } else {
+        const sessionCount = guestSessionId
+            ? await CouponUsage.count({
+                where: { couponId: coupon.id, userId: null, guestSessionId },
+                transaction,
+            })
+            : 0;
+
+        let emailCount = 0;
+        if (guestEmail) {
+            const normalizedEmail = guestEmail.trim().toLowerCase();
+            const guestOrders = await Order.findAll({
+                where: { guestEmail: normalizedEmail, status: { [Op.ne]: 'cancelled' } },
+                attributes: ['id'],
+                transaction,
+            });
+            const guestOrderIds = guestOrders.map((o) => o.id);
+            if (guestOrderIds.length > 0) {
+                emailCount = await CouponUsage.count({
+                    where: { couponId: coupon.id, orderId: { [Op.in]: guestOrderIds } },
+                    transaction,
+                });
+            }
+        }
+        userCount = Math.max(sessionCount, emailCount);
+    }
     if (userCount >= coupon.perUserLimit) {
         throw new AppError('VALIDATION_ERROR', 400, 'You have exceeded the usage limit for this coupon');
     }
@@ -689,9 +816,25 @@ const assertCouponIsUsable = async (couponInput, userId, cartSubtotal, transacti
 };
 
 const evaluateCouponAgainstContext = async (coupon, userId, context) => {
-    await assertCouponIsUsable(coupon, userId, context.cartSubtotal, context.transaction, context.guestSessionId);
+    await assertCouponIsUsable(coupon, userId, context.cartSubtotal, context.transaction, context.guestSessionId, context.guestEmail);
 
-    const eligibleItems = context.cartItems.filter((line) => matchesCouponTarget(coupon, line));
+    let expandedApplicableIds = ensureArray(coupon.applicableIds);
+    let expandedExcludedCategoryIds = ensureArray(coupon.excludedCategoryIds);
+
+    if (coupon.applicableTo === 'category' && expandedApplicableIds.length > 0) {
+        expandedApplicableIds = await expandCategoryIdsWithDescendants(expandedApplicableIds);
+    }
+    if (expandedExcludedCategoryIds.length > 0) {
+        expandedExcludedCategoryIds = await expandCategoryIdsWithDescendants(expandedExcludedCategoryIds);
+    }
+
+    const targetCoupon = {
+        ...coupon,
+        applicableIds: expandedApplicableIds,
+        excludedCategoryIds: expandedExcludedCategoryIds,
+    };
+
+    const eligibleItems = context.cartItems.filter((line) => matchesCouponTarget(targetCoupon, line));
     const eligibleSubtotal = context.cartItems.length
         ? Number(eligibleItems.reduce((sum, item) => sum + item.lineSubtotal, 0).toFixed(2))
         : context.cartSubtotal;
@@ -715,12 +858,15 @@ const evaluateCouponAgainstContext = async (coupon, userId, context) => {
         orderDiscount = Math.min(coupon.value, baseAmount);
     } else if (coupon.type === 'percentage') {
         orderDiscount = (coupon.value / 100) * baseAmount;
-        if (coupon.maxDiscount && orderDiscount > coupon.maxDiscount) {
+        if (coupon.maxDiscount !== null && coupon.maxDiscount !== undefined && orderDiscount > coupon.maxDiscount) {
             orderDiscount = coupon.maxDiscount;
         }
     }
 
     const freeShipping = coupon.type === 'free_shipping';
+    if (freeShipping && Number(context.shippingCost || 0) <= 0 && context.strictShippingCheck) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Your order already qualifies for free delivery');
+    }
     const shippingDiscount = freeShipping ? context.shippingCost : 0;
     const totalDiscount = Number((orderDiscount + shippingDiscount).toFixed(2));
 
@@ -775,8 +921,9 @@ const validateCoupon = async (code, userId, rawContext = {}) => {
     if (!(await isCouponsEnabled())) {
         throw new AppError('FORBIDDEN', 403, 'Coupons feature is currently disabled');
     }
+    const normalizedCode = String(code || '').trim().toUpperCase();
     const couponRecord = await Coupon.findOne({
-        where: { code: code.toUpperCase() },
+        where: { code: normalizedCode },
         transaction: rawContext.transaction,
         lock: rawContext.transaction ? Transaction.LOCK.UPDATE : undefined
     });
@@ -789,7 +936,7 @@ const validateCoupon = async (code, userId, rawContext = {}) => {
         throw new AppError('NOT_FOUND', 404, 'Coupon not found');
     }
 
-    const context = await buildValidationContext(userId, rawContext);
+    const context = await buildValidationContext(userId, { ...rawContext, strictShippingCheck: true });
     const primaryEvaluation = await evaluateCouponAgainstContext(coupon, userId, context);
 
     const autoCouponRecords = await Coupon.findAll({
@@ -802,17 +949,17 @@ const validateCoupon = async (code, userId, rawContext = {}) => {
             ['createdAt', 'DESC'],
         ],
         transaction: context.transaction,
-        lock: context.transaction ? Transaction.LOCK.UPDATE : undefined,
         limit: 50
     });
 
     const autoEvaluations = [];
+    const candidateContext = { ...context, transaction: undefined };
     for (const couponRecordItem of autoCouponRecords) {
         const autoCoupon = serializeCoupon(couponRecordItem);
         if (autoCoupon.id === coupon.id) continue;
 
         try {
-            const evaluation = await evaluateCouponAgainstContext(autoCoupon, userId, context);
+            const evaluation = await evaluateCouponAgainstContext(autoCoupon, userId, candidateContext);
             autoEvaluations.push(evaluation);
         } catch (error) {
             // Ignore ineligible auto coupons during manual validation.
@@ -837,7 +984,7 @@ const resolveCoupons = async (codes = [], userId, rawContext = {}) => {
     }
     const normalizedCodes = [...new Set((codes || [])
         .map((code) => String(code || '').trim().toUpperCase())
-        .filter(Boolean))];
+        .filter(Boolean))].sort().slice(0, 5);
     const context = await buildValidationContext(userId, rawContext);
 
     const manualEvaluations = [];
@@ -852,6 +999,10 @@ const resolveCoupons = async (codes = [], userId, rawContext = {}) => {
         }
 
         const coupon = serializeCoupon(couponRecord);
+        if (coupon.visibility === 'private' && coupon.applicationMode === 'auto') {
+            throw new AppError('NOT_FOUND', 404, `Coupon ${code} not found`);
+        }
+
         const evaluation = await evaluateCouponAgainstContext(coupon, userId, context);
 
         const incompatibleCoupon = manualEvaluations.find((existing) => !canStackPair(existing, evaluation));
@@ -876,18 +1027,18 @@ const resolveCoupons = async (codes = [], userId, rawContext = {}) => {
             ['createdAt', 'DESC'],
         ],
         transaction: context.transaction,
-        lock: context.transaction ? Transaction.LOCK.UPDATE : undefined,
         limit: 50
     });
 
     const autoEvaluations = [];
     const selectedIds = new Set(manualEvaluations.map((evaluation) => evaluation.coupon.id));
+    const candidateContext = { ...context, transaction: undefined };
     for (const couponRecord of autoCouponRecords) {
         const autoCoupon = serializeCoupon(couponRecord);
         if (selectedIds.has(autoCoupon.id)) continue;
 
         try {
-            const evaluation = await evaluateCouponAgainstContext(autoCoupon, userId, context);
+            const evaluation = await evaluateCouponAgainstContext(autoCoupon, userId, candidateContext);
             autoEvaluations.push(evaluation);
         } catch (error) {
             // Ignore ineligible auto coupons.
@@ -895,6 +1046,16 @@ const resolveCoupons = async (codes = [], userId, rawContext = {}) => {
     }
 
     const combination = chooseStackedEvaluations(autoEvaluations, context, manualEvaluations);
+
+    // If any auto coupon was selected in combination, lock and verify it specifically
+    if (context.transaction) {
+        const winningAutoCoupons = combination.appliedCoupons
+            .filter((c) => c.applicationMode === 'auto')
+            .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+        for (const winningCoupon of winningAutoCoupons) {
+            await assertCouponIsUsable(winningCoupon, userId, context.cartSubtotal, context.transaction, context.guestSessionId, context.guestEmail);
+        }
+    }
 
     return {
         ...combination,
@@ -947,10 +1108,11 @@ const getEligibleCoupons = async (userId, rawContext = {}) => {
         });
 
     const suggestedCoupons = eligibleCoupons.filter((item) => ['suggest', 'auto'].includes(item.coupon.applicationMode));
-    const autoSeed = eligibleCoupons.find((item) => item.coupon.applicationMode === 'auto');
+    const autoCoupons = eligibleCoupons.filter((item) => item.coupon.applicationMode === 'auto');
+    const autoSeed = autoCoupons[0] || null;
     const autoAppliedCoupon = autoSeed || null;
     const bestCombination = chooseStackedEvaluations(
-        eligibleCoupons,
+        autoCoupons,
         context,
         autoSeed ? [autoSeed] : []
     );
@@ -961,17 +1123,41 @@ const getEligibleCoupons = async (userId, rawContext = {}) => {
         bestCoupon: eligibleCoupons[0] || null,
         autoAppliedCoupon,
         bestCombination,
-        autoAppliedCoupons: bestCombination.appliedCoupons.filter((item) => item.applicationMode === 'auto'),
+        autoAppliedCoupons: bestCombination.appliedCoupons,
     };
 };
 
 const listPublic = async ({ page = 1, limit = 20 } = {}) => {
     const { limit: lmt, offset } = getPagination(page, limit);
+    const now = new Date();
+    const where = {
+        visibility: 'public',
+        isActive: true,
+        campaignStatus: { [Op.notIn]: ['draft', 'paused', 'archived'] },
+        [Op.and]: [
+            {
+                [Op.or]: [
+                    { startDate: null },
+                    { startDate: { [Op.lte]: now } },
+                ],
+            },
+            {
+                [Op.or]: [
+                    { endDate: null },
+                    { endDate: { [Op.gte]: now } },
+                ],
+            },
+            {
+                [Op.or]: [
+                    { usageLimit: null },
+                    { usedCount: { [Op.lt]: sequelize.col('usage_limit') } },
+                ],
+            },
+        ],
+    };
+
     const result = await Coupon.findAndCountAll({
-        where: {
-            visibility: 'public',
-            isActive: true,
-        },
+        where,
         order: [
             ['priority', 'DESC'],
             ['value', 'DESC'],
@@ -983,7 +1169,6 @@ const listPublic = async ({ page = 1, limit = 20 } = {}) => {
 
     const rows = result.rows
         .map((coupon) => serializeCoupon(coupon))
-        .filter((coupon) => coupon.status === 'active')
         .map((plain) => ({
             code: plain.code,
             name: plain.name,
@@ -1006,4 +1191,18 @@ const listPublic = async ({ page = 1, limit = 20 } = {}) => {
     };
 };
 
-module.exports = { list, findById, create, update, remove, validateCoupon, resolveCoupons, listPublic, getEligibleCoupons, matchesCouponTarget, buildCombinationResult };
+module.exports = {
+    list,
+    findById,
+    create,
+    update,
+    remove,
+    validateCoupon,
+    resolveCoupons,
+    listPublic,
+    getEligibleCoupons,
+    matchesCouponTarget,
+    buildCombinationResult,
+    expandCategoryIdsWithDescendants,
+    getCouponStatus,
+};

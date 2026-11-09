@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## [1.5.1.0] - 2026-11-09
+
+### Fixed
+- Enforce first-order coupon eligibility across settled orders, including paid-then-cancelled orders, preventing coupon reuse after refunds.
+- Re-evaluate auto coupons on storefront cart item swaps and capture guest email for digital-only orders to preserve per-customer limits.
+- Attribute line-item discounts accurately during partial return refund computations to prevent over-refunding.
+- Correct tax fallback calculations to detect active sale items properly.
+- Deterministically sort auto coupons prior to transaction row locking to prevent deadlocks under concurrency.
+
 ## [1.5.0.0] - 2026-11-09
 
 ### Added
