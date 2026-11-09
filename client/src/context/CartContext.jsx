@@ -8,15 +8,18 @@ export const CartProvider = ({ children }) => {
   const cartEnabled = useFeature('cart');
   const [cart, setCart] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const cartCount = cart?.items?.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
 
   const fetchCart = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
       const res = await cartService.getCart();
       setCart(res.data.data);
     } catch (err) {
+      setError('We couldn’t load your cart. Please try again.');
       console.error('Failed to fetch cart', err);
     } finally {
       setLoading(false);
@@ -32,30 +35,35 @@ export const CartProvider = ({ children }) => {
   const addItem = async (productId, quantity = 1, variantId = null) => {
     const res = await cartService.addItem(productId, quantity, variantId);
     setCart(res.data.data);
+    setError('');
     return res.data.data;
   };
 
   const updateItem = async (cartItemId, quantity) => {
     const res = await cartService.updateItem(cartItemId, quantity);
     setCart(res.data.data);
+    setError('');
     return res.data.data;
   };
 
   const removeItem = async (cartItemId) => {
     const res = await cartService.removeItem(cartItemId);
     setCart(res.data.data);
+    setError('');
     return res.data.data;
   };
 
   const clearCart = async () => {
     await cartService.clearCart();
     setCart(null);
+    setError('');
   };
 
   const value = {
     cart,
     cartCount,
     loading,
+    error,
     fetchCart,
     addItem,
     updateItem,

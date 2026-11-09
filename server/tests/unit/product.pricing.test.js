@@ -12,6 +12,12 @@ import {
   serializeVariantPricing,
 } from '../../src/modules/product/product.pricing';
 
+it('hides historical Simple variants from the storefront while retaining them for admin history', () => {
+  const product = { id: 'simple', type: 'simple', price: 100, quantity: 50, reservedQty: 27, variants: [{ id: 'old', price: 200, stockQty: 22, reservedQty: 19 }] };
+  expect(serializeProductPricing(product).variants).toEqual([]);
+  expect(serializeProductPricing(product, { adminView: true }).variants).toHaveLength(1);
+});
+
 describe('Product Pricing & Variant Sale Logic', () => {
   describe('P0: Variant products sale price calculations', () => {
     it('applies product sale discount to variant with same MRP', () => {

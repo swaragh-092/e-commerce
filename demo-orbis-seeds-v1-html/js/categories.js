@@ -241,7 +241,7 @@ function createCategoryCard(category) {
     card.className = 'product-inner';
     card.style.cursor = 'pointer';
 
-    var buttonText = hasChildren ? "View Sub-categories" : "View Products";
+    var buttonText = hasChildren ? "View Sub-Categories" : "View Products";
     var linkUrl = (hasChildren ? 'product.html?cat=' : 'products.html?category=') + encodeURIComponent(category.slug);
 
     card.innerHTML =

@@ -1,10 +1,10 @@
 import { Box, Chip, Paper, Typography } from '@mui/material';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import { getInventoryEditPath } from '../../../utils/inventoryNavigation';
 import { getPanelSx } from './dashboardUtils';
 
 const InventoryWarningsWidget = ({ lowStock, loading, spacing, stats }) => {
-  const navigate = useNavigate();
   const criticalItems = lowStock.filter((item) => item.availableQty <= 0 || item.status === 'out_of_stock');
   const warningItems = lowStock.filter((item) => item.availableQty > 0).slice(0, 4);
   const outOfStockCount = Number(stats?.inventory?.outOfStockCount ?? stats?.outOfStockCount ?? criticalItems.length);
@@ -29,10 +29,11 @@ const InventoryWarningsWidget = ({ lowStock, loading, spacing, stats }) => {
           {criticalItems.slice(0, 3).map((item) => (
             <Box
               key={item.inventoryKey || item.variantId || item.id}
-              onClick={() => navigate(`/admin/products/${item.id}/edit`)}
+              component={Link}
+              to={getInventoryEditPath(item.id, item.variantId)}
               sx={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1,
-                p: 0.5, borderRadius: 1, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' }
+                color: 'inherit', textDecoration: 'none', p: 0.5, borderRadius: 1, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' }
               }}
             >
               <Box sx={{ minWidth: 0 }}>
@@ -45,10 +46,11 @@ const InventoryWarningsWidget = ({ lowStock, loading, spacing, stats }) => {
           {warningItems.map((item) => (
             <Box
               key={item.inventoryKey || item.variantId || item.id}
-              onClick={() => navigate(`/admin/products/${item.id}/edit`)}
+              component={Link}
+              to={getInventoryEditPath(item.id, item.variantId)}
               sx={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1,
-                p: 0.5, borderRadius: 1, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' }
+                color: 'inherit', textDecoration: 'none', p: 0.5, borderRadius: 1, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' }
               }}
             >
               <Box sx={{ minWidth: 0 }}>

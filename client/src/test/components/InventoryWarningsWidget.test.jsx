@@ -12,6 +12,8 @@ describe('inventory warning identity', () => {
     ]} /></MemoryRouter>);
     expect(screen.getByText('Variant · SKU: IGA-250G')).toBeInTheDocument();
     expect(screen.getByText('Variant · SKU: IGA-500G')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /IGA-250G/ })).toHaveAttribute('href', '/admin/products/product/edit?variantId=a');
+    expect(screen.getByRole('link', { name: /IGA-500G/ })).toHaveAttribute('href', '/admin/products/product/edit?variantId=b');
     expect(screen.getByText('3 available')).toBeInTheDocument();
     expect(screen.getByText('4 available')).toBeInTheDocument();
   });

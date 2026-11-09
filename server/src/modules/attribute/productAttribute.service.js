@@ -4,7 +4,7 @@ const { ProductAttribute, AttributeTemplate, AttributeValue, Product, sequelize 
 const AppError = require('../../utils/AppError');
 const { assertVariableProduct } = require('../product/productType');
 const { groupKey } = require('./productAttributeOrder');
-const { lockProductVariantChanges, assertAttributeNotUsedByVariants, assertAttributeRemovalAllowed } = require('./productAttributeUsage');
+const { lockProductVariantChanges, assertAttributeNotUsedByVariants, assertAttributeValueNotUsedByVariants, assertAttributeRemovalAllowed } = require('./productAttributeUsage');
 
 const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayType', 'valueType', 'unit', 'unitCategory'];
 const ATTRIBUTE_VALUE_FIELDS = ['id', 'value', 'slug', 'sortOrder', 'displayLabel', 'swatchColor', 'imageUrl', 'unitLabel', 'metadata'];
@@ -153,12 +153,14 @@ const updateProductAttributeGroup = async (productId, attrId, { isVariantAttr })
     return ProductAttribute.findAll({ where: { productId }, include: fullInclude, order: [['sortOrder', 'ASC'], ['createdAt', 'ASC'], ['id', 'ASC']], transaction });
 });
 
-/** Remove a value or its entire attribute, only after variant use is disabled. */
+/** Unused values can be removed directly; removing the entire attribute still requires disabling variant use. */
 const deleteProductAttribute = async (productId, attrId, { wholeGroup = false } = {}) => sequelize.transaction(async (transaction) => {
     await lockProductVariantChanges(productId, transaction);
     const { group } = await loadAttributeGroup(productId, attrId, transaction);
-    await assertAttributeRemovalAllowed(productId, group, transaction);
-    for (const item of wholeGroup ? group : group.filter((row) => row.id === attrId)) await item.destroy({ transaction });
+    const targets = wholeGroup ? group : group.filter((row) => row.id === attrId);
+    if (wholeGroup || group.length === 1) await assertAttributeRemovalAllowed(productId, group, transaction);
+    else await assertAttributeValueNotUsedByVariants(productId, targets[0], transaction);
+    for (const item of targets) await item.destroy({ transaction });
 });
 
 module.exports = {

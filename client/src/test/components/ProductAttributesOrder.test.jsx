@@ -35,11 +35,11 @@ beforeEach(() => {
 
 describe('product attribute removal and variant dependencies', () => {
   const enabled = initial.map((row) => ({ ...row, isVariantAttr: row.attributeId === 'volume' }));
-  it('requires disabling variant use before removing an attribute or its values, even with no variants', async () => {
+  it('requires disabling variant use only for whole-attribute removal, even with no variants', async () => {
     render(<Harness initialRows={enabled} />);
     expect(screen.getByRole('button', { name: 'Remove Volume attribute' })).toBeDisabled();
-    expect(within(screen.getByRole('list', { name: 'Volume value order' })).queryByTestId('CancelIcon')).not.toBeInTheDocument();
-    expect(screen.getByText('Turn off “Use for variants” before removing this attribute or its values.')).toBeInTheDocument();
+    expect(within(screen.getByRole('list', { name: 'Volume value order' })).getAllByTestId('CancelIcon')).toHaveLength(2);
+    expect(screen.getByText(/Turn off “Use for variants” before removing this attribute\./)).toHaveTextContent('Unused values can be removed directly.');
     attributeService.updateProductAttributeGroup.mockResolvedValue({ data: { data: initial } });
     fireEvent.click(screen.getByRole('checkbox', { name: 'Use Volume for variants' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Remove Volume attribute' })).toBeEnabled());
@@ -52,6 +52,50 @@ describe('product attribute removal and variant dependencies', () => {
     expect(screen.getByText(/Delete all variants using this attribute, then turn off/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Remove Color attribute' })).toBeEnabled();
     expect(screen.getByRole('checkbox', { name: 'Use Color for variants' })).toBeEnabled();
+    const values = within(screen.getByRole('list', { name: 'Volume value order' })).getAllByRole('listitem');
+    expect(within(values[0]).queryByTestId('CancelIcon')).not.toBeInTheDocument();
+    expect(within(values[1]).getByTestId('CancelIcon')).toBeInTheDocument();
+  });
+  it('removes an unused variant value directly while keeping the attribute enabled and its used value', async () => {
+    attributeService.getProductAttributes.mockResolvedValue({ data: { data: enabled.filter((row) => row.id !== 'a2') } });
+    render(<Harness initialRows={enabled} variants={[{ id: 'variant', options: [{ attributeId: 'volume', valueId: 'small' }] }]} />);
+    fireEvent.click(within(screen.getByRole('list', { name: 'Volume value order' })).getByTestId('CancelIcon'));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Remove value from product?' }));
+    expect(attributeService.deleteProductAttribute).not.toHaveBeenCalled();
+    fireEvent.click(dialog.getByRole('button', { name: 'Remove value', exact: true }));
+    await waitFor(() => expect(screen.queryByText('500ml')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByText('250ml')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Use Volume for variants' })).toBeChecked();
+    expect(screen.getByRole('button', { name: 'Remove Volume attribute' })).toBeDisabled();
+    expect(attributeService.deleteProductAttribute).toHaveBeenCalledWith('product', 'a2');
+    expect(attributeService.deleteProductAttributeGroup).not.toHaveBeenCalled();
+    expect(attributeService.updateProductAttributeGroup).not.toHaveBeenCalled();
+  });
+  it('recognizes used values from nested variant options, including legacy display-only assignments', () => {
+    render(<Harness variants={[{ id: 'variant', options: [{ attribute: { id: 'volume' }, value: { id: 'small' } }] }]} />);
+    const values = within(screen.getByRole('list', { name: 'Volume value order' })).getAllByRole('listitem');
+    expect(within(values[0]).queryByTestId('CancelIcon')).not.toBeInTheDocument();
+    expect(within(values[1]).getByTestId('CancelIcon')).toBeInTheDocument();
+  });
+  it('allows removing values referenced only by deleted variants', () => {
+    render(<Harness initialRows={enabled} variants={[{ id: 'deleted', deletedAt: '2026-11-01', options: [{ attributeId: 'volume', valueId: 'small' }] }]} />);
+    expect(within(screen.getByRole('list', { name: 'Volume value order' })).getAllByTestId('CancelIcon')).toHaveLength(2);
+  });
+  it('keeps whole-attribute protection for the last enabled value', () => {
+    render(<Harness initialRows={[enabled[0]]} />);
+    expect(within(screen.getByRole('list', { name: 'Volume value order' })).queryByTestId('CancelIcon')).not.toBeInTheDocument();
+  });
+  it('keeps an unused value if the server detects a newly created variant using it', async () => {
+    attributeService.deleteProductAttribute.mockRejectedValue(new Error('This value is used by existing variants.'));
+    render(<Harness initialRows={enabled} />);
+    fireEvent.click(within(screen.getByRole('list', { name: 'Volume value order' })).getAllByTestId('CancelIcon')[1]);
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Remove value', exact: true }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('This value is used');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByText('500ml')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Use Volume for variants' })).toBeChecked();
+    expect(attributeService.getProductAttributes).not.toHaveBeenCalled();
   });
   it('confirms whole-attribute removal and removes all values together', async () => {
     attributeService.getProductAttributes.mockResolvedValue({ data: { data: initial.slice(2) } });
@@ -105,6 +149,7 @@ describe('product attribute removal and variant dependencies', () => {
   it('does not expose attribute removal without management permission', () => {
     render(<Harness canManage={false} />);
     expect(screen.queryByRole('button', { name: /^Remove .* attribute$/ })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('CancelIcon')).not.toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'Use Volume for variants' })).toBeDisabled();
   });
 });

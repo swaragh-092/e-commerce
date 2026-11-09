@@ -50,8 +50,8 @@
     if (newsletter === 'subscribed' || newsletter === 'failed') {
         var notice = document.getElementById('newsletter-status');
         notice.textContent = newsletter === 'subscribed'
-            ? 'You are subscribed to updates about future products.'
-            : 'Your enquiry was received, but we could not subscribe you to future product updates. You can try subscribing again later.';
+            ? 'Your request to receive ORBI Seeds news and product updates by email has been received.'
+            : 'Your enquiry was received, but we could not process your request for ORBI Seeds news and product updates. Please try subscribing again later.';
         notice.hidden = false;
     }
     if (params.get('listUpdate') === 'failed') {

@@ -19,29 +19,16 @@ import {
 import attributeService from '../../services/attributeService';
 import { useNotification } from '../../context/NotificationContext';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import useCategoryAttributes from '../../hooks/useCategoryAttributes';
 
 const CategoryAttributesDialog = ({ open, onClose, categoryId, categoryName }) => {
   const { notify } = useNotification();
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [attributes, setAttributes] = useState([]);
+  const { attributes, loading, error: loadError, retry: fetchLinkedAttributes } = useCategoryAttributes(categoryId, open);
   const [allTemplates, setAllTemplates] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [attrSearchTerm, setAttrSearchTerm] = useState('');
   const [attrSearching, setAttrSearching] = useState(false);
-
-  const fetchLinkedAttributes = useCallback(async () => {
-    if (!categoryId) return;
-    try {
-      setLoading(true);
-      const res = await attributeService.getCategoryAttributes(categoryId, true);
-      setAttributes(res?.data?.data || []);
-    } catch (err) {
-      notify(getApiErrorMessage(err), 'error');
-    } finally {
-      setLoading(false);
-    }
-  }, [categoryId, notify]);
 
   const fetchTemplates = useCallback(async (search = '') => {
     try {
@@ -59,12 +46,6 @@ const CategoryAttributesDialog = ({ open, onClose, categoryId, categoryName }) =
       setAttrSearching(false);
     }
   }, []);
-
-  useEffect(() => {
-    if (open && categoryId) {
-      fetchLinkedAttributes();
-    }
-  }, [open, categoryId, fetchLinkedAttributes]);
 
   useEffect(() => {
     let timer;
@@ -130,6 +111,8 @@ const CategoryAttributesDialog = ({ open, onClose, categoryId, categoryName }) =
             
             {loading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={24} /></Box>
+            ) : loadError ? (
+              <Alert severity="warning" action={<Button color="inherit" onClick={fetchLinkedAttributes}>Retry category attributes</Button>}>Category attributes could not be loaded. {loadError}</Alert>
             ) : attributes.length === 0 ? (
               <Box sx={{ textAlign: 'center', py: 8, px: 2 }}>
                 <Typography variant="body2" color="text.secondary">No attributes linked to this category yet.</Typography>

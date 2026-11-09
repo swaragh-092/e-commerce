@@ -4,13 +4,21 @@ const require = createRequire(import.meta.url);
 const { buildInventorySummary } = require('../../src/modules/inventory/inventoryHealth.service');
 const { buildInventoryTargets } = require('../../src/modules/inventory/inventoryAlert.service');
 
-const product = { id: 'product', name: 'IGA', type: 'simple', status: 'published', isEnabled: true, quantity: 99, variants: [
+const product = { id: 'product', name: 'IGA', type: 'variable', status: 'published', isEnabled: true, quantity: 99, variants: [
   { id: 'low', sku: 'IGA-250G', stockQty: 22, reservedQty: 19, isActive: true },
   { id: 'healthy', sku: 'IGA-500G', stockQty: 50, reservedQty: 0, isActive: true },
   { id: 'disabled', sku: 'IGA-1KG', stockQty: 4, reservedQty: 4, isActive: false },
 ] };
 
 describe('inventory availability and disable rules', () => {
+  it('uses the saved Simple product stock instead of old variant records', () => {
+    const simple = { ...product, type: 'simple', sku: 'IGA', quantity: 50, reservedQty: 27 };
+    expect(buildInventorySummary([simple], 10).rows).toEqual([]);
+    expect(buildInventoryTargets([simple], 10)).toEqual([]);
+    const low = { ...simple, quantity: 30 };
+    expect(buildInventorySummary([low], 10).rows[0]).toMatchObject({ inventoryKey: 'product:product', variantId: null, sku: 'IGA', quantity: 30, reservedQty: 27, availableQty: 3 });
+    expect(buildInventoryTargets([low], 10)[0]).toMatchObject({ inventoryKey: 'product:product', availableQty: 3 });
+  });
   it('uses the same per-SKU risk for dashboard and notifications regardless of parent totals', () => {
     const summary = buildInventorySummary([product], 10);
     const alerts = buildInventoryTargets([product], 10);
@@ -32,13 +40,13 @@ describe('inventory availability and disable rules', () => {
     expect(buildInventoryTargets([disabled], 10)).toEqual([]);
   });
   it.each([[0, 'out_of_stock'], [3, 'low_stock'], [10, 'low_stock'], [11, null]])('classifies %s available units at threshold ten', (availableQty, severity) => {
-    const simple = { ...product, variants: [], quantity: availableQty + 2, reservedQty: 2 };
+    const simple = { ...product, type: 'simple', variants: [], quantity: availableQty + 2, reservedQty: 2 };
     const targets = buildInventoryTargets([simple], 10);
     if (severity) expect(targets[0]).toMatchObject({ availableQty, severity });
     else expect(targets).toEqual([]);
   });
   it('supports a zero threshold and all-reserved stock', () => {
-    expect(buildInventoryTargets([{ ...product, variants: [], quantity: 4, reservedQty: 4 }], 0)[0].severity).toBe('out_of_stock');
-    expect(buildInventoryTargets([{ ...product, variants: [], quantity: 4, reservedQty: 3 }], 0)).toEqual([]);
+    expect(buildInventoryTargets([{ ...product, type: 'simple', variants: [], quantity: 4, reservedQty: 4 }], 0)[0].severity).toBe('out_of_stock');
+    expect(buildInventoryTargets([{ ...product, type: 'simple', variants: [], quantity: 4, reservedQty: 3 }], 0)).toEqual([]);
   });
 });
