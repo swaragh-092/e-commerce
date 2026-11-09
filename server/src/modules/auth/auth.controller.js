@@ -39,6 +39,7 @@ const login = async (req, res, next) => {
     const { email, password, rememberMe } = req.validated;
     const trustedDevice = req.cookies?.trusted_device;
     const result = await AuthService.login(email, password, req.ip, rememberMe, req.headers['user-agent'], trustedDevice);
+    if (result.requiresTwoFactor) res.setHeader('Cache-Control', 'no-store');
     return sendAuthSuccess(res, result, 'Login successful', { rememberMe });
   } catch (err) {
     next(err);

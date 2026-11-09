@@ -53,6 +53,10 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.JSONB,
             allowNull: true,
         },
+        emailMfaPasswordBinding: {
+            type: DataTypes.STRING(64),
+            allowNull: true,
+        },
         twoFactorBackupCodes: {
             type: DataTypes.JSONB,
             allowNull: true,
@@ -71,7 +75,7 @@ module.exports = (sequelize, DataTypes) => {
         underscored: true,
         paranoid: true, // soft delete
         defaultScope: {
-            attributes: { exclude: ['password', 'twoFactorSecret', 'twoFactorBackupCodes'] },
+            attributes: { exclude: ['password', 'twoFactorSecret', 'twoFactorBackupCodes', 'emailMfaPasswordBinding'] },
         },
         scopes: {
             withPassword: {
@@ -90,6 +94,9 @@ module.exports = (sequelize, DataTypes) => {
                 }
             },
             beforeUpdate: async (user) => {
+                if (user.changed('password') || user.changed('email') || user.changed('twoFactorSecret')) {
+                    user.emailMfaPasswordBinding = null;
+                }
                 if (user.changed('email') && user.email && typeof user.email === 'string') {
                     user.email = user.email.trim().toLowerCase();
                 }

@@ -10,7 +10,7 @@ const AuditService = require('../audit/audit.service');
 const { ACTIONS, AUTH_TIME, ENTITIES } = require('../../config/constants');
 const { enrichUserAuthorization } = require('../../config/permissions');
 const logger = require('../../utils/logger');
-const { requiresAdminMfa, assertMfaEnrollment, assertMfaSession, loadMfaPolicy } = require('./mfaPolicy');
+const { requiresAdminMfa, canUseEmailMfa, assertMfaEnrollment, assertMfaSession, loadMfaPolicy } = require('./mfaPolicy');
 const LoginAttemptStore = require('./loginAttemptStore');
 
 const { hashToken, generateTokens, signTempTwoFactorToken } = require('./tokenUtils');
@@ -229,7 +229,12 @@ const login = async (email, password, ipAddress, rememberMe = false, userAgent, 
     if (!requiresAdminMfa(user, mfaPolicy) && trustedDevice && verifyTrustedDevice(trustedDevice, user.id)) {
       // Trusted device — skip 2FA
     } else {
-      return { requiresTwoFactor: true, tempToken: signTempTwoFactorToken(user.id) };
+      const emailMfa = canUseEmailMfa(user, mfaPolicy) ? require('./emailMfa.service') : null;
+      return {
+        requiresTwoFactor: true,
+        tempToken: signTempTwoFactorToken(user.id, emailMfa ? crypto.randomBytes(32).toString('hex') : undefined),
+        ...(emailMfa?.isBound(user) ? { emailChallenge: emailMfa.issueChallenge(user) } : {}),
+      };
     }
   }
 
@@ -301,6 +306,7 @@ const login = async (email, password, ipAddress, rememberMe = false, userAgent, 
 const refresh = async (refreshTokenStr, ipAddress, userAgent) => {
   try {
     const decoded = jwt.verify(refreshTokenStr, process.env.JWT_REFRESH_SECRET, { algorithms: ['HS256'], issuer: JWT_ISS, audience: JWT_AUD });
+    if (decoded.purpose) throw new AppError('UNAUTHORIZED', 401, 'Invalid token purpose');
     const emailVerificationRequired = await isEmailVerificationRequired();
     const tokenHash = hashToken(refreshTokenStr);
 
@@ -373,7 +379,11 @@ const refresh = async (refreshTokenStr, ipAddress, userAgent) => {
 
         assertMfaSession(user, decoded, await loadMfaPolicy(user, t));
         const sessionId = crypto.randomUUID();
-        const tokens = generateTokens(user, sessionId, { mfaVerified: decoded.mfa === true });
+        const tokens = generateTokens(user, sessionId, {
+          mfaVerified: decoded.mfa === true,
+          mfaMethod: decoded.mfaMethod,
+          mfaBinding: decoded.mfaBinding,
+        });
 
         // Preserve the original session duration (remember-me 30d vs default 7d)
         // so a remember-me session doesn't shrink to 7d after the first rotation.
@@ -719,13 +729,15 @@ const verifyTwoFactor = async (tempToken, totpCode, ipAddress) => {
     throw new AppError('FORBIDDEN', 403, 'Account deletion period has expired');
   }
 
-  assertMfaEnrollment(user, await loadMfaPolicy(user));
+  const policy = await loadMfaPolicy(user);
+  assertMfaEnrollment(user, policy);
   if (!user.twoFactorEnabled) throw new AppError('UNAUTHORIZED', 401, 'MFA is not enabled');
   const TwoFactorService = require('./twoFactor.service');
   let isValid = false;
   try {
     isValid = TwoFactorService.verify(user, totpCode);
   } catch (e) {}
+  const verifiedAuthenticator = isValid;
   if (!isValid) {
     isValid = await TwoFactorService.verifyBackupCode(user, totpCode);
   }
@@ -743,7 +755,14 @@ const verifyTwoFactor = async (tempToken, totpCode, ipAddress) => {
     createdByIp: ipAddress,
   });
 
-  await user.update({ lastLoginAt: new Date() });
+  const updates = { lastLoginAt: new Date() };
+  // Require a fresh authenticator sign-in after any password or email change.
+  // An inbox alone must not satisfy both password reset and the second step.
+  if (verifiedAuthenticator && decoded.passwordBinding && canUseEmailMfa(user, policy)
+      && !user.emailMfaPasswordBinding) {
+    updates.emailMfaPasswordBinding = decoded.passwordBinding;
+  }
+  await user.update(updates);
   const userData = await User.findByPk(user.id, { include: authUserInclude });
 
   try {

@@ -85,6 +85,29 @@ router.post('/resend-verification', verifyEmailLimiter, validate(resendVerificat
 
 router.post('/verify-email', verifyEmailLimiter, validate(verifyEmailSchema), authController.verifyEmail);
 
+// Email codes are offered only by the password flow.
+const emailMfa = require('./emailMfa.service');
+const { success } = require('../../utils/response');
+const { stripAuthTokens } = require('./authCookies');
+const emailChallengeSchema = Joi.object({ emailChallenge: Joi.string().max(2048).required() });
+router.post('/2fa/email/send', twoFactorLimiter, validate(emailChallengeSchema), async (req, res, next) => {
+  try {
+    res.setHeader('Cache-Control', 'no-store');
+    await emailMfa.sendCode(req.validated.emailChallenge, req.ip);
+    return success(res, null, 'Email code sent');
+  } catch (error) { return next(error); }
+});
+router.post('/2fa/email/verify', twoFactorLimiter,
+  validate(emailChallengeSchema.keys({ code: Joi.string().pattern(/^\d{6}$/).required() })),
+  async (req, res, next) => {
+    try {
+      res.setHeader('Cache-Control', 'no-store');
+      const result = await emailMfa.verifyCode(req.validated.emailChallenge, req.validated.code, req.ip);
+      setAuthCookies(res, result.tokens);
+      return success(res, stripAuthTokens(result));
+    } catch (error) { return next(error); }
+  });
+
 // 2FA routes
 router.post('/2fa/verify', twoFactorLimiter, validate(twoFactorVerifySchema), authController.verifyTwoFactor);
 router.post('/2fa/setup', authenticate, twoFactorLimiter, twoFactorController.setup);

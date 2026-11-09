@@ -6,6 +6,7 @@ import { validateEmail, validateRequired } from '../../utils/authValidation';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import authService from '../../services/authService';
 import { EmailOutlined, LockOutlined, Visibility, VisibilityOff, PhoneOutlined } from '@mui/icons-material';
+import EmailMfaStep from '../../components/auth/EmailMfaStep';
 import AuthPageShell from '../../components/storefront/AuthPageShell';
 import newsletterService from '../../services/newsletterService';
 import { useSettings } from '../../hooks/useSettings';
@@ -51,6 +52,8 @@ const LoginPage = () => {
 
   // 2FA state
   const [twoFactorStep, setTwoFactorStep] = useState(false);
+  const [emailChallenge, setEmailChallenge] = useState('');
+  const [emailStep, setEmailStep] = useState(false);
   const [tempToken, setTempToken] = useState('');
   const [totpCode, setTotpCode] = useState('');
   const [useBackupCode, setUseBackupCode] = useState(false);
@@ -61,6 +64,8 @@ const LoginPage = () => {
     if (searchParams.get('requiresTwoFactor') === 'true' && searchParams.get('tempToken')) {
       setTwoFactorStep(true);
       setTempToken(searchParams.get('tempToken'));
+      setEmailChallenge('');
+      setEmailStep(false);
     }
   }, [searchParams]);
 
@@ -141,6 +146,7 @@ const LoginPage = () => {
       if (result.requiresTwoFactor) {
         setTwoFactorStep(true);
         setTempToken(result.tempToken);
+        setEmailChallenge(result.emailChallenge || '');
         setError('');
         return;
       }
@@ -226,6 +232,8 @@ const LoginPage = () => {
       if (result.requiresTwoFactor) {
         setTwoFactorStep(true);
         setTempToken(result.tempToken);
+        setEmailChallenge('');
+        setEmailStep(false);
         setLoginMode('email'); // switch to show 2FA input
         return;
       }
@@ -263,7 +271,13 @@ const LoginPage = () => {
       )}
       {successMsg && <Alert severity={location.state?.sessionExpired ? 'info' : 'success'} sx={{ mb: 2 }}>{successMsg}</Alert>}
 
-      {twoFactorStep ? (
+      {emailStep ? (
+          <EmailMfaStep challenge={emailChallenge} onBack={() => setEmailStep(false)} onComplete={async () => {
+            const signedInUser = await finalizeAuthenticatedSession();
+            await saveNewsletterChoice(signedInUser);
+            navigate(location.state?.from?.pathname || '/', { replace: true });
+          }} />
+        ) : twoFactorStep ? (
         <Box component="form" onSubmit={handleTwoFactorSubmit}>
           <Typography sx={{ mb: 2, fontSize: 14, color: '#475569' }}>
             {useBackupCode
@@ -307,6 +321,24 @@ const LoginPage = () => {
           >
             {useBackupCode ? 'Use authenticator code instead' : 'Lost your device? Use a backup code'}
           </Button>
+            {emailChallenge && (
+              <Button type="button" fullWidth disabled={loading} onClick={() => { setError(''); setEmailStep(true); }}>
+                Use an email code
+              </Button>
+            )}
+            {emailChallenge && (
+              <Button type="button" fullWidth disabled={loading} onClick={() => {
+                setTwoFactorStep(false);
+                setTempToken('');
+                setEmailChallenge('');
+                setTotpCode('');
+                setUseBackupCode(false);
+                setError('');
+                setFormData(current => ({ ...current, password: '' }));
+              }}>
+                Back to sign in
+              </Button>
+            )}
         </Box>
       ) : loginMode === 'phone' ? (
         <Box component="form" onSubmit={handleVerifyOtp}>
