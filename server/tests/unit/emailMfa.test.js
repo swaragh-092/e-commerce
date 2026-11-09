@@ -86,9 +86,18 @@ describe('Email sign-in alternate', () => {
     await emailMfa.sendCode(challenge);
     expect(db.RefreshToken.create).not.toHaveBeenCalled();
     await expect(emailMfa.verifyCode(emailMfa.issueChallenge(user), code)).rejects.toMatchObject({ statusCode: 400 });
-    await expect(emailMfa.verifyCode(challenge, code)).resolves.toHaveProperty('tokens');
+    const result = await emailMfa.verifyCode(challenge, code);
+    expect(result).toHaveProperty('tokens');
     await expect(emailMfa.verifyCode(challenge, code)).rejects.toMatchObject({ statusCode: 400 });
     expect(db.RefreshToken.create).toHaveBeenCalledTimes(1);
+
+    const jwt = require('jsonwebtoken');
+    const claims = jwt.verify(result.tokens.accessToken, process.env.JWT_ACCESS_SECRET);
+    const mfaPolicy = require('../../src/modules/auth/mfaPolicy');
+    expect(claims.mfaBinding).toBe(user.emailMfaPasswordBinding);
+    expect(() => mfaPolicy.assertMfaSession(user, claims, policy)).not.toThrow();
+    user.email = 'changed@example.test';
+    expect(() => mfaPolicy.assertMfaSession(user, claims, policy)).toThrow();
   });
 
   it('keeps a per-account guess limit when another challenge asks for a code', async () => {

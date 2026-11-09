@@ -379,7 +379,11 @@ const refresh = async (refreshTokenStr, ipAddress, userAgent) => {
 
         assertMfaSession(user, decoded, await loadMfaPolicy(user, t));
         const sessionId = crypto.randomUUID();
-        const tokens = generateTokens(user, sessionId, { mfaVerified: decoded.mfa === true, mfaMethod: decoded.mfaMethod });
+        const tokens = generateTokens(user, sessionId, {
+          mfaVerified: decoded.mfa === true,
+          mfaMethod: decoded.mfaMethod,
+          mfaBinding: decoded.mfaBinding,
+        });
 
         // Preserve the original session duration (remember-me 30d vs default 7d)
         // so a remember-me session doesn't shrink to 7d after the first rotation.

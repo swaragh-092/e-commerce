@@ -88,7 +88,11 @@ const verifyCode = async (token, code, ipAddress) => {
     // Keep the spent record for the per-account send cooldown.
     await record.update({ attempts: record.maxAttempts }, { transaction });
     const id = crypto.randomUUID();
-    const tokens = generateTokens(user, id, { mfaVerified: true, mfaMethod: 'email' });
+    const tokens = generateTokens(user, id, {
+      mfaVerified: true,
+      mfaMethod: 'email',
+      mfaBinding: user.emailMfaPasswordBinding,
+    });
     await RefreshToken.create({
       id, userId: user.id, token: hashToken(tokens.refreshToken), createdByIp: ipAddress,
       expiresAt: new Date(Date.now() + AUTH_TIME.REFRESH_TOKEN_TTL_MS),
