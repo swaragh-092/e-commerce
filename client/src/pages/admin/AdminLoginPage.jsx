@@ -17,7 +17,7 @@ const AdminLoginPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, verifyTwoFactor, finalizeAuthenticatedSession, isAuthenticated, user, hasRole } = useAuth();
+  const { login, verifyTwoFactor, finalizeAuthenticatedSession, isAuthenticated, user } = useAuth();
   
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [fieldErrors, setFieldErrors] = useState({});

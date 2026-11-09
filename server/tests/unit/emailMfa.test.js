@@ -21,7 +21,7 @@ beforeEach(() => {
     twoFactorEnabled: true, twoFactorSecret: { data: 'factor' }, password: 'original-password-hash',
     update: vi.fn(),
   };
-  user.emailMfaPasswordBinding = emailMfa.binding(user);
+  user.emailMfaPasswordBinding = 'prior-authenticator-proof';
   row = undefined;
   vi.spyOn(db.sequelize, 'transaction').mockImplementation(callback => callback({ LOCK: { UPDATE: 'UPDATE' } }));
   vi.spyOn(db.User, 'scope').mockReturnValue({ findByPk: async () => user });
@@ -75,6 +75,7 @@ describe('Email sign-in alternate', () => {
   it('requires new authenticator proof after a password reset', async () => {
     const oldChallenge = emailMfa.issueChallenge(user);
     user.password = 'reset-password-hash';
+    user.emailMfaPasswordBinding = null;
     expect(emailMfa.isBound(user)).toBe(false);
     await expect(emailMfa.sendCode(oldChallenge)).rejects.toMatchObject({ statusCode: 401 });
     await expect(emailMfa.sendCode(emailMfa.issueChallenge(user))).rejects.toMatchObject({ statusCode: 401 });
@@ -97,6 +98,7 @@ describe('Email sign-in alternate', () => {
     expect(claims.mfaBinding).toBe(user.emailMfaPasswordBinding);
     expect(() => mfaPolicy.assertMfaSession(user, claims, policy)).not.toThrow();
     user.email = 'changed@example.test';
+    user.emailMfaPasswordBinding = null;
     expect(() => mfaPolicy.assertMfaSession(user, claims, policy)).toThrow();
   });
 

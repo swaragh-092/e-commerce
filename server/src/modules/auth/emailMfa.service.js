@@ -13,10 +13,10 @@ const PURPOSE = 'staff-email-mfa';
 const WINDOW_MS = 5 * 60 * 1000;
 const MAX_ATTEMPTS = 3;
 const denied = () => new AppError('UNAUTHORIZED', 401, 'Email verification expired or is unavailable. Sign in again or use your authenticator.');
-const digest = (...values) => crypto.createHmac('sha256', process.env.JWT_ACCESS_SECRET)
+const hashCode = (...values) => crypto.createHmac('sha256', process.env.JWT_ACCESS_SECRET)
   .update(JSON.stringify([PURPOSE, ...values])).digest('hex');
-const binding = user => digest(user.id, user.password, user.email, user.twoFactorSecret);
-const isBound = user => user.emailMfaPasswordBinding === binding(user);
+const binding = user => user.emailMfaPasswordBinding;
+const isBound = user => Boolean(binding(user));
 const issueChallenge = user => jwt.sign({
   id: user.id, purpose: PURPOSE, binding: binding(user), jti: crypto.randomUUID(),
 }, process.env.JWT_ACCESS_SECRET, { ...getIssAud(), algorithm: 'HS256', expiresIn: '5m' });
@@ -57,7 +57,7 @@ const sendCode = async (token, ipAddress) => {
     if (record) await record.destroy({ transaction });
     const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
     await OtpToken.create({
-      ...where, otpHash: digest(claims.jti, code), maxAttempts: MAX_ATTEMPTS,
+      ...where, otpHash: hashCode(claims.jti, code), maxAttempts: MAX_ATTEMPTS,
       expiresAt: new Date(claims.exp * 1000), createdByIp: ipAddress,
     }, { transaction });
     return { email: user.email, code };
@@ -79,7 +79,7 @@ const verifyCode = async (token, code, ipAddress) => {
   const result = await withChallenge(token, async ({ user, claims, record, transaction }) => {
     if (!record || record.expiresAt <= new Date() || record.attempts >= record.maxAttempts) return null;
     const expected = Buffer.from(record.otpHash, 'hex');
-    const submitted = Buffer.from(digest(claims.jti, code), 'hex');
+    const submitted = Buffer.from(hashCode(claims.jti, code), 'hex');
     if (!crypto.timingSafeEqual(expected, submitted)) {
       await record.increment('attempts', { transaction });
       return null;

@@ -232,7 +232,7 @@ const login = async (email, password, ipAddress, rememberMe = false, userAgent, 
       const emailMfa = canUseEmailMfa(user, mfaPolicy) ? require('./emailMfa.service') : null;
       return {
         requiresTwoFactor: true,
-        tempToken: signTempTwoFactorToken(user.id, emailMfa?.binding(user)),
+        tempToken: signTempTwoFactorToken(user.id, emailMfa ? crypto.randomBytes(32).toString('hex') : undefined),
         ...(emailMfa?.isBound(user) ? { emailChallenge: emailMfa.issueChallenge(user) } : {}),
       };
     }
@@ -759,7 +759,7 @@ const verifyTwoFactor = async (tempToken, totpCode, ipAddress) => {
   // Require a fresh authenticator sign-in after any password or email change.
   // An inbox alone must not satisfy both password reset and the second step.
   if (verifiedAuthenticator && decoded.passwordBinding && canUseEmailMfa(user, policy)
-      && decoded.passwordBinding === require('./emailMfa.service').binding(user)) {
+      && !user.emailMfaPasswordBinding) {
     updates.emailMfaPasswordBinding = decoded.passwordBinding;
   }
   await user.update(updates);

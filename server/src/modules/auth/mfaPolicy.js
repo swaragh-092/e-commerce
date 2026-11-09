@@ -57,8 +57,7 @@ const assertMfaSession = (user, claims, policy) => {
     throw new AppError('UNAUTHORIZED', 401, 'Sign in again with your authenticator.');
   }
   if (claims.mfaMethod === 'email'
-      && (!claims.mfaBinding || claims.mfaBinding !== user.emailMfaPasswordBinding
-        || claims.mfaBinding !== require('./emailMfa.service').binding(user))) {
+      && (!claims.mfaBinding || claims.mfaBinding !== user.emailMfaPasswordBinding)) {
     throw new AppError('UNAUTHORIZED', 401, 'Sign in again with your authenticator.');
   }
   if (requiresAdminMfa(user, policy) && claims.mfa !== true) {

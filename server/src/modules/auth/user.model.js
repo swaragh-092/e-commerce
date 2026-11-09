@@ -94,6 +94,9 @@ module.exports = (sequelize, DataTypes) => {
                 }
             },
             beforeUpdate: async (user) => {
+                if (user.changed('password') || user.changed('email') || user.changed('twoFactorSecret')) {
+                    user.emailMfaPasswordBinding = null;
+                }
                 if (user.changed('email') && user.email && typeof user.email === 'string') {
                     user.email = user.email.trim().toLowerCase();
                 }
