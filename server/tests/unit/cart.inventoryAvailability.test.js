@@ -18,10 +18,20 @@ describe('cart inventory availability', () => {
     await expect(cartService.addItem('user', null, { productId: 'product', quantity: 1 })).rejects.toMatchObject({ code: 'NOT_FOUND' });
     expect(create).not.toHaveBeenCalled();
   });
-  it('requires a variant even when all legacy simple product variants are disabled', async () => {
-    vi.spyOn(db.Product, 'findByPk').mockResolvedValue({ id: 'product', type: 'simple', status: 'published', isEnabled: true, quantity: 50 });
-    vi.spyOn(db.ProductVariant, 'count').mockImplementation(async ({ where }) => where.isActive === true ? 0 : 2);
-    await expect(cartService.addItem('user', null, { productId: 'product', quantity: 1 })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  it('uses standalone stock for Simple products even when historical variants exist', async () => {
+    vi.spyOn(db.Product, 'findByPk').mockResolvedValue({ id: 'product', type: 'simple', status: 'published', isEnabled: true, quantity: 50, reservedQty: 27 });
+    const count = vi.spyOn(db.ProductVariant, 'count');
+    vi.spyOn(db.CartItem, 'findOne').mockResolvedValue(null);
+    vi.spyOn(db.CartItem, 'create').mockResolvedValue({});
+    vi.spyOn(db.Cart, 'findByPk').mockResolvedValue({ id: 'cart', items: [] });
+    // Empty cart serialization needs no product pricing data.
+    await cartService.addItem('user', null, { productId: 'product', quantity: 1 });
+    expect(db.CartItem.create).toHaveBeenCalledWith(expect.objectContaining({ variantId: null, quantity: 1 }), expect.anything());
+    expect(count).not.toHaveBeenCalled();
+  });
+  it('rejects obsolete variant IDs on Simple products', async () => {
+    vi.spyOn(db.Product, 'findByPk').mockResolvedValue({ id: 'product', type: 'simple', status: 'published', isEnabled: true, quantity: 50, reservedQty: 27 });
+    await expect(cartService.addItem('user', null, { productId: 'product', variantId: 'old', quantity: 1 })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
   it('rejects a disabled variant without changing its inventory', async () => {
     vi.spyOn(db.Product, 'findByPk').mockResolvedValue({ id: 'product', type: 'variable', status: 'published', isEnabled: true });

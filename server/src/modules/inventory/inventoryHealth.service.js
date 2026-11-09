@@ -20,7 +20,7 @@ const getInventoryStatus = (availableQty, threshold) => {
 const getProductInventoryValues = (product) => {
   const variants = Array.isArray(product?.variants) ? product.variants : [];
   const activeVariants = variants.filter((variant) => variant?.isActive !== false);
-  const hasVariantRows = variants.length > 0 || product?.type === 'variable';
+  const hasVariantRows = product?.type === 'variable';
   const quantity = hasVariantRows
     ? activeVariants.reduce((sum, variant) => sum + Math.max(Number(variant?.stockQty) || 0, 0), 0)
     : Math.max(Number(product?.quantity) || 0, 0);
@@ -41,7 +41,7 @@ const buildInventorySummary = (products, threshold = 10) => {
   for (const product of Array.isArray(products) ? products : []) {
     if (product?.status !== 'published' || product?.isEnabled === false) continue;
     const variants = Array.isArray(product.variants) ? product.variants : [];
-    const hasVariantInventory = variants.length > 0 || product.type === 'variable';
+    const hasVariantInventory = product.type === 'variable';
 
     if (hasVariantInventory) {
       for (const variant of variants) {

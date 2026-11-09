@@ -258,6 +258,9 @@ const serializeProductPricing = (product, { adminView = false, features = {} } =
 
   const plain = require('../attribute/productAttributeOrder').orderProductPresentation(typeof product.toJSON === 'function' ? product.toJSON() : { ...product });
 
+  // Historical variants must not become purchasable options for a Simple product.
+  if (!adminView && plain.type === 'simple') plain.variants = [];
+
   // Strip internal fields that should never appear in API responses
   delete plain.searchVector;
   delete plain.search_vector;

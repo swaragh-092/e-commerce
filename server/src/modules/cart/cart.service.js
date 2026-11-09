@@ -121,6 +121,7 @@ const addItem = async (userId, sessionId, payload) => {
 
         let availableStock;
         if (variantId) {
+            if (product.type !== 'variable') throw new AppError('VALIDATION_ERROR', 400, 'This product uses standalone stock. Add it without a variant.');
             const variant = await ProductVariant.findOne({
                 where: { id: variantId, productId, isActive: true },
                 transaction: t,
@@ -131,11 +132,7 @@ const addItem = async (userId, sessionId, payload) => {
             }
             availableStock = Number(variant.stockQty || 0) - Number(variant.reservedQty || 0);
         } else {
-            const variantCount = await ProductVariant.count({
-                where: { productId },
-                transaction: t,
-            });
-            if (product.type === 'variable' || variantCount > 0) {
+            if (product.type === 'variable') {
                 throw new AppError('VALIDATION_ERROR', 400, 'Please select a variant option before adding to cart');
             }
             availableStock = Number(product.quantity || 0) - Number(product.reservedQty || 0);
@@ -202,17 +199,15 @@ const updateItem = async (userId, sessionId, itemId, quantity) => {
             throw new AppError('NOT_FOUND', 404, 'Product no longer available and removed from cart');
         }
 
+        if (item.variantId && product.type !== 'variable') throw new AppError('CONFLICT', 409, 'This product now uses standalone stock. Remove it and add the product again.');
+
         if (item.variantId && (!variant || variant.deletedAt !== null || variant.isActive === false)) {
             await item.destroy({ transaction: t });
             throw new AppError('NOT_FOUND', 404, 'Variant no longer available and removed from cart');
         }
 
         if (!item.variantId) {
-            const variantCount = await ProductVariant.count({
-                where: { productId: item.productId },
-                transaction: t,
-            });
-            if (product.type === 'variable' || variantCount > 0) {
+            if (product.type === 'variable') {
                 await item.destroy({ transaction: t });
                 throw new AppError('CONFLICT', 409, 'Product now requires option selection and was removed from cart');
             }
