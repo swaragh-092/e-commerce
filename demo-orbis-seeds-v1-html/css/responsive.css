@@ -73,8 +73,10 @@
     .variety-of-text .arrow img{max-width: 15px;}
     .reality .counter{padding: 10px 30px;}
     .reality{justify-content: space-evenly;flex-wrap: wrap;}
-    .locations{justify-content: space-evenly;}
-    .location-1{padding: 20px;}
+    /* Keep the regions in two evenly spaced columns on tablets and phones. */
+    .locations{display: grid;grid-template-columns: repeat(2, minmax(0, 1fr));align-items: stretch;gap: 24px;padding: 24px;}
+    .location-1{min-width: 0;justify-content: flex-start;padding: 0;}
+    .location-1 h3{min-width: 0;line-height: 1.4;}
     .research-developement-parent{flex-direction: column;gap: 40px}
     .research-left-img:nth-child(2){transform: unset;}
     .research-right{max-width: 900px;transform: unset;}
@@ -206,9 +208,13 @@
 }
 
   @media(max-width:920px){
-   .about-inner{flex-direction: column;}
-   .solar-system{max-width: 100%;padding-top: 330px;}
-   .about-right{min-width: 100%;}
+   /* Keep the hero overlap in normal flow so it leaves no empty space below. */
+   #section-1{top: 0;margin-top: -108px;}
+   .about-wrapper{padding-top: 24px;}
+   .about-inner{flex-direction: column;gap: 24px;}
+   /* Reserve the full orbit, including the animated moons, before the text. */
+   .solar-system{max-width: 100%;height: 460px;padding-top: 0;}
+   .about-right{min-width: 100%;padding-top: 0;}
    .about-right h2{text-align: center;}
   .variety-of-seeds-1{max-width: 145px;}
   .variety-of-text h3{font-size: 14px;}
@@ -257,9 +263,7 @@
    #section-1 .banner-statistics {gap: 20px;}
    #section-1 .banner-statistics h3 {font-size: 20px;}
 
-   .location-1 h3{font-size: 20px;}
    .location-1 span {flex-basis: 44px;width: 44px;height: 44px;}
-   .locations{justify-content: center;}
    .footer-inner {flex-direction: column;align-items: center;gap: 50px;}
    .footer-left{max-width: 100%;padding: 0;}
    .footer-middle{max-width: 100%;padding: 0;}
@@ -275,7 +279,8 @@
    .testimonials-wrapper {padding: 30px 0;}
    h2 {font-size: 30px;}
    h1{font-size: 38px;}
-   .common-btn-parent a{padding: 8px;}
+   .common-btn-parent a{padding: 8px 20px;max-width: 100%;}
+   .common-btn button, .gallery-pagination button, .custom-toast-btn{padding-inline: 20px;}
    .contact-us-right .common-btn{max-width: 150px;}
    .variety-of-seeds-inner h2{max-width: 400px;}
    .testimonial-1{max-width: 500px;}
@@ -349,12 +354,17 @@
 }
 
 @media(max-width:600px){
-   .locations {justify-content: center;flex-direction: column;align-items: flex-start;}
+   .locations{gap: 20px 12px;padding: 20px 16px;}
+   .location-1{gap: 8px;}
+   .location-1 span{flex-basis: 36px;width: 36px;height: 36px;font-size: 15px;}
+   .location-1 h3{font-size: 16px;}
    .footer-inner{gap: 30px;}
-   .common-btn-parent {max-width: 110px;}
-   .common-btn-parent a {padding: 5px;font-size: 14px;}
-   .contact-us-right .common-btn {max-width: 110px;}
-   .contact-us-right button {padding: 5px;font-size: 14px;}
+   /* Keep room around button labels instead of squeezing them into fixed widths. */
+   .common-btn-parent {width: fit-content;max-width: 100%;}
+   .common-btn-parent a {padding: 5px 16px;font-size: 14px;}
+   .common-btn button, .gallery-pagination button, .catalog-pagination button, .custom-toast-btn{padding-inline: 16px;}
+   .contact-us-right .common-btn {width: fit-content;max-width: 100%;}
+   .contact-us-right button {padding: 5px 16px;font-size: 14px;}
 
    .testimonial-wrappe {padding: 40px 0;}
     .tesimonial-inner-wrapper {gap: 20px;}
@@ -394,7 +404,7 @@
    .chillie-right h4{font-size: 20px;}
    .chillie-right-heading h3{font-size: 28px;}
    .chillie-right-heading span{font-size: 50px;}
-   .gallery-pagination button{padding: 0px 6px 2px; font-size: 15px;}
+   .gallery-pagination button{padding: 0px 16px 2px; font-size: 15px;}
    .gallery-pagination{gap: 0px;}
 }
 @media(max-width:536px){
@@ -408,7 +418,7 @@
 
     .bottom-header-top .iso-logos img {max-width: 38px;}
     header.scrolled-header .bottom-inner-wrapper .iso-logos img {max-width: 40px;}
-    .about-inner{gap:0}
+    .solar-system{height: 400px;}
     .research-faq .acc__title h3{font-size: 16px;}
     .testimonial-img{max-width: 75px;}
     .testimonial-img img{max-width: 75px;}
@@ -501,11 +511,10 @@
   .chillie-right h4{font-size: 18px;}
    .chillie-right-heading h3{font-size: 24px;}
    .chillie-right-heading span{font-size: 45px;}
-   .view-product-btn{padding: 10px 10px;}
  }
 
  @media(max-width:400px){
- .about-right{padding-top: 0;}
+   .solar-system{height: 280px;}
    .earth {width: 225px;height: 225px;}
    .orbit-1 {width: 255px;height: 255px;}
    .orbit-2 {width: 243px;height: 243px;}
