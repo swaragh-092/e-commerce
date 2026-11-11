@@ -37,12 +37,12 @@ const PAGE_DEFINITIONS = [
   { key: 'home', label: 'Home', status: 'active', previewPath: '/', settingsGroup: 'homepage' },
   { key: 'product', label: 'Product', status: 'active', previewPath: '/products', settingsGroup: 'productPage', ownedKeys: ['templateLayout', 'imageAlignment', 'showBreadcrumbs', 'showSKU', 'showStockBadge', 'showStickyAddToCart', 'showTrustBadges', 'showRelatedProducts', 'showRecentlyViewed', 'addToCartLabel', 'showBuyNowButton', 'buyNowLabel'] },
   { key: 'category', label: 'Category', status: 'active', previewPath: '/category/all', settingsGroup: 'categoryPage', ownedKeys: ['heroTitle', 'headerLayout', 'showSubcategories'] },
-  { key: 'collection', label: 'Collection', status: 'active', previewPath: '/products', settingsGroup: 'catalog', ownedKeys: ['templateLayout', 'filterLayout', 'showBreadcrumbs', 'gridColumns', 'showFilters', 'categoryDepth', 'showCategoryIcon'] },
+  { key: 'collection', label: 'Collection', status: 'active', previewPath: '/products', settingsGroup: 'catalog', ownedKeys: ['templateLayout', 'filterLayout', 'showBreadcrumbs', 'gridColumns', 'showFilters', 'categoryDepth'] },
   { key: 'search', label: 'Search', status: 'active', previewPath: '/search' },
-  { key: 'cart', label: 'Cart', status: 'active', previewPath: '/cart', settingsGroup: 'cartPage', ownedKeys: ['layout', 'showCrossSells', 'showTrustBadges', 'emptyStateText'] },
+  { key: 'cart', label: 'Cart', status: 'active', previewPath: '/cart', settingsGroup: 'cartPage', ownedKeys: ['layout', 'showTrustBadges', 'emptyStateText'] },
   { key: 'checkout', label: 'Checkout', status: 'active', previewPath: '/checkout' },
-  { key: 'account', label: 'Account', status: 'active', previewPath: '/account', settingsGroup: 'accountPage', ownedKeys: ['layout', 'orderCardStyle', 'showSupportInfo'] },
-  { key: 'orders', label: 'Orders', status: 'active', previewPath: '/account/orders' },
+  { key: 'account', label: 'Account', status: 'active', previewPath: '/account', settingsGroup: 'accountPage', ownedKeys: ['layout', 'showSupportInfo'] },
+  { key: 'orders', label: 'Orders', status: 'active', previewPath: '/orders' },
   { key: 'wishlist', label: 'Wishlist', status: 'active', previewPath: '/wishlist' },
   { key: 'brand', label: 'Brands', status: 'active', previewPath: '/brands', settingsGroup: 'brandsPage', ownedKeys: ['heroTitle', 'heroSubtitle', 'cardLayout', 'gridColumns', 'imageAspectRatio', 'cardStyle', 'cardBorderRadius', 'showDescriptions', 'showProductCount', 'showAlphabeticalFilter', 'showFeaturedSection', 'featuredLayout', 'featuredCount'] },
   { key: 'blog', label: 'Blog', status: 'active', previewPath: '/blogs', settingsGroup: 'blogPage', ownedKeys: ['listLayout', 'articleLayout', 'showAuthor', 'showDate'] },
@@ -181,7 +181,6 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
             { value: 5, label: '5 - Dense grid' },
           ],
         },
-        { key: 'showCategoryIcon', label: 'Show category icons', type: 'boolean', defaultValue: true },
         { key: 'showFilters', label: 'Show filter sidebar on catalog page', type: 'boolean', defaultValue: true },
         {
           key: 'categoryDepth',
@@ -327,16 +326,6 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
             { value: 'sidebar', label: 'Sidebar - dashboard style navigation' },
           ],
         },
-        {
-          key: 'orderCardStyle',
-          label: 'Order Card Style',
-          type: 'select',
-          defaultValue: 'detailed',
-          options: [
-            { value: 'detailed', label: 'Detailed - shows thumbnails' },
-            { value: 'compact', label: 'Compact - list view' },
-          ],
-        },
         { key: 'showSupportInfo', label: 'Show support information block', type: 'boolean', defaultValue: false },
       ],
     }],
@@ -361,7 +350,6 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
         key: 'features',
         label: 'Features',
         fields: [
-          { key: 'showCrossSells', label: 'Show cross-sells', type: 'boolean', defaultValue: true },
           { key: 'showTrustBadges', label: 'Show trust badges and secure checkout messaging', type: 'boolean', defaultValue: true },
         ],
       },
@@ -375,36 +363,10 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
   checkout: {
     groups: [
       {
-        key: 'layout',
-        label: 'Checkout Layout',
-        fields: [{
-          key: 'layout',
-          label: 'Layout Style',
-          type: 'select',
-          defaultValue: 'two-column',
-          options: [
-            { value: 'two-column', label: 'Two-column — form left, summary right' },
-            { value: 'one-column', label: 'One-column — stacked' },
-            { value: 'accordion', label: 'Accordion — collapsed steps' },
-          ],
-        }],
-      },
-      {
-        key: 'features',
-        label: 'Features',
-        fields: [
-          { key: 'showOrderSummary', label: 'Show order summary sidebar', type: 'boolean', defaultValue: true },
-          { key: 'allowGuestCheckout', label: 'Allow guest checkout', type: 'boolean', defaultValue: true },
-          { key: 'showCoupon', label: 'Show coupon field at checkout', type: 'boolean', defaultValue: true },
-          { key: 'showShippingStep', label: 'Show shipping step', type: 'boolean', defaultValue: true },
-          { key: 'showOrderNotes', label: 'Show order notes field', type: 'boolean', defaultValue: true },
-        ],
-      },
-      {
         key: 'labels',
         label: 'Labels',
         fields: [
-          { key: 'placeOrderLabel', label: 'Place Order Button Label', type: 'text', defaultValue: 'Place Order' },
+          { key: 'placeOrderLabel', label: 'Cash on Delivery Button Label', type: 'text', defaultValue: 'Place Order' },
           { key: 'paymentHeading', label: 'Payment Section Heading', type: 'text', defaultValue: 'Payment' },
         ],
       },
@@ -427,26 +389,12 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
               { value: 4, label: '4 columns' },
             ],
           },
-          {
-            key: 'defaultSort',
-            label: 'Default Sort',
-            type: 'select',
-            defaultValue: 'relevance',
-            options: [
-              { value: 'relevance', label: 'Relevance' },
-              { value: 'newest', label: 'Newest' },
-              { value: 'price_asc', label: 'Price: Low to High' },
-              { value: 'price_desc', label: 'Price: High to Low' },
-            ],
-          },
         ],
       },
       {
         key: 'features',
         label: 'Features',
         fields: [
-          { key: 'showFilters', label: 'Show filter sidebar', type: 'boolean', defaultValue: true },
-          { key: 'showSortBar', label: 'Show sort bar', type: 'boolean', defaultValue: true },
           { key: 'showResultCount', label: 'Show result count', type: 'boolean', defaultValue: true },
         ],
       },
@@ -475,39 +423,15 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
         label: 'CTA Buttons',
         fields: [
           { key: 'cta1Label', label: 'Primary Button Label', type: 'text', defaultValue: 'Browse Products' },
-          { key: 'cta1Link', label: 'Primary Button Link', type: 'text', defaultValue: '/products' },
+          { key: 'cta1Link', label: 'Primary Button Link', type: 'text', defaultValue: '/products', helperText: 'Use a store path starting with /.' },
           { key: 'cta2Label', label: 'Secondary Button Label', type: 'text', defaultValue: 'Go Home' },
-          { key: 'cta2Link', label: 'Secondary Button Link', type: 'text', defaultValue: '/' },
+          { key: 'cta2Link', label: 'Secondary Button Link', type: 'text', defaultValue: '/', helperText: 'Use a store path starting with /.' },
         ],
       },
     ],
   },
   orders: {
     groups: [
-      {
-        key: 'layout',
-        label: 'Orders List Layout',
-        fields: [{
-          key: 'layout',
-          label: 'Layout Style',
-          type: 'select',
-          defaultValue: 'list',
-          options: [
-            { value: 'list', label: 'List — full-width rows' },
-            { value: 'cards', label: 'Cards — grid of order cards' },
-          ],
-        }],
-      },
-      {
-        key: 'visibility',
-        label: 'Visibility',
-        fields: [
-          { key: 'showStatusBadge', label: 'Show order status badges', type: 'boolean', defaultValue: true },
-          { key: 'showThumbnails', label: 'Show item thumbnails', type: 'boolean', defaultValue: true },
-          { key: 'showTotal', label: 'Show order total', type: 'boolean', defaultValue: true },
-          { key: 'showTracking', label: 'Show tracking link', type: 'boolean', defaultValue: true },
-        ],
-      },
       {
         key: 'labels',
         label: 'Labels',

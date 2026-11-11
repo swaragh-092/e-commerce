@@ -149,11 +149,24 @@ const buildPageTemplateRows = (pkg, scopes) => {
   const product = pkg.pageTemplates.product;
   if (product) {
     pushDefinedSetting(rows, 'productPage', 'templateLayout', product.layout);
+    pushDefinedSetting(rows, 'productPage', 'imageAlignment', product.imageAlignment);
+    pushDefinedSetting(rows, 'productPage', 'showSKU', product.showSKU);
+    pushDefinedSetting(rows, 'productPage', 'showStockBadge', product.showStockBadge);
     pushDefinedSetting(rows, 'productPage', 'showTrustBadges', product.showTrustBadges);
     pushDefinedSetting(rows, 'productPage', 'showRelatedProducts', product.showRelatedProducts);
     pushDefinedSetting(rows, 'productPage', 'showRecentlyViewed', product.showRecentlyViewed);
     pushDefinedSetting(rows, 'productPage', 'showStickyAddToCart', product.showStickyAddToCart);
     pushDefinedSetting(rows, 'productPage', 'showBreadcrumbs', product.showBreadcrumbs);
+    pushDefinedSetting(rows, 'productPage', 'addToCartLabel', product.addToCartLabel);
+    pushDefinedSetting(rows, 'productPage', 'showBuyNowButton', product.showBuyNowButton);
+    pushDefinedSetting(rows, 'productPage', 'buyNowLabel', product.buyNowLabel);
+  }
+
+  const category = pkg.pageTemplates.category;
+  if (category) {
+    pushDefinedSetting(rows, 'categoryPage', 'heroTitle', category.heroTitle);
+    pushDefinedSetting(rows, 'categoryPage', 'headerLayout', category.headerLayout);
+    pushDefinedSetting(rows, 'categoryPage', 'showSubcategories', category.showSubcategories);
   }
 
   const collection = pkg.pageTemplates.collection;
@@ -380,7 +393,7 @@ const affectedGroups = (scopes, replaceDemoContent) => {
   if (scopes.includes('layoutStyle')) { groups.add('nav'); groups.add('footer'); groups.add('announcement'); }
   if (scopes.includes('homepageSections')) groups.add('homepage');
   if (replaceDemoContent && scopes.includes('demoContent')) { groups.add('announcement'); groups.add('homepage'); }
-  if (scopes.includes('pageTemplates')) { groups.add('productPage'); groups.add('catalog'); groups.add('brandsPage'); groups.add('cartPage'); groups.add('accountPage'); groups.add('blogPage'); }
+  if (scopes.includes('pageTemplates')) { groups.add('productPage'); groups.add('categoryPage'); groups.add('catalog'); groups.add('brandsPage'); groups.add('cartPage'); groups.add('accountPage'); groups.add('blogPage'); }
   return [...groups];
 };
 
@@ -677,7 +690,7 @@ const importToLibrary = async (packageData, userId) => {
 
 const exportCurrent = async (options = {}) => {
   const { includeHomepageSections = true, includeDemoContent = true, includeComponentStyles = true, includeSectionPresets = true } = options;
-  const groups = ['theme', 'componentStyles', 'sectionPresets', 'nav', 'footer', 'announcement', 'homepage', 'productPage', 'catalog', 'brandsPage', 'cartPage', 'accountPage', 'blogPage'];
+  const groups = ['theme', 'componentStyles', 'sectionPresets', 'nav', 'footer', 'announcement', 'homepage', 'productPage', 'categoryPage', 'catalog', 'brandsPage', 'cartPage', 'accountPage', 'blogPage'];
   const snapshot = await readCurrentSettings(groups);
 
   const pkg = {
@@ -718,11 +731,22 @@ const exportCurrent = async (options = {}) => {
   pkg.pageTemplates = {
     product: {
       layout: snapshot.productPage?.templateLayout || 'media-left-details-right',
+      imageAlignment: snapshot.productPage?.imageAlignment,
+      showSKU: snapshot.productPage?.showSKU,
+      showStockBadge: snapshot.productPage?.showStockBadge,
       showTrustBadges: snapshot.productPage?.showTrustBadges,
       showRelatedProducts: snapshot.productPage?.showRelatedProducts,
       showRecentlyViewed: snapshot.productPage?.showRecentlyViewed,
       showStickyAddToCart: snapshot.productPage?.showStickyAddToCart,
       showBreadcrumbs: snapshot.productPage?.showBreadcrumbs,
+      addToCartLabel: snapshot.productPage?.addToCartLabel,
+      showBuyNowButton: snapshot.productPage?.showBuyNowButton,
+      buyNowLabel: snapshot.productPage?.buyNowLabel,
+    },
+    category: {
+      heroTitle: snapshot.categoryPage?.heroTitle,
+      headerLayout: snapshot.categoryPage?.headerLayout,
+      showSubcategories: snapshot.categoryPage?.showSubcategories,
     },
     collection: {
       layout: snapshot.catalog?.templateLayout || 'sidebar-filters-grid',

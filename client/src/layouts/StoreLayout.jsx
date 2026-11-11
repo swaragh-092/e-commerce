@@ -15,6 +15,7 @@ import { useCart } from '../hooks/useCart';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import CategoryNav from '../components/layout/CategoryNav';
 import StorefrontFooter from '../components/layout/StorefrontFooter';
+import StoreHeaderLogo from '../components/layout/StoreHeaderLogo';
 import { useWishlist } from '../context/WishlistContext';
 import { useCategories } from '../context/CategoryContext';
 import SearchWidget from '../components/search/SearchWidget';
@@ -55,7 +56,6 @@ const StoreLayout = () => {
   const [menuAnchors, setMenuAnchors] = useState({});
   const [mobileMenuAnchor, setMobileMenuAnchor] = useState(null);
   const [isMobileSearchExpanded, setIsMobileSearchExpanded] = useState(false);
-  const [logoLoadFailed, setLogoLoadFailed] = useState(false);
   const [accountMenuAnchor, setAccountMenuAnchor] = useState(null);
   const canAccessAdmin = hasAnyPermission(ADMIN_ACCESS_PERMISSIONS);
   const isAuthPage = ['/login', '/register'].includes(location.pathname);
@@ -103,6 +103,10 @@ const StoreLayout = () => {
   }, [pagesEnabled]);
 
   const nav          = settings?.nav          || {};
+  const headerStoreName = nav.logoText || storeName;
+  const headerLogoUrl = nav.logoUrl || settings?.logo?.main || '';
+  const showStoreName = nav.showStoreName !== false;
+  const showHeaderMenu = nav.showMenu !== false;
   const showSearch   = nav.showSearch !== false;
   const showAccount  = nav.showAccount !== false;
   const showCart     = nav.showCart !== false && cartEnabled;
@@ -368,34 +372,24 @@ const StoreLayout = () => {
           <Box
             component={RouterLink}
             to="/"
-            sx={{
+            sx={(theme) => ({
               display: 'flex',
               alignItems: 'center',
               textDecoration: 'none',
               color: 'inherit',
-              gap: 1,
-              flexShrink: 0,
+              flexShrink: 1,
+              [theme.breakpoints.up('md')]: { flexShrink: 0 },
               minWidth: 0,
-            }}
+              maxWidth: { xs: showStoreName && headerLogoUrl ? '50vw' : '42vw', sm: 'none' },
+            })}
           >
-            {settings?.logo?.main && !logoLoadFailed ? (
-              <img
-                src={settings.logo.main}
-                alt={storeName}
-                style={{ maxHeight: 36, maxWidth: 112, objectFit: 'contain' }}
-                onError={() => setLogoLoadFailed(true)}
-              />
-            ) : (
-              <Typography variant="h6" noWrap sx={{ fontWeight: 700, maxWidth: { xs: 110, sm: 180 } }}>
-                {storeName}
-              </Typography>
-            )}
+            <StoreHeaderLogo src={headerLogoUrl} name={headerStoreName} maxWidth={nav.logoMaxWidth} showName={showStoreName} />
           </Box>
 
           {headerAlignment === 'center' && <Box sx={{ flexGrow: 1, minWidth: 8 }} />}
           {headerAlignment === 'right' && <Box sx={{ flexGrow: 1, minWidth: 8 }} />}
 
-          <Box
+          {showHeaderMenu && <Box
             component="nav"
             aria-label="Main navigation"
             sx={{
@@ -423,7 +417,7 @@ const StoreLayout = () => {
 
           >
             {renderHeaderLinks(desktopHeaderItems)}
-          </Box>
+          </Box>}
 
           {(headerAlignment === 'left' || headerAlignment === 'center') && <Box sx={{ flexGrow: 1, minWidth: 8 }} />}
 
@@ -434,7 +428,7 @@ const StoreLayout = () => {
             </Box>
           )}
 
-          {mobileHeaderItems.length > 0 && (
+          {showHeaderMenu && mobileHeaderItems.length > 0 && (
             <>
               <IconButton
                 color="inherit"

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useLocation, useNavigate, Link as RouterLink } from 'react-router-dom';
 import {
-    Alert, Box, Button, Chip, Container, Divider, Grid, IconButton, Skeleton, Typography,
+    Alert, Box, Breadcrumbs, Button, Chip, Container, Divider, Grid, IconButton, Link, Skeleton, Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
@@ -33,7 +33,7 @@ import RelatedProducts from '../../components/product/RelatedProducts';
 import ProductTabsAccordion from '../../components/storefront/ProductTabsAccordion';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getStoreName } from '../../utils/store';
-import { trackRecentlyViewed } from '../../components/storefront/sections/RecentlyViewedSection';
+import RecentlyViewedSection, { trackRecentlyViewed } from '../../components/storefront/sections/RecentlyViewedSection';
 import { buildBreadcrumbJsonLd, buildProductJsonLd } from '../../utils/seo/buildStructuredData';
 import { getBadgeChipProps } from '../../utils/componentStyles';
 
@@ -341,7 +341,8 @@ const ProductDetailPage = () => {
         pageUrl: resolvedPageUrl,
     });
 
-    const productStructuredData = [productJsonLd, breadcrumbStructuredData].filter(Boolean);
+    const showBreadcrumbs = pp.showBreadcrumbs !== false;
+    const productStructuredData = [productJsonLd, showBreadcrumbs ? breadcrumbStructuredData : null].filter(Boolean);
 
     const hasVariants = product.type === 'variable';
 
@@ -439,6 +440,13 @@ const ProductDetailPage = () => {
                 url={resolvedPageUrl}
                 structuredData={productStructuredData}
             />
+            {showBreadcrumbs && (
+                <Breadcrumbs aria-label="Product breadcrumbs" sx={{ mb: 2 }}>
+                    <Link component={RouterLink} to="/" color="inherit" underline="hover">Home</Link>
+                    <Link component={RouterLink} to="/products" color="inherit" underline="hover">Products</Link>
+                    <Typography color="text.primary" aria-current="page">{product.name}</Typography>
+                </Breadcrumbs>
+            )}
             <Grid
                 container
                 spacing={{ xs: 3, md: layoutGrid.spacing, lg: layoutGrid.spacing + 1 }}
@@ -997,6 +1005,7 @@ const ProductDetailPage = () => {
             </Grid>
 
             {showProductRelated && <RelatedProducts productId={product.id} />}
+            {pp.showRecentlyViewed !== false && <RecentlyViewedSection key={product.id} excludeProductId={product.id} />}
 
             <EnquiryModal
                 open={enquiryOpen}
