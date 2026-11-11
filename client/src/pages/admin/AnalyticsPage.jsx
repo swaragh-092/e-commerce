@@ -249,9 +249,10 @@ const SalesAnalyticsPage = () => {
                       <AnalyticsField name="0">Product</AnalyticsField>
                       <AnalyticsField name="1" align="right">Views</AnalyticsField>
                       <AnalyticsField name="2" align="right">Add to Cart</AnalyticsField>
-                      <AnalyticsField name="3" align="right">Purchased</AnalyticsField>
-                      <AnalyticsField name="4" align="right">View→Cart</AnalyticsField>
-                      <AnalyticsField name="5" align="right">Cart→Buy</AnalyticsField>
+                      <AnalyticsField name="3" align="right">Orders</AnalyticsField>
+                      <AnalyticsField name="4" align="right">Units Sold</AnalyticsField>
+                      <AnalyticsField name="5" align="right">View→Cart</AnalyticsField>
+                      <AnalyticsField name="6" align="right">Cart→Order</AnalyticsField>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -260,9 +261,10 @@ const SalesAnalyticsPage = () => {
                         <AnalyticsField name="0">{r.name}</AnalyticsField>
                         <AnalyticsField name="1" align="right">{r.views}</AnalyticsField>
                         <AnalyticsField name="2" align="right">{r.addToCart}</AnalyticsField>
-                        <AnalyticsField name="3" align="right">{r.purchased}</AnalyticsField>
-                        <AnalyticsField name="4" align="right"><Chip size="small" label={`${r.viewToCartRate}%`} color={r.viewToCartRate > 10 ? 'success' : 'default'} /></AnalyticsField>
-                        <AnalyticsField name="5" align="right"><Chip size="small" label={`${r.cartToBuyRate}%`} color={r.cartToBuyRate > 30 ? 'success' : 'default'} /></AnalyticsField>
+                        <AnalyticsField name="3" align="right">{r.orders}</AnalyticsField>
+                        <AnalyticsField name="4" align="right">{r.purchased}</AnalyticsField>
+                        <AnalyticsField name="5" align="right"><Chip size="small" label={`${r.viewToCartRate}%`} color={r.viewToCartRate > 10 ? 'success' : 'default'} /></AnalyticsField>
+                        <AnalyticsField name="6" align="right"><Chip size="small" label={`${r.cartToBuyRate}%`} color={r.cartToBuyRate > 30 ? 'success' : 'default'} /></AnalyticsField>
                       </TableRow>
                     ))}
                   </TableBody>

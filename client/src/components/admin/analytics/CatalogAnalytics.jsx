@@ -42,8 +42,10 @@ export default function CatalogAnalytics() {
   const { loading, data, error } = result;
   const reports = [
     ['topViews', 'Most viewed products', (row) => [row.name, formatCount(row.views)]],
+    ['topEnquiries', 'Products generating enquiries', (row) => [row.name, formatCount(row.enquiries), formatCount(row.converted)]],
     ['trafficSources', 'Traffic sources', (row) => [row.source, formatCount(row.visits)]],
     ['campaigns', 'Campaign visits', (row) => [row.source, row.medium, row.campaign, formatCount(row.visits)]],
+    ['enquiryCampaigns', 'Enquiries by campaign', (row) => [row.source, row.medium, row.campaign, formatCount(row.enquiries), formatCount(row.converted)]],
   ];
   return <Box>
     <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 3 }}>
@@ -59,7 +61,7 @@ export default function CatalogAnalytics() {
     {data?.trackingAvailable === false && <Alert severity="info" sx={{ mb: 2 }}>Visit tracking is not available yet. Analytics will appear once tracking is configured.</Alert>}
     {widgets.every(({ id }) => !visible(id)) && <Alert severity="info">All cards are hidden. Use Customize to choose cards or restore the defaults.</Alert>}
     {!error && <Grid container spacing={3}>
-      {[['visits', 'Page views'], ['sessions', 'Sessions'], ['productViews', 'Product views']].map(([id, label]) => <AnalyticsWidget metric={id} item xs={12} sm={4} key={id}>
+      {[['visits', 'Page views'], ['sessions', 'Sessions'], ['productViews', 'Product views'], ['enquiries', 'Enquiries'], ['convertedEnquiries', 'Converted enquiries'], ['openEnquiries', 'Open enquiries']].map(([id, label]) => <AnalyticsWidget metric={id} item xs={12} sm={4} key={id}>
         <Paper elevation={0} sx={{ p: 3 }}><Typography color="text.secondary">{label}</Typography>
           {loading ? <Skeleton width="60%" height={40} /> : <Typography variant="h4" fontWeight={700}>{formatCount(data?.[id])}</Typography>}
           {id === 'sessions' && <Typography variant="caption" color="text.secondary">Distinct recorded session IDs</Typography>}

@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useSettings } from '../../hooks/useSettings';
+import { getCampaignAttribution } from '../../utils/campaignAttribution';
+import { getSessionId } from '../../services/session';
 
 const normalizeGoogleId = (value) => /^G-[A-Z0-9]+$/.test(String(value || '').trim().toUpperCase())
   ? String(value).trim().toUpperCase() : '';
@@ -89,7 +91,17 @@ export default function StorefrontAnalytics() {
   const isAdmin = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
 
   useEffect(() => {
-    if (isPreview || isAdmin || (!googleId && !pixelId)) return undefined;
+    if (isPreview || isAdmin) return undefined;
+    getCampaignAttribution(location.search);
+    try {
+      if (window.location.protocol === 'https:') {
+        const sessionId = getSessionId();
+        document.cookie = `sessionId=${encodeURIComponent(sessionId)}; Path=/; SameSite=Lax; Secure`;
+      }
+    } catch {
+      // Storage can be unavailable in restricted browser sessions.
+    }
+    if (!googleId && !pixelId) return undefined;
     const timer = window.setTimeout(() => trackPage({
       googleId, pixelId,
       navigation: `${location.key}:${location.pathname}`,
@@ -99,7 +111,7 @@ export default function StorefrontAnalytics() {
       window.clearTimeout(timer);
       if (googleId) window[`ga-disable-${googleId}`] = true;
     };
-  }, [googleId, pixelId, isPreview, isAdmin, location.key, location.pathname]);
+  }, [googleId, pixelId, isPreview, isAdmin, location.key, location.pathname, location.search]);
 
   return null;
 }

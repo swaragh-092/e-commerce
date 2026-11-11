@@ -48,7 +48,10 @@ const createEnquirySchema = Joi.object({
     .min(1)
     .max(100)
     .optional()
-    .allow(null)
+    .allow(null),
+  utmSource: Joi.string().trim().max(255).optional().allow(null, ''),
+  utmMedium: Joi.string().trim().max(255).optional().allow(null, ''),
+  utmCampaign: Joi.string().trim().max(255).optional().allow(null, '')
 }).custom((value, helpers) => {
   if (!value.productId && !value.cartItems) {
     return helpers.error('any.custom', { message: 'Either productId or cartItems is required' });

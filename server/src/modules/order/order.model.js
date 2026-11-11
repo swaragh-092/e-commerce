@@ -92,6 +92,9 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.UUID,
             allowNull: true,
         },
+        utmSource: { type: DataTypes.STRING(255), allowNull: true, field: 'utm_source' },
+        utmMedium: { type: DataTypes.STRING(255), allowNull: true, field: 'utm_medium' },
+        utmCampaign: { type: DataTypes.STRING(255), allowNull: true, field: 'utm_campaign' },
         idempotencyKey: {
             type: DataTypes.STRING(36),
             allowNull: true,

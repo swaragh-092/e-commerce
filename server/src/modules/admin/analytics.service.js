@@ -436,20 +436,26 @@ const getProductFunnel = async ({ period = '30d', limit = 10, _dateRange } = {})
 
   const rows = await db.sequelize.query(`
     WITH product_views AS (
-      SELECT product_id, COUNT(*)::int AS views
+      SELECT product_id,
+        COUNT(DISTINCT COALESCE(user_id::text, NULLIF(session_id, '')))::int
+          + COUNT(*) FILTER (WHERE user_id IS NULL AND NULLIF(session_id, '') IS NULL)::int AS views
       FROM page_visits
       WHERE product_id IS NOT NULL AND created_at BETWEEN :start AND :end
       GROUP BY product_id
     ),
     product_carts AS (
-      SELECT ci.product_id, COUNT(DISTINCT c.id)::int AS add_to_cart
+      SELECT ci.product_id,
+        COUNT(DISTINCT COALESCE(c.user_id::text, NULLIF(c.session_id, '')))::int AS add_to_cart
       FROM cart_items ci
       JOIN carts c ON c.id = ci.cart_id
       WHERE c.created_at BETWEEN :start AND :end
+        AND (c.user_id IS NOT NULL OR NULLIF(c.session_id, '') IS NOT NULL)
       GROUP BY ci.product_id
     ),
     product_purchases AS (
-      SELECT oi.product_id, SUM(oi.quantity)::int AS purchased
+      SELECT oi.product_id,
+        COUNT(DISTINCT o.id)::int AS orders,
+        SUM(oi.quantity)::int AS purchased
       FROM order_items oi
       JOIN orders o ON o.id = oi.order_id
       WHERE o.status IN (${VALID_STATUSES_SQL})
@@ -462,12 +468,13 @@ const getProductFunnel = async ({ period = '30d', limit = 10, _dateRange } = {})
       p.name,
       COALESCE(pv.views, 0) AS views,
       COALESCE(pc.add_to_cart, 0) AS add_to_cart,
+      COALESCE(pp.orders, 0) AS orders,
       COALESCE(pp.purchased, 0) AS purchased
     FROM products p
     LEFT JOIN product_views pv ON pv.product_id = p.id
     LEFT JOIN product_carts pc ON pc.product_id = p.id
     LEFT JOIN product_purchases pp ON pp.product_id = p.id
-    WHERE COALESCE(pv.views, 0) + COALESCE(pc.add_to_cart, 0) + COALESCE(pp.purchased, 0) > 0
+    WHERE COALESCE(pv.views, 0) + COALESCE(pc.add_to_cart, 0) + COALESCE(pp.orders, 0) > 0
     ORDER BY views DESC
     LIMIT :limit
   `, {
@@ -480,9 +487,10 @@ const getProductFunnel = async ({ period = '30d', limit = 10, _dateRange } = {})
     name: r.name,
     views: r.views,
     addToCart: r.add_to_cart,
+    orders: r.orders,
     purchased: r.purchased,
     viewToCartRate: r.views > 0 ? parseFloat(((r.add_to_cart / r.views) * 100).toFixed(1)) : 0,
-    cartToBuyRate: r.add_to_cart > 0 ? parseFloat(((r.purchased / r.add_to_cart) * 100).toFixed(1)) : 0,
+    cartToBuyRate: r.add_to_cart > 0 ? parseFloat(((r.orders / r.add_to_cart) * 100).toFixed(1)) : 0,
   }));
 };
 
@@ -498,21 +506,33 @@ const getUtmAttribution = async ({ period = '30d', limit = 20, _dateRange } = {}
   );
   if (!tableExists[0]?.t) return [];
 
-  // Attribute orders to UTM by matching user_id or session_id from visits to orders
+  // Assign each order to its latest matching campaign touch before checkout.
+  // Aggregating visits directly can count one order's revenue under several campaigns.
   const rows = await db.sequelize.query(`
     SELECT
-      pv.utm_source AS source,
-      pv.utm_medium AS medium,
-      pv.utm_campaign AS campaign,
-      COUNT(DISTINCT o.id)::int AS orders,
+      COALESCE(NULLIF(o.utm_source, ''), pv.utm_source) AS source,
+      COALESCE(NULLIF(o.utm_medium, ''), pv.utm_medium) AS medium,
+      COALESCE(NULLIF(o.utm_campaign, ''), pv.utm_campaign) AS campaign,
+      COUNT(*)::int AS orders,
       COALESCE(SUM(o.total), 0) AS revenue
-    FROM page_visits pv
-    JOIN orders o ON (o.user_id = pv.user_id OR o.checkout_session_id::text = pv.session_id)
-    WHERE pv.utm_source IS NOT NULL
-      AND pv.created_at BETWEEN :start AND :end
+    FROM orders o
+    LEFT JOIN LATERAL (
+      SELECT visit.utm_source, visit.utm_medium, visit.utm_campaign
+      FROM page_visits visit
+      WHERE NULLIF(o.utm_source, '') IS NULL
+        AND ((o.user_id IS NOT NULL AND visit.user_id = o.user_id)
+        OR (o.checkout_session_id IS NOT NULL AND visit.session_id = o.checkout_session_id::text))
+        AND visit.created_at <= o.created_at
+        AND NULLIF(visit.utm_source, '') IS NOT NULL
+      ORDER BY visit.created_at DESC
+      LIMIT 1
+    ) pv ON TRUE
+    WHERE COALESCE(NULLIF(o.utm_source, ''), pv.utm_source) IS NOT NULL
       AND o.status IN (${VALID_STATUSES_SQL})
       AND o.created_at BETWEEN :start AND :end
-    GROUP BY pv.utm_source, pv.utm_medium, pv.utm_campaign
+    GROUP BY COALESCE(NULLIF(o.utm_source, ''), pv.utm_source),
+      COALESCE(NULLIF(o.utm_medium, ''), pv.utm_medium),
+      COALESCE(NULLIF(o.utm_campaign, ''), pv.utm_campaign)
     ORDER BY revenue DESC
     LIMIT :limit
   `, {

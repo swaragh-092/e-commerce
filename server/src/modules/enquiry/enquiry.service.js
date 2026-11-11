@@ -140,6 +140,9 @@ class EnquiryService {
       productId: data.productId || null,
       variantId: data.variantId || null,
       cartItems: normalizedCartItems,
+      utmSource: data.utmSource || null,
+      utmMedium: data.utmMedium || null,
+      utmCampaign: data.utmCampaign || null,
       status: 'pending',
     };
 
