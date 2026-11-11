@@ -382,7 +382,7 @@ const ThemeGalleryPage = () => {
             Install launch-ready storefront blueprints. Templates can apply brand design, layout styling, homepage structure, demo content, and rollback history without touching custom code.
           </Typography>
         </Box>
-        <Box sx={{ display: 'flex', gap: 1, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <Box sx={{ display: 'flex', gap: 1, flexShrink: 0, flexWrap: 'wrap', justifyContent: { xs: 'flex-start', md: 'flex-end' }, width: { xs: '100%', md: 'auto' }, '& .MuiButton-root': { minHeight: 40 } }}>
           {canManageTemplates && (
             <Button component={RouterLink} to="/admin/store-designer" variant="contained">Customize Store</Button>
           )}
