@@ -1,10 +1,10 @@
 import { IconButton, Tooltip } from '@mui/material';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
-import { useCustomerTheme } from '../../context/ThemeContext';
+import { useAdminThemeMode } from '../../context/ThemeContext';
 
 const DarkModeToggle = () => {
-  const { isDark, toggleDarkMode } = useCustomerTheme();
+  const { isDark, toggleDarkMode } = useAdminThemeMode();
 
   return (
     <Tooltip title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}>

@@ -201,7 +201,18 @@ const GalleryPage = () => {
       {error && <Alert severity="error" sx={{ mb: 2 }} action={<Button color="inherit" onClick={() => load(page)}>Retry</Button>}>{error}</Alert>}
       {loading ? <Box sx={{ display: 'flex', justifyContent: 'center', p: 6 }}><CircularProgress /></Box> : (
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '280px minmax(0,1fr)' }, gap: 3 }}>
-          <Card variant="outlined" sx={{ p: 2, alignSelf: 'start' }}>
+          <Card
+            variant="outlined"
+            sx={{
+              p: 2,
+              alignSelf: 'start',
+              position: 'sticky',
+              top: { xs: 72, md: 80 },
+              maxHeight: { xs: 'calc(100dvh - 88px)', md: 'calc(100dvh - 96px)' },
+              overflowY: 'auto',
+              zIndex: 1,
+            }}
+          >
             <Typography fontWeight={700} sx={{ mb: 1 }}>Galleries</Typography>
             {!galleries.length && <Typography color="text.secondary">No galleries yet. Create one to organize your images.</Typography>}
             <Stack spacing={1}>

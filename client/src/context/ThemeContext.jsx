@@ -14,8 +14,8 @@ export const SettingsContext = createContext(null);
 // settings (payments, shipping, product page) change — only when the
 // theme tokens themselves change. See HomeExperience, HeroSection, etc.
 export const DesignTokensContext = createContext(null);
-const CustomerThemeContext = createContext({ isDark: false, toggleDarkMode: () => {} });
-export const useCustomerTheme = () => useContext(CustomerThemeContext);
+const AdminThemeModeContext = createContext({ isDark: false, toggleDarkMode: () => {} });
+export const useAdminThemeMode = () => useContext(AdminThemeModeContext);
 
 /**
  * Slice hook — returns only the resolved design tokens object.
@@ -61,22 +61,15 @@ export const SettingsProvider = ({ children }) => {
 
   const t = settings?.theme || {};
 
-  // Customer dark mode: localStorage override with prefers-color-scheme fallback
-  const [customerDarkMode, setCustomerDarkMode] = useState(() => {
-    const stored = localStorage.getItem('customerDarkMode');
-    if (stored === 'true') return 'dark';
-    if (stored === 'false') return 'light';
-    return stored; // 'light', 'dark', or null
-  });
-
+  // Storefront appearance stays light; the admin theme has its own preference.
+  const [adminDarkMode, setAdminDarkMode] = useState(() => localStorage.getItem('adminDarkMode') === 'true');
   const toggleDarkMode = useCallback(() => {
-    setCustomerDarkMode((prev) => {
-      const currentResolved = prev || (t.mode || (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
-      const next = currentResolved === 'dark' ? 'light' : 'dark';
-      localStorage.setItem('customerDarkMode', next);
+    setAdminDarkMode((current) => {
+      const next = !current;
+      localStorage.setItem('adminDarkMode', String(next));
       return next;
     });
-  }, [t.mode]);
+  }, []);
 
   // Memoize fetchSettings so any consumer that depends on `refreshSettings`
   // in a useEffect dep array does not infinite-loop. The previous version
@@ -212,26 +205,23 @@ export const SettingsProvider = ({ children }) => {
     fetchSettings();
   }, []);
 
-  const storefrontTokens = useMemo(
-    () => resolveDesignTokens(t, customerDarkMode),
-    [t, customerDarkMode]
-  );
-  const isDark = isAdminRoute ? false : storefrontTokens.isDark;
+  const storefrontTokens = useMemo(() => resolveDesignTokens(t, 'light'), [t]);
+  const isDark = isAdminRoute && adminDarkMode;
   const themeConfig = useMemo(
-    () => (isAdminRoute ? buildAdminTheme(settings?.admin) : createTheme(buildStorefrontTheme(t, customerDarkMode))),
-    [isAdminRoute, settings?.admin, t, customerDarkMode]
+    () => (isAdminRoute ? buildAdminTheme(settings?.admin, isDark ? 'dark' : 'light') : createTheme(buildStorefrontTheme(t, 'light'))),
+    [isAdminRoute, settings?.admin, t, isDark]
   );
   // Resolved design tokens — used by DesignTokensContext subscribers.
   // Admin routes deliberately receive the stable admin theme, never merchant
   // storefront tokens, so saved storefront styling cannot leak into admin UI.
   const designTokens = useMemo(
     () => ({
-      cssVariables: isAdminRoute ? {} : buildStorefrontCssVariables(t, customerDarkMode),
+      cssVariables: isAdminRoute ? {} : buildStorefrontCssVariables(t, 'light'),
       tokens: storefrontTokens,
       themeObj: t,
       isAdminRoute,
     }),
-    [isAdminRoute, storefrontTokens, t, customerDarkMode]
+    [isAdminRoute, storefrontTokens, t]
   );
 
   // Memoize the SettingsContext value object — without this, every
@@ -257,14 +247,14 @@ export const SettingsProvider = ({ children }) => {
   // independent from storefront design settings.
   useEffect(() => {
     if (isAdminRoute) return undefined;
-    const vars = buildStorefrontCssVariables(t, customerDarkMode);
+    const vars = buildStorefrontCssVariables(t, 'light');
     const root = document.documentElement;
     Object.entries(vars).forEach(([key, value]) => root.style.setProperty(key, value));
 
     return () => {
       Object.keys(vars).forEach((key) => root.style.removeProperty(key));
     };
-  }, [isAdminRoute, t, customerDarkMode]);
+  }, [isAdminRoute, t]);
 
   // In preview mode: listen for postMessage from the admin panel to apply
   // updated CSS vars instantly (colour/font changes without iframe reload).
@@ -290,7 +280,7 @@ export const SettingsProvider = ({ children }) => {
       document.getElementById('theme-critical-css')?.remove();
       return undefined;
     }
-    const criticalCss = settings?.theme?.criticalCSS || settings?.theme?.performance?.criticalCSS || buildCriticalThemeCss(t, customerDarkMode);
+    const criticalCss = settings?.theme?.criticalCSS || settings?.theme?.performance?.criticalCSS || buildCriticalThemeCss(t, 'light');
     const styleId = 'theme-critical-css';
     let style = document.getElementById(styleId);
 
@@ -305,7 +295,7 @@ export const SettingsProvider = ({ children }) => {
     } else if (style) {
       style.remove();
     }
-  }, [isAdminRoute, settings?.theme?.criticalCSS, settings?.theme?.performance?.criticalCSS, t, customerDarkMode]);
+  }, [isAdminRoute, settings?.theme?.criticalCSS, settings?.theme?.performance?.criticalCSS, t]);
 
   useEffect(() => {
     if (isAdminRoute) return undefined;
@@ -415,7 +405,7 @@ export const SettingsProvider = ({ children }) => {
   return (
     <SettingsContext.Provider value={value}>
       <DesignTokensContext.Provider value={designTokens}>
-        <CustomerThemeContext.Provider value={{ isDark, toggleDarkMode }}>
+        <AdminThemeModeContext.Provider value={{ isDark, toggleDarkMode }}>
           <ThemeProvider theme={themeConfig}>
             <CssBaseline />
             {loading ? (
@@ -424,7 +414,7 @@ export const SettingsProvider = ({ children }) => {
               </Box>
             ) : children}
           </ThemeProvider>
-        </CustomerThemeContext.Provider>
+        </AdminThemeModeContext.Provider>
       </DesignTokensContext.Provider>
     </SettingsContext.Provider>
   );

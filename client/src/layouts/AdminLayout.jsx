@@ -66,6 +66,7 @@ import { useSettings, useMode } from '../hooks/useSettings';
 import { isAdminMenuItemVisible } from '../utils/adminMenuVisibility';
 import { PERMISSIONS } from '../utils/permissions';
 import { UnitCatalogProvider } from '../context/UnitCatalogContext';
+import DarkModeToggle from '../components/layout/DarkModeToggle';
 
 const drawerWidth = 240;
 const slimDrawerWidth = 72;
@@ -162,6 +163,7 @@ const AdminLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
+  const [failedLogoSrc, setFailedLogoSrc] = useState(null);
   const [hoveredGroup, setHoveredGroup] = useState(null);
   const [openGroups, setOpenGroups] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
@@ -182,6 +184,8 @@ const AdminLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { settings, features, visibility } = useSettings();
+  const logoSrc = settings?.logo?.main;
+  const showLogo = Boolean(logoSrc && failedLogoSrc !== logoSrc);
   const appMode = useMode(); // 'ecommerce' | 'catalog'
   const isDesignerCanvasRoute = location.pathname.startsWith('/admin/store-designer');
   const navCollapsed = sidebarCollapsed;
@@ -731,18 +735,19 @@ const AdminLayout = () => {
             <MenuIcon />
           </IconButton>
           <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-            {settings?.logo?.main ? (
+            {showLogo ? (
               <img
-                src={settings.logo.main}
+                src={logoSrc}
                 alt={settings?.general?.storeName || 'Admin'}
                 style={{ maxHeight: 32, maxWidth: 120, objectFit: 'contain', filter: 'brightness(0) invert(1)' }}
-                onError={(e) => { e.target.style.display = 'none'; }}
+                onError={() => setFailedLogoSrc(logoSrc)}
               />
             ) : null}
-            <Typography variant="h6" noWrap sx={{ fontWeight: 700, display: { xs: 'none', md: 'block' } }}>
+            <Typography variant="h6" noWrap sx={{ fontWeight: 700, display: { xs: showLogo ? 'none' : 'block', md: 'block' } }}>
               Admin Dashboard
             </Typography>
           </Box>
+          <DarkModeToggle />
           <Tooltip title="View Store">
             <IconButton color="inherit" component={RouterLink} to="/" sx={{ mr: 1 }}>
               <StoreIcon />
