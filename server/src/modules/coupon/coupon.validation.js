@@ -86,17 +86,25 @@ const updateCouponSchema = Joi.object({
     priority: Joi.number().integer().min(0).max(2147483647).optional(),
 });
 
+const buyNowItemSchema = Joi.object({
+    productId: Joi.string().uuid().required(),
+    variantId: Joi.string().uuid().allow(null),
+    quantity: Joi.number().integer().min(1).default(1),
+});
+
 const validateCouponSchema = Joi.object({
     code: Joi.string().trim().max(50).uppercase().required(),
     subtotal: Joi.number().precision(2).min(0).max(99999999.99).required(),
     shippingCost: Joi.number().precision(2).min(0).max(99999999.99).optional(),
     email: Joi.string().trim().email().optional(),
+    buyNowItem: buyNowItemSchema.optional(),
 });
 
 const eligibleCouponsSchema = Joi.object({
     subtotal: Joi.number().precision(2).min(0).max(99999999.99).optional(),
     shippingCost: Joi.number().precision(2).min(0).max(99999999.99).optional(),
     email: Joi.string().trim().email().optional(),
+    buyNowItem: buyNowItemSchema.optional(),
 });
 
 module.exports = {

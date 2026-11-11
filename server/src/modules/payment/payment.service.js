@@ -963,14 +963,17 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {}, 
                 const validCouponIds = existingCoupons.map((c) => c.id);
 
                 if (validCouponIds.length > 0) {
-                    const existingUsages = await CouponUsage.count({
+                    const existingUsages = await CouponUsage.findAll({
                         where: { orderId: lockedOrder.id, couponId: { [Op.in]: validCouponIds } },
+                        attributes: ['couponId'],
                         transaction: t,
                     });
 
-                    if (existingUsages === 0) {
+                    const recordedCouponIds = new Set(existingUsages.map(({ couponId }) => couponId));
+                    const missingCouponIds = validCouponIds.filter((id) => !recordedCouponIds.has(id));
+                    if (missingCouponIds.length > 0) {
                         await CouponUsage.bulkCreate(
-                            validCouponIds.map((couponId) => ({
+                            missingCouponIds.map((couponId) => ({
                                 couponId,
                                 userId: lockedOrder.userId,
                                 guestSessionId: lockedOrder.userId ? null : lockedOrder.guestSessionId,
@@ -980,7 +983,7 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {}, 
                         );
                         await Coupon.update(
                             { usedCount: sequelize.literal('used_count + 1') },
-                            { where: { id: { [Op.in]: validCouponIds } }, transaction: t }
+                            { where: { id: { [Op.in]: missingCouponIds } }, transaction: t }
                         );
                     }
                 }

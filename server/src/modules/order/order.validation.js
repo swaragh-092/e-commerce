@@ -1,5 +1,6 @@
 'use strict';
 const Joi = require('joi');
+const { MAX_CHECKOUT_COUPONS } = require('../../config/constants');
 const CANCELLATION_REASONS = require('../../../../shared/cancellation-reasons.json');
 const { isGuestSessionId } = require('../../utils/guestSession');
 const {
@@ -14,7 +15,7 @@ const {
 const placeOrderSchema = Joi.object({
     shippingAddressId: Joi.string().uuid().optional().allow(null, ''),
     couponCode: Joi.string().trim().max(50).uppercase().optional().allow(null, ''),
-    couponCodes: Joi.array().items(Joi.string().trim().max(50).uppercase()).max(5).optional().default([]),
+    couponCodes: Joi.array().items(Joi.string().trim().max(50).uppercase()).max(MAX_CHECKOUT_COUPONS).optional().default([]),
     notes: Joi.string().allow(null, ''),
     paymentMethod: Joi.string().valid('razorpay', 'stripe', 'payu', 'cashfree', 'cod').default('razorpay'),
     shippingQuoteId: Joi.string().uuid().optional(),

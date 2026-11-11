@@ -57,13 +57,13 @@ const remove = async (req, res, next) => {
 
 const validateCoupon = async (req, res, next) => {
   try {
-    const { code, subtotal, shippingCost, email } = req.validated;
+    const { code, subtotal, shippingCost, email, buyNowItem } = req.validated;
     const userId = req.user?.id || null;
     const guestSessionId = req.headers['x-session-id'] || req.cookies?.sessionId || null;
     if (!userId && !isGuestSessionId(guestSessionId)) {
       throw new AppError('VALIDATION_ERROR', 400, 'A valid guest checkout session is required to validate coupons');
     }
-    const result = await CouponService.validateCoupon(code, userId, { cartSubtotal: subtotal, shippingCost, guestSessionId, guestEmail: email });
+    const result = await CouponService.validateCoupon(code, userId, { cartSubtotal: subtotal, shippingCost, guestSessionId, guestEmail: email, buyNowItem });
     return success(res, result);
   } catch (err) {
     next(err);
@@ -84,12 +84,13 @@ const getEligibleCoupons = async (req, res, next) => {
   try {
     const userId = req.user?.id || null;
     const guestSessionId = req.headers['x-session-id'] || req.cookies?.sessionId || null;
-    const { subtotal, shippingCost, email } = req.validated || {};
+    const { subtotal, shippingCost, email, buyNowItem } = req.validated || {};
     const result = await CouponService.getEligibleCoupons(userId, {
       cartSubtotal: subtotal,
       shippingCost,
       guestSessionId,
       guestEmail: email || null,
+      buyNowItem,
     });
     return success(res, result);
   } catch (err) {

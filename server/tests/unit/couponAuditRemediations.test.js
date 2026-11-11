@@ -2,10 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
+const { Op } = require('sequelize');
 const {
     getReturnRequestItemAmount,
     releaseOrderCoupons,
     createRefundRecord,
+    placeOrder,
 } = require('../../src/modules/order/order.service');
 const PaymentService = require('../../src/modules/payment/payment.service');
 const CouponService = require('../../src/modules/coupon/coupon.service');
@@ -20,6 +22,8 @@ const {
     Order,
     OrderRefund,
     Payment,
+    Product,
+    ProductVariant,
     User,
     Cart,
     Category,
@@ -30,8 +34,8 @@ const {
 } = require('../../src/modules');
 const {
     createCouponSchema,
-    updateCouponSchema,
     validateCouponSchema,
+    eligibleCouponsSchema,
 } = require('../../src/modules/coupon/coupon.validation');
 const { placeOrderSchema } = require('../../src/modules/order/order.validation');
 const AnalyticsService = require('../../src/modules/admin/analytics.service');
@@ -205,7 +209,11 @@ describe('Coupon Audit Fixes Verification', () => {
     });
 
     describe('2. Coupon deletion between placement and settlement', () => {
-        it('safely settles online payment even if applied coupon was deleted', async () => {
+        it.each([
+            { validIds: [], recordedIds: [], missingIds: [] },
+            { validIds: ['recorded', 'missing'], recordedIds: ['recorded'], missingIds: ['missing'] },
+            { validIds: ['recorded'], recordedIds: ['recorded'], missingIds: [] },
+        ])('settles with valid coupons $validIds and recorded coupons $recordedIds', async ({ validIds, recordedIds, missingIds }) => {
             const transaction = { LOCK: { UPDATE: 'UPDATE' } };
             vi.spyOn(sequelize, 'transaction').mockImplementation(async (callback) => callback(transaction));
 
@@ -216,7 +224,7 @@ describe('Coupon Audit Fixes Verification', () => {
                 status: 'pending_payment',
                 total: 100,
                 paymentMethod: 'razorpay',
-                appliedDiscounts: [{ couponId: 'deleted-coupon-id', code: 'DELETED' }],
+                appliedDiscounts: ['deleted-coupon-id', ...validIds].map((couponId) => ({ couponId })),
                 update: vi.fn().mockResolvedValue(true),
             };
 
@@ -228,24 +236,89 @@ describe('Coupon Audit Fixes Verification', () => {
                 update: vi.fn().mockResolvedValue(true),
             });
 
-            // The coupon was deleted, so Coupon.findAll returns empty array
-            vi.spyOn(Coupon, 'findAll').mockResolvedValue([]);
-            const bulkCreateUsages = vi.spyOn(CouponUsage, 'bulkCreate');
-            const updateCoupon = vi.spyOn(Coupon, 'update');
+            vi.spyOn(Coupon, 'findAll').mockResolvedValue(validIds.map((id) => ({ id })));
+            vi.spyOn(CouponUsage, 'findAll').mockResolvedValue(recordedIds.map((couponId) => ({ couponId })));
+            const bulkCreateUsages = vi.spyOn(CouponUsage, 'bulkCreate').mockResolvedValue([]);
+            const updateCoupon = vi.spyOn(Coupon, 'update').mockResolvedValue([1]);
 
-            await expect(PaymentService.markOrderPaid({
+            await PaymentService.markOrderPaid({
                 orderId: 'order-1',
                 provider: 'razorpay',
                 transactionId: 'txn-123',
-            })).resolves.not.toThrow();
+            });
 
-            // Should NOT attempt to create usage for deleted coupon
-            expect(bulkCreateUsages).not.toHaveBeenCalled();
-            expect(updateCoupon).not.toHaveBeenCalled();
+            if (missingIds.length) {
+                expect(bulkCreateUsages).toHaveBeenCalledWith(
+                    missingIds.map((couponId) => ({ couponId, orderId: 'order-1', userId: 'user-1', guestSessionId: null })),
+                    { transaction }
+                );
+                expect(updateCoupon).toHaveBeenCalledWith(expect.anything(), {
+                    where: { id: { [Op.in]: missingIds } }, transaction,
+                });
+            } else {
+                expect(bulkCreateUsages).not.toHaveBeenCalled();
+                expect(updateCoupon).not.toHaveBeenCalled();
+            }
             expect(lockedOrder.update).toHaveBeenCalledWith(
                 expect.objectContaining({ status: 'processing' }),
                 expect.anything()
             );
+        });
+    });
+
+    describe('Checkout review regressions', () => {
+        const buyNowItem = { productId: 'd3bc4d67-e619-49ab-aebf-402c38744508', variantId: null, quantity: 1 };
+        const product = { id: buyNowItem.productId, name: 'Buy Now product', price: 100, status: 'published', requiresShipping: false };
+        const coupon = {
+            id: 'min500', code: 'MIN500', type: 'fixed_amount', value: 50, minOrderAmount: 500,
+            isActive: true, visibility: 'public', campaignStatus: 'active', applicationMode: 'manual',
+            stackingRules: { allowMultipleCoupons: true, allowOrderDiscounts: true },
+        };
+
+        it('prices Buy Now from the selected item in both coupon endpoints', async () => {
+            const model = { ...coupon, toJSON: () => coupon };
+            vi.spyOn(Coupon, 'findOne').mockResolvedValue(model);
+            vi.spyOn(Coupon, 'findAll').mockResolvedValue([model]);
+            vi.spyOn(Product, 'findByPk').mockResolvedValue(product);
+            vi.spyOn(ProductVariant, 'count').mockResolvedValue(0);
+            Cart.findOne.mockResolvedValue({ items: [{ product: { id: 'saved', price: 1000 }, quantity: 1 }] });
+            const rawContext = { cartSubtotal: 1000, buyNowItem };
+            expect(validateCouponSchema.validate({ code: 'MIN500', subtotal: 1000, buyNowItem }).error).toBeUndefined();
+            expect(eligibleCouponsSchema.validate({ subtotal: 1000, buyNowItem }).error).toBeUndefined();
+
+            await expect(CouponService.validateCoupon('MIN500', 'user-1', rawContext))
+                .rejects.toThrow('Minimum order amount of 500 required');
+            await expect(CouponService.getEligibleCoupons('user-1', rawContext))
+                .resolves.toMatchObject({ eligibleCoupons: [] });
+            expect(Cart.findOne).not.toHaveBeenCalled();
+        });
+
+        it('caps compatible automatic coupons at the number checkout accepts, including a manual seed', async () => {
+            const records = Array.from({ length: 6 }, (_, index) => {
+                const auto = { ...coupon, id: `auto-${index}`, code: `AUTO${index}`, value: 10 - index, applicationMode: 'auto' };
+                return { ...auto, toJSON: () => auto };
+            });
+            vi.spyOn(Coupon, 'findAll').mockResolvedValue(records);
+            vi.spyOn(Coupon, 'findOne').mockResolvedValue({ ...coupon, toJSON: () => coupon });
+            const context = { cartItems: [{ product: { id: 'product', price: 1000 }, quantity: 1 }] };
+            const preview = await CouponService.getEligibleCoupons('user-1', context);
+            const codes = preview.bestCombination.appliedCoupons.map(({ code }) => code);
+            expect(codes).toEqual(['AUTO0', 'AUTO1', 'AUTO2', 'AUTO3', 'AUTO4']);
+            expect(placeOrderSchema.validate({ couponCodes: codes }).error).toBeUndefined();
+            const order = await CouponService.resolveCoupons(['MIN500'], 'user-1', context);
+            expect(order.couponCodes).toEqual(['MIN500', 'AUTO0', 'AUTO1', 'AUTO2', 'AUTO3']);
+        });
+
+        it.each([{ status: 'draft' }, { isEnabled: false }])('rejects a product that became unavailable before the order lock (%j)', async (change) => {
+            const transaction = { LOCK: { UPDATE: 'UPDATE' } };
+            vi.spyOn(sequelize, 'transaction').mockImplementation(async (callback) => callback(transaction));
+            vi.spyOn(ProductVariant, 'count').mockResolvedValue(0);
+            const productLookup = vi.spyOn(Product, 'findByPk')
+                .mockResolvedValueOnce(product)
+                .mockResolvedValueOnce({ ...product, ...change });
+
+            await expect(placeOrder('user-1', { buyNowItem })).rejects.toThrow('is no longer available');
+            expect(productLookup).toHaveBeenLastCalledWith(product.id, { transaction, lock: 'UPDATE' });
         });
     });
 
@@ -634,7 +707,7 @@ describe('Coupon Audit Fixes Verification', () => {
                     unitPrice: 100,
                     quantity: 1,
                 }],
-            })).resolves.not.toThrow();
+            })).resolves.toMatchObject({ appliedCoupons: [expect.objectContaining({ applicationMode: 'manual' })] });
         });
     });
 
@@ -1235,7 +1308,7 @@ describe('Coupon Audit Fixes Verification', () => {
                     unitPrice: 100,
                     quantity: 1,
                 }],
-            })).resolves.not.toThrow();
+            })).resolves.toMatchObject({ appliedCoupons: [expect.objectContaining({ applicationMode: 'manual' })] });
 
             // Check where criteria passed to findAll
             const callWhere = findAllSpy.mock.calls[0][0].where;

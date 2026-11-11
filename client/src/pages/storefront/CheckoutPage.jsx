@@ -261,6 +261,11 @@ const CheckoutPage = () => {
     const buyNowItem = useMemo(() => {
         return location.state?.fromBuyNow ? normalizeBuyNowItem(location.state?.buyNowItem) : null;
     }, [location.state?.fromBuyNow, location.state?.buyNowItem]);
+    const couponBuyNowItem = useMemo(() => buyNowItem ? {
+        productId: buyNowItem.productId,
+        variantId: buyNowItem.variantId || null,
+        quantity: buyNowItem.quantity,
+    } : undefined, [buyNowItem]);
     const hasInvalidBuyNowState = Boolean(location.state?.fromBuyNow) && !buyNowItem;
 
     const checkoutEnabled = useFeatureVisible('checkout', 'storefront');
@@ -640,7 +645,7 @@ const CheckoutPage = () => {
         if (activeSection === 2 && couponsEnabled && showAvailableCoupons) {
             setPublicCouponsLoading(true);
             const checkoutEmail = user?.email || (guestEmail ? guestEmail.trim() : undefined);
-            getEligibleCoupons({ subtotal, shippingCost, email: checkoutEmail })
+            getEligibleCoupons({ subtotal, shippingCost, email: checkoutEmail, buyNowItem: couponBuyNowItem })
                 .then((res) => {
                     const data = res.data?.data || {};
                     setPublicCoupons(data.eligibleCoupons || []);
@@ -649,7 +654,7 @@ const CheckoutPage = () => {
                         const autoCoupon = data.bestCombination?.appliedCoupons?.find((c) => c.applicationMode === 'auto');
                         if (autoCoupon) {
                             setCouponResult(data.bestCombination);
-                        } else if (couponResult && !couponCode) {
+                        } else if (couponResult) {
                             setCouponResult(null);
                         }
                     }
@@ -657,13 +662,13 @@ const CheckoutPage = () => {
                 .catch(() => {})
                 .finally(() => setPublicCouponsLoading(false));
         }
-    }, [activeSection, couponsEnabled, showAvailableCoupons, subtotal, shippingCost, couponCode, user?.email, guestEmail]);
+    }, [activeSection, couponsEnabled, showAvailableCoupons, subtotal, shippingCost, couponCode, user?.email, guestEmail, couponBuyNowItem]);
 
     useEffect(() => {
         if (couponResult && !couponResult.error && !couponLoading) {
             const checkoutEmail = user?.email || (guestEmail ? guestEmail.trim() : undefined);
             if (couponCode) {
-                validateCoupon({ code: couponCode, subtotal, shippingCost, email: checkoutEmail })
+                validateCoupon({ code: couponCode, subtotal, shippingCost, email: checkoutEmail, buyNowItem: couponBuyNowItem })
                     .then((res) => {
                         setCouponResult(res.data?.data || null);
                     })
@@ -676,7 +681,7 @@ const CheckoutPage = () => {
                         });
                     });
             } else if (couponsEnabled && couponResult?.appliedCoupons?.some((c) => c.applicationMode === 'auto')) {
-                getEligibleCoupons({ subtotal, shippingCost, email: checkoutEmail })
+                getEligibleCoupons({ subtotal, shippingCost, email: checkoutEmail, buyNowItem: couponBuyNowItem })
                     .then((res) => {
                         const data = res.data?.data || {};
                         const autoCoupon = data.bestCombination?.appliedCoupons?.find((c) => c.applicationMode === 'auto');
@@ -689,7 +694,7 @@ const CheckoutPage = () => {
                     .catch(() => {});
             }
         }
-    }, [subtotal, shippingCost, itemSignature, user?.email, guestEmail, couponCode, couponsEnabled]);
+    }, [subtotal, shippingCost, itemSignature, user?.email, guestEmail, couponCode, couponsEnabled, couponBuyNowItem]);
 
     const handleApplyCoupon = async (codeOverride) => {
         const code = codeOverride || couponCode;
@@ -699,7 +704,7 @@ const CheckoutPage = () => {
         setCouponResult(null);
         try {
             const checkoutEmail = user?.email || (guestEmail ? guestEmail.trim() : undefined);
-            const res = await validateCoupon({ code, subtotal, shippingCost, email: checkoutEmail });
+            const res = await validateCoupon({ code, subtotal, shippingCost, email: checkoutEmail, buyNowItem: couponBuyNowItem });
             setCouponResult(res.data?.data || null);
         } catch (err) {
             setCouponResult({ orderDiscount: 0, totalDiscount: 0, message: getApiErrorMessage(err, 'Invalid coupon code.'), error: true });

@@ -18,9 +18,10 @@ const {
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const { getPagination } = require('../../utils/pagination');
-const { ACTIONS, ENTITIES } = require('../../config/constants');
+const { ACTIONS, ENTITIES, MAX_CHECKOUT_COUPONS } = require('../../config/constants');
 const { getEffectivePrice, getVariantUnitPrice, isSaleActive, resolveSaleLabel } = require('../product/product.pricing');
 const { getSaleLabels } = require('../settings/saleLabel.service');
+const { loadBuyNowItem } = require('../order/buyNowItem');
 const { isGuestSessionId } = require('../../utils/guestSession');
 
 const ensureArray = (value) => (Array.isArray(value) ? [...new Set(value.filter(Boolean))] : []);
@@ -225,6 +226,7 @@ const chooseStackedEvaluations = (evaluations, context, seedEvaluations = []) =>
         });
 
     for (const candidate of sortedCandidates) {
+        if (selected.length >= MAX_CHECKOUT_COUPONS) break;
         const compatibleWithAll = selected.every((existing) => canStackPair(existing, candidate));
         if (compatibleWithAll) {
             selected.push(candidate);
@@ -642,7 +644,13 @@ const buildValidationContext = async (userId, rawContext = {}) => {
         ? legacyContext.cartItems.map((item) => mapCartLine(item, labelPresets)).filter(Boolean)
         : [];
 
-    if (!cartItems.length) {
+    if (legacyContext.buyNowItem) {
+        const item = await loadBuyNowItem(legacyContext.buyNowItem);
+        if (item.product.status !== 'published' || item.product.isEnabled === false) {
+            throw new AppError('VALIDATION_ERROR', 400, 'Buy Now product is not available for purchase');
+        }
+        cartItems = [mapCartLine(item, labelPresets)];
+    } else if (!cartItems.length) {
         cartItems = await loadActiveCartLines(userId, legacyContext.guestSessionId);
     }
 
@@ -650,7 +658,7 @@ const buildValidationContext = async (userId, rawContext = {}) => {
         ? cartItems.reduce((sum, item) => sum + (Number.isFinite(Number(item.lineSubtotal)) ? Number(item.lineSubtotal) : 0), 0)
         : NaN;
 
-    const cartSubtotal = Number.isFinite(computedSubtotal) && computedSubtotal > 0
+    const cartSubtotal = Number.isFinite(computedSubtotal)
         ? Number(computedSubtotal.toFixed(2))
         : (Number.isFinite(Number(legacyContext.cartSubtotal)) ? Number(legacyContext.cartSubtotal) : 0);
 
@@ -721,56 +729,51 @@ const assertCouponIsUsable = async (couponInput, userId, cartSubtotal, transacti
         // Serialize first-order coupon checks per customer. Without this lock,
         // concurrent checkouts using different first-order coupons could both pass.
         let userEmail = null;
-        if (userId && transaction) {
+        if (transaction) {
             const user = await User.findByPk(userId, { transaction, lock: Transaction.LOCK.UPDATE });
             if (!user) throw new AppError('NOT_FOUND', 404, 'Customer account not found');
             userEmail = user.email ? user.email.trim().toLowerCase() : null;
-        } else if (userId) {
+        } else {
             const user = await User.findByPk(userId, { attributes: ['id', 'email'] });
             userEmail = user?.email ? user.email.trim().toLowerCase() : null;
-        } else if (guestEmail) {
-            userEmail = guestEmail.trim().toLowerCase();
         }
 
         // An active order reserves first-order eligibility while payment is in
         // progress. Reservation timeout/cancellation of unpaid orders restores eligibility.
         // Completed, closed, or paid (and later refunded/cancelled) orders consume it.
         const identityConditions = [
-            ...(userId ? [{ userId }] : []),
+            { userId },
             ...(userEmail ? [{ guestEmail: userEmail, userId: null }] : []),
-            ...(!userId && !userEmail && guestSessionId ? [{ guestSessionId, userId: null }] : []),
         ];
 
-        if (identityConditions.length > 0) {
-            const priorOrders = await Order.findAll({
-                where: {
-                    [Op.or]: identityConditions,
-                },
+        const priorOrders = await Order.findAll({
+            where: {
+                [Op.or]: identityConditions,
+            },
+            attributes: ['id', 'status'],
+            include: [{
+                model: Payment,
                 attributes: ['id', 'status'],
-                include: [{
-                    model: Payment,
-                    attributes: ['id', 'status'],
-                    required: false,
-                }],
-                transaction,
-            });
+                required: false,
+            }],
+            transaction,
+        });
 
-            const settledPaymentStatuses = ['paid_online', 'paid_cod', 'completed', 'refunded', 'partially_refunded'];
+        const settledPaymentStatuses = ['paid_online', 'paid_cod', 'completed', 'refunded', 'partially_refunded'];
 
-            const hasPriorOrder = priorOrders.some((ord) => {
-                if (ord.status !== 'cancelled') {
-                    return true;
-                }
-                const paymentStatus = ord.Payment?.status;
-                if (paymentStatus && settledPaymentStatuses.includes(paymentStatus)) {
-                    return true;
-                }
-                return false;
-            });
-
-            if (hasPriorOrder) {
-                throw new AppError('VALIDATION_ERROR', 400, 'This coupon is only available on your first order');
+        const hasPriorOrder = priorOrders.some((ord) => {
+            if (ord.status !== 'cancelled') {
+                return true;
             }
+            const paymentStatus = ord.Payment?.status;
+            if (paymentStatus && settledPaymentStatuses.includes(paymentStatus)) {
+                return true;
+            }
+            return false;
+        });
+
+        if (hasPriorOrder) {
+            throw new AppError('VALIDATION_ERROR', 400, 'This coupon is only available on your first order');
         }
     }
 
@@ -984,7 +987,7 @@ const resolveCoupons = async (codes = [], userId, rawContext = {}) => {
     }
     const normalizedCodes = [...new Set((codes || [])
         .map((code) => String(code || '').trim().toUpperCase())
-        .filter(Boolean))].sort().slice(0, 5);
+        .filter(Boolean))].sort().slice(0, MAX_CHECKOUT_COUPONS);
     const context = await buildValidationContext(userId, rawContext);
 
     const manualEvaluations = [];
