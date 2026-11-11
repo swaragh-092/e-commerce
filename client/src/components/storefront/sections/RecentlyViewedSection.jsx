@@ -31,7 +31,7 @@ export const getRecentlyViewed = () => {
   } catch { return []; }
 };
 
-const RecentlyViewedSection = ({ section = {}, mode = 'live', onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
+const RecentlyViewedSection = ({ section = {}, mode = 'live', excludeProductId, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
   const [products, setProducts] = useState([]);
   const preview = mode === 'preview';
   const count = section.count || 8;
@@ -39,8 +39,8 @@ const RecentlyViewedSection = ({ section = {}, mode = 'live', onInlineFieldChang
 
   useEffect(() => {
     if (preview) return;
-    setProducts(getRecentlyViewed().slice(0, count));
-  }, [preview, count]);
+    setProducts(getRecentlyViewed().filter((product) => product.id !== excludeProductId).slice(0, count));
+  }, [preview, count, excludeProductId]);
 
   if (preview) {
     return (

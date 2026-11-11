@@ -41,7 +41,8 @@ const BrandsPage = () => {
   const cardLayout = brandsPage.cardLayout || 'standard';
   const showAlphabeticalFilter = brandsPage.showAlphabeticalFilter !== false;
   const imageAspectRatio = brandsPage.imageAspectRatio || 'square';
-  const cardBorderRadius = parseInt(brandsPage.cardBorderRadius) || 12;
+  const configuredRadius = parseInt(brandsPage.cardBorderRadius, 10);
+  const cardBorderRadius = Number.isFinite(configuredRadius) ? configuredRadius : 12;
   const showProductCount = brandsPage.showProductCount === true;
   const showFeaturedSection = brandsPage.showFeaturedSection !== false;
   const featuredLayout = brandsPage.featuredLayout || 'banner';

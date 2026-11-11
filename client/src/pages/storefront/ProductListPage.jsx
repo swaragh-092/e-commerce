@@ -33,7 +33,8 @@ const ProductListPage = ({ tag = null }) => {
     const filterLayout = catalog.filterLayout || (collectionLayout.includes('top') ? 'topbar' : 'sidebar');
     const isCompactCatalog = collectionLayout.includes('compact') || collectionLayout.includes('table') || collectionLayout.includes('b2b');
     const isEditorialCatalog = collectionLayout.includes('editorial') || collectionLayout.includes('image-led');
-    const showSidebarFilters = showFilters && !isMobile && filterLayout !== 'topbar';
+    const useFilterDrawer = isMobile || filterLayout === 'drawer';
+    const showSidebarFilters = showFilters && !useFilterDrawer && filterLayout !== 'topbar';
     const showTopbarFilters = showFilters && !isMobile && filterLayout === 'topbar';
     const showCatalogBreadcrumbs = catalog.showBreadcrumbs !== false;
     const pricingEnabled = useFeatureVisible('pricing', 'storefront');
@@ -187,7 +188,7 @@ const ProductListPage = ({ tag = null }) => {
                 </Box>
 
                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                    {showFilters && isMobile && (
+                    {showFilters && useFilterDrawer && (
                         <IconButton 
                             onClick={() => setMobileFilterOpen(true)} 
                             color="primary"
@@ -253,7 +254,7 @@ const ProductListPage = ({ tag = null }) => {
                 </Grid>
             </Grid>
 
-            <Drawer anchor="left" open={mobileFilterOpen} onClose={() => setMobileFilterOpen(false)}>
+            <Drawer anchor="left" open={showFilters && useFilterDrawer && mobileFilterOpen} onClose={() => setMobileFilterOpen(false)}>
                 <Box sx={{ width: { xs: '85vw', sm: 320 }, maxWidth: 380, p: 3 }}>
                     <StorefrontSidebarMenu onNavigate={() => setMobileFilterOpen(false)} />
                     <ProductFilters filters={filters} onFilterChange={(f) => { handleFilterChange(f); setMobileFilterOpen(false); }} priceRange={priceRange} />

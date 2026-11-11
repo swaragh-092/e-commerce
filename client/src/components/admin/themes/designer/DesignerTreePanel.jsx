@@ -48,10 +48,8 @@ const PAGE_EDITORS = {
   orders:      { Editor: OrdersPageStyleEditor,    key: 'orders' },
 };
 
-// Pages whose controls are auto-generated (info only)
-// Wishlist inherits Product Card styles — no dedicated settings panel yet
 const PAGE_INFO = {
-  wishlist: 'The Wishlist page inherits Product Card styles. Adjust card appearance under Theme Settings → Product Card.',
+  wishlist: 'Wishlist uses a fixed layout. You can preview it here and edit shared storefront styles in Theme Settings.',
 };
 
 const AddSectionButton = ({ children = 'Add section', onClick, variant = 'text', compact = false }) => (
@@ -402,7 +400,7 @@ const DesignerTreePanel = ({
           )}
         </Stack>
         </> : <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 2, fontSize: '0.8rem' }}>
-          This page uses a fixed layout. Use Page Settings above to change its appearance.
+          This page uses a fixed layout.{PageEditor ? ' Use Page Settings above to change its appearance.' : ''}
         </Typography>}
 
         <Divider sx={{ mx: 1, my: 0.75 }} />

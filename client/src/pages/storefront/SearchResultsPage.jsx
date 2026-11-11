@@ -32,7 +32,8 @@ const SearchResultsPage = () => {
 
   const { settings } = useSettings();
   const catalog = settings?.catalog || {};
-  const gridCols = parseInt(catalog.gridColumns) || 4;
+  const searchStyle = settings?.searchPage || {};
+  const gridCols = parseInt(searchStyle.gridColumns ?? catalog.gridColumns, 10) || 4;
   const collectionLayout = catalog.templateLayout || 'sidebar-filters-grid';
   const isCompactCatalog = collectionLayout.includes('compact') || collectionLayout.includes('table') || collectionLayout.includes('b2b');
 
@@ -160,13 +161,13 @@ const SearchResultsPage = () => {
           <SearchWidget
             key={urlQuery}
             variant="inline"
-            placeholder="Search products..."
+            placeholder={searchStyle.searchPlaceholder || 'Search products...'}
             initialValue={normalizedQuery}
             onSearch={(q) => setSearchParams({ q, page: '1' })}
             sx={{ maxWidth: { sm: 500 } }}
           />
 
-          {normalizedQuery && hasSearched && !loading && !searchError && (
+          {searchStyle.showResultCount !== false && normalizedQuery && hasSearched && !loading && !searchError && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
               <Chip
                 label={`${meta.totalItems} product result${meta.totalItems !== 1 ? 's' : ''}`}
@@ -288,8 +289,7 @@ const SearchResultsPage = () => {
             color="text.secondary"
             sx={{ maxWidth: 400, mx: 'auto', mb: 3 }}
           >
-            We couldn't find any products matching "{normalizedQuery}".
-            Try using different keywords or check for typos.
+            {searchStyle.noResultsMessage || `We couldn't find any products matching "${normalizedQuery}". Try using different keywords or check for typos.`}
           </Typography>
           {suggestion && (
             <Chip

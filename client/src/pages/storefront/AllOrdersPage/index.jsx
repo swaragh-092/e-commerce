@@ -24,7 +24,7 @@ import {
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageSEO from '../../../components/common/PageSEO';
 import { orderService } from '../../../services/orderService';
-import { useCurrency } from '../../../hooks/useSettings';
+import { useCurrency, useSettings } from '../../../hooks/useSettings';
 import { getApiErrorMessage } from '../../../utils/apiErrors';
 
 import { ORDER_STATUSES, TIME_FILTERS, LIMIT } from './constants';
@@ -41,6 +41,8 @@ const AllOrdersPage = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
     const { formatPrice } = useCurrency();
+    const { settings } = useSettings();
+    const ordersStyle = settings?.ordersPage || {};
 
     // Filter state
     const [searchInput, setSearchInput] = useState(searchParams.get('search') || '');
@@ -430,7 +432,7 @@ const AllOrdersPage = () => {
                                 <Typography
                                     sx={{ fontWeight: 700, fontSize: 16, mb: 1 }}
                                 >
-                                    No orders found
+                                    {activeFilterCount > 0 || searchInput ? 'No orders found' : ordersStyle.emptyHeadline || 'No orders found'}
                                 </Typography>
                                 <Typography
                                     sx={{ fontSize: 13, color: 'text.secondary', mb: 3 }}
@@ -463,7 +465,7 @@ const AllOrdersPage = () => {
                                             fontSize: 13,
                                         }}
                                     >
-                                        Start Shopping
+                                        {ordersStyle.emptyCtaLabel || 'Start Shopping'}
                                     </Button>
                                 )}
                             </Box>
