@@ -1,5 +1,5 @@
 import platformFeatures from '../../../shared/platform-features.json';
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ThemeProvider, createTheme, CssBaseline, Box, CircularProgress } from '@mui/material';
 import settingsService from '../services/settingsService';
@@ -50,6 +50,9 @@ export const DEFAULT_FALLBACK_FEATURES = {
 };
 
 export const SettingsProvider = ({ children }) => {
+  const [previewMode] = useState(isPreviewMode);
+  const previewSettingsRef = useRef(null);
+
   const location = useLocation();
   const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
   const [settings, setSettings] = useState(null);
@@ -76,11 +79,11 @@ export const SettingsProvider = ({ children }) => {
   // returned a fresh closure on every render, which made ThemeGalleryPage's
   // 5 dependent effects re-fire on every render.
   const fetchSettings = useCallback(async () => {
+    let data;
     try {
-      let data;
       // In preview mode read from localStorage — avoids API call and keeps
       // production data untouched while the admin previews unsaved changes.
-      if (isPreviewMode()) {
+      if (previewMode) {
         const raw = localStorage.getItem(PREVIEW_KEY);
         data = raw ? JSON.parse(raw) : {};
       } else {
@@ -98,16 +101,16 @@ export const SettingsProvider = ({ children }) => {
         settingsService.getFeatures(),
       ]);
 
-      setSettings(data);
+      setSettings(previewMode ? previewSettingsRef.current || data : data);
       setMode(featureData?.mode || 'ecommerce');
       setFeatures({ ...data?.features, ...featureData?.features });
       setLockedKeys(featureData?.lockedKeys || []);
       setVisibility(featureData?.visibility || DEFAULT_TIER1_VISIBILITY);
-      if (!isPreviewMode()) applyDocumentSettings(data);
+      if (!previewMode) applyDocumentSettings(data);
     } catch (error) {
       console.error("Failed to load settings", error);
       // Fallback defaults — safe for both modes
-      setSettings({
+      setSettings((previewMode && (previewSettingsRef.current || data)) || {
         theme: { primaryColor: '#1976d2', mode: 'light', fontFamily: 'Roboto' },
         general: { storeName: DEFAULT_STORE_NAME },
         features: { ...DEFAULT_FALLBACK_FEATURES },
@@ -149,7 +152,7 @@ export const SettingsProvider = ({ children }) => {
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [previewMode]);
 
   const applyDocumentSettings = (data) => {
     // Page title
@@ -224,6 +227,31 @@ export const SettingsProvider = ({ children }) => {
     [isAdminRoute, storefrontTokens, t]
   );
 
+  const previewFeatures = useMemo(() => {
+    if (!previewMode || !features) return features;
+    const draftFeatures = { ...features };
+    for (const key of Object.keys(features)) {
+      const value = settings?.features?.[key];
+      if (value != null && !lockedKeys.includes(key)) {
+        draftFeatures[key] = value === true || value === 'true';
+      }
+    }
+    return draftFeatures;
+  }, [previewMode, features, settings?.features, lockedKeys]);
+
+  const previewVisibility = useMemo(() => {
+    if (!previewMode || !visibility) return visibility;
+    return Object.fromEntries(Object.entries(visibility).map(([surface, values]) => [
+      surface,
+      Object.fromEntries(Object.entries(values).map(([key, enabled]) => {
+        const preference = settings?.visibility?.[surface + key[0].toUpperCase() + key.slice(1)];
+        return [key, preference == null ? enabled : (
+          previewFeatures?.[key] === true && (preference === true || preference === 'true')
+        )];
+      })),
+    ]));
+  }, [previewMode, visibility, settings?.visibility, previewFeatures]);
+
   // Memoize the SettingsContext value object — without this, every
   // consumer of useSettings() re-renders on ANY change to any of the
   // 6 fields below. Combined with the new DesignTokensContext, components
@@ -233,13 +261,13 @@ export const SettingsProvider = ({ children }) => {
     () => ({
       settings,
       mode,        // 'ecommerce' | 'catalog'
-      features,    // fully resolved feature map — use useFeature() to read individual flags
-      visibility,  // Tier 1 presentation switches — use useFeatureVisible()
+      features: previewFeatures, // fully resolved feature map — use useFeature() to read individual flags
+      visibility: previewVisibility, // Tier 1 presentation switches — use useFeatureVisible()
       lockedKeys,  // Tier 1 keys — use useIsFeatureLocked() to read
       loading,
       refreshSettings: fetchSettings,
     }),
-    [settings, mode, features, visibility, lockedKeys, loading, fetchSettings]
+    [settings, mode, previewFeatures, previewVisibility, lockedKeys, loading, fetchSettings]
   );
 
   // Expose resolved storefront design tokens as CSS custom properties for custom CSS and widgets.
@@ -256,23 +284,22 @@ export const SettingsProvider = ({ children }) => {
     };
   }, [isAdminRoute, t]);
 
-  // In preview mode: listen for postMessage from the admin panel to apply
-  // updated CSS vars instantly (colour/font changes without iframe reload).
   useEffect(() => {
-    if (!isPreviewMode()) return;
+    if (!previewMode || window.parent === window) return undefined;
     const handler = (event) => {
       if (
         event.origin !== window.location.origin ||
-        event.data?.type !== 'PREVIEW_THEME_UPDATE'
+        event.source !== window.parent ||
+        event.data?.type !== 'PREVIEW_SETTINGS_UPDATE'
       ) return;
-      const root = document.documentElement;
-      Object.entries(event.data.vars || {}).forEach(([key, value]) =>
-        root.style.setProperty(key, value)
-      );
+      const nextSettings = event.data.settings;
+      if (!nextSettings || typeof nextSettings !== 'object' || Array.isArray(nextSettings)) return;
+      previewSettingsRef.current = nextSettings;
+      setSettings(nextSettings);
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, []);
+  }, [previewMode]);
 
   // Inject critical CSS and package-level asset hints from theme settings.
   useEffect(() => {

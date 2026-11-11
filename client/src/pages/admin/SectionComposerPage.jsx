@@ -1299,12 +1299,12 @@ const SectionComposerPage = () => {
                 Storefront Preview
               </Typography>
               <ToggleButtonGroup
-                value={activePage === 'home' && !devicePreview ? previewRenderMode : 'live'}
+                value={devicePreview ? 'live' : previewRenderMode}
                 exclusive
                 onChange={(_, v) => v && setPreviewRenderMode(v)}
                 size="small"
               >
-                <ToggleButton value="mock" disabled={activePage !== 'home' || devicePreview} aria-label="Interactive editor preview">Edit design</ToggleButton>
+                <ToggleButton value="mock" disabled={devicePreview} aria-label="Interactive editor preview">Edit design</ToggleButton>
                 <ToggleButton value="live" aria-label="Read-only live storefront preview">Test storefront</ToggleButton>
               </ToggleButtonGroup>
             </Stack>
@@ -1321,7 +1321,15 @@ const SectionComposerPage = () => {
           </Box>
 
           <Box sx={{ px: 1.5, py: 0.75, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
-            {activePage !== 'home' ? (
+            {activePage !== 'home' && previewRenderMode === 'mock' && !devicePreview ? (
+              <Alert
+                severity="info"
+                variant="outlined"
+                sx={{ py: 0, alignItems: 'center', '& .MuiAlert-message': { py: 0.5, fontSize: '0.78rem' } }}
+              >
+                Previewing the <strong>{activePageLabel}</strong> draft with sample content. Switch to Test storefront to check the live page.
+              </Alert>
+            ) : activePage !== 'home' ? (
               <Alert
                 severity="info"
                 variant="outlined"
@@ -1389,7 +1397,7 @@ const SectionComposerPage = () => {
               }}
             >
               <Box sx={{ width: '100%', flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
-                {activePage !== 'home' ? (
+                {activePage !== 'home' && livePreview ? (
                   previewTarget.error ? (
                     <Box sx={{ p: 4, textAlign: 'center' }}>
                       <Alert severity="info" variant="outlined" sx={{ maxWidth: 480, mx: 'auto' }}>
@@ -1404,13 +1412,12 @@ const SectionComposerPage = () => {
                     <LiveStorefrontPreview
                       settings={livePreviewSettings}
                       path={previewTarget.path || '/'}
-                      reloadOnSettingsChange
                       device={viewportMode}
                       showToolbar={false}
                       frameHeight="100%"
                     />
                   )
-                ) : loadError ? (
+                ) : activePage === 'home' && loadError ? (
                   <Box sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                     <Alert severity="error" sx={{ maxWidth: 500 }}>
                       {loadError}
@@ -1424,7 +1431,6 @@ const SectionComposerPage = () => {
                     <LiveStorefrontPreview
                       settings={livePreviewSettings}
                       path={activePageConfig.previewPath || '/'}
-                      reloadOnSettingsChange
                       device={viewportMode}
                       showToolbar={false}
                       frameHeight="100%"
@@ -1437,14 +1443,14 @@ const SectionComposerPage = () => {
                     activePage={activePage}
                     currentSettings={livePreviewSettings}
                     componentStyles={componentStyles}
-                    selectedSectionId={panelView.sectionId}
-                    onSelectSection={selectSection}
+                    selectedSectionId={activePage === 'home' ? panelView.sectionId : undefined}
+                    onSelectSection={activePage === 'home' ? selectSection : undefined}
                     onSelectComponent={(component) => openComponentEditor(component)}
-                    onInlineFieldChange={handlePreviewFieldChange}
-                    onInlineFieldCommit={handlePreviewFieldCommit}
-                    onInlineBlockFocus={handleInlineBlockFocus}
-                    onAddSectionAt={(index, area) => openAddSection(index, area)}
-                    onReorderSection={reorderSection}
+                    onInlineFieldChange={activePage === 'home' ? handlePreviewFieldChange : undefined}
+                    onInlineFieldCommit={activePage === 'home' ? handlePreviewFieldCommit : undefined}
+                    onInlineBlockFocus={activePage === 'home' ? handleInlineBlockFocus : undefined}
+                    onAddSectionAt={activePage === 'home' ? (index, area) => openAddSection(index, area) : undefined}
+                    onReorderSection={activePage === 'home' ? reorderSection : undefined}
                   />
                 )}
               </Box>

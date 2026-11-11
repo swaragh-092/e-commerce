@@ -479,63 +479,65 @@ const ProductDetailPage = () => {
                             p: { xs: 2, sm: 0 },
                         }}
                     >
-                    <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            flexWrap: 'wrap',
-                            gap: 0.8,
-                            mb: 1.2,
-                            fontWeight: 700,
-                            textTransform: 'uppercase',
-                            letterSpacing: 0.5
-                        }}
-                    >
-                        <Box
-                            component={RouterLink}
-                            to="/"
-                            sx={{ color: 'inherit', textDecoration: 'none', '&:hover': { color: 'primary.main' } }}
+                    {showBreadcrumbs && (
+                        <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                                gap: 0.8,
+                                mb: 1.2,
+                                fontWeight: 700,
+                                textTransform: 'uppercase',
+                                letterSpacing: 0.5
+                            }}
                         >
-                            Home
-                        </Box>
+                            <Box
+                                component={RouterLink}
+                                to="/"
+                                sx={{ color: 'inherit', textDecoration: 'none', '&:hover': { color: 'primary.main' } }}
+                            >
+                                Home
+                            </Box>
 
-                        {(() => {
-                            const cats = product.categories;
-                            if (!cats?.length) return null;
+                            {(() => {
+                                const cats = product.categories;
+                                if (!cats?.length) return null;
 
-                            const catMap = Object.fromEntries(cats.map(c => [c.id, c]));
-                            const parentIds = new Set(cats.map(c => c.parentId).filter(Boolean));
-                            const leaf = cats.find(c => !parentIds.has(c.id)) || cats[0];
-                            const path = [];
-                            let cur = leaf;
-                            while (cur) {
-                                path.unshift({ name: cur.name, slug: cur.slug });
-                                cur = cur.parentId ? catMap[cur.parentId] : null;
-                            }
+                                const catMap = Object.fromEntries(cats.map(c => [c.id, c]));
+                                const parentIds = new Set(cats.map(c => c.parentId).filter(Boolean));
+                                const leaf = cats.find(c => !parentIds.has(c.id)) || cats[0];
+                                const path = [];
+                                let cur = leaf;
+                                while (cur) {
+                                    path.unshift({ name: cur.name, slug: cur.slug });
+                                    cur = cur.parentId ? catMap[cur.parentId] : null;
+                                }
 
-                            return path.map((cat, index) => (
-                                <Box key={cat.slug} sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                                    <Box component="span" sx={{ opacity: 0.4, fontWeight: 400 }}>/</Box>
-                                    <Box
-                                        component={RouterLink}
-                                        to={`/category/${cat.slug}`}
-                                        sx={{
-                                            color: 'inherit',
-                                            textDecoration: 'none',
-                                            '&:hover': { color: 'primary.main' },
-                                            // The last one is the current leaf category, maybe make it slightly bolder or different?
-                                            // But for breadcrumbs, usually the current page is not a link.
-                                            // However, here they are all categories.
-                                        }}
-                                    >
-                                        {cat.name}
+                                return path.map((cat, index) => (
+                                    <Box key={cat.slug} sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                                        <Box component="span" sx={{ opacity: 0.4, fontWeight: 400 }}>/</Box>
+                                        <Box
+                                            component={RouterLink}
+                                            to={`/category/${cat.slug}`}
+                                            sx={{
+                                                color: 'inherit',
+                                                textDecoration: 'none',
+                                                '&:hover': { color: 'primary.main' },
+                                                // The last one is the current leaf category, maybe make it slightly bolder or different?
+                                                // But for breadcrumbs, usually the current page is not a link.
+                                                // However, here they are all categories.
+                                            }}
+                                        >
+                                            {cat.name}
+                                        </Box>
                                     </Box>
-                                </Box>
-                            ));
-                        })()}
-                    </Typography>
+                                ));
+                            })()}
+                        </Typography>
+                    )}
 
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, mb: 1.5 }}>
                         <Typography variant="h2" component="h1" fontWeight={900} sx={{ fontSize: { xs: '2.1rem', md: '2.6rem', lg: '3rem' }, lineHeight: 1.1 }}>
@@ -887,9 +889,11 @@ const ProductDetailPage = () => {
 
                         <Divider sx={{ my: 1.5 }} />
 
-                        <Typography variant="body2" color="success.main" fontWeight={900} sx={{ mb: 0.75 }}>
-                            {stockAvailable ? 'In stock' : 'Currently unavailable'}
-                        </Typography>
+                        {pp.showStockBadge !== false && (
+                            <Typography variant="body2" color="success.main" fontWeight={900} sx={{ mb: 0.75 }}>
+                                {stockAvailable ? 'In stock' : 'Currently unavailable'}
+                            </Typography>
+                        )}
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                             Ships from <strong>{storeName}</strong>
                         </Typography>
