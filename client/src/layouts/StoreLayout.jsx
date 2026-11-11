@@ -372,15 +372,16 @@ const StoreLayout = () => {
           <Box
             component={RouterLink}
             to="/"
-            sx={{
+            sx={(theme) => ({
               display: 'flex',
               alignItems: 'center',
               textDecoration: 'none',
               color: 'inherit',
-              flexShrink: 0,
+              flexShrink: 1,
+              [theme.breakpoints.up('md')]: { flexShrink: 0 },
               minWidth: 0,
               maxWidth: { xs: showStoreName && headerLogoUrl ? '50vw' : '42vw', sm: 'none' },
-            }}
+            })}
           >
             <StoreHeaderLogo src={headerLogoUrl} name={headerStoreName} maxWidth={nav.logoMaxWidth} showName={showStoreName} />
           </Box>

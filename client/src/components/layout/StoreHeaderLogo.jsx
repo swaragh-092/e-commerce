@@ -24,12 +24,14 @@ const StoreHeaderLogo = ({ src, name, maxWidth, showName = true }) => {
           src={src}
           alt={showName ? '' : name}
           onError={() => setFailed(true)}
-          sx={{
+          sx={(theme) => ({
             maxWidth: { xs: `min(${resolvedMaxWidth}, ${showName ? '24vw' : '32vw'})`, sm: resolvedMaxWidth },
             maxHeight: 36,
             objectFit: 'contain',
-            flexShrink: 0,
-          }}
+            flexShrink: 1,
+            [theme.breakpoints.up('md')]: { flexShrink: 0 },
+            minWidth: 0,
+          })}
         />
       )}
       {(showName || !src || failed) && (

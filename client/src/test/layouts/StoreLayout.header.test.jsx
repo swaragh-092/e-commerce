@@ -71,6 +71,19 @@ describe('StoreLayout responsive header settings', () => {
     expect(container.querySelector('nav[aria-label="Main navigation"]')).toBeInTheDocument();
   });
 
+  it('allows the mobile logo and image to shrink around the header actions', async () => {
+    state.settings.nav.logoText = 'A very long designer store name';
+    const { container } = renderStoreLayout();
+    const menu = await screen.findByRole('button', { name: 'Open navigation menu' });
+    const logo = screen.getByRole('link', { name: state.settings.nav.logoText });
+    const image = container.querySelector('img[src="/designer-logo.svg"]');
+
+    expect(menu).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Register' })).toBeInTheDocument();
+    expect(logo).toHaveStyle('flex-shrink: 1; min-width: 0');
+    expect(image).toHaveStyle('flex-shrink: 1; min-width: 0');
+  });
+
   it('hides desktop links and the mobile menu trigger when the Designer hides the menu', async () => {
     state.settings.nav.showMenu = false;
     const { container } = renderStoreLayout();
