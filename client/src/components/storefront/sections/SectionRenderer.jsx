@@ -160,7 +160,7 @@ const SectionRenderer = ({
       content = <CountdownSection section={section} mode={mode} onSelectComponent={onSelectComponent} {...editorProps} />;
       break;
     case SECTION_TYPES.RECENTLY_VIEWED:
-      content = <RecentlyViewedSection section={section} mode={mode} {...editorProps} />;
+      content = <RecentlyViewedSection section={section} mode={mode} excludeProductId={data.excludeProductId} {...editorProps} />;
       break;
     case SECTION_TYPES.PRODUCT_INFO:
     case SECTION_TYPES.PRODUCT_REVIEWS:

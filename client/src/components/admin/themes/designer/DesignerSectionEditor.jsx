@@ -19,6 +19,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 import StorageIcon from '@mui/icons-material/Storage';
 import { SECTION_VARIANTS, getSectionLabel } from '../../../storefront/sections/sectionRegistry';
 import { SHADOW_PRESETS, WIDTH_PRESETS } from '../../../storefront/sections/SectionFallback';
+import { getSaleLabels } from '../../../../services/adminService';
 import MediaPicker from '../../../common/MediaPicker';
 import { getMediaUrl } from '../../../../utils/media';
 
@@ -26,6 +27,7 @@ const PRODUCT_SOURCES = [
   { value: 'featured', label: 'Featured' },
   { value: 'sale', label: 'On Sale' },
   { value: 'bestSellers', label: 'Best Sellers' },
+  { value: 'mostViewed', label: 'Most Viewed' },
   { value: 'newest', label: 'Newest' },
   { value: 'recommended', label: 'Recommended' },
 ];
@@ -487,6 +489,39 @@ const BlockListEditor = ({
   );
 };
 
+const CampaignLabelSelect = ({ value, onChange }) => {
+  const [labels, setLabels] = useState(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let active = true;
+    getSaleLabels().then(({ data }) => {
+      if (active) setLabels(data?.data || []);
+    }).catch(() => {
+      if (active) setFailed(true);
+    });
+    return () => { active = false; };
+  }, []);
+
+  return (
+    <TextField
+      select fullWidth size="small" label="Sale label" value={value || ''}
+      onChange={(event) => onChange(event.target.value)}
+      helperText={failed ? 'Could not load sale labels.' : 'Show only active deals with this label.'}
+      error={failed}
+    >
+      <MenuItem value="">All sale products</MenuItem>
+      {value && !labels?.some((label) => label.id === value) && (
+        <MenuItem value={value} disabled>{labels ? 'Unavailable sale label' : value}</MenuItem>
+      )}
+      {labels?.map((label) => (
+        <MenuItem key={label.id} value={label.id} disabled={label.isActive === false}>
+          {label.text || label.label || label.name || label.id}
+        </MenuItem>
+      ))}
+    </TextField>
+  );
+};
+
 const DesignerSectionEditor = ({
   section,
   inheritedBlocks = [],
@@ -507,6 +542,7 @@ const DesignerSectionEditor = ({
 
   const variants = SECTION_VARIANTS[section.type] || [];
   const isProductRow  = section.type === 'product-row';
+  const isRecentlyViewed = section.type === 'recently-viewed';
   const isCountdown   = section.type === 'countdown-sale';
   const isNewsletter  = section.type === 'newsletter-signup';
   const isHero        = section.type === 'hero-carousel';
@@ -832,6 +868,14 @@ const DesignerSectionEditor = ({
 
           {/* ── LAYOUT ── */}
           <FieldGroup label="Layout" defaultOpen={false} icon={<ViewQuiltIcon sx={{ fontSize: 15 }} />}>
+            {isRecentlyViewed && (
+              <TextField select label="Product layout" size="small" value={section.variant || section.layout || 'carousel'}
+                onChange={(e) => { onChange('variant', e.target.value); onBlur(); }}>
+                <MenuItem value="carousel">Carousel</MenuItem>
+                <MenuItem value="grid">Grid</MenuItem>
+                <MenuItem value="grid-compact">Compact grid</MenuItem>
+              </TextField>
+            )}
             <Box>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
                 Text Alignment
@@ -1200,11 +1244,11 @@ const DesignerSectionEditor = ({
           </FieldGroup>
 
           {/* ── DATA SOURCE (product-row / category sections) ── */}
-          {(isProductRow || hasCategories) && (
+          {(isProductRow || isRecentlyViewed || hasCategories) && (
             <FieldGroup label="Content source" icon={<StorageIcon sx={{ fontSize: 15 }} />} defaultOpen={false}>
-              {isProductRow && (
+              {(isProductRow || isRecentlyViewed) && (
                 <>
-                  <FormControl size="small" fullWidth>
+                  {isProductRow && <FormControl size="small" fullWidth>
                     <InputLabel>Product Source</InputLabel>
                     <Select
                       value={section.source || 'featured'}
@@ -1213,18 +1257,24 @@ const DesignerSectionEditor = ({
                     >
                       {PRODUCT_SOURCES.map((s) => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
                     </Select>
-                  </FormControl>
+                  </FormControl>}
+                  {isProductRow && section.source === 'sale' && (
+                    <CampaignLabelSelect value={section.saleLabel} onChange={(value) => {
+                      onChange('saleLabel', value);
+                      onBlur();
+                    }} />
+                  )}
                   <TextField
                     label="Count"
                     type="number"
                     value={section.count || 8}
-                    onChange={(e) => onChange('count', parseInt(e.target.value) || 8)}
+                    onChange={(e) => onChange('count', Math.min(isRecentlyViewed ? 12 : 24, Math.max(1, parseInt(e.target.value) || 8)))}
                     onBlur={onBlur}
                     size="small"
                     fullWidth
-                    inputProps={{ min: 1, max: 24 }}
+                    inputProps={{ min: 1, max: isRecentlyViewed ? 12 : 24 }}
                   />
-                  <TextField
+                  {isProductRow && !(section.source === 'sale' && section.saleLabel) && <TextField
                     label="View All Link"
                     value={section.viewAllLink || ''}
                     onChange={(e) => onChange('viewAllLink', e.target.value)}
@@ -1232,7 +1282,7 @@ const DesignerSectionEditor = ({
                     size="small"
                     fullWidth
                     placeholder="/products?featured=true"
-                  />
+                  />}
                 </>
               )}
               {hasCategories && (

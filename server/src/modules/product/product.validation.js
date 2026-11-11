@@ -6,6 +6,11 @@ const { MIN_SEARCH_QUERY_LENGTH, MAX_SEARCH_QUERY_LENGTH, normalizeSearchQuery }
 
 const productListQuerySchema = Joi.object({
   tags: tagFilterSchema,
+  ids: Joi.array().single().max(12).items(Joi.string().uuid()),
+  discoveryRow: Joi.boolean(),
+  saleLabel: Joi.string().trim().max(100),
+  sale: Joi.boolean(),
+  onSale: Joi.boolean(),
   hasVariants: Joi.boolean(),
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(1000).default(20),

@@ -11,6 +11,11 @@ const { PERMISSIONS, getPermissionsForUser } = require('../../config/permissions
 const { error } = require('../../utils/response');
 const { idParamSchema } = require('../../utils/common.validation');
 const settingsService = require('../settings/settings.service');
+const Joi = require('joi');
+const { recordView } = require('./product.discovery');
+const { publicApiLimiter } = require('../../middleware/rateLimiter.middleware');
+const productViewSchema = Joi.object({ browserId: Joi.string().uuid({ version: 'uuidv4' }).required() });
+
 
 const requireTagPermission = async (req, res, next) => {
   if (req.body?.tags === undefined) return next();
@@ -50,6 +55,17 @@ router.delete('/bulk', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_D
 router.patch('/bulk', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_UPDATE), validate(bulkUpdateSchema), auditLog('Product'), productController.bulkUpdate);
 router.get('/id/:id/related', optionalAuth, productController.getRelated);
 router.get('/id/:id/stock-history', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_READ), validate(idParamSchema, 'params'), productController.getStockHistory);
+
+router.post('/id/:id/view', publicApiLimiter, optionalAuth, validate(idParamSchema, 'params'), validate(productViewSchema), async (req, res, next) => {
+  try {
+    const staff = getPermissionsForUser(req.user).includes(PERMISSIONS.PRODUCTS_READ);
+    const bot = /bot|crawl|spider|slurp/i.test(req.get('User-Agent') || '');
+    if (!staff && !bot) await recordView(req.params.id, req.body.browserId);
+    return res.sendStatus(204);
+  } catch (err) {
+    return next(err);
+  }
+});
 
 router.get('/:slug', optionalAuth, productController.getBySlug);
 

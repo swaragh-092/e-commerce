@@ -38,6 +38,7 @@ const ProductListPage = ({ tag = null }) => {
     const showTopbarFilters = showFilters && !isMobile && filterLayout === 'topbar';
     const showCatalogBreadcrumbs = catalog.showBreadcrumbs !== false;
     const pricingEnabled = useFeatureVisible('pricing', 'storefront');
+    const ordersEnabled = useFeature('orders');
     const showPrice = useFeature('showPrice');
     const brandsEnabled = useFeature('brands');
 
@@ -52,7 +53,8 @@ const ProductListPage = ({ tag = null }) => {
         sort: searchParams.get('sort') || defaultSort,
         minPrice: searchParams.get('minPrice') || '',
         maxPrice: searchParams.get('maxPrice') || '',
-        ...(searchParams.get('onSale') === 'true' && { saleStatus: 'active' }),
+        ...(searchParams.get('onSale') === 'true' && { onSale: true }),
+        ...(searchParams.get('saleLabel') && { saleLabel: searchParams.get('saleLabel') }),
         status: 'published',
         limit: defaultLimit,
     };
@@ -206,7 +208,10 @@ const ProductListPage = ({ tag = null }) => {
                             startAdornment={<SortIcon fontSize="small" sx={{ mr: 0.5, color: 'text.secondary' }} />}
                             sx={{ borderRadius: 1.5, bgcolor: 'background.paper' }}
                         >
-                            <MenuItem value="newest">Newest Arrivals</MenuItem>
+                            <MenuItem value="newest">Newest Added</MenuItem>
+                            <MenuItem value="arrivals">New Arrivals</MenuItem>
+                            {ordersEnabled && <MenuItem value="best-selling">Best Sellers</MenuItem>}
+                            <MenuItem value="most-viewed">Most Viewed</MenuItem>
                             {pricingEnabled && showPrice && <MenuItem value="price_asc">Price: Low to High</MenuItem>}
                             {pricingEnabled && showPrice && <MenuItem value="price_desc">Price: High to Low</MenuItem>}
                             <MenuItem value="name_asc">Name: A to Z</MenuItem>

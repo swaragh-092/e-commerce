@@ -19,6 +19,7 @@ const {
   sequelize,
 } = require('../index');
 const { Op } = Sequelize;
+const discovery = require('./product.discovery');
 const salePriceIsDiscounted = Sequelize.where(Sequelize.col('Product.sale_price'), Op.lt, Sequelize.col('Product.price'));
 const { generateSlug } = require('../../utils/slugify');
 // Note: Although the ARCHITECTURE/STANDARDS refer to generateUniqueSlug(),
@@ -468,6 +469,8 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     where[Op.and] = [...(where[Op.and] || []), Sequelize.literal(`${hasVariants ? '' : 'NOT '}EXISTS (SELECT 1 FROM "product_variants" AS copy_variant WHERE copy_variant.product_id = "Product".id AND copy_variant.deleted_at IS NULL)`)];
   }
 
+  if (filters.ids) where.id = { [Op.in]: filters.ids };
+
   // Filter Logic
   if (typeof filters.search === 'string' && filters.search.length > 0) {
     const trimmed = normalizeSearchQuery(filters.search);
@@ -560,7 +563,14 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   if (tagFilter) where[Op.and] = [...(where[Op.and] || []), tagFilter];
 
   // sale: salePrice is set AND sale window is active (or no window defined)
-  if (filters.onSale === 'true' || filters.onSale === true || filters.sale === 'true' || filters.sale === true) {
+  if (filters.saleLabel) {
+    const labelExists = labelPresets.some((label) => label.id === filters.saleLabel);
+    where.saleLabel = filters.saleLabel;
+    if (!features.pricing || !labelExists) {
+      where[Op.and] = [...(where[Op.and] || []), Sequelize.literal('FALSE')];
+    }
+  }
+  if (filters.saleLabel || filters.onSale === 'true' || filters.onSale === true || filters.sale === 'true' || filters.sale === true) {
     where[Op.and] = [
       ...(where[Op.and] || []),
       Sequelize.literal(buildSqlSaleCondition(labelPresets, now, '"Product"')),
@@ -568,16 +578,24 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   }
 
   const SORTABLE_FIELDS = { price: 'price', quantity: 'quantity', name: 'name', createdAt: 'createdAt' };
-  if (filters.sort === 'best-selling') {
-    // Subquery: rank products by total units sold across all orders
-    order.push([
-      Sequelize.literal(`(
-        SELECT COALESCE(SUM(oi.quantity), 0)
-        FROM order_items oi
-        WHERE oi.product_id = "Product"."id"
-      )`),
-      'DESC',
-    ]);
+  const ranking = filters.sort === 'best-selling' ? discovery.bestSellers
+    : filters.sort === 'most-viewed' ? discovery.mostViewed : null;
+  if (ranking) {
+    const minimum = filters.discoveryRow ? (filters.sort === 'best-selling' ? 2 : 5) : 1;
+    const condition = filters.sort === 'best-selling' && !features.orders ? 'FALSE' : `${ranking} >= ${minimum}`;
+    where[Op.and] = [...(where[Op.and] || []), Sequelize.literal(condition)];
+    if (filters.sort === 'most-viewed') {
+      where[Op.and].push(Sequelize.literal(`EXISTS (
+        SELECT 1 FROM storefront_product_views
+        WHERE view_date <= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date - 6
+      )`));
+    }
+    order.push([Sequelize.literal(ranking), 'DESC'], ['id', 'ASC']);
+  } else if (filters.sort === 'arrivals') {
+    if (filters.discoveryRow) {
+      where[Op.and] = [...(where[Op.and] || []), Sequelize.literal(`${discovery.arrival} >= NOW() - INTERVAL '30 days'`)];
+    }
+    order.push([Sequelize.literal(discovery.arrival), 'DESC'], ['id', 'ASC']);
   } else if (filters.sortBy && SORTABLE_FIELDS[filters.sortBy]) {
     const dir = filters.sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
     order.push([SORTABLE_FIELDS[filters.sortBy], dir]);

@@ -9,6 +9,7 @@ const PRODUCT_SOURCES = [
   { value: 'featured', label: 'Featured' },
   { value: 'sale', label: 'On Sale' },
   { value: 'bestSellers', label: 'Best Sellers' },
+  { value: 'mostViewed', label: 'Most Viewed' },
   { value: 'newest', label: 'Newest' },
   { value: 'recommended', label: 'Recommended' },
 ];

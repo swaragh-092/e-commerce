@@ -26,3 +26,10 @@ describe('storefront tag browsing', () => {
     await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({ tags: '', category: '' })));
   });
 });
+
+it('keeps the selected sale campaign on the next catalog page', async () => {
+  render(<MemoryRouter initialEntries={['/products?saleLabel=summer-sale']}><ProductListPage /></MemoryRouter>);
+  await waitFor(() => expect(getProducts).toHaveBeenCalledWith(expect.objectContaining({ saleLabel: 'summer-sale' })));
+  fireEvent.click(await screen.findByRole('button', { name: 'Go to page 2' }));
+  await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({ saleLabel: 'summer-sale', page: 2 })));
+});

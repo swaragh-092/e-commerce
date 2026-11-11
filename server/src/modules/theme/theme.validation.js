@@ -29,7 +29,7 @@ const CARD_STYLES = ['elevated', 'outlined', 'flat'];
 const BG_STYLES = ['softGradient', 'solid'];
 const FONT_WEIGHTS = ['300', '400', '500', '600', '700', '800', '900'];
 const SECTION_TYPES = ['hero-carousel', 'value-props', 'category-shortcuts', 'promo-banners', 'product-row', 'brand-showcase', 'editorial-image-text', 'testimonials', 'logo-cloud', 'newsletter-signup', 'countdown-sale', 'featured-collection-grid', 'faq', 'trust-badges', 'recently-viewed'];
-const PRODUCT_SOURCES = ['featured', 'sale', 'bestSellers', 'newest', 'recommended'];
+const PRODUCT_SOURCES = ['featured', 'sale', 'bestSellers', 'mostViewed', 'newest', 'recommended'];
 const DATA_SOURCE_TYPES = ['apiBuilder'];
 const API_BUILDER_RESOURCES = ['products', 'categories', 'brands', 'productImages', 'tags', 'media', 'pages'];
 const API_BUILDER_OPERATORS = ['equals', 'contains', 'in', 'gte', 'lte', 'between'];
@@ -183,6 +183,7 @@ const homepageSectionSchema = Joi.object({
   title: safeText,
   subtitle: safeText,
   source: Joi.string().valid(...PRODUCT_SOURCES),
+  saleLabel: Joi.string().trim().max(100).allow('', null),
   dataSourceKey: Joi.string().max(80).allow('', null),
   dataSourceSlug: Joi.string().max(140).allow('', null),
   count: Joi.number().integer().min(1).max(50),

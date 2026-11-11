@@ -54,3 +54,15 @@ export const getStockHistory = async (id, params = {}) => {
   const response = await api.get(`/products/id/${id}/stock-history`, { params });
   return response.data;
 };
+
+export const trackProductView = async (productId) => {
+  if (!productId || document.visibilityState !== 'visible') return;
+  const key = 'storefront_view_browser_id';
+  try {
+    const browserId = localStorage.getItem(key) || crypto.randomUUID();
+    localStorage.setItem(key, browserId);
+    await api.post(`/products/id/${productId}/view`, { browserId });
+  } catch {
+    // Analytics is optional during product browsing.
+  }
+};
