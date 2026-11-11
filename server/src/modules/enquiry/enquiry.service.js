@@ -382,7 +382,7 @@ class EnquiryService {
         null,
         'email',
         transaction
-      ) : routed.length === 0 || routed.some(Boolean);
+      ) : routed.some(Boolean);
 
       if (!queued) {
         throw new Error('Reply email could not be queued');

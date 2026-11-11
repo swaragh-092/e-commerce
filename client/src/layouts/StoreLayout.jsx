@@ -19,7 +19,6 @@ import StoreHeaderLogo from '../components/layout/StoreHeaderLogo';
 import { useWishlist } from '../context/WishlistContext';
 import { useCategories } from '../context/CategoryContext';
 import SearchWidget from '../components/search/SearchWidget';
-import DarkModeToggle from '../components/layout/DarkModeToggle';
 import PageService from '../services/pageService';
 import MenuService from '../services/menuService';
 import MenuChildrenMore from '../components/layout/MenuChildrenMore';
@@ -456,9 +455,6 @@ const StoreLayout = () => {
           )}
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.125, sm: 0.5 }, flexShrink: 0 }}>
-            <Box sx={{ display: { xs: 'none', md: 'flex' } }}>
-              <DarkModeToggle />
-            </Box>
             {actionsOrder.map((actionKey) => {
               if (actionKey === 'search') {
                 return showSearch ? (

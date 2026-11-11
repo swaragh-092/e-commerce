@@ -36,4 +36,12 @@ describe('Saved enquiry replies', () => {
     expect(transaction.rollback).toHaveBeenCalledOnce();
     expect(transaction.commit).not.toHaveBeenCalled();
   });
+  it('does not report success when the enquiry reply event is explicitly disabled', async () => {
+    notifications.sendEvent.mockResolvedValue([]);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(service.replyToEnquiry('eq', 'New reply', 'staff-id')).rejects.toThrow('Failed to send reply email');
+    expect(notifications.send).not.toHaveBeenCalled();
+    expect(transaction.rollback).toHaveBeenCalledOnce();
+    expect(transaction.commit).not.toHaveBeenCalled();
+  });
 });

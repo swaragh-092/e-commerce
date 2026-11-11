@@ -1,9 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useContext } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { useTheme } from '@mui/material/styles';
-import { SettingsContext, SettingsProvider, useDesignTokens } from '../../context/ThemeContext';
+import { SettingsContext, SettingsProvider, useAdminThemeMode, useDesignTokens } from '../../context/ThemeContext';
+import DarkModeToggle from '../../components/layout/DarkModeToggle';
 
 const settings = {
   theme: {
@@ -27,15 +28,23 @@ vi.mock('../../services/settingsService', () => ({
 
 const Probe = () => {
   const theme = useTheme();
+  const { isDark } = useAdminThemeMode();
   const { cssVariables, isAdminRoute, tokens } = useDesignTokens();
   return (
+    <>
     <div
       data-testid="probe"
       data-admin={String(isAdminRoute)}
       data-has-vars={String(Object.keys(cssVariables).length > 0)}
       data-primary={tokens.colors.primary}
       data-ui-primary={theme.palette.primary.main}
+      data-ui-mode={theme.palette.mode}
+      data-is-dark={String(isDark)}
+      data-store-mode={tokens.mode}
+      data-background={theme.palette.background.default}
     />
+    <DarkModeToggle />
+    </>
   );
 };
 
@@ -131,5 +140,29 @@ describe('SettingsProvider admin/storefront theme separation', () => {
     await waitFor(() => expect(probe.dataset.uiPrimary).toBe('#126443'));
     expect(probe.dataset.primary).toBe('#2563eb');
     expect(probe.dataset.hasVars).toBe('false');
+  });
+
+  it('keeps the storefront in light mode even if saved theme settings request dark mode', async () => {
+    service.getAllSettings.mockResolvedValue({ ...settings, theme: { ...settings.theme, mode: 'dark' } });
+    renderAt('/');
+    const probe = await screen.findByTestId('probe');
+
+    await waitFor(() => expect(probe.dataset.uiMode).toBe('light'));
+    expect(probe.dataset.storeMode).toBe('light');
+    expect(document.documentElement.style.getPropertyValue('--store-theme-mode')).toBe('light');
+  });
+
+  it('toggles and persists the admin dark theme independently', async () => {
+    renderAt('/admin');
+    const probe = await screen.findByTestId('probe');
+
+    await waitFor(() => expect(probe.dataset.uiMode).toBe('light'));
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to dark mode' }));
+
+    await waitFor(() => expect(probe.dataset.uiMode).toBe('dark'));
+    expect(screen.getByRole('button', { name: 'Switch to light mode' })).toBeInTheDocument();
+    expect(probe.dataset.isDark).toBe('true');
+    expect(probe.dataset.background).toBe('#0b1220');
+    expect(localStorage.getItem('adminDarkMode')).toBe('true');
   });
 });
