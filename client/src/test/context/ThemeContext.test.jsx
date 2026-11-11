@@ -90,17 +90,30 @@ describe('SettingsProvider admin/storefront theme separation', () => {
   });
 
   it('applies draft settings for multiple pages without reloading the preview', async () => {
+    service.getFeatures.mockResolvedValue({
+      mode: 'ecommerce',
+      features: { wishlist: true, cart: true },
+      lockedKeys: ['cart'],
+      visibility: { storefront: { cart: true } },
+    });
     const initialUrl = window.location.href;
     const parent = document.createElement('iframe');
     document.body.append(parent);
     const parentMock = vi.spyOn(window, 'parent', 'get').mockReturnValue(parent.contentWindow);
     window.history.replaceState(null, '', '/products/sample?previewMode=1');
     localStorage.setItem('storePreviewTheme', JSON.stringify(settings));
-    const SettingsProbe = () => (
-      <output data-testid="page-settings">{JSON.stringify(useContext(SettingsContext).settings)}</output>
-    );
+    const SettingsProbe = () => {
+      const context = useContext(SettingsContext);
+      return <>
+        <output data-testid="page-settings">{JSON.stringify(context.settings)}</output>
+        <output data-testid="preview-features">{JSON.stringify(context.features)}</output>
+        <output data-testid="preview-visibility">{JSON.stringify(context.visibility)}</output>
+      </>;
+    };
     const updated = {
       ...settings,
+      features: { wishlist: false, cart: false },
+      visibility: { storefrontCart: false },
       productPage: { showBreadcrumbs: false, showSKU: false, showStockBadge: false, addToCartLabel: 'Add to basket' },
       categoryPage: { headerLayout: 'split' },
       catalog: { gridColumns: 3 },
@@ -126,6 +139,8 @@ describe('SettingsProvider admin/storefront theme separation', () => {
       expect(JSON.parse(screen.getByTestId('page-settings').textContent)).toEqual(settings);
       send(parent.contentWindow, window.location.origin);
       expect(JSON.parse(screen.getByTestId('page-settings').textContent)).toEqual(updated);
+      expect(JSON.parse(screen.getByTestId('preview-features').textContent)).toEqual({ wishlist: false, cart: true });
+      expect(JSON.parse(screen.getByTestId('preview-visibility').textContent)).toEqual({ storefront: { cart: false } });
     } finally {
       window.history.replaceState(null, '', initialUrl);
       parentMock.mockRestore();

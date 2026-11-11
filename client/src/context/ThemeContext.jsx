@@ -227,6 +227,31 @@ export const SettingsProvider = ({ children }) => {
     [isAdminRoute, storefrontTokens, t]
   );
 
+  const previewFeatures = useMemo(() => {
+    if (!previewMode || !features) return features;
+    const draftFeatures = { ...features };
+    for (const key of Object.keys(features)) {
+      const value = settings?.features?.[key];
+      if (value != null && !lockedKeys.includes(key)) {
+        draftFeatures[key] = value === true || value === 'true';
+      }
+    }
+    return draftFeatures;
+  }, [previewMode, features, settings?.features, lockedKeys]);
+
+  const previewVisibility = useMemo(() => {
+    if (!previewMode || !visibility) return visibility;
+    return Object.fromEntries(Object.entries(visibility).map(([surface, values]) => [
+      surface,
+      Object.fromEntries(Object.entries(values).map(([key, enabled]) => {
+        const preference = settings?.visibility?.[surface + key[0].toUpperCase() + key.slice(1)];
+        return [key, preference == null ? enabled : (
+          previewFeatures?.[key] === true && (preference === true || preference === 'true')
+        )];
+      })),
+    ]));
+  }, [previewMode, visibility, settings?.visibility, previewFeatures]);
+
   // Memoize the SettingsContext value object — without this, every
   // consumer of useSettings() re-renders on ANY change to any of the
   // 6 fields below. Combined with the new DesignTokensContext, components
@@ -236,13 +261,13 @@ export const SettingsProvider = ({ children }) => {
     () => ({
       settings,
       mode,        // 'ecommerce' | 'catalog'
-      features,    // fully resolved feature map — use useFeature() to read individual flags
-      visibility,  // Tier 1 presentation switches — use useFeatureVisible()
+      features: previewFeatures, // fully resolved feature map — use useFeature() to read individual flags
+      visibility: previewVisibility, // Tier 1 presentation switches — use useFeatureVisible()
       lockedKeys,  // Tier 1 keys — use useIsFeatureLocked() to read
       loading,
       refreshSettings: fetchSettings,
     }),
-    [settings, mode, features, visibility, lockedKeys, loading, fetchSettings]
+    [settings, mode, previewFeatures, previewVisibility, lockedKeys, loading, fetchSettings]
   );
 
   // Expose resolved storefront design tokens as CSS custom properties for custom CSS and widgets.

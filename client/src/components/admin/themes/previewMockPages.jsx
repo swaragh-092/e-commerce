@@ -78,6 +78,27 @@ export const renderMockProductInfoOnly = (settingsObj, previewContext = {}) => {
   const isEditorial = ['luxury-editorial', 'editorial'].includes(productTemplateLayout);
   const isLuxury = productTemplateLayout === 'luxury-editorial';
 
+  const purchaseControls = (
+    <>
+      <Typography variant="caption" color="text.secondary" fontWeight={700}>Select Color</Typography>
+      <Box sx={{ display: 'flex', gap: 1, mt: 0.5, mb: 2 }}>
+        {['#e5d5c5', '#1e293b'].map((c, i) => (
+          <Box key={c} sx={{ width: 20, height: 20, borderRadius: '50%', bgcolor: c, border: i === 0 ? '2px solid' : '1px solid', borderColor: i === 0 ? 'primary.main' : 'divider' }} />
+        ))}
+      </Box>
+      <Typography variant="caption" color="text.secondary" fontWeight={700}>Select Size</Typography>
+      <Box sx={{ display: 'flex', gap: 0.75, mt: 0.5, mb: 2.5 }}>
+        {['S', 'M', 'L'].map((s, i) => (
+          <Box key={s} sx={{ px: 1.25, py: 0.25, border: '1px solid', borderColor: i === 1 ? 'primary.main' : 'divider', borderRadius: 'var(--store-radius)', fontSize: '0.7rem', fontWeight: i === 1 ? 700 : 500, bgcolor: i === 1 ? 'primary.main' : 'transparent', color: i === 1 ? '#fff' : 'text.primary' }}>{s}</Box>
+        ))}
+      </Box>
+      <Stack spacing={1}>
+        <Button variant="contained" color="primary" fullWidth size="small" startIcon={<ShoppingBagOutlinedIcon />}>{addToCartLabel}</Button>
+        {showBuyNowButton && <Button variant="contained" color="secondary" fullWidth size="small">{buyNowLabel}</Button>}
+      </Stack>
+    </>
+  );
+
   return (
     <Box onClick={handleSectionClick} sx={{ p: { xs: 2, md: 4 }, maxWidth: 1200, mx: 'auto', bgcolor: 'background.default', ...editableSectionSx }}>
       {showBreadcrumbs && (
@@ -174,27 +195,13 @@ export const renderMockProductInfoOnly = (settingsObj, previewContext = {}) => {
               <Typography variant="h5" color="primary.main" fontWeight={800} sx={{ mb: 2 }}>{productPrice}</Typography>
               <Divider sx={{ my: 2 }} />
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>{productDesc}</Typography>
+              {!showStickyPurchasePanel && purchaseControls}
             </Grid>
 
             {showStickyPurchasePanel && <Grid item xs={12} md={3}>
               <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 'var(--store-radius-card)', bgcolor: 'background.paper', position: 'sticky', top: 20 }}>
                 <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5 }}>Purchase Options</Typography>
-                <Typography variant="caption" color="text.secondary" fontWeight={700}>Select Color</Typography>
-                <Box sx={{ display: 'flex', gap: 1, mt: 0.5, mb: 2 }}>
-                  {['#e5d5c5', '#1e293b'].map((c, i) => (
-                    <Box key={c} sx={{ width: 20, height: 20, borderRadius: '50%', bgcolor: c, border: i === 0 ? '2px solid' : '1px solid', borderColor: i === 0 ? 'primary.main' : 'divider' }} />
-                  ))}
-                </Box>
-                <Typography variant="caption" color="text.secondary" fontWeight={700}>Select Size</Typography>
-                <Box sx={{ display: 'flex', gap: 0.75, mt: 0.5, mb: 2.5 }}>
-                  {['S', 'M', 'L'].map((s, i) => (
-                    <Box key={s} sx={{ px: 1.25, py: 0.25, border: '1px solid', borderColor: i === 1 ? 'primary.main' : 'divider', borderRadius: 'var(--store-radius)', fontSize: '0.7rem', fontWeight: i === 1 ? 700 : 500, bgcolor: i === 1 ? 'primary.main' : 'transparent', color: i === 1 ? '#fff' : 'text.primary' }}>{s}</Box>
-                  ))}
-                </Box>
-                <Stack spacing={1}>
-                  <Button variant="contained" color="primary" fullWidth size="small" startIcon={<ShoppingBagOutlinedIcon />}>{addToCartLabel}</Button>
-                  {showBuyNowButton && <Button variant="contained" color="secondary" fullWidth size="small">{buyNowLabel}</Button>}
-                </Stack>
+                {purchaseControls}
               </Box>
             </Grid>}
           </>
@@ -753,6 +760,7 @@ export const renderMockCartMain = (settingsObj, previewContext = {}) => {
   const cp = settingsObj?.cartPage || {};
   const layout = cp.layout || 'standard';
   const isCompact = layout === 'compact';
+  const stackColumns = isCompact || layout === 'stacked';
   const showTrustBadges = cp.showTrustBadges !== false;
   const showCoupon = cp.showCoupon === true;
   const showSavings = cp.showSavings === true;
@@ -771,7 +779,7 @@ export const renderMockCartMain = (settingsObj, previewContext = {}) => {
     <Box onClick={editableProps.onClick} sx={{ p: { xs: 2, md: isCompact ? 3 : 4 }, maxWidth: isCompact ? 900 : 1080, mx: 'auto', bgcolor: 'background.default', ...(editableProps.sx || {}) }}>
       <Typography variant="h4" fontWeight={800} sx={{ mb: 4, fontFamily: 'var(--store-font-heading)' }}>Shopping Cart</Typography>
       <Grid container spacing={4}>
-        <Grid item xs={12} md={isCompact ? 12 : 8}>
+        <Grid item xs={12} md={stackColumns ? 12 : 8}>
           <Stack spacing={2.5}>
             {items.map((item, i) => (
               <Box key={i} sx={{ display: 'flex', gap: 2, pb: 2.5, borderBottom: '1px solid', borderColor: 'divider' }}>
@@ -802,8 +810,8 @@ export const renderMockCartMain = (settingsObj, previewContext = {}) => {
           )}
         </Grid>
 
-        <Grid item xs={12} md={isCompact ? 12 : 4}>
-          <Box sx={{ p: isCompact ? 2 : 3, border: '1px solid', borderColor: 'divider', borderRadius: 'var(--store-radius-card)', bgcolor: 'background.paper', position: isCompact ? 'static' : 'sticky', top: 20 }}>
+        <Grid item xs={12} md={stackColumns ? 12 : 4}>
+          <Box sx={{ p: isCompact ? 2 : 3, border: '1px solid', borderColor: 'divider', borderRadius: 'var(--store-radius-card)', bgcolor: 'background.paper', position: stackColumns ? 'static' : 'sticky', top: 20 }}>
             <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 2 }}>Order Summary</Typography>
             <Stack spacing={1.5} sx={{ mb: 2 }}>
               <Stack direction="row" justifyContent="space-between"><Typography color="text.secondary">Subtotal</Typography><Typography fontWeight={700}>$603.00</Typography></Stack>

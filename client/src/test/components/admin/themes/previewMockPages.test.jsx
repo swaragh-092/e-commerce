@@ -8,9 +8,24 @@ import {
   renderMockCategoryProductsOnly,
   renderMockCheckoutMain,
   renderMockOrdersMain,
+  renderMockProductInfoOnly,
 } from '../../../../components/admin/themes/previewMockPages';
 
 describe('store designer sample page previews', () => {
+  it('keeps purchase controls inline when the sticky panel is disabled', () => {
+    render(renderMockProductInfoOnly({ productPage: {
+      templateLayout: 'sticky-purchase-panel',
+      showStickyAddToCart: false,
+      addToCartLabel: 'Add to basket',
+      buyNowLabel: 'Buy this item',
+    } }));
+
+    expect(screen.queryByText('Purchase Options')).not.toBeInTheDocument();
+    expect(screen.getByText('Select Size')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add to basket' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Buy this item' })).toBeInTheDocument();
+  });
+
   it('shows the configured category fallback title and subcategory visibility', () => {
     render(renderMockCategoryHeaderOnly({
       categoryPage: { heroTitle: 'Seasonal picks', headerLayout: 'split', showSubcategories: false },
