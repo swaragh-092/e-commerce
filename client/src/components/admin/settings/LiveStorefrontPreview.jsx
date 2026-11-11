@@ -8,8 +8,7 @@
  *  2. The iframe loads /?previewMode=1.
  *  3. ThemeContext detects previewMode=1 and reads settings from localStorage['storePreviewTheme']
  *     instead of the API, giving an isolated preview without touching production data.
- *  4. Every time the form changes, we postMessage the updated preview data to the iframe,
- *     which applies the new CSS vars instantly (no reload needed for colours/fonts).
+ *  4. The iframe receives the latest draft settings when it loads and whenever they change.
  *
  * Device frames:
  *   mobile  → 375px wide
@@ -32,7 +31,6 @@ import TabletIcon from '@mui/icons-material/Tablet';
 import DesktopWindowsIcon from '@mui/icons-material/DesktopWindows';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import { buildStorefrontCssVariables } from '../../../utils/theme';
 
 // ─── Device configuration ─────────────────────────────────────────────────────
 
@@ -62,9 +60,8 @@ const formToNestedSettings = (form) => {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function LiveStorefrontPreview({ form, settings, path = '/', reloadOnSettingsChange = false, reloadDelay = 450, device: controlledDevice, showToolbar = true, showStatusText = showToolbar, frameHeight }) {
+export default function LiveStorefrontPreview({ form, settings, path = '/', device: controlledDevice, showToolbar = true, showStatusText = showToolbar, frameHeight }) {
   const iframeRef  = useRef(null);
-  const lastSnapshotRef = useRef('');
   const [localDevice, setLocalDevice] = useState('desktop');
   const [iframeKey, setIframeKey] = useState(0); // bump to force iframe reload
   const [ready, setReady]       = useState(false);
@@ -80,78 +77,35 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', relo
   const device = controlledDevice || localDevice;
   const cfg = DEVICES[device] || DEVICES.desktop;
 
-  // ── Write preview settings to localStorage whenever form/settings changes ─
-  useEffect(() => {
+  const syncSettings = useCallback(() => {
     const nested = settings || formToNestedSettings(form);
-    if (!nested || Object.keys(nested).length === 0) return;
+    if (!Object.keys(nested).length) return;
+
     try {
       localStorage.setItem(PREVIEW_KEY, JSON.stringify(nested));
     } catch {
-      // localStorage quota exceeded — degrade gracefully
+      // The iframe can still receive settings through postMessage.
     }
-
-    // If iframe is already mounted, postMessage the new CSS vars so colours/fonts
-    // update instantly without a full reload.
-    const iframe = iframeRef.current;
-    if (iframe && ready) {
-      const vars = buildStorefrontCssVariables(nested, null);
-      iframe.contentWindow?.postMessage(
-        { type: 'PREVIEW_THEME_UPDATE', vars },
-        window.location.origin,
-      );
-    }
-  }, [form, settings, ready]);
-
-
-  // Layout/page settings are read by the iframe at boot. When Store Designer
-  // changes those values, reload after a short debounce so the real route picks
-  // up the new localStorage snapshot without saving production settings.
-  useEffect(() => {
-    if (!reloadOnSettingsChange) return undefined;
-    const nested = settings || formToNestedSettings(form);
-    if (!nested || Object.keys(nested).length === 0) return undefined;
-
-    let snapshot;
-    try {
-      snapshot = JSON.stringify({ path, settings: nested });
-    } catch {
-      return undefined;
-    }
-
-    if (!lastSnapshotRef.current) {
-      lastSnapshotRef.current = snapshot;
-      return undefined;
-    }
-
-    if (lastSnapshotRef.current === snapshot) return undefined;
-    lastSnapshotRef.current = snapshot;
-
-    const timer = window.setTimeout(() => {
-      setReady(false);
-      setIframeKey((k) => k + 1);
-    }, reloadDelay);
-
-    return () => window.clearTimeout(timer);
-  }, [form, settings, path, reloadOnSettingsChange, reloadDelay]);
-
-  // ── Cleanup: remove preview key when admin unmounts the panel ────────────
-  useEffect(() => {
-    return () => {
-      localStorage.removeItem(PREVIEW_KEY);
-    };
-  }, []);
-
-  const handleLoad = useCallback(() => {
-    setReady(true);
-    // Re-send current vars after iframe reload
-    const nested = settings || formToNestedSettings(form);
-    if (!nested || Object.keys(nested).length === 0) return;
-    const vars = buildStorefrontCssVariables(nested, null);
     iframeRef.current?.contentWindow?.postMessage(
-      { type: 'PREVIEW_THEME_UPDATE', vars },
+      { type: 'PREVIEW_SETTINGS_UPDATE', settings: nested },
       window.location.origin,
     );
   }, [form, settings]);
+
+  useEffect(syncSettings, [syncSettings]);
+
+  useEffect(() => () => {
+    try {
+      localStorage.removeItem(PREVIEW_KEY);
+    } catch {
+      // Storage is optional for the embedded preview.
+    }
+  }, []);
+
+  const handleLoad = () => {
+    syncSettings();
+    setReady(true);
+  };
 
   const handleRefresh = () => {
     setReady(false);
@@ -280,7 +234,7 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', relo
 
       {showStatusText && (
         <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center' }}>
-          Colours and fonts update instantly. Layout changes refresh on next reload.
+          Draft design changes update in the preview as you edit.
         </Typography>
       )}
     </Box>

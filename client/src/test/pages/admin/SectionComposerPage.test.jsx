@@ -42,8 +42,13 @@ describe('Store Designer section editing', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Home/ }));
     fireEvent.click(await screen.findByText('Product', { selector: '.MuiListItemText-primary' }));
     expect(await screen.findByText('Real storefront /products/sample-product')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Interactive editor preview' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Interactive editor preview' })).toBeEnabled();
     expect(screen.queryByRole('button', { name: 'Preview Product recommendations' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Interactive editor preview' }));
+    expect(await screen.findByText(/with sample content/)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Preview Product recommendations' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Read-only live storefront preview' }));
+    expect(await screen.findByText('Real storefront /products/sample-product')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Save draft/i })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: /^Product/ }));
     fireEvent.click(await screen.findByText('Home', { selector: '.MuiListItemText-primary' }));

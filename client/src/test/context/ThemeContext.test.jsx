@@ -1,8 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import { useContext } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { useTheme } from '@mui/material/styles';
-import { SettingsProvider, useDesignTokens } from '../../context/ThemeContext';
+import { SettingsContext, SettingsProvider, useDesignTokens } from '../../context/ThemeContext';
 
 const settings = {
   theme: {
@@ -77,6 +78,50 @@ describe('SettingsProvider admin/storefront theme separation', () => {
     expect(probe.dataset.primary).toBe('#2563eb');
     expect(document.documentElement.style.getPropertyValue('--store-color-primary')).toBe('#2563eb');
     expect(document.getElementById('admin-custom-css')?.textContent).toContain('storefront-only');
+  });
+
+  it('applies draft settings for multiple pages without reloading the preview', async () => {
+    const initialUrl = window.location.href;
+    const parent = document.createElement('iframe');
+    document.body.append(parent);
+    const parentMock = vi.spyOn(window, 'parent', 'get').mockReturnValue(parent.contentWindow);
+    window.history.replaceState(null, '', '/products/sample?previewMode=1');
+    localStorage.setItem('storePreviewTheme', JSON.stringify(settings));
+    const SettingsProbe = () => (
+      <output data-testid="page-settings">{JSON.stringify(useContext(SettingsContext).settings)}</output>
+    );
+    const updated = {
+      ...settings,
+      productPage: { showBreadcrumbs: false, showSKU: false, showStockBadge: false, addToCartLabel: 'Add to basket' },
+      categoryPage: { headerLayout: 'split' },
+      catalog: { gridColumns: 3 },
+      homepage: { sections: [] },
+      blogPage: { showAuthor: false },
+      brandsPage: { heroTitle: 'Our brands' },
+      cartPage: { emptyStateText: 'Your basket is empty' },
+      accountPage: { showSupportInfo: true },
+      checkoutPage: { paymentHeading: 'Payment options' },
+      searchPage: { showResultCount: false },
+      ordersPage: { emptyHeadline: 'No purchases yet' },
+      notFoundPage: { headline: 'Page unavailable' },
+    };
+    try {
+      render(<MemoryRouter><SettingsProvider><SettingsProbe /></SettingsProvider></MemoryRouter>);
+      await screen.findByTestId('page-settings');
+      const send = (source, origin) => act(() => window.dispatchEvent(new MessageEvent('message', {
+        origin, source, data: { type: 'PREVIEW_SETTINGS_UPDATE', settings: updated },
+      })));
+      send(window, window.location.origin);
+      expect(JSON.parse(screen.getByTestId('page-settings').textContent)).toEqual(settings);
+      send(parent.contentWindow, 'https://other.example');
+      expect(JSON.parse(screen.getByTestId('page-settings').textContent)).toEqual(settings);
+      send(parent.contentWindow, window.location.origin);
+      expect(JSON.parse(screen.getByTestId('page-settings').textContent)).toEqual(updated);
+    } finally {
+      window.history.replaceState(null, '', initialUrl);
+      parentMock.mockRestore();
+      parent.remove();
+    }
   });
 
   it('uses saved admin colors without changing storefront tokens', async () => {

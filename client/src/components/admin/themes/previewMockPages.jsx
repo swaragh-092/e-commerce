@@ -71,6 +71,7 @@ export const renderMockProductInfoOnly = (settingsObj, previewContext = {}) => {
   const showBreadcrumbs = pp.showBreadcrumbs !== false;
   const showSku = pp.showSKU !== false;
   const showStockBadge = pp.showStockBadge !== false;
+  const showStickyPurchasePanel = pp.showStickyAddToCart !== false;
 
   const isGalleryTop = productTemplateLayout === 'gallery-top-details-below';
   const isStickyPanel = productTemplateLayout === 'sticky-purchase-panel';
@@ -141,7 +142,7 @@ export const renderMockProductInfoOnly = (settingsObj, previewContext = {}) => {
           </>
         ) : isStickyPanel ? (
           <>
-            <Grid item xs={12} md={5}>
+            <Grid item xs={12} md={showStickyPurchasePanel ? 5 : 6}>
               <Box sx={{ display: 'flex', flexDirection: imageAlignment === 'vertical' ? 'row' : 'column', gap: 1.5 }}>
                 {imageAlignment === 'vertical' && (
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -163,7 +164,7 @@ export const renderMockProductInfoOnly = (settingsObj, previewContext = {}) => {
               </Box>
             </Grid>
 
-            <Grid item xs={12} md={4}>
+            <Grid item xs={12} md={showStickyPurchasePanel ? 4 : 6}>
               <Typography variant="overline" color="text.secondary" fontWeight={700}>{productBrand}</Typography>
               <Typography variant="h4" component="h1" sx={{ mt: 0.5, mb: 1, fontWeight: 'var(--store-font-weight-heading)', fontFamily: 'var(--store-font-heading)' }}>{productTitle}</Typography>
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
@@ -175,7 +176,7 @@ export const renderMockProductInfoOnly = (settingsObj, previewContext = {}) => {
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>{productDesc}</Typography>
             </Grid>
 
-            <Grid item xs={12} md={3}>
+            {showStickyPurchasePanel && <Grid item xs={12} md={3}>
               <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 'var(--store-radius-card)', bgcolor: 'background.paper', position: 'sticky', top: 20 }}>
                 <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5 }}>Purchase Options</Typography>
                 <Typography variant="caption" color="text.secondary" fontWeight={700}>Select Color</Typography>
@@ -195,7 +196,7 @@ export const renderMockProductInfoOnly = (settingsObj, previewContext = {}) => {
                   {showBuyNowButton && <Button variant="contained" color="secondary" fullWidth size="small">{buyNowLabel}</Button>}
                 </Stack>
               </Box>
-            </Grid>
+            </Grid>}
           </>
         ) : (
           <>
@@ -301,7 +302,7 @@ export const renderMockCategoryHeaderOnly = (settingsObj) => {
   const cp = settingsObj?.categoryPage || {};
   const headerLayout = cp.headerLayout || 'standard';
   const showSubcategories = cp.showSubcategories !== false;
-  const catName = "Outerwear & Coats";
+  const catName = cp.heroTitle || 'Shop Category';
 
   const isCover = headerLayout === 'cover';
   const isSplit = headerLayout === 'split';
@@ -347,51 +348,95 @@ export const renderMockCategoryHeaderOnly = (settingsObj) => {
 
 // ─── Category Products ───────────────────────────────────────────────────────
 
-export const renderMockCategoryProductsOnly = () => (
-  <Box sx={{ p: 4, bgcolor: 'background.default' }}>
-    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-      <Typography variant="caption" color="text.secondary" fontWeight={700}>8 Products Found</Typography>
-      <Box sx={{ display: 'flex', gap: 1 }}>
-        <Button size="small" variant="outlined" startIcon={<FilterListIcon />}>Filters</Button>
-        <Button size="small" variant="outlined">Sort: Recommended</Button>
-      </Box>
-    </Stack>
+export const renderMockCategoryProductsOnly = (settingsObj, previewContext = {}) => {
+  const catalog = settingsObj?.catalog || {};
+  const showFilters = catalog.showFilters !== false;
+  const showBreadcrumbs = catalog.showBreadcrumbs !== false;
+  const gridColumns = Math.min(5, Math.max(2, Number(catalog.gridColumns) || 4));
+  const layout = catalog.templateLayout || 'sidebar-filters-grid';
+  const filterLayout = catalog.filterLayout || (layout.includes('top') ? 'topbar' : 'sidebar');
+  const isMobilePreview = previewContext.previewMode === 'mobile' || previewContext.previewMode === 'tablet';
+  const showSidebar = showFilters && !isMobilePreview && filterLayout !== 'topbar';
+  const showTopbar = showFilters && filterLayout === 'topbar' && !isMobilePreview;
+  const showDrawerButton = showFilters && isMobilePreview;
+  const categoryDepth = Math.min(5, Math.max(1, Number(catalog.categoryDepth) || 3));
+  const products = [
+    { title: 'Draped Wool Trench Coat', price: '$345.00' },
+    { title: 'Quilted Puffer Jacket', price: '$220.00' },
+    { title: 'Classic Moto Leather Jacket', price: '$295.00' },
+    { title: 'Double-Breasted Overcoat', price: '$380.00' },
+    { title: 'Wool Blend Jacket', price: '$285.00' },
+  ];
 
-    <Grid container spacing={3}>
-      {[
-        { title: "Draped Wool Trench Coat", price: "$345.00" },
-        { title: "Quilted Puffer Jacket", price: "$220.00" },
-        { title: "Classic Moto Leather Jacket", price: "$295.00" },
-        { title: "Double-Breasted Overcoat", price: "$380.00" }
-      ].map((p, idx) => (
-        <Grid item xs={12} sm={6} md={3} key={idx}>
-          <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 'var(--store-radius-card)', p: 1.5, bgcolor: 'background.paper' }}>
-            <Box sx={{ aspectRatio: '3/4', bgcolor: 'action.hover', borderRadius: 'var(--store-radius)', display: 'grid', placeItems: 'center', mb: 1.5 }}>
-              <Typography variant="caption" color="text.secondary">Product Image</Typography>
+  return (
+    <Box sx={{ p: 4, bgcolor: 'background.default' }}>
+      {showBreadcrumbs && <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>Home / Categories / {settingsObj?.categoryPage?.heroTitle || 'Shop Category'}</Typography>}
+      {showTopbar && (
+        <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap' }}>
+          {['Category', 'Price', 'Brand'].map((label) => <Button key={label} size="small" variant="outlined">{label}</Button>)}
+        </Stack>
+      )}
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+        <Typography variant="caption" color="text.secondary" fontWeight={700}>8 Products Found</Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          {showDrawerButton && <Button size="small" variant="outlined" startIcon={<FilterListIcon />}>Filters</Button>}
+          <Button size="small" variant="outlined">Sort: Recommended</Button>
+        </Box>
+      </Stack>
+      <Grid container spacing={3}>
+        {showSidebar && (
+          <Grid item xs={12} md={3}>
+            <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 'var(--store-radius-card)', bgcolor: 'background.paper' }}>
+              <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 2 }}>Categories · {categoryDepth} levels</Typography>
+              {['Outerwear', 'Coats', 'Wool Coats', 'Longline Wool Coats', 'Lightweight Layers'].slice(0, categoryDepth).map((label, index) => (
+                <Typography key={label} variant="body2" sx={{ py: 0.5, pl: Math.min(index, categoryDepth - 1) * 1.25 }}>{label}</Typography>
+              ))}
             </Box>
-            <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }} noWrap>{p.title}</Typography>
-            <Typography variant="body2" color="primary.main" fontWeight={800}>{p.price}</Typography>
-          </Box>
+          </Grid>
+        )}
+        <Grid item xs={12} md={showSidebar ? 9 : 12}>
+          <Grid container spacing={3}>
+            {products.map((product) => (
+              <Grid item xs={12} sm={6} md={12 / gridColumns} key={product.title}>
+                <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 'var(--store-radius-card)', p: 1.5, bgcolor: 'background.paper' }}>
+                  <Box sx={{ aspectRatio: layout.includes('image-led') ? '4/3' : '3/4', bgcolor: 'action.hover', borderRadius: 'var(--store-radius)', display: 'grid', placeItems: 'center', mb: 1.5 }}>
+                    <Typography variant="caption" color="text.secondary">Product Image</Typography>
+                  </Box>
+                  <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }} noWrap>{product.title}</Typography>
+                  <Typography variant="body2" color="primary.main" fontWeight={800}>{product.price}</Typography>
+                </Box>
+              </Grid>
+            ))}
+          </Grid>
         </Grid>
-      ))}
-    </Grid>
-  </Box>
-);
+      </Grid>
+    </Box>
+  );
+};
 
 // ─── Catalog Header ──────────────────────────────────────────────────────────
 
-export const renderMockCatalogHeaderOnly = () => (
+export const renderMockCatalogHeaderOnly = (settingsObj) => (
   <Box sx={{ p: 4, pb: 0, bgcolor: 'background.default' }}>
+    {settingsObj?.catalog?.showBreadcrumbs !== false && <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>Home / Products</Typography>}
     <Typography variant="h4" fontWeight={800} sx={{ mb: 2, fontFamily: 'var(--store-font-heading)' }}>All Products</Typography>
   </Box>
 );
 
 // ─── Catalog Products ────────────────────────────────────────────────────────
 
-export const renderMockCatalogProductsOnly = (settingsObj) => {
+export const renderMockCatalogProductsOnly = (settingsObj, previewContext = {}) => {
   const cat = settingsObj?.catalog || {};
   const showFilters = cat.showFilters !== false;
   const gridColumns = Number(cat.gridColumns) || 4;
+  const templateLayout = cat.templateLayout || 'sidebar-filters-grid';
+  const filterLayout = cat.filterLayout || (templateLayout.includes('top') ? 'topbar' : 'sidebar');
+  const categoryDepth = Number(cat.categoryDepth) || 3;
+  const isMobilePreview = previewContext.previewMode === 'mobile' || previewContext.previewMode === 'tablet';
+  const showSidebar = showFilters && !isMobilePreview && filterLayout === 'sidebar';
+  const showTopbar = showFilters && filterLayout === 'topbar' && !isMobilePreview;
+  const showDrawerButton = showFilters && (isMobilePreview || filterLayout === 'drawer');
+  const isCompactList = templateLayout.includes('compact') || templateLayout.includes('b2b');
   const showCategoryIcon = cat.showCategoryIcon !== false;
   const priceRangeMax = cat.priceRangeMax || 2000;
   const defaultSort = cat.defaultSort || 'recommended';
@@ -400,15 +445,20 @@ export const renderMockCatalogProductsOnly = (settingsObj) => {
 
   return (
     <Box sx={{ p: 4, pt: 2, bgcolor: 'background.default' }}>
+      {showTopbar && (
+        <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap' }}>
+          {['Category', 'Price', 'Brand'].map((label) => <Button key={label} size="small" variant="outlined">{label}</Button>)}
+        </Stack>
+      )}
       <Grid container spacing={3}>
-        {showFilters && (
+        {showSidebar && (
           <Grid item xs={12} md={3}>
             <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 'var(--store-radius-card)', bgcolor: 'background.paper' }}>
               <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 2 }}>Filters</Typography>
               
-              <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ display: 'block', mb: 1 }}>Categories</Typography>
+              <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ display: 'block', mb: 1 }}>Categories · {categoryDepth} levels</Typography>
               <Stack spacing={1} sx={{ mb: 3 }}>
-                {['New In', 'Apparel', 'Accessories', 'Footwear'].map((c, i) => (
+                {['New In', 'Apparel', 'Accessories', 'Footwear'].slice(0, Math.max(1, categoryDepth)).map((c, i) => (
                   <Stack key={c} direction="row" alignItems="center" justifyContent="space-between" sx={{ fontSize: '0.85rem', cursor: 'pointer', color: i === 1 ? 'primary.main' : 'text.primary', fontWeight: i === 1 ? 700 : 500 }}>
                     <Stack direction="row" alignItems="center" spacing={1}>
                       {showCategoryIcon && <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: i === 1 ? 'primary.main' : 'action.disabled', opacity: 0.7 }} />}
@@ -437,10 +487,13 @@ export const renderMockCatalogProductsOnly = (settingsObj) => {
           </Grid>
         )}
 
-        <Grid item xs={12} md={showFilters ? 9 : 12}>
+        <Grid item xs={12} md={showSidebar ? 9 : 12}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
             <Typography variant="caption" color="text.secondary" fontWeight={700}>Showing 6 of 36 Products</Typography>
-            <Button size="small" variant="outlined">Sort: {defaultSort}</Button>
+            <Stack direction="row" spacing={1}>
+              {showDrawerButton && <Button size="small" variant="outlined" startIcon={<FilterListIcon />}>Filters</Button>}
+              <Button size="small" variant="outlined">Sort: {defaultSort}</Button>
+            </Stack>
           </Stack>
 
           <Grid container spacing={3}>
@@ -451,10 +504,18 @@ export const renderMockCatalogProductsOnly = (settingsObj) => {
               { title: "Lightweight Wool Knit", price: "$145.00" },
               { title: "Cropped Denim Jacket", price: "$110.00" },
               { title: "Silk Evening Skirt", price: "$165.00" }
-            ].slice(0, showFilters ? 6 : 8).map((p, idx) => (
+            ].slice(0, showFilters ? 6 : 8).map((p, idx) => isCompactList ? (
+              <Grid item xs={12} key={idx}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, border: '1px solid', borderColor: 'divider', borderRadius: 'var(--store-radius-card)', p: 1.5, bgcolor: 'background.paper' }}>
+                  <Box sx={{ width: 64, height: 64, flexShrink: 0, aspectRatio: '1/1', bgcolor: 'action.hover', borderRadius: 'var(--store-radius)', display: 'grid', placeItems: 'center' }}><Typography variant="caption" color="text.secondary">Image</Typography></Box>
+                  <Typography variant="body2" fontWeight={700} sx={{ flex: 1 }}>{p.title}</Typography>
+                  <Typography variant="body2" color="primary.main" fontWeight={800}>{p.price}</Typography>
+                </Box>
+              </Grid>
+            ) : (
               <Grid item xs={12} sm={6} md={colWidth} key={idx}>
                 <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 'var(--store-radius-card)', p: 1.5, bgcolor: 'background.paper' }}>
-                  <Box sx={{ aspectRatio: '3/4', bgcolor: 'action.hover', borderRadius: 'var(--store-radius)', display: 'grid', placeItems: 'center', mb: 1.5 }}>
+                  <Box sx={{ aspectRatio: templateLayout.includes('image-led') ? '4/3' : '3/4', bgcolor: 'action.hover', borderRadius: 'var(--store-radius)', display: 'grid', placeItems: 'center', mb: 1.5 }}>
                     <Typography variant="caption" color="text.secondary">Product Image</Typography>
                   </Box>
                   <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }} noWrap>{p.title}</Typography>
@@ -691,7 +752,8 @@ export const renderMockAccountMain = (settingsObj) => {
 export const renderMockCartMain = (settingsObj, previewContext = {}) => {
   const cp = settingsObj?.cartPage || {};
   const layout = cp.layout || 'standard';
-  const isStacked = layout === 'stacked';
+  const isCompact = layout === 'compact';
+  const showTrustBadges = cp.showTrustBadges !== false;
   const showCoupon = cp.showCoupon === true;
   const showSavings = cp.showSavings === true;
   const showShippingEstimator = cp.showShippingEstimator === true;
@@ -706,10 +768,10 @@ export const renderMockCartMain = (settingsObj, previewContext = {}) => {
   ];
 
   return (
-    <Box onClick={editableProps.onClick} sx={{ p: { xs: 2, md: 4 }, maxWidth: 1080, mx: 'auto', bgcolor: 'background.default', ...(editableProps.sx || {}) }}>
+    <Box onClick={editableProps.onClick} sx={{ p: { xs: 2, md: isCompact ? 3 : 4 }, maxWidth: isCompact ? 900 : 1080, mx: 'auto', bgcolor: 'background.default', ...(editableProps.sx || {}) }}>
       <Typography variant="h4" fontWeight={800} sx={{ mb: 4, fontFamily: 'var(--store-font-heading)' }}>Shopping Cart</Typography>
       <Grid container spacing={4}>
-        <Grid item xs={12} md={isStacked ? 12 : 8}>
+        <Grid item xs={12} md={isCompact ? 12 : 8}>
           <Stack spacing={2.5}>
             {items.map((item, i) => (
               <Box key={i} sx={{ display: 'flex', gap: 2, pb: 2.5, borderBottom: '1px solid', borderColor: 'divider' }}>
@@ -740,8 +802,8 @@ export const renderMockCartMain = (settingsObj, previewContext = {}) => {
           )}
         </Grid>
 
-        <Grid item xs={12} md={isStacked ? 12 : 4}>
-          <Box sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 'var(--store-radius-card)', bgcolor: 'background.paper', position: isStacked ? 'static' : 'sticky', top: 20 }}>
+        <Grid item xs={12} md={isCompact ? 12 : 4}>
+          <Box sx={{ p: isCompact ? 2 : 3, border: '1px solid', borderColor: 'divider', borderRadius: 'var(--store-radius-card)', bgcolor: 'background.paper', position: isCompact ? 'static' : 'sticky', top: 20 }}>
             <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 2 }}>Order Summary</Typography>
             <Stack spacing={1.5} sx={{ mb: 2 }}>
               <Stack direction="row" justifyContent="space-between"><Typography color="text.secondary">Subtotal</Typography><Typography fontWeight={700}>$603.00</Typography></Stack>
@@ -760,7 +822,18 @@ export const renderMockCartMain = (settingsObj, previewContext = {}) => {
           </Box>
         </Grid>
       </Grid>
+      {showTrustBadges && (
+        <Stack direction="row" spacing={2} sx={{ mt: 3, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 'var(--store-radius-card)', bgcolor: 'background.paper', flexWrap: 'wrap' }}>
+          <Typography variant="caption" fontWeight={700}>Secure checkout</Typography>
+          <Typography variant="caption" fontWeight={700}>Easy returns</Typography>
+          <Typography variant="caption" fontWeight={700}>Authentic products</Typography>
+        </Stack>
+      )}
       {showRecentlyViewed && <Box sx={{ mt: 5 }}><Typography variant="h6" fontWeight={800}>Recently viewed</Typography></Box>}
+      <Box sx={{ mt: 5, p: 4, textAlign: 'center', border: '1px dashed', borderColor: 'divider', borderRadius: 'var(--store-radius-card)', bgcolor: 'action.hover' }}>
+        <Typography variant="caption" color="text.disabled" fontWeight={700} sx={{ display: 'block', mb: 1 }}>Empty Cart Preview</Typography>
+        <Typography variant="body2" color="text.secondary">{cp.emptyStateText || "Haven't added anything yet. Let's fix that."}</Typography>
+      </Box>
     </Box>
   );
 };
@@ -941,6 +1014,10 @@ export const renderMockSearchMain = (settingsObj) => {
           )}
         </Grid>
       </Box>
+      <Box sx={{ mt: 4, p: 3, textAlign: 'center', border: '1px dashed', borderColor: 'divider', borderRadius: 'var(--store-radius-card)', bgcolor: 'action.hover' }}>
+        <Typography variant="caption" color="text.disabled" fontWeight={700} sx={{ display: 'block', mb: 1 }}>Empty Results Preview</Typography>
+        <Typography variant="body2" color="text.secondary">{noResultsMessage}</Typography>
+      </Box>
     </Box>
   );
 };
@@ -1035,8 +1112,8 @@ export const SECTION_TYPE_TO_MOCK_RENDERER = {
   'product-reviews':   (s, c) => renderMockReviews(s, c),
   'category-header':   (s) => renderMockCategoryHeaderOnly(s),
   'category-products': (s, c) => renderMockCategoryProductsOnly(s, c),
-  'catalog-header':    ()  => renderMockCatalogHeaderOnly(),
-  'catalog-products':  (s) => renderMockCatalogProductsOnly(s),
+  'catalog-header':    (s) => renderMockCatalogHeaderOnly(s),
+  'catalog-products':  (s, c) => renderMockCatalogProductsOnly(s, c),
   'brands-header':     (s) => renderMockBrandsHeaderOnly(s),
   'brands-list':       (s) => renderMockBrandsListOnly(s),
   'blog-header':       (s, c) => renderMockBlogHeaderOnly(s, c),

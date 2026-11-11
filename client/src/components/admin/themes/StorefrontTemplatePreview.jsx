@@ -272,6 +272,14 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
   const previewTheme = useMemo(() => createTheme(buildStorefrontTheme(design)), [design]);
 
   const width = PREVIEW_WIDTHS[mode] || '100%';
+  const isSectionVisible = (section, productPage) => {
+    if (section.enabled === false) return false;
+    if (activePage !== 'product') return true;
+    if (section.type === 'value-props') return productPage?.showTrustBadges !== false;
+    if (section.type === 'product-row') return productPage?.showRelatedProducts !== false;
+    if (section.type === 'recently-viewed') return productPage?.showRecentlyViewed !== false;
+    return true;
+  };
   const visibleSections = useMemo(() => sections.filter((section) => section.enabled !== false), [sections]);
   const productSections = useMemo(() => visibleSections.filter((section) => needsProductData(section) || section.type === 'product-info'), [visibleSections]);
   const needsCategories = useMemo(() => visibleSections.some((section) => needsCategoryData(section)), [visibleSections]);
@@ -353,6 +361,7 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
       baseData.render = () => mockRenderer(scopedSettings, {
         section,
         products: resolvedData.products?.[section.id] || [],
+        previewMode: mode,
         onSelectSection,
         onSelectComponent,
       });
@@ -395,8 +404,8 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
     const announcementText = announcementSettings.text || demoData.announcementText;
     const showAnnouncement = announcementText && announcementSettings.enabled !== false && announcementSettings.enabled !== 'false';
     const sectionRows = sectionList.map((section, originalIndex) => ({ section, originalIndex }));
-    const templateSectionRows = sectionRows.filter(({ section }) => section.enabled !== false && section.placement !== 'footer');
-    const footerSectionRows = sectionRows.filter(({ section }) => section.enabled !== false && section.placement === 'footer');
+    const templateSectionRows = sectionRows.filter(({ section }) => isSectionVisible(section, scopedSettings.productPage) && section.placement !== 'footer');
+    const footerSectionRows = sectionRows.filter(({ section }) => isSectionVisible(section, scopedSettings.productPage) && section.placement === 'footer');
     const firstFooterIndex = sectionList.findIndex((section) => section.placement === 'footer');
     const footerStartIndex = firstFooterIndex === -1 ? sectionList.length : firstFooterIndex;
     const canvasDragEnabled = Boolean(onReorderSection) && !compareMode;
@@ -678,6 +687,12 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
     blogPage: packageData?.blogPage || {},
     brandsPage: packageData?.brandsPage || {},
     accountPage: packageData?.accountPage || {},
+    cartPage: packageData?.cartPage || {},
+    checkoutPage: packageData?.checkoutPage || {},
+    wishlistPage: packageData?.wishlistPage || {},
+    searchPage: packageData?.searchPage || {},
+    notFoundPage: packageData?.notFoundPage || {},
+    ordersPage: packageData?.ordersPage || {},
   };
 
   if (compareMode && currentSettings) {
