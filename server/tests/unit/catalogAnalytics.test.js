@@ -53,9 +53,11 @@ describe('Catalog analytics', () => {
     expect(options.replacements.end - options.replacements.start).toBe(7 * 864e5);
   });
 
-  it('returns an explicit unavailable state before tracking is installed', async () => {
-    const query = vi.spyOn(db.sequelize, 'query').mockResolvedValueOnce([{ t: null }]);
-    expect(await getCatalogOverview()).toMatchObject({ visits: 0, topViews: [], trackingAvailable: false });
-    expect(query).toHaveBeenCalledTimes(1);
+  it('keeps enquiry analytics available before visit tracking is installed', async () => {
+    const query = vi.spyOn(db.sequelize, 'query').mockResolvedValueOnce([{ t: null }])
+      .mockResolvedValueOnce([{ enquiries: 3, convertedEnquiries: 1 }]);
+    expect(await getCatalogOverview()).toMatchObject({ visits: 0, topViews: [], enquiries: 3, convertedEnquiries: 1, trackingAvailable: false });
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls[1][0]).not.toContain('FROM page_visits');
   });
 });

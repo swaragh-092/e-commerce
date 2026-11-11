@@ -94,8 +94,10 @@ export default function StorefrontAnalytics() {
     if (isPreview || isAdmin) return undefined;
     getCampaignAttribution(location.search);
     try {
-      const sessionId = getSessionId();
-      document.cookie = `sessionId=${encodeURIComponent(sessionId)}; Path=/; SameSite=Lax${window.location.protocol === 'https:' ? '; Secure' : ''}`;
+      if (window.location.protocol === 'https:') {
+        const sessionId = getSessionId();
+        document.cookie = `sessionId=${encodeURIComponent(sessionId)}; Path=/; SameSite=Lax; Secure`;
+      }
     } catch {
       // Storage can be unavailable in restricted browser sessions.
     }

@@ -437,10 +437,10 @@ const getProductFunnel = async ({ period = '30d', limit = 10, _dateRange } = {})
   const rows = await db.sequelize.query(`
     WITH product_views AS (
       SELECT product_id,
-        COUNT(DISTINCT COALESCE(user_id::text, NULLIF(session_id, '')))::int AS views
+        COUNT(DISTINCT COALESCE(user_id::text, NULLIF(session_id, '')))::int
+          + COUNT(*) FILTER (WHERE user_id IS NULL AND NULLIF(session_id, '') IS NULL)::int AS views
       FROM page_visits
       WHERE product_id IS NOT NULL AND created_at BETWEEN :start AND :end
-        AND (user_id IS NOT NULL OR NULLIF(session_id, '') IS NOT NULL)
       GROUP BY product_id
     ),
     product_carts AS (
