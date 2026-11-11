@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
-const { Order, OrderHistory, GuestOrderClaimToken, User, sequelize } = require('../../src/modules');
+const { Order, OrderHistory, GuestOrderClaimToken, User, CouponUsage, sequelize } = require('../../src/modules');
 const NotificationService = require('../../src/modules/notification/notification.service');
 const OrderService = require('../../src/modules/order/order.service');
 
@@ -25,6 +25,7 @@ describe('verified guest order claims', () => {
         vi.spyOn(User, 'findByPk').mockResolvedValue({ id: 'user-1', email: 'Buyer@Example.com', emailVerified: true, status: 'active' });
         vi.spyOn(Order, 'findAll').mockResolvedValue([order]);
         vi.spyOn(OrderHistory, 'create').mockResolvedValue({});
+        const updateCouponUsages = vi.spyOn(CouponUsage, 'update').mockResolvedValue([1]);
 
         await expect(OrderService.claimGuestOrders('user-1', 'a'.repeat(64))).resolves.toEqual({ linkedCount: 1 });
         expect(Order.findAll).toHaveBeenCalledWith(expect.objectContaining({
@@ -33,6 +34,10 @@ describe('verified guest order claims', () => {
             lock: 'UPDATE',
         }));
         expect(order.update).toHaveBeenCalledWith({ userId: 'user-1', guestSessionId: null }, { transaction });
+        expect(updateCouponUsages).toHaveBeenCalledWith(
+            { userId: 'user-1', guestSessionId: null },
+            expect.objectContaining({ transaction })
+        );
         expect(OrderHistory.create).toHaveBeenCalledWith(expect.objectContaining({
             eventType: 'guest_order_linked', actorId: 'user-1', actorType: 'customer',
         }), { transaction });

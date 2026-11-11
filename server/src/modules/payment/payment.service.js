@@ -955,25 +955,37 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {}, 
             ));
 
             if (appliedCouponIds.length > 0) {
-                const existingUsages = await CouponUsage.count({
-                    where: { orderId: lockedOrder.id },
+                const existingCoupons = await Coupon.findAll({
+                    where: { id: { [Op.in]: appliedCouponIds } },
+                    attributes: ['id'],
                     transaction: t,
                 });
+                const validCouponIds = existingCoupons.map((c) => c.id);
 
-                if (existingUsages === 0) {
-                    await CouponUsage.bulkCreate(
-                        appliedCouponIds.map((couponId) => ({
-                            couponId,
-                            userId: lockedOrder.userId,
-                            guestSessionId: lockedOrder.userId ? null : lockedOrder.guestSessionId,
-                            orderId: lockedOrder.id,
-                        })),
-                        { transaction: t }
-                    );
-                    await Coupon.update(
-                        { usedCount: sequelize.literal('used_count + 1') },
-                        { where: { id: { [Op.in]: appliedCouponIds } }, transaction: t }
-                    );
+                if (validCouponIds.length > 0) {
+                    const existingUsages = await CouponUsage.findAll({
+                        where: { orderId: lockedOrder.id, couponId: { [Op.in]: validCouponIds } },
+                        attributes: ['couponId'],
+                        transaction: t,
+                    });
+
+                    const recordedCouponIds = new Set(existingUsages.map(({ couponId }) => couponId));
+                    const missingCouponIds = validCouponIds.filter((id) => !recordedCouponIds.has(id));
+                    if (missingCouponIds.length > 0) {
+                        await CouponUsage.bulkCreate(
+                            missingCouponIds.map((couponId) => ({
+                                couponId,
+                                userId: lockedOrder.userId,
+                                guestSessionId: lockedOrder.userId ? null : lockedOrder.guestSessionId,
+                                orderId: lockedOrder.id,
+                            })),
+                            { transaction: t }
+                        );
+                        await Coupon.update(
+                            { usedCount: sequelize.literal('used_count + 1') },
+                            { where: { id: { [Op.in]: missingCouponIds } }, transaction: t }
+                        );
+                    }
                 }
             }
 

@@ -19,15 +19,23 @@ const stackingRules = Joi.object({
 });
 
 const createCouponSchema = Joi.object({
-    code: Joi.string().max(50).uppercase().required(),
-    name: Joi.string().max(255).required(),
+    code: Joi.string().trim().max(50).uppercase().required(),
+    name: Joi.string().trim().max(255).required(),
     description: Joi.string().allow('', null).optional(),
     type: couponType.required(),
-    value: Joi.number().min(0).required(),
-    minOrderAmount: Joi.number().min(0).default(0),
-    maxDiscount: Joi.number().min(0).allow(null).optional(),
-    usageLimit: Joi.number().integer().min(1).allow(null).optional(),
-    perUserLimit: Joi.number().integer().min(1).default(1),
+    value: Joi.number().precision(2).when('type', {
+        is: 'free_shipping',
+        then: Joi.number().min(0).max(0).default(0),
+        otherwise: Joi.when('type', {
+            is: 'percentage',
+            then: Joi.number().min(0.01).max(100).required(),
+            otherwise: Joi.number().min(0.01).max(99999999.99).required(),
+        }),
+    }).required(),
+    minOrderAmount: Joi.number().precision(2).min(0).max(99999999.99).default(0),
+    maxDiscount: Joi.number().precision(2).min(0).max(99999999.99).allow(null).optional(),
+    usageLimit: Joi.number().integer().min(1).max(2147483647).allow(null).optional(),
+    perUserLimit: Joi.number().integer().min(1).max(2147483647).default(1),
     startDate: Joi.date().iso().required(),
     endDate: Joi.date().iso().greater(Joi.ref('startDate')).required(), 
     isActive: Joi.boolean().default(true),
@@ -43,19 +51,19 @@ const createCouponSchema = Joi.object({
     visibility: visibility.default('private'),
     customerEligibility: customerEligibility.default('all'),
     isExclusive: Joi.boolean().default(false),
-    priority: Joi.number().integer().min(0).default(0),
+    priority: Joi.number().integer().min(0).max(2147483647).default(0),
 });
 
 const updateCouponSchema = Joi.object({
-    code: Joi.string().max(50).uppercase().optional(),
-    name: Joi.string().max(255).optional(),
+    code: Joi.string().trim().max(50).uppercase().optional(),
+    name: Joi.string().trim().max(255).optional(),
     description: Joi.string().allow('', null).optional(),
     type: couponType.optional(),
-    value: Joi.number().min(0).optional(),
-    minOrderAmount: Joi.number().min(0).optional(),
-    maxDiscount: Joi.number().min(0).allow(null).optional(),
-    usageLimit: Joi.number().integer().min(1).allow(null).optional(),
-    perUserLimit: Joi.number().integer().min(1).optional(),
+    value: Joi.number().precision(2).min(0).max(99999999.99).optional(),
+    minOrderAmount: Joi.number().precision(2).min(0).max(99999999.99).optional(),
+    maxDiscount: Joi.number().precision(2).min(0).max(99999999.99).allow(null).optional(),
+    usageLimit: Joi.number().integer().min(1).max(2147483647).allow(null).optional(),
+    perUserLimit: Joi.number().integer().min(1).max(2147483647).optional(),
     startDate: Joi.date().iso().optional(),
     endDate: Joi.date().iso().when('startDate', {
         is: Joi.exist(),
@@ -75,18 +83,28 @@ const updateCouponSchema = Joi.object({
     visibility: visibility.optional(),
     customerEligibility: customerEligibility.optional(),
     isExclusive: Joi.boolean().optional(),
-    priority: Joi.number().integer().min(0).optional(),
+    priority: Joi.number().integer().min(0).max(2147483647).optional(),
+});
+
+const buyNowItemSchema = Joi.object({
+    productId: Joi.string().uuid().required(),
+    variantId: Joi.string().uuid().allow(null),
+    quantity: Joi.number().integer().min(1).default(1),
 });
 
 const validateCouponSchema = Joi.object({
-    code: Joi.string().max(50).uppercase().required(),
-    subtotal: Joi.number().min(0).required(),
-    shippingCost: Joi.number().min(0).optional()
+    code: Joi.string().trim().max(50).uppercase().required(),
+    subtotal: Joi.number().precision(2).min(0).max(99999999.99).required(),
+    shippingCost: Joi.number().precision(2).min(0).max(99999999.99).optional(),
+    email: Joi.string().trim().email().optional(),
+    buyNowItem: buyNowItemSchema.optional(),
 });
 
 const eligibleCouponsSchema = Joi.object({
-    subtotal: Joi.number().min(0).optional(),
-    shippingCost: Joi.number().min(0).optional(),
+    subtotal: Joi.number().precision(2).min(0).max(99999999.99).optional(),
+    shippingCost: Joi.number().precision(2).min(0).max(99999999.99).optional(),
+    email: Joi.string().trim().email().optional(),
+    buyNowItem: buyNowItemSchema.optional(),
 });
 
 module.exports = {

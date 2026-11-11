@@ -200,18 +200,44 @@ const CouponsPage = () => {
   const fetchOptions = async () => {
     setLoadingOptions(true);
     try {
-      const brandPromise = brandsEnabled
-        ? brandService.getBrands({ page: 1, limit: 100 })
-        : Promise.resolve({ data: { data: { brands: [] } } });
-      const [productResponse, categoryResponse, brandResponse] = await Promise.all([
-        getProducts({ page: 1, limit: 100 }),
+      const fetchAllProducts = async () => {
+        let all = [];
+        let page = 1;
+        let totalPages = 1;
+        while (page <= totalPages && page <= 10) {
+          const res = await getProducts({ page, limit: 1000 });
+          const items = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+          all = all.concat(items);
+          totalPages = res?.meta?.totalPages || res?.totalPages || 1;
+          page += 1;
+        }
+        return all;
+      };
+
+      const fetchAllBrands = async () => {
+        if (!brandsEnabled) return [];
+        let all = [];
+        let page = 1;
+        let totalPages = 1;
+        while (page <= totalPages && page <= 10) {
+          const res = await brandService.getBrands({ page, limit: 1000 });
+          const items = res?.data?.data?.brands || res?.data?.brands || [];
+          all = all.concat(items);
+          totalPages = res?.data?.meta?.totalPages || res?.meta?.totalPages || 1;
+          page += 1;
+        }
+        return all;
+      };
+
+      const [productsData, categoryResponse, brandsData] = await Promise.all([
+        fetchAllProducts(),
         getCategoryTree(),
-        brandPromise,
+        fetchAllBrands(),
       ]);
 
-      setProducts(productResponse?.data || []);
+      setProducts(productsData);
       setCategories(flattenCategoryTree(categoryResponse?.data || []));
-      setBrands(brandResponse?.data?.data?.brands || []);
+      setBrands(brandsData);
     } catch (error) {
       notify('Failed to load coupon targeting options.', 'error');
     } finally {
@@ -465,7 +491,7 @@ const CouponsPage = () => {
       multiple
       options={options}
       loading={loadingOptions}
-      value={(form[field] || []).map((id) => optionMap.get(id)).filter(Boolean)}
+      value={(form[field] || []).map((id) => optionMap.get(id) || { id, name: id })}
       getOptionLabel={(option) => option.name}
       isOptionEqualToValue={(option, value) => option.id === value.id}
       onChange={(_, value) => set(field, value.map((item) => item.id))}

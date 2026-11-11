@@ -75,7 +75,7 @@ const TIER2_DEFAULTS = Object.fromEntries(VALID_MODES.map((mode) => [mode, {
  * @returns {'ecommerce'|'catalog'}
  */
 const getMode = (modeParam) => {
-  const raw = (modeParam || '').toLowerCase().trim();
+  const raw = String(modeParam || '').toLowerCase().trim();
   if (VALID_MODES.includes(raw)) return raw;
 
   if (raw && !warnedUnknownMode) {

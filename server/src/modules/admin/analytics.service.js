@@ -536,19 +536,51 @@ const getCouponPerformance = async ({ period = '30d', limit = 10, _dateRange } =
   const { start, end } = getDateRange({ period, _dateRange });
 
   const rows = await db.sequelize.query(`
+    WITH order_coupons AS (
+      SELECT
+        o.id AS order_id,
+        o.total AS order_total,
+        (d->>'couponId') AS coupon_id,
+        COALESCE((d->>'totalDiscount')::numeric, 0) AS discount_amount
+      FROM orders o
+      CROSS JOIN LATERAL jsonb_array_elements(
+        CASE
+          WHEN jsonb_typeof(o.applied_discounts) = 'array' THEN o.applied_discounts
+          ELSE '[]'::jsonb
+        END
+      ) AS d
+      WHERE o.status IN (${VALID_STATUSES_SQL})
+        AND o.created_at BETWEEN :start AND :end
+        AND d->>'couponId' IS NOT NULL
+
+      UNION ALL
+
+      SELECT
+        o.id AS order_id,
+        o.total AS order_total,
+        o.coupon_id::text AS coupon_id,
+        COALESCE(o.discount_amount, 0) AS discount_amount
+      FROM orders o
+      WHERE o.status IN (${VALID_STATUSES_SQL})
+        AND o.created_at BETWEEN :start AND :end
+        AND o.coupon_id IS NOT NULL
+        AND (
+          o.applied_discounts IS NULL
+          OR jsonb_typeof(o.applied_discounts) != 'array'
+          OR jsonb_array_length(o.applied_discounts) = 0
+        )
+    )
     SELECT
       c.id AS coupon_id,
       c.code,
       c.type AS discount_type,
       c.value AS discount_value,
-      COUNT(o.id)::int AS times_used,
-      COALESCE(SUM(o.total), 0) AS revenue_generated,
-      COALESCE(SUM(o.discount_amount), 0) AS total_discount_given,
-      COALESCE(AVG(o.discount_amount), 0) AS avg_discount
+      COUNT(oc.order_id)::int AS times_used,
+      COALESCE(SUM(oc.order_total), 0) AS revenue_generated,
+      COALESCE(SUM(oc.discount_amount), 0) AS total_discount_given,
+      COALESCE(AVG(oc.discount_amount), 0) AS avg_discount
     FROM coupons c
-    JOIN orders o ON o.coupon_id = c.id
-    WHERE o.status IN (${VALID_STATUSES_SQL})
-      AND o.created_at BETWEEN :start AND :end
+    JOIN order_coupons oc ON c.id::text = oc.coupon_id
     GROUP BY c.id, c.code, c.type, c.value
     ORDER BY revenue_generated DESC
     LIMIT :limit
