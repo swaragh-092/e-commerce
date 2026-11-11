@@ -22,19 +22,10 @@ import { getProducts } from '../../../services/productService';
 import { getCategories } from '../../../services/categoryService';
 import MenuService from '../../../services/menuService';
 import PageService from '../../../services/pageService';
+import StoreHeaderLogo from '../../../components/layout/StoreHeaderLogo';
 import { useBrands } from '../../../context/BrandContext';
 import { needsCategoryData, needsProductData } from '../../storefront/sections/sectionRegistry';
 import { buildSectionRendererData } from '../../storefront/sections/sectionData';
-
-const PreviewLogo = ({ src, name, maxWidth, showName }) => {
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [src]);
-  return <>
-    {src && !failed && <Box component="img" src={src} alt={showName ? '' : name} onError={() => setFailed(true)}
-      sx={{ maxWidth: maxWidth || 140, maxHeight: 36, objectFit: 'contain' }} />}
-    {(showName || !src || failed) && <Typography variant="h6" fontWeight={700} color="inherit" noWrap sx={{ maxWidth: 180 }}>{name}</Typography>}
-  </>;
-};
 
 const DEFAULT_ACTIONS_ORDER = ['search', 'cart', 'wishlist', 'account'];
 // Code-split the dev mock renderers — they only matter inside the admin
@@ -496,7 +487,7 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
               onClick={(event) => { event.stopPropagation(); onSelectComponent?.('headerLogo'); }}
               sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, minWidth: 0, cursor: onSelectComponent ? 'pointer' : 'default', px: 0.5, borderRadius: 1, '&:hover': onSelectComponent ? { outline: '2px dashed #ffffff' } : undefined }}
             >
-              <PreviewLogo src={logoUrl} name={storeName} maxWidth={navSettings.logoMaxWidth} showName={navSettings.showStoreName !== false} />
+              <StoreHeaderLogo src={logoUrl} name={storeName} maxWidth={navSettings.logoMaxWidth} showName={navSettings.showStoreName !== false} />
             </Box>
             {navSettings.showMenu !== false && (
               <Stack

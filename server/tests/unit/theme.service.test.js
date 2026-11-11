@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
 const path = require('path');
@@ -51,6 +51,65 @@ describe('Theme package schema validation', () => {
     pkg.design.theme.primaryColor = 'not-a-color';
     const { error } = packageSchema.validate(pkg, { abortEarly: false });
     expect(error).toBeDefined();
+  });
+
+  it('preserves Designer product and category controls through theme export, library import, and scoped preview', async () => {
+    const { Setting, ThemePackage } = require('../../src/modules');
+    const ThemeService = require('../../src/modules/theme/theme.service');
+    const designerSettings = [
+      { group: 'productPage', key: 'templateLayout', value: 'gallery-top-details-below' },
+      { group: 'productPage', key: 'imageAlignment', value: 'vertical' },
+      { group: 'productPage', key: 'showSKU', value: false },
+      { group: 'productPage', key: 'showStockBadge', value: false },
+      { group: 'productPage', key: 'addToCartLabel', value: 'Add to basket' },
+      { group: 'productPage', key: 'showBuyNowButton', value: false },
+      { group: 'productPage', key: 'buyNowLabel', value: 'Buy it now' },
+      { group: 'categoryPage', key: 'heroTitle', value: 'Browse our departments' },
+      { group: 'categoryPage', key: 'headerLayout', value: 'split' },
+      { group: 'categoryPage', key: 'showSubcategories', value: false },
+    ];
+    const readSettings = vi.spyOn(Setting, 'findAll')
+      .mockResolvedValueOnce(designerSettings)
+      .mockResolvedValueOnce([]);
+    const findTemplate = vi.spyOn(ThemePackage, 'findOne').mockResolvedValue(null);
+    const createTemplate = vi.spyOn(ThemePackage, 'create').mockImplementation(async (record) => record);
+
+    try {
+      const pkg = await ThemeService.exportCurrent({ includeDemoContent: false });
+      const saved = await ThemeService.importToLibrary(JSON.parse(JSON.stringify(pkg)), 'manager');
+      const preview = await ThemeService.preview(saved.packageData, ['pageTemplates']);
+
+      expect(pkg.pageTemplates.product).toMatchObject({
+        imageAlignment: 'vertical',
+        showSKU: false,
+        showStockBadge: false,
+        addToCartLabel: 'Add to basket',
+        showBuyNowButton: false,
+        buyNowLabel: 'Buy it now',
+      });
+      expect(pkg.pageTemplates.category).toEqual({
+        heroTitle: 'Browse our departments',
+        headerLayout: 'split',
+        showSubcategories: false,
+      });
+      expect(preview.mergedSettings.productPage).toMatchObject({
+        imageAlignment: 'vertical',
+        showSKU: false,
+        showStockBadge: false,
+        addToCartLabel: 'Add to basket',
+        showBuyNowButton: false,
+        buyNowLabel: 'Buy it now',
+      });
+      expect(preview.mergedSettings.categoryPage).toMatchObject({
+        heroTitle: 'Browse our departments',
+        headerLayout: 'split',
+        showSubcategories: false,
+      });
+    } finally {
+      readSettings.mockRestore();
+      findTemplate.mockRestore();
+      createTemplate.mockRestore();
+    }
   });
 
   it('rejects unknown section types', () => {

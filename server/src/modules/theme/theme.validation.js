@@ -14,6 +14,10 @@ const internalLink = Joi.string().pattern(/^\/(?!\/)/).max(500).messages({
 const dataUri = Joi.string().pattern(/^data:image\//).max(100000);
 const previewImageUrl = Joi.alternatives().try(safeUrl, dataUri).allow('', null);
 const linkUrl = Joi.alternatives().try(safeUrl, internalLink).allow('', null);
+const sectionImageUrl = Joi.alternatives().try(
+  safeUrl,
+  Joi.string().pattern(/^\/(?!\/)[^\\\s"']*$/).max(2000),
+).allow('', null);
 const fontDataUri = Joi.string().pattern(/^data:font\//).max(100000);
 const fontUrl = Joi.alternatives().try(safeUrl, internalLink, fontDataUri).allow('', null);
 const safeText = Joi.string().max(500).allow('', null);
@@ -146,6 +150,19 @@ const themeDesignSchema = Joi.object({
 const navSchema = Joi.object({
   sticky: Joi.boolean(),
   showCategoryBar: Joi.boolean(),
+  bgColor: hexColor.allow('', null),
+  fgColor: hexColor.allow('', null),
+  logoText: safeText,
+  logoUrl: sectionImageUrl,
+  logoMaxWidth: Joi.string().max(30).allow('', null),
+  showStoreName: Joi.boolean(),
+  menuItems: safeText,
+  showMenu: Joi.boolean(),
+  showSearch: Joi.boolean(),
+  showCart: Joi.boolean(),
+  showWishlist: Joi.boolean(),
+  showAccount: Joi.boolean(),
+  actionsOrder: Joi.array().items(Joi.string().valid('search', 'cart', 'wishlist', 'account')).unique().max(4),
 }).unknown(false);
 
 const footerStyleSchema = Joi.object({
@@ -237,13 +254,25 @@ const metaSchema = Joi.object({
 
 const pageTemplateSchema = Joi.object({
   layout: Joi.string().max(80).required(),
+  imageAlignment: Joi.string().valid('horizontal', 'vertical'),
+  showSKU: Joi.boolean(),
+  showStockBadge: Joi.boolean(),
   showTrustBadges: Joi.boolean(),
   showRelatedProducts: Joi.boolean(),
   showRecentlyViewed: Joi.boolean(),
   showStickyAddToCart: Joi.boolean(),
   showBreadcrumbs: Joi.boolean(),
+  addToCartLabel: safeText,
+  showBuyNowButton: Joi.boolean(),
+  buyNowLabel: safeText,
   productsPerRow: Joi.number().integer().min(1).max(6),
   filterLayout: Joi.string().valid('sidebar', 'drawer', 'topbar'),
+}).unknown(false);
+
+const categoryPageTemplateSchema = Joi.object({
+  heroTitle: safeText,
+  headerLayout: Joi.string().valid('standard', 'cover', 'split'),
+  showSubcategories: Joi.boolean(),
 }).unknown(false);
 
 const brandPageTemplateSchema = Joi.object({
@@ -406,6 +435,7 @@ const packageSchema = Joi.object({
   dataSources: Joi.array().items(dataSourceSchema).max(12),
   pageTemplates: Joi.object({
     product: pageTemplateSchema,
+    category: categoryPageTemplateSchema,
     collection: pageTemplateSchema,
     brand: brandPageTemplateSchema,
     cart: cartPageTemplateSchema,
