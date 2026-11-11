@@ -739,7 +739,7 @@ const AdminLayout = () => {
               <img
                 src={logoSrc}
                 alt={settings?.general?.storeName || 'Admin'}
-                style={{ maxHeight: 32, maxWidth: 120, objectFit: 'contain', filter: 'brightness(0) invert(1)' }}
+                style={{ maxHeight: 32, maxWidth: 120, objectFit: 'contain' }}
                 onError={() => setFailedLogoSrc(logoSrc)}
               />
             ) : null}
