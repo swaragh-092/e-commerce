@@ -12,6 +12,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import api from '../../services/api';
+import { getCampaignAttribution } from '../../utils/campaignAttribution';
 
 const EnquiryModal = ({ open, onClose, product, cartItems }) => {
   const [formData, setFormData] = useState({
@@ -52,6 +53,7 @@ const EnquiryModal = ({ open, onClose, product, cartItems }) => {
       variantId: product?.selectedVariant?.id || null,
       cartItems: cartItems || null,
     };
+    Object.assign(payload, getCampaignAttribution());
 
     try {
       await api.post('/enquiries', payload);

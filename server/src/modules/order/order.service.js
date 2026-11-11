@@ -1192,6 +1192,9 @@ const placeOrder = async (userId, payload) => {
     const intentPayload = { ...payload };
     delete intentPayload.idempotencyKey;
     delete intentPayload.checkoutSessionId;
+    delete intentPayload.utmSource;
+    delete intentPayload.utmMedium;
+    delete intentPayload.utmCampaign;
     delete intentPayload.sessionId;
     const idempotencyPayloadHash = idempotencyKey ? hashOrderIntent(intentPayload) : null;
     const idempotencyWhere = idempotencyKey
@@ -1608,6 +1611,9 @@ const placeOrder = async (userId, payload) => {
                 digital: true,
             },
             checkoutSessionId: shippingQuote?.checkoutSessionId || payload.checkoutSessionId || payload.sessionId || null,
+            utmSource: payload.utmSource || null,
+            utmMedium: payload.utmMedium || null,
+            utmCampaign: payload.utmCampaign || null,
             idempotencyKey,
             idempotencyPayloadHash,
             shippingCurrency: shippingQuote?.currency || 'INR',

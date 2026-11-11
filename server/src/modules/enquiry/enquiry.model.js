@@ -50,6 +50,9 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         field: 'cart_items',
       },
+      utmSource: { type: DataTypes.STRING(255), allowNull: true, field: 'utm_source' },
+      utmMedium: { type: DataTypes.STRING(255), allowNull: true, field: 'utm_medium' },
+      utmCampaign: { type: DataTypes.STRING(255), allowNull: true, field: 'utm_campaign' },
     },
     {
       tableName: 'enquiries',

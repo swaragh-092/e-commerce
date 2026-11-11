@@ -2,14 +2,17 @@ const widget = (id, label, columns = []) => ({ id, label, fields: columns.map((l
 
 export const CATALOG_ANALYTICS_WIDGETS = [
   widget('visits', 'Page views'), widget('sessions', 'Sessions'), widget('productViews', 'Product views'),
+  widget('enquiries', 'Enquiries'), widget('convertedEnquiries', 'Converted enquiries'), widget('openEnquiries', 'Open enquiries'),
   widget('trend', 'Visits over time'), widget('topViews', 'Most viewed products', ['Product', 'Views']),
+  widget('topEnquiries', 'Products generating enquiries', ['Product', 'Enquiries', 'Converted']),
   widget('trafficSources', 'Traffic sources', ['Source', 'Visits']),
   widget('campaigns', 'Campaign visits', ['Source', 'Medium', 'Campaign', 'Visits']),
+  widget('enquiryCampaigns', 'Enquiries by campaign', ['Source', 'Medium', 'Campaign', 'Enquiries', 'Converted']),
 ];
 
 export const SALES_ANALYTICS_WIDGETS = [
   widget('conversionRate', 'Conversion summary'),
-  widget('productFunnel', 'Product funnel', ['Product', 'Views', 'Add to cart', 'Purchased', 'View to cart', 'Cart to purchase']),
+  widget('productFunnel', 'Product funnel', ['Product', 'Views', 'Add to cart', 'Orders', 'Units sold', 'View to cart', 'Cart to order']),
   widget('topProducts', 'Top selling products', ['Rank', 'Product', 'Revenue']),
   widget('aovTrend', 'Average order value'),
   widget('utmAttribution', 'Marketing attribution', ['Source', 'Medium', 'Campaign', 'Orders', 'Revenue']),

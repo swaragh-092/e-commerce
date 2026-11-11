@@ -35,6 +35,7 @@ import CenteredLoader from '../../components/common/CenteredLoader';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
 import { getStoreName } from '../../utils/store';
+import { getCampaignAttribution } from '../../utils/campaignAttribution';
 import { INDIAN_STATES } from '../../utils/indianStates';
 
 import { getBadgeChipProps, getFormControlSize, getFormControlSx } from '../../utils/componentStyles';
@@ -119,6 +120,9 @@ const createCheckoutSessionId = () => {
 const getOrderSubmissionKey = async (checkoutSessionId, orderPayload) => {
     const payloadForFingerprint = { ...orderPayload };
     delete payloadForFingerprint.checkoutSessionId;
+    delete payloadForFingerprint.utmSource;
+    delete payloadForFingerprint.utmMedium;
+    delete payloadForFingerprint.utmCampaign;
     delete payloadForFingerprint.idempotencyKey;
     const bytes = new TextEncoder().encode(JSON.stringify(payloadForFingerprint));
     const digest = await crypto.subtle.digest('SHA-256', bytes);
@@ -856,6 +860,7 @@ const CheckoutPage = () => {
                 ...(hasPhysicalItems && selectedAddressId ? { shippingAddressId: selectedAddressId } : {}),
                 ...(hasPhysicalItems && shippingQuote?.quoteId ? { shippingQuoteId: shippingQuote.quoteId } : {}),
                 checkoutSessionId,
+                ...getCampaignAttribution(),
                 sessionId: getSessionId(),
                 ...(!user && guestEmail ? { guestEmail: guestEmail.trim() } : {}),
                 paymentMethod,
