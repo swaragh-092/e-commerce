@@ -61,6 +61,15 @@
       }
     },
     {
+      "key": "showAvailableCoupons",
+      "label": "Show Available Coupons",
+      "description": "Display applicable coupon codes on the cart page.",
+      "defaults": {
+        "ecommerce": true,
+        "catalog": false
+      }
+    },
+    {
       "key": "guestCheckout",
       "label": "Guest Checkout",
       "description": "Allow customers to checkout without creating an account.",
@@ -75,15 +84,6 @@
       "description": "Require email confirmation after registration.",
       "defaults": {
         "ecommerce": false,
-        "catalog": false
-      }
-    },
-    {
-      "key": "showAvailableCoupons",
-      "label": "Show Available Coupons",
-      "description": "Display applicable coupon codes on the cart page.",
-      "defaults": {
-        "ecommerce": true,
         "catalog": false
       }
     },
