@@ -58,9 +58,10 @@ const DEFAULT_HOMEPAGE = {
 };
 
 const PRODUCT_SOURCE_PARAMS = {
-  newest: { sort: 'newest' },
+  newest: { sort: 'arrivals', discoveryRow: true },
   featured: { featured: true },
-  bestSellers: { sort: 'best-selling' },
+  bestSellers: { sort: 'best-selling', discoveryRow: true },
+  mostViewed: { sort: 'most-viewed', discoveryRow: true },
   sale: { sale: true },
   recommended: { sort: 'recommended' },
 };
@@ -140,14 +141,16 @@ const resolveHomepage = (settings = {}) => {
 const getProductParams = (section) => ({
   ...(PRODUCT_SOURCE_PARAMS[section.source] || {}),
   ...(section.query || {}),
-  limit: num(section.count, 8),
+  ...(section.source === 'sale' && section.saleLabel && { saleLabel: section.saleLabel }),
+  limit: ['bestSellers', 'mostViewed'].includes(section.source)
+    ? Math.max(4, num(section.count, 8)) : num(section.count, 8),
   status: 'published',
 });
 
 const circuitBreakerState = {};
 
 const fetchSectionData = async (section) => {
-  if (!section.dataSourceSlug) {
+  if (!section.dataSourceSlug || (section.source === 'sale' && section.saleLabel)) {
     return getProducts(getProductParams(section));
   }
 
@@ -206,16 +209,17 @@ const fetchSectionData = async (section) => {
 
 const HomeExperience = () => {
   const { settings } = useSettings();
+  const designerPreview = new URLSearchParams(window.location.search).get('previewMode') === '1';
   const { brands: contextBrands, loading: brandsLoading } = useBrands();
   const pricingEnabled = useFeatureVisible('pricing', 'storefront');
+  const ordersEnabled = useFeature('orders');
   const brandsEnabled = useFeature('brands');
   const config = useMemo(() => resolveHomepage(settings), [settings]);
-  const visibleSections = useMemo(
-    () => arr(config.sections).filter(
-      (section) => bool(section.enabled, true) && (brandsEnabled || section.type !== 'brand-showcase')
-    ),
-    [brandsEnabled, config.sections],
-  );
+  const visibleSections = useMemo(() => arr(config.sections).filter(
+    (section) => bool(section.enabled, true)
+      && (ordersEnabled || section.source !== 'bestSellers')
+      && (brandsEnabled || section.type !== 'brand-showcase'),
+  ), [brandsEnabled, ordersEnabled, config.sections]);
   const visiblePromoBanners = useMemo(
     () => arr(config.promoBanners).filter(
       (promo) => brandsEnabled || !String(promo?.link || '').startsWith('/brands')
@@ -231,32 +235,43 @@ const HomeExperience = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let active = true;
     const productFetches = productSections.map((section) => fetchSectionData(section));
     const categoryFetch = needsCategories ? getCategories({ hideEmpty: true }) : Promise.resolve(null);
 
     setLoading(true);
     Promise.allSettled([...productFetches, categoryFetch])
       .then((results) => {
+        if (!active) return;
         const productResults = results.slice(0, productFetches.length);
         const categoryResult = results[productFetches.length];
         const products = {};
 
         productSections.forEach((section, index) => {
-          products[section.id] = section.dataSourceSlug
+          products[section.id] = section.dataSourceSlug && !(section.source === 'sale' && section.saleLabel)
             ? extractDataSourceArray(productResults[index], section, num(section.count, 8))
-            : extractArray(productResults[index], num(section.count, 8));
+            : extractArray(productResults[index], getProductParams(section).limit);
         });
 
         setData({ products, categories: extractArray(categoryResult) });
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
   }, [needsCategories, productSections]);
 
   const buildSectionData = (section) => buildSectionRendererData({
     section: needsCategoryData(section) && Array.isArray(section.items)
       ? { ...section, items: filterCategoryTiles(section.items, data.categories) } : section,
     homepage: { ...config, categoryTiles: filterCategoryTiles(config.categoryTiles, data.categories), promoBanners: visiblePromoBanners },
-    resolvedData: data,
+    resolvedData: {
+      ...data,
+      products: {
+        ...data.products,
+        [section.id]: data.products[section.id]?.slice(0, num(section.count, 8)),
+      },
+    },
     brands: contextBrands,
     loading,
     brandsLoading,
@@ -271,6 +286,20 @@ const HomeExperience = () => {
       />
 
       {visibleSections.map((section, index) => {
+        const discoverySort = !section.dataSourceSlug && PRODUCT_SOURCE_PARAMS[section.source]?.discoveryRow
+          ? PRODUCT_SOURCE_PARAMS[section.source].sort : null;
+        const available = data.products[section.id]?.length || 0;
+        const campaignLabel = section.type === 'product-row' && section.source === 'sale' ? section.saleLabel : null;
+        if (campaignLabel && !pricingEnabled && !designerPreview) return null;
+        const sparse = !loading && ((discoverySort && available < (discoverySort === 'arrivals' ? 1 : 4))
+          || (campaignLabel && !available));
+        if (sparse && !designerPreview) return null;
+        const previewSection = designerPreview && (sparse || section.type === 'recently-viewed');
+        const renderedSection = campaignLabel
+          ? { ...section, viewAllLink: `/products?saleLabel=${encodeURIComponent(campaignLabel)}` }
+          : discoverySort && (!section.viewAllLink || section.viewAllLink === '/products?sort=newest')
+          ? { ...section, viewAllLink: `/products?sort=${discoverySort}` }
+          : section;
         const display = {
           xs: section.hideOnMobile ? 'none' : 'block',
           md: section.hideOnDesktop ? 'none' : 'block',
@@ -280,8 +309,8 @@ const HomeExperience = () => {
         return (
           <Box key={section.id || index} sx={{ display }}>
             <SectionRenderer
-              section={section}
-              mode="live"
+              section={renderedSection}
+              mode={previewSection ? 'preview' : 'live'}
               data={buildSectionData(section)}
               index={frameIndex}
             />

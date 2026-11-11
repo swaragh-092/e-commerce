@@ -3,6 +3,10 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import DesignerSectionEditor from '../../components/admin/themes/designer/DesignerSectionEditor';
 
+vi.mock('../../services/adminService', () => ({
+  getSaleLabels: vi.fn().mockResolvedValue({ data: { data: [{ id: 'summer-sale', name: 'Summer Sale' }] } }),
+}));
+
 vi.mock('../../components/common/MediaPicker', () => ({ default: () => <div data-testid="media-picker" /> }));
 
 describe('DesignerSectionEditor BlockListEditor', () => {
@@ -100,4 +104,15 @@ describe('DesignerSectionEditor BlockListEditor', () => {
     expect(screen.getByLabelText('Section Name')).toHaveValue('Main Hero');
     expect(screen.getByText(/Name shown in the designer sidebar. Slide headings are configured under Slides below./i)).toBeInTheDocument();
   });
+});
+
+it('stores the sale label ID when a merchant selects a campaign', async () => {
+  const onChange = vi.fn();
+  const onBlur = vi.fn();
+  render(<DesignerSectionEditor section={{ id: 'sale-row', type: 'product-row', source: 'sale' }} onChange={onChange} onBlur={onBlur} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Content source' }));
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Sale label' }));
+  fireEvent.click(await screen.findByRole('option', { name: 'Summer Sale' }));
+  expect(onChange).toHaveBeenCalledWith('saleLabel', 'summer-sale');
+  expect(onBlur).toHaveBeenCalled();
 });

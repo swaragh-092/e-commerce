@@ -87,6 +87,7 @@ const HOMEPAGE_PRODUCT_SOURCES = [
   { value: 'featured', label: 'Featured Products' },
   { value: 'sale', label: 'Deals / On Sale' },
   { value: 'bestSellers', label: 'Best Sellers' },
+  { value: 'mostViewed', label: 'Most Viewed' },
   { value: 'newest', label: 'New Arrivals' },
   { value: 'recommended', label: 'Recommended' },
 ];

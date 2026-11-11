@@ -8,7 +8,7 @@ import RemoveIcon from '@mui/icons-material/Remove';
 import CartIcon from '@mui/icons-material/ShoppingCart';
 import FlashOnIcon from '@mui/icons-material/FlashOn';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import { getProduct } from '../../services/productService';
+import { getProduct, trackProductView } from '../../services/productService';
 import PageSEO from '../../components/common/PageSEO';
 import ProductImages from '../../components/product/ProductImages';
 import VariantSelector from '../../components/product/VariantSelector';
@@ -33,7 +33,9 @@ import RelatedProducts from '../../components/product/RelatedProducts';
 import ProductTabsAccordion from '../../components/storefront/ProductTabsAccordion';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getStoreName } from '../../utils/store';
-import RecentlyViewedSection, { trackRecentlyViewed } from '../../components/storefront/sections/RecentlyViewedSection';
+import { trackRecentlyViewed } from '../../components/storefront/sections/RecentlyViewedSection';
+import SectionRenderer from '../../components/storefront/sections/SectionRenderer';
+import { getPageSections } from '../../utils/designerSections';
 import { buildBreadcrumbJsonLd, buildProductJsonLd } from '../../utils/seo/buildStructuredData';
 import { getBadgeChipProps } from '../../utils/componentStyles';
 
@@ -66,6 +68,7 @@ const ProductDetailPage = () => {
     const wishlistEnabled = useFeature('wishlist');
     const enquiryEnabled = useFeature('enquiry');
     const pp = settings?.productPage || {};
+    const designerPreview = new URLSearchParams(location.search).get('previewMode') === '1';
     const badgeChipStyle = useComponentStyles('badgeChip');
     const badgeChipProps = useMemo(() => getBadgeChipProps(badgeChipStyle), [badgeChipStyle]);
     const themedChipProps = (overrides = {}) => ({
@@ -117,7 +120,10 @@ const ProductDetailPage = () => {
                 return;
             }
             setProduct(nextProduct);
-            trackRecentlyViewed(nextProduct);
+            if (!designerPreview && nextProduct.status === 'published' && nextProduct.isEnabled !== false) {
+                trackRecentlyViewed(nextProduct);
+                void trackProductView(nextProduct.id);
+            }
             if (nextProduct?.type === 'variable' && nextProduct?.variants?.length > 0) {
                 const requestedVariant = new URLSearchParams(location.search).get('variant');
                 const requestedVariantMatch = requestedVariant
@@ -1009,7 +1015,13 @@ const ProductDetailPage = () => {
             </Grid>
 
             {showProductRelated && <RelatedProducts productId={product.id} />}
-            {pp.showRecentlyViewed !== false && <RecentlyViewedSection key={product.id} excludeProductId={product.id} />}
+            {pp.showRecentlyViewed !== false && getPageSections(settings, 'product')
+                .filter((section) => section.type === 'recently-viewed' && section.enabled !== false)
+                .map((section) => (
+                    <Box key={`${product.id}-${section.id}`} sx={{ display: { xs: section.hideOnMobile ? 'none' : 'block', md: section.hideOnDesktop ? 'none' : 'block' } }}>
+                        <SectionRenderer section={section} mode={designerPreview ? 'preview' : 'live'} data={{ excludeProductId: product.id }} />
+                    </Box>
+                ))}
 
             <EnquiryModal
                 open={enquiryOpen}

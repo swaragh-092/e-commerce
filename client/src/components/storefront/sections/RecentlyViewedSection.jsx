@@ -1,70 +1,74 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Typography, Stack } from '@mui/material';
-import ProductRow from '../../product/ProductRow';
+import React, { useEffect, useState } from 'react';
+import { Box, Button } from '@mui/material';
+import { getProducts } from '../../../services/productService';
 import ProductRowSection from './ProductRowSection';
 
 const STORAGE_KEY = 'recently_viewed_products';
 const MAX_ITEMS = 12;
-
-// Public API to track a viewed product (call from ProductDetailPage)
-export const trackRecentlyViewed = (product) => {
-  if (!product?.id) return;
-  try {
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    const filtered = stored.filter((p) => p.id !== product.id);
-    const entry = {
-      id: product.id,
-      name: product.name,
-      slug: product.slug,
-      price: product.price,
-      salePrice: product.salePrice,
-      images: product.images?.slice(0, 1) || [],
-    };
-    const updated = [entry, ...filtered].slice(0, MAX_ITEMS);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-  } catch { /* localStorage unavailable */ }
-};
+const HISTORY_AGE = 30 * 24 * 60 * 60 * 1000;
 
 export const getRecentlyViewed = () => {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-  } catch { return []; }
+    const history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    const now = Date.now();
+    const recent = history.filter((entry) => entry?.id && (!entry.viewedAt || entry.viewedAt >= now - HISTORY_AGE))
+      .slice(0, MAX_ITEMS).map(({ id, viewedAt }) => ({ id, viewedAt: viewedAt || now }));
+    if (history.some((entry) => entry?.id && !entry.viewedAt)) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(recent)); } catch { /* Storage unavailable. */ }
+    }
+    return recent;
+  } catch {
+    return [];
+  }
 };
 
-const RecentlyViewedSection = ({ section = {}, mode = 'live', excludeProductId, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
+export const trackRecentlyViewed = (product) => {
+  if (!product?.id) return;
+  try {
+    const previous = getRecentlyViewed().filter(({ id }) => id !== product.id);
+    const history = [{ id: product.id, viewedAt: Date.now() }, ...previous].slice(0, MAX_ITEMS);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+  } catch {
+    // The storefront still works when browser storage is unavailable.
+  }
+};
+
+const RecentlyViewedSection = ({ section = {}, mode = 'live', excludeProductId, ...editorProps }) => {
   const [products, setProducts] = useState([]);
-  const preview = mode === 'preview';
-  const count = section.count || 8;
-  const align = section.textAlign || 'left';
+  const [cleared, setCleared] = useState(false);
+  const count = Math.min(MAX_ITEMS, Math.max(1, Number(section.count) || 8));
+  const row = { ...section, title: section.title || 'Recently Viewed', variant: section.variant || section.layout || 'carousel', count };
 
   useEffect(() => {
-    if (preview) return;
-    setProducts(getRecentlyViewed().filter((product) => product.id !== excludeProductId).slice(0, count));
-  }, [preview, count, excludeProductId]);
+    if (mode === 'preview' || cleared) return;
+    const ids = getRecentlyViewed().map(({ id }) => id).filter((id) => id !== excludeProductId);
+    if (!ids.length) return;
+    let active = true;
+    const params = new URLSearchParams({ limit: String(ids.length) });
+    ids.forEach((id) => params.append('ids', id));
 
-  if (preview) {
-    return (
-      <ProductRowSection
-        section={{ ...section, title: section.title || 'Recently Viewed', count, variant: 'carousel', textAlign: align }}
-        mode="preview"
-        onInlineFieldChange={onInlineFieldChange}
-        onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus}
-      />
-    );
-  }
+    getProducts(params).then(({ data }) => {
+      if (!active) return;
+      const byId = new Map((data || []).map((product) => [product.id, product]));
+      setProducts(ids.map((id) => byId.get(id)).filter(Boolean));
+    }).catch(() => {
+      if (active) setProducts([]);
+    });
+    return () => { active = false; };
+  }, [mode, excludeProductId, cleared]);
 
-  if (!products.length) return null;
+  if (mode === 'preview') return <ProductRowSection section={row} mode={mode} {...editorProps} />;
+  if (!products.length || cleared) return null;
+
+  const clearHistory = () => {
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* Storage unavailable. */ }
+    setCleared(true);
+  };
 
   return (
-    <Box component="section">
-      <ProductRow
-        title={section.title || 'Recently Viewed'}
-        products={products}
-        loading={false}
-        count={count}
-        layout="carousel"
-        align={align}
-      />
+    <Box>
+      <ProductRowSection section={row} products={products.slice(0, count)} count={count} />
+      <Button size="small" onClick={clearHistory}>Clear history</Button>
     </Box>
   );
 };

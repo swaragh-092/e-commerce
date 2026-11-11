@@ -50,9 +50,10 @@ const PREVIEW_WIDTHS = { desktop: '100%', tablet: 768, mobile: 375 };
 const API_BUILDER_TIMEOUT_MS = 5000;
 
 const PRODUCT_SOURCE_PARAMS = {
-  newest: { sort: 'newest' },
+  newest: { sort: 'arrivals', discoveryRow: true },
   featured: { featured: true },
-  bestSellers: { sort: 'best-selling' },
+  bestSellers: { sort: 'best-selling', discoveryRow: true },
+  mostViewed: { sort: 'most-viewed', discoveryRow: true },
   sale: { sale: true },
   recommended: { sort: 'recommended' },
 };
@@ -239,7 +240,7 @@ const extractDataSourceArray = (res, section, count) => {
 };
 
 const fetchPreviewProducts = (section) => {
-  if (section.dataSourceSlug) {
+  if (section.dataSourceSlug && !(section.source === 'sale' && section.saleLabel)) {
     return api.get('/api-builder/public/' + section.dataSourceSlug, { timeout: API_BUILDER_TIMEOUT_MS });
   }
   return getProducts(getProductParams(section));
@@ -248,6 +249,7 @@ const fetchPreviewProducts = (section) => {
 const getProductParams = (section) => ({
   ...(PRODUCT_SOURCE_PARAMS[section.source] || {}),
   ...(section.query || {}),
+  ...(section.source === 'sale' && section.saleLabel && { saleLabel: section.saleLabel }),
   limit: num(section.count, 8),
   status: 'published',
 });
@@ -323,7 +325,7 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
       const categoryResult = results[productFetches.length];
       const products = {};
       productSections.forEach((section, index) => {
-        products[section.id] = section.dataSourceSlug
+        products[section.id] = section.dataSourceSlug && !(section.source === 'sale' && section.saleLabel)
           ? extractDataSourceArray(productResults[index], section, num(section.count, 8))
           : extractArray(productResults[index], num(section.count, 8));
       });
