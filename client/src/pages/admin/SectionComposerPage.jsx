@@ -45,6 +45,8 @@ import { getSectionLabel, SECTION_VARIANTS } from '../../components/storefront/s
 import { createDefaultSection } from '../../utils/sectionPresets';
 import AddSectionDialog from '../../components/admin/sections/AddSectionDialog';
 import SaveAsTemplateDialog from '../../components/admin/themes/SaveAsTemplateDialog';
+import DraftReviewDialog from '../../components/admin/themes/DraftReviewDialog';
+import DraftArchivesDialog from '../../components/admin/themes/DraftArchivesDialog';
 import DesignVersionHistoryDialog from '../../components/admin/themes/DesignVersionHistoryDialog';
 import StorefrontTemplatePreview from '../../components/admin/themes/StorefrontTemplatePreview';
 import DesignerTreePanel from '../../components/admin/themes/designer/DesignerTreePanel';
@@ -163,6 +165,8 @@ const SectionComposerPage = () => {
   const [draft, setDraft] = useState(null);
   const [draftConflicts, setDraftConflicts] = useState([]);
   const [useLiveOpen, setUseLiveOpen] = useState(false);
+  const [reviewDraftOpen, setReviewDraftOpen] = useState(false);
+  const [archivesOpen, setArchivesOpen] = useState(false);
   const [usingLive, setUsingLive] = useState(false);
   const [draftDeletes, setDraftDeletes] = useState([]);
   const [publishOpen, setPublishOpen] = useState(false);
@@ -1155,6 +1159,8 @@ const SectionComposerPage = () => {
               <MenuItem onClick={() => { setActionsAnchor(null); openAddSection(sections.length, 'template'); }}><AddIcon fontSize="small" sx={{ mr: 1.5 }} />Add section</MenuItem>
               <MenuItem onClick={() => { setActionsAnchor(null); setSaveTemplateOpen(true); }}><SaveIcon fontSize="small" sx={{ mr: 1.5 }} />Save as template</MenuItem>
               <MenuItem onClick={() => { setActionsAnchor(null); openVersionHistory(); }} disabled={saving || publishing}><HistoryIcon fontSize="small" sx={{ mr: 1.5 }} />Version history</MenuItem>
+              <MenuItem onClick={() => { setActionsAnchor(null); setArchivesOpen(true); }} disabled={saving || publishing}>Archived drafts</MenuItem>
+              <MenuItem onClick={() => { setActionsAnchor(null); setReviewDraftOpen(true); }} disabled={!draft || saving || publishing}>Review saved draft</MenuItem>
               {isMobile && <MenuItem onClick={() => { setActionsAnchor(null); handleUndo(); }} disabled={historyIndex <= 0}><UndoIcon fontSize="small" sx={{ mr: 1.5 }} />Undo section change</MenuItem>}
               {isMobile && <MenuItem onClick={() => { setActionsAnchor(null); handleRedo(); }} disabled={historyIndex >= history.length - 1}><RedoIcon fontSize="small" sx={{ mr: 1.5 }} />Redo section change</MenuItem>}
             </Menu>
@@ -1421,7 +1427,7 @@ const SectionComposerPage = () => {
           </Box>
 
           {draftConflicts.length > 0 && (
-            <Alert severity="warning" action={<Button color="inherit" onClick={() => setUseLiveOpen(true)} disabled={saving || publishing || usingLive}>Use live storefront</Button>}>
+            <Alert severity="warning" action={<Stack direction="row"><Button color="inherit" onClick={() => setReviewDraftOpen(true)}>Review differences</Button><Button color="inherit" onClick={() => setUseLiveOpen(true)} disabled={dirty || saving || publishing || usingLive}>Use live storefront</Button></Stack>}>
               This saved draft differs from changes made to the live storefront, possibly by installing another template. The editor is showing your draft, not the live design. Publishing is blocked to protect those changes.
             </Alert>
           )}
@@ -1559,7 +1565,7 @@ const SectionComposerPage = () => {
         <DialogTitle>Restore version {pendingVersion?.revision}?</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary">
-            This replaces the current saved draft with the published version. It does not change the live storefront. Any unsaved editor changes will be discarded.
+            This archives the current saved draft before replacing it with the published version. It does not change the live storefront. Any unsaved editor changes will be discarded.
           </Typography>
         </DialogContent>
         <DialogActions>
@@ -1570,14 +1576,21 @@ const SectionComposerPage = () => {
         </DialogActions>
       </Dialog>
 
+      <DraftReviewDialog open={reviewDraftOpen} onClose={() => setReviewDraftOpen(false)} draft={draft} conflicts={draftConflicts} />
+      <DraftArchivesDialog open={archivesOpen} onClose={() => setArchivesOpen(false)} draft={draft} dirty={dirty} onRestored={async () => {
+        setDirty(false);
+        setPanelView({ mode: 'tree', sectionId: null, componentKey: null, blockKey: null, blockIndex: null });
+        await fetchSections();
+      }} />
+
       <Dialog open={useLiveOpen} onClose={() => !usingLive && setUseLiveOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>Replace draft with live storefront?</DialogTitle>
         <DialogContent>
-          <Typography>This deletes the saved draft and any unsaved editor changes, then loads the currently installed live design. Your live storefront will not change. Cancel to keep your draft.</Typography>
+          <Typography>This archives the saved draft for recovery, then loads the currently installed live design. Unsaved editor changes are not archived: save them first if you want to keep them. Your live storefront will not change. Cancel to keep editing.</Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setUseLiveOpen(false)} disabled={usingLive}>Cancel</Button>
-          <Button variant="contained" onClick={handleUseLive} disabled={usingLive}>{usingLive ? 'Loading...' : 'Discard draft and load live'}</Button>
+          <Button variant="contained" onClick={handleUseLive} disabled={dirty || usingLive}>{usingLive ? 'Loading...' : 'Archive draft and load live'}</Button>
         </DialogActions>
       </Dialog>
 

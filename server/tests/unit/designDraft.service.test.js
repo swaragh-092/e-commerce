@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
-const { DesignDraft, DesignDraftVersion, Setting, sequelize } = require('../../src/modules');
+const { DesignDraft, DesignDraftVersion, DesignDraftArchive, Setting, sequelize } = require('../../src/modules');
 afterEach(() => vi.restoreAllMocks());
 const AuditService = require('../../src/modules/audit/audit.service');
 const DesignDraftService = require('../../src/modules/settings/designDraft.service');
@@ -50,6 +50,56 @@ describe('Design draft safety', () => {
     vi.spyOn(DesignDraft, 'findOne').mockResolvedValue({ status: 'draft', revision: 47, destroy, toJSON: () => ({ revision: 47 }) });
     await expect(DesignDraftService.discardDraft({ id: 'user' }, 46)).rejects.toMatchObject({ code: 'DRAFT_CONFLICT' });
     expect(destroy).not.toHaveBeenCalled();
+  });
+
+  it('archives before deleting a discarded draft and preserves it if archiving fails', async () => {
+    const transaction = { LOCK: { UPDATE: 'UPDATE' } };
+    const destroy = vi.fn();
+    vi.spyOn(sequelize, 'transaction').mockImplementation(async (fn) => fn(transaction));
+    vi.spyOn(DesignDraft, 'findOne').mockResolvedValue({
+      id: 'draft', draftKey: 'store', status: 'draft', revision: 4, payload: [], baseSnapshot: {}, destroy,
+    });
+    vi.spyOn(DesignDraftArchive, 'create').mockRejectedValue(new Error('archive failed'));
+    await expect(DesignDraftService.discardDraft({ id: 'user' }, 4)).rejects.toThrow('archive failed');
+    expect(DesignDraftArchive.create).toHaveBeenCalledWith(expect.objectContaining({ revision: 4, archivedBy: 'user' }), { transaction });
+    expect(destroy).not.toHaveBeenCalled();
+  });
+
+  it('restores an archive at the next revision against the fresh live snapshot', async () => {
+    const transaction = { LOCK: { UPDATE: 'UPDATE' } };
+    const draft = { id: 'draft', status: 'draft', revision: 8, update: vi.fn(async function (values) { Object.assign(this, values); return this; }), toJSON() { return { ...this }; } };
+    vi.spyOn(sequelize, 'transaction').mockImplementation(async (fn) => fn(transaction));
+    vi.spyOn(DesignDraftArchive, 'findOne').mockResolvedValue({ id: 'archive', revision: 3, payload: [{ group: 'theme', key: 'primaryColor', value: '#111' }], baseSnapshot: { ignored: true } });
+    vi.spyOn(DesignDraftArchive, 'create').mockResolvedValue({});
+    vi.spyOn(DesignDraft, 'findOne').mockResolvedValue(draft);
+    vi.spyOn(Setting, 'findAll').mockResolvedValue([{ group: 'theme', key: 'primaryColor', value: '#fff' }]);
+    const auditLog = vi.spyOn(AuditService, 'log').mockResolvedValue();
+    const result = await DesignDraftService.restoreArchivedDraft({ archiveId: 'archive', expectedRevision: 8 }, { id: 'user' });
+    expect(draft.update).toHaveBeenCalledWith(expect.objectContaining({ revision: 9, baseSnapshot: { theme: { primaryColor: '#fff' } }, payload: [{ group: 'theme', key: 'primaryColor', value: '#111', operation: 'upsert' }] }), { transaction });
+    expect(result.draft.baseSnapshot).toBeUndefined();
+    expect(auditLog).toHaveBeenCalledWith(expect.objectContaining({ changes: expect.objectContaining({ action: 'restore-archive', archiveId: 'archive' }) }), transaction);
+  });
+
+  it('does not replace a draft or log a restore if archiving the current draft fails', async () => {
+    const transaction = { LOCK: { UPDATE: 'UPDATE' } };
+    const update = vi.fn();
+    vi.spyOn(sequelize, 'transaction').mockImplementation(async (fn) => fn(transaction));
+    vi.spyOn(DesignDraftArchive, 'findOne').mockResolvedValue({ id: 'archive', revision: 2, payload: [] });
+    vi.spyOn(DesignDraftArchive, 'create').mockRejectedValue(new Error('archive failed'));
+    vi.spyOn(DesignDraft, 'findOne').mockResolvedValue({ status: 'draft', revision: 8, update });
+    const auditLog = vi.spyOn(AuditService, 'log').mockResolvedValue();
+    await expect(DesignDraftService.restoreArchivedDraft({ archiveId: 'archive', expectedRevision: 8 }, { id: 'user' })).rejects.toThrow('archive failed');
+    expect(update).not.toHaveBeenCalled();
+    expect(auditLog).not.toHaveBeenCalled();
+  });
+
+  it('omits archive payload and base snapshot from archive metadata', async () => {
+    const row = { toJSON: () => ({ id: 'archive', payload: ['private'], baseSnapshot: { private: true }, revision: 3 }) };
+    vi.spyOn(DesignDraftArchive, 'findAll').mockResolvedValue([row]);
+    const result = await DesignDraftService.getArchivedDrafts();
+    expect(DesignDraftArchive.findAll).toHaveBeenCalledWith(expect.objectContaining({ attributes: { exclude: ['payload', 'baseSnapshot'] } }));
+    expect(result.archives[0]).not.toHaveProperty('payload');
+    expect(result.archives[0]).not.toHaveProperty('baseSnapshot');
   });
 
   it('ignores object key order but preserves array order when comparing live settings', () => {

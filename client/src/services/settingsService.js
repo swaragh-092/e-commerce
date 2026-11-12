@@ -63,6 +63,16 @@ export const restoreDesignVersion = async (versionId, expectedRevision = undefin
   return response.data.data;
 };
 
+export const getDraftArchives = async () => {
+  const response = await api.get('/settings/design-draft/archives');
+  return response.data.data;
+};
+
+export const restoreDraftArchive = async (archiveId, expectedRevision) => {
+  const response = await api.post(`/settings/design-draft/archives/${archiveId}/restore`, { expectedRevision });
+  return response.data.data;
+};
+
 export const discardDesignDraft = async (expectedRevision) => {
   const response = await api.delete('/settings/design-draft', { data: { expectedRevision } });
   return response.data.data;

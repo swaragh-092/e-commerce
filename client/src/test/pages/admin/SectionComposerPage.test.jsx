@@ -52,7 +52,7 @@ describe('Store Designer section editing', () => {
     expect(service.discardDesignDraft).not.toHaveBeenCalled();
     expect(await screen.findByText('Preview Old template hero')).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('button', { name: 'Use live storefront' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Discard draft and load live' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Archive draft and load live' }));
     await waitFor(() => expect(service.discardDesignDraft).toHaveBeenCalledWith(46));
     expect(await screen.findByRole('button', { name: 'Preview Homepage hero' })).toBeInTheDocument();
     expect(screen.queryByText(/editor is showing your draft, not the live design/)).not.toBeInTheDocument();
@@ -96,7 +96,7 @@ describe('Store Designer section editing', () => {
     service.discardDesignDraft.mockRejectedValueOnce(new Error('Conflict'));
     mount();
     fireEvent.click(await screen.findByRole('button', { name: 'Use live storefront' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Discard draft and load live' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Archive draft and load live' }));
     await waitFor(() => expect(notify).toHaveBeenCalledWith('Could not load the live design. Please retry.', 'error'));
     expect(await screen.findByText('Preview Old template hero')).toBeInTheDocument();
   });
