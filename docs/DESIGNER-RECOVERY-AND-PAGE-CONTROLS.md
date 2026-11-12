@@ -86,3 +86,16 @@ open the selected path, start collapsed with per-branch disclosure buttons, or e
 visible levels. Category-page overrides take precedence over Collection settings;
 Collection settings remain the fallback. Depth limits both rendering and the number of
 levels administrators can expose.
+
+## Orders page controls
+
+Orders page settings control the page title, search placeholder, comfortable/compact
+row spacing, optional product thumbnails, and an optional help block with custom copy
+and an internal link. Empty-orders recovery supports a headline, message, button label,
+and internal destination. Filtered no-results copy remains separate, with Clear Filters
+instead of a shopping link.
+
+Existing appearance is preserved by default: comfortable rows, no thumbnails, and no
+help block. Thumbnails use saved order-item image snapshots when available; older orders
+without an image remain text-only. Status, totals, payment information, guest-order
+verification, and order details actions are not designer-editable.
