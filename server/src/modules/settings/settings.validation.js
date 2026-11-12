@@ -46,6 +46,8 @@ const restoreDesignVersionSchema = Joi.object({
   expectedRevision: Joi.number().integer().min(1).optional(),
 }).unknown(false);
 
+const restoreDesignArchiveSchema = Joi.object({ expectedRevision: Joi.number().integer().min(1).optional() }).unknown(false);
+
 module.exports = {
   updateSettingsGroupSchema,
   updateSingleSettingSchema,
@@ -54,4 +56,5 @@ module.exports = {
   saveDesignDraftSchema,
   publishDesignDraftSchema,
   restoreDesignVersionSchema,
+  restoreDesignArchiveSchema,
 };

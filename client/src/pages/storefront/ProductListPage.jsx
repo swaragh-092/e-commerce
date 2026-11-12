@@ -26,8 +26,8 @@ const ProductListPage = ({ tag = null }) => {
     const { settings } = useSettings();
     const catalog      = settings?.catalog || {};
     const defaultSort  = catalog.defaultSort  || 'newest';
-    const defaultLimit = parseInt(catalog.defaultPageSize) || 20;
-    const gridCols     = parseInt(catalog.gridColumns) || 4;
+    const defaultLimit = Math.min(100, Math.max(1, Number.parseInt(catalog.defaultPageSize, 10) || 20));
+    const gridCols     = Math.min(6, Math.max(2, Number.parseInt(catalog.gridColumns, 10) || 4));
     const showFilters  = catalog.showFilters !== false;
     const collectionLayout = catalog.templateLayout || 'sidebar-filters-grid';
     const filterLayout = catalog.filterLayout || (collectionLayout.includes('top') ? 'topbar' : 'sidebar');
@@ -82,7 +82,7 @@ const ProductListPage = ({ tag = null }) => {
         fetchProducts();
         return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchParams.toString(), brandsEnabled, tag?.slug]);
+    }, [searchParams.toString(), brandsEnabled, tag?.slug, defaultLimit, defaultSort]);
 
     // Resolve the category slug → full breadcrumb path for the contextual breadcrumb on PDP
     // e.g. "vegetable" slug → "Vegetable > Roots > Beetroot" when filtering by beetroot

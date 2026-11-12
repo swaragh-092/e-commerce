@@ -159,10 +159,10 @@ const CategoryPage = () => {
     const { settings }      = useSettings();
     const catalog           = settings?.catalog || {};
     const categoryPage      = settings?.categoryPage || {};
-    const defaultSort       = catalog.defaultSort       || 'newest';
-    const defaultLimit      = parseInt(catalog.defaultPageSize) || 20;
-    const gridCols          = parseInt(catalog.gridColumns) || 4;
-    const showFilters       = catalog.showFilters !== false;
+    const defaultSort       = categoryPage.defaultSort || catalog.defaultSort || 'newest';
+    const defaultLimit      = Math.min(100, Math.max(1, Number.parseInt(categoryPage.defaultPageSize ?? catalog.defaultPageSize, 10) || 20));
+    const gridCols          = Math.min(6, Math.max(2, Number.parseInt(categoryPage.gridColumns ?? catalog.gridColumns, 10) || 4));
+    const showFilters       = (categoryPage.showFilters ?? catalog.showFilters) !== false;
     const collectionLayout  = catalog.templateLayout || 'sidebar-filters-grid';
     const filterLayout      = catalog.filterLayout  || (collectionLayout.includes('top') ? 'topbar' : 'sidebar');
     const isCompact         = collectionLayout.includes('compact') || collectionLayout.includes('b2b');
@@ -216,7 +216,7 @@ const CategoryPage = () => {
 
         return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [categorySlug, searchParams.toString()]);
+    }, [categorySlug, searchParams.toString(), defaultLimit, defaultSort]);
 
     // ── Handlers ──────────────────────────────────────────────────────────────
     const handleFilterChange = (newFilters) => {

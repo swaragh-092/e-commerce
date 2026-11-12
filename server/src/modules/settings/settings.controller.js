@@ -73,6 +73,16 @@ const getDesignVersions = async (req, res, next) => {
   }
 };
 
+const getDesignArchives = async (req, res, next) => {
+  try { return success(res, await DesignDraftService.getArchivedDrafts({ limit: req.query.limit })); }
+  catch (err) { next(err); }
+};
+
+const restoreDesignArchive = async (req, res, next) => {
+  try { return success(res, await DesignDraftService.restoreArchivedDraft({ archiveId: req.params.id, ...req.body }, req.user)); }
+  catch (err) { next(err); }
+};
+
 const saveDesignDraft = async (req, res, next) => {
   try {
     const draft = await DesignDraftService.saveDraft(req.body, req.user);
@@ -160,6 +170,8 @@ module.exports = {
   resetDesignSetting,
   getDesignDraft,
   getDesignVersions,
+  getDesignArchives,
+  restoreDesignArchive,
   saveDesignDraft,
   publishDesignDraft,
   restoreDesignVersion,

@@ -1,7 +1,7 @@
 'use strict';
 
 const { isDeepStrictEqual } = require('node:util');
-const { sequelize, Setting, DesignDraft, DesignDraftVersion } = require('../index');
+const { sequelize, Setting, DesignDraft, DesignDraftVersion, DesignDraftArchive } = require('../index');
 const SettingsService = require('./settings.service');
 const AuditService = require('../audit/audit.service');
 const AppError = require('../../utils/AppError');
@@ -24,6 +24,13 @@ const serializeVersion = (version, { includePayload = false } = {}) => {
   return value;
 };
 
+const serializeArchive = (archive) => {
+  const value = archive.toJSON();
+  delete value.payload;
+  delete value.baseSnapshot;
+  return value;
+};
+
 const buildPublishedVersion = (draft, userId, publishedAt = new Date()) => ({
   draftKey: DESIGN_DRAFT_KEY,
   revision: Number(draft.revision) || 1,
@@ -31,6 +38,14 @@ const buildPublishedVersion = (draft, userId, publishedAt = new Date()) => ({
   publishedAt,
   publishedBy: userId,
 });
+
+const archiveDraft = (draft, userId, transaction) => DesignDraftArchive.create({
+  draftKey: draft.draftKey,
+  revision: draft.revision,
+  payload: draft.payload,
+  baseSnapshot: draft.baseSnapshot,
+  archivedBy: userId,
+}, { transaction });
 
 const readLiveSnapshot = async (transaction = null, { lock = false } = {}) => {
   const options = { where: { group: DESIGN_DRAFT_GROUPS } };
@@ -118,6 +133,15 @@ const getPublishedVersions = async ({ limit = 30 } = {}) => {
     include: [{ association: 'publisher', attributes: ['id', 'firstName', 'lastName', 'email'] }],
   });
   return { versions: versions.map((version) => serializeVersion(version)) };
+};
+
+const getArchivedDrafts = async ({ limit = 30 } = {}) => {
+  const safeLimit = Math.max(1, Math.min(100, Number.parseInt(limit, 10) || 30));
+  const archives = await DesignDraftArchive.findAll({
+    where: { draftKey: DESIGN_DRAFT_KEY }, order: [['createdAt', 'DESC']], limit: safeLimit,
+    attributes: { exclude: ['payload', 'baseSnapshot'] },
+  });
+  return { archives: archives.map(serializeArchive) };
 };
 
 const saveDraft = async ({ settings, expectedRevision }, user) => {
@@ -262,6 +286,7 @@ const restorePublishedVersion = async ({ versionId, expectedRevision }, user) =>
   const draft = await findDraft(t, { lock: true });
   if (draft?.status === 'draft') assertRevision(draft, expectedRevision);
 
+  if (draft?.status === 'draft') await archiveDraft(draft, user.id, t);
   const baseSnapshot = draft?.status === 'draft'
     ? draft.baseSnapshot
     : await readLiveSnapshot(t, { lock: true });
@@ -307,6 +332,10 @@ const discardDraft = async (user, expectedRevision) => sequelize.transaction(asy
   const draft = await findDraft(t, { lock: true });
   if (!draft || draft.status !== 'draft') return { discarded: false };
   assertRevision(draft, expectedRevision);
+  await DesignDraftArchive.create({
+    draftKey: draft.draftKey, revision: draft.revision, payload: draft.payload,
+    baseSnapshot: draft.baseSnapshot, archivedBy: user.id,
+  }, { transaction: t });
   await draft.destroy({ transaction: t });
   try {
     await AuditService.log({
@@ -320,15 +349,44 @@ const discardDraft = async (user, expectedRevision) => sequelize.transaction(asy
   return { discarded: true };
 });
 
+const restoreArchivedDraft = async ({ archiveId, expectedRevision }, user) => sequelize.transaction(async (t) => {
+  const archive = await DesignDraftArchive.findOne({
+    where: { id: archiveId, draftKey: DESIGN_DRAFT_KEY }, transaction: t,
+    lock: t.LOCK ? t.LOCK.UPDATE : 'UPDATE',
+  });
+  if (!archive) throw new AppError('NOT_FOUND', 404, 'Archived design draft not found.');
+  const payload = normalizePayload(archive.payload || []);
+  assertDraftPermissions(payload, user);
+  const draft = await findDraft(t, { lock: true });
+  if (draft?.status === 'draft') assertRevision(draft, expectedRevision);
+
+  if (draft?.status === 'draft') await archiveDraft(draft, user.id, t);
+  const baseSnapshot = await readLiveSnapshot(t, { lock: true });
+  const values = { revision: (Number(draft?.revision) || 0) + 1, status: 'draft', payload, baseSnapshot, updatedBy: user.id, publishedAt: null, publishedBy: null };
+  const restored = draft
+    ? await draft.update(values, { transaction: t })
+    : await DesignDraft.create({ draftKey: DESIGN_DRAFT_KEY, ...values, createdBy: user.id }, { transaction: t });
+  await AuditService.log({
+    userId: user.id,
+    action: 'UPDATE',
+    entity: 'DesignDraft',
+    entityId: restored.id,
+    changes: { action: 'restore-archive', archiveId: archive.id, archiveRevision: archive.revision, revision: restored.revision },
+  }, t);
+  return { draft: serializeDraft(restored) };
+});
+
 module.exports = {
   DESIGN_DRAFT_GROUPS,
   getDraft,
   getPublishedVersions,
+  getArchivedDrafts,
   saveDraft,
   publishDraft,
   restorePublishedVersion,
   buildPublishedVersion,
   discardDraft,
+  restoreArchivedDraft,
   findPublishConflicts,
   normalizePayload,
 };
