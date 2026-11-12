@@ -2,11 +2,38 @@ import { createRequire } from 'node:module';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
-const { DesignDraft, Setting, sequelize } = require('../../src/modules');
+const { DesignDraft, DesignDraftVersion, Setting, sequelize } = require('../../src/modules');
 afterEach(() => vi.restoreAllMocks());
+const AuditService = require('../../src/modules/audit/audit.service');
 const DesignDraftService = require('../../src/modules/settings/designDraft.service');
 
 describe('Design draft safety', () => {
+  it.each([
+    { draftRevision: 1, lastPublishedRevision: 46, expected: 47 },
+    { draftRevision: 46, lastPublishedRevision: 46, expected: 47 },
+    { draftRevision: 50, lastPublishedRevision: 46, expected: 50 },
+    { draftRevision: 1, lastPublishedRevision: null, expected: 1 },
+  ])('publishes above retained history without reusing a revision: %j', async ({ draftRevision, lastPublishedRevision, expected }) => {
+    const transaction = { LOCK: { UPDATE: 'UPDATE' } };
+    const draft = {
+      id: 'draft', status: 'draft', revision: draftRevision, payload: [], baseSnapshot: {},
+      toJSON() { return { revision: this.revision, status: this.status }; },
+      update: vi.fn(async function (values) { Object.assign(this, values); return this; }),
+    };
+    vi.spyOn(sequelize, 'transaction').mockImplementation(async (fn) => fn(transaction));
+    vi.spyOn(DesignDraft, 'findOne').mockResolvedValue(draft);
+    vi.spyOn(Setting, 'findAll').mockResolvedValue([]);
+    vi.spyOn(DesignDraftVersion, 'max').mockResolvedValue(lastPublishedRevision);
+    vi.spyOn(DesignDraftVersion, 'create').mockImplementation(async (values) => ({ toJSON: () => values }));
+    vi.spyOn(AuditService, 'log').mockResolvedValue();
+    const result = await DesignDraftService.publishDraft({ expectedRevision: draftRevision }, { id: 'user' });
+    expect(DesignDraft.findOne).toHaveBeenCalledWith(expect.objectContaining({ transaction, lock: 'UPDATE' }));
+    expect(DesignDraftVersion.max).toHaveBeenCalledWith('revision', { where: { draftKey: 'store' }, transaction });
+    expect(result.version.revision).toBe(expected);
+    expect(result.draft.revision).toBe(expected + 1);
+    expect(result.published).toBe(true);
+  });
+
   it('reports stale live settings on load without modifying the saved draft', async () => {
     const draft = { status: 'draft', revision: 46, baseSnapshot: { theme: { primaryColor: '#000000' } }, payload: [{ group: 'theme', key: 'primaryColor', value: '#111111' }], toJSON() { return { ...this }; } };
     vi.spyOn(DesignDraft, 'findOne').mockResolvedValue(draft);
