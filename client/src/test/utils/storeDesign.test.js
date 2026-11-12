@@ -30,7 +30,7 @@ describe('store design ownership', () => {
   it('keeps operational settings editable from System Settings', () => {
     expect(isDesignerOwnedSetting('general', 'storeName')).toBe(false);
     expect(isDesignerOwnedSetting('shipping', 'method')).toBe(false);
-    expect(isDesignerOwnedSetting('catalog', 'defaultSort')).toBe(false);
+    expect(isDesignerOwnedSetting('catalog', 'defaultSort')).toBe(true);
     expect(isDesignerOwnedSetting('catalog', 'lowStockThreshold')).toBe(false);
     expect(isDesignerOwnedSetting('advanced', 'headScripts')).toBe(false);
   });

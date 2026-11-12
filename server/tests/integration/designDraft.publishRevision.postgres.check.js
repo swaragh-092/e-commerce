@@ -56,7 +56,8 @@ async function main() {
     const beforePublishedRestore = await db.DesignDraft.findOne();
     await service.restorePublishedVersion({ versionId: published.version.id, expectedRevision: beforePublishedRestore.revision }, user);
     assert.equal(await db.DesignDraftArchive.count(), 4);
-    assert.ok(await db.DesignDraftArchive.findOne({ where: { revision: beforePublishedRestore.revision, payload: beforePublishedRestore.payload } }));
+    const archivesAfterPublishedRestore = await db.DesignDraftArchive.findAll();
+    assert.ok(archivesAfterPublishedRestore.some(row => row.revision === beforePublishedRestore.revision && JSON.stringify(row.payload) === JSON.stringify(beforePublishedRestore.payload)));
     const metadata = await service.getArchivedDrafts();
     assert.ok(metadata.archives.every(row => !('payload' in row) && !('baseSnapshot' in row)));
     console.log('PASS: published history, draft archives and restores preserve replaced drafts without publishing restored payload.');
