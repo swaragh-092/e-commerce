@@ -57,8 +57,32 @@ page-specific controls are still separate work. Authenticated production save/pu
 verification was blocked by the live admin sign-in; local synthetic browser and
 isolated PostgreSQL checks are not production proof.
 
-Category settings also control nested category-filter depth (1–5 levels) and expansion
-behavior: open the selected path, start collapsed with per-branch disclosure buttons,
-or expand all visible levels. Category-page overrides take precedence over Collection
-settings; Collection settings remain the fallback. Depth limits both rendering and the
-number of levels administrators can expose, preventing excessively deep filter trees.
+
+## Search and Cart controls
+
+Search settings control result page size (capped at the API's 50-result limit), desktop
+columns, matching brand/category visibility, result-count visibility, page heading, search
+placeholder, initial prompt, and no-result copy. Searches still require two characters and
+retain server-side query-length validation.
+
+Cart settings control empty-state copy and its safe internal recovery link, cart/summary
+labels, checkout/enquiry text, continue-shopping/clear-cart visibility, and optional
+trust, payment, and secure-checkout presentation. Checkout/payment availability remains
+server-feature-gated; hiding presentation does not change feature availability. Prices,
+shipping and tax continue to be calculated by commerce services.
+
+## Product rows on other storefront pages
+
+The Store Designer can add up to six product rows on Product, Category, Collection,
+Search, and Cart pages. Each row supports Best Sellers, Trending / Most Viewed, Featured,
+New Arrivals, or On Sale sources, with a configurable title, product count, and carousel
+or grid layout. Rows are saved with that page's settings and appended after its primary
+page content; existing product grids and cart controls remain intact.
+
+## Nested category filters
+
+Category settings control nested category-filter depth (1–5 levels) and expansion behavior:
+open the selected path, start collapsed with per-branch disclosure buttons, or expand all
+visible levels. Category-page overrides take precedence over Collection settings;
+Collection settings remain the fallback. Depth limits both rendering and the number of
+levels administrators can expose.

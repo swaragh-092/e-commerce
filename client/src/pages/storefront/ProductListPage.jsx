@@ -4,6 +4,7 @@ import { FilterList as FilterIcon, Sort as SortIcon } from '@mui/icons-material'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { getMediaUrl, onImageError } from '../../utils/media';
 import ProductGrid from '../../components/product/ProductGrid';
+import PageProductRows from '../../components/storefront/sections/PageProductRows';
 import ProductFilters from '../../components/product/ProductFilters';
 import StorefrontSidebarMenu from '../../components/layout/StorefrontSidebarMenu';
 import { getProducts } from '../../services/productService';
@@ -54,6 +55,7 @@ const ProductListPage = ({ tag = null }) => {
         minPrice: searchParams.get('minPrice') || '',
         maxPrice: searchParams.get('maxPrice') || '',
         ...(searchParams.get('onSale') === 'true' && { onSale: true }),
+        ...(searchParams.get('featured') === 'true' && { featured: true }),
         ...(searchParams.get('saleLabel') && { saleLabel: searchParams.get('saleLabel') }),
         status: 'published',
         limit: defaultLimit,
@@ -126,6 +128,8 @@ const ProductListPage = ({ tag = null }) => {
         || filters.brand
         || filters.minPrice
         || filters.maxPrice
+        || filters.featured
+        || filters.onSale
     );
 
     const tagPath = tag ? `/tags/${encodeURIComponent(tag.slug)}` : '';
@@ -258,6 +262,7 @@ const ProductListPage = ({ tag = null }) => {
                     )}
                 </Grid>
             </Grid>
+            {!tag && <PageProductRows rows={settings?.catalog?.productRows} />}
 
             <Drawer anchor="left" open={showFilters && useFilterDrawer && mobileFilterOpen} onClose={() => setMobileFilterOpen(false)}>
                 <Box sx={{ width: { xs: '85vw', sm: 320 }, maxWidth: 380, p: 3 }}>

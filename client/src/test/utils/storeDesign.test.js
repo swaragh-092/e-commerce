@@ -25,6 +25,9 @@ describe('store design ownership', () => {
     expect(isDesignerOwnedSetting('productPage', 'templateLayout')).toBe(true);
     expect(isDesignerOwnedSetting('brandsPage', 'cardBorderRadius')).toBe(true);
     expect(isDesignerOwnedSetting('advanced', 'customCSS')).toBe(true);
+    for (const group of ['productPage', 'categoryPage', 'catalog', 'searchPage', 'cartPage']) {
+      expect(isDesignerOwnedSetting(group, 'productRows')).toBe(true);
+    }
   });
 
   it('keeps operational settings editable from System Settings', () => {
@@ -35,6 +38,35 @@ describe('store design ownership', () => {
     expect(isDesignerOwnedSetting('categoryPage', 'categoryExpandMode')).toBe(true);
     expect(isDesignerOwnedSetting('catalog', 'lowStockThreshold')).toBe(false);
     expect(isDesignerOwnedSetting('advanced', 'headScripts')).toBe(false);
+  });
+
+  it('registers the cart and search controls that their storefront pages consume', () => {
+    const cartFields = DESIGN_PAGE_CONTROL_SCHEMAS.cart.groups.flatMap(group => group.fields.map(field => field.key));
+    const searchFields = DESIGN_PAGE_CONTROL_SCHEMAS.search.groups.flatMap(group => group.fields.map(field => field.key));
+    for (const key of ['emptyStateTitle', 'emptyStateText', 'emptyStateButtonLabel', 'emptyStateButtonLink', 'showPaymentMethods', 'showSecureCheckout', 'showClearCart', 'checkoutButtonLabel']) {
+      expect(cartFields).toContain(key);
+      expect(isDesignerOwnedSetting('cartPage', key)).toBe(true);
+    }
+    for (const key of ['resultsPerPage', 'showMatchingBrands', 'showMatchingCategories', 'initialPromptMessage', 'noResultsMessage']) {
+      expect(searchFields).toContain(key);
+      expect(isDesignerOwnedSetting('searchPage', key)).toBe(true);
+    }
+  });
+
+  it('keeps page ownership and initial control values aligned with storefront fallbacks', () => {
+    const pages = Object.fromEntries(DESIGN_PAGE_REGISTRY.map(page => [page.key, page]));
+    for (const [key, group, fields] of [
+      ['checkout', 'checkoutPage', ['paymentHeading']],
+      ['orders', 'ordersPage', ['emptyHeadline']],
+      ['not-found', 'notFoundPage', ['headline', 'cta1Link']],
+    ]) {
+      expect(pages[key].settingsGroup).toBe(group);
+      for (const field of fields) expect(isDesignerOwnedSetting(group, field)).toBe(true);
+    }
+    expect(getDesignPageControlSchema('account').groups[0].fields[0].defaultValue).toBe('tabs');
+    expect(getDesignPageControlSchema('brand').groups.flatMap(group => group.fields).find(field => field.key === 'showProductCount').defaultValue).toBe(false);
+    expect(getDesignPageControlSchema('checkout').groups[0].fields.find(field => field.key === 'paymentHeading').defaultValue).toBe('Payment Method');
+    expect(getDesignPageControlSchema('orders').groups[0].fields.find(field => field.key === 'emptyHeadline').defaultValue).toBe('No orders found');
   });
 
   it('builds merchant-facing summaries without exposing internal storage names', () => {

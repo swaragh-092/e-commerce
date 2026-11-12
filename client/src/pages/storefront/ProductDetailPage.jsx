@@ -35,6 +35,7 @@ import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getStoreName } from '../../utils/store';
 import { trackRecentlyViewed } from '../../components/storefront/sections/RecentlyViewedSection';
 import SectionRenderer from '../../components/storefront/sections/SectionRenderer';
+import PageProductRows from '../../components/storefront/sections/PageProductRows';
 import { getPageSections } from '../../utils/designerSections';
 import { buildBreadcrumbJsonLd, buildProductJsonLd } from '../../utils/seo/buildStructuredData';
 import { getBadgeChipProps } from '../../utils/componentStyles';
@@ -1015,6 +1016,7 @@ const ProductDetailPage = () => {
             </Grid>
 
             {showProductRelated && <RelatedProducts productId={product.id} />}
+            <PageProductRows rows={settings?.productPage?.productRows} />
             {pp.showRecentlyViewed !== false && getPageSections(settings, 'product')
                 .filter((section) => section.type === 'recently-viewed' && section.enabled !== false)
                 .map((section) => (

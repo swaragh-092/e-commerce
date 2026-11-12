@@ -7,12 +7,12 @@ import { AuthContext } from '../../../context/AuthContext';
 import cartService from '../../../services/cartService';
 import { useCart } from '../../../hooks/useCart';
 
-const { notify } = vi.hoisted(() => ({ notify: vi.fn() }));
+const { notify, settingsState } = vi.hoisted(() => ({ notify: vi.fn(), settingsState: { current: {} } }));
 vi.mock('../../../services/cartService', () => ({ default: {
   getCart: vi.fn(), addItem: vi.fn(), updateItem: vi.fn(), removeItem: vi.fn(), clearCart: vi.fn(),
 } }));
 vi.mock('../../../hooks/useSettings', () => ({
-  useSettings: () => ({ settings: {} }),
+  useSettings: () => ({ settings: settingsState.current }),
   useFeature: () => true,
   useFeatureVisible: () => true,
   useFeaturesResolved: () => true,
@@ -86,5 +86,64 @@ describe('cart failure recovery', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: label })).toBeEnabled());
     expect(screen.getByText('Test product')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Decrease quantity' }).nextElementSibling).toHaveTextContent('2');
+  });
+});
+
+
+describe('cart designer controls', () => {
+  it('applies empty-cart copy and a safe internal recovery link', async () => {
+    settingsState.current = { cartPage: { emptyStateTitle: 'Basket waiting', emptyStateText: 'Pick something you love.', emptyStateButtonLabel: 'Explore flowers', emptyStateButtonLink: '/category/flowers' } };
+    cartService.getCart.mockResolvedValue(response([]));
+    mount();
+    expect(await screen.findByRole('heading', { name: 'Basket waiting' })).toBeInTheDocument();
+    expect(screen.getByText('Pick something you love.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Explore flowers' })).toHaveAttribute('href', '/category/flowers');
+  });
+
+  it('uses cart labels and respects optional CTA, payment, trust, secure and clear controls', async () => {
+    settingsState.current = { cartPage: {
+      cartTitle: 'Your basket', cartSubtitle: 'Check these items', summaryTitle: 'Your total',
+      checkoutButtonLabel: 'Continue securely', showEnquiryButton: false,
+      showContinueShopping: false, showClearCart: false, showTrustBadges: false,
+      showPaymentMethods: false, showSecureCheckout: false,
+    } };
+    mount();
+    expect(await screen.findByRole('heading', { name: /Your basket/ })).toBeInTheDocument();
+    expect(screen.getByText('Check these items')).toBeInTheDocument();
+    expect(screen.getByText('Your total')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue securely' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Enquire About Cart' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Clear all items' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Continue shopping/i })).not.toBeInTheDocument();
+    expect(screen.queryByText('Easy Returns')).not.toBeInTheDocument();
+    expect(screen.queryByText('WE ACCEPT')).not.toBeInTheDocument();
+    expect(screen.queryByText('256-BIT SSL ENCRYPTED CHECKOUT')).not.toBeInTheDocument();
+  });
+});
+
+
+describe('cart designer settings', () => {
+  it('customizes the empty-cart recovery action with an internal path', async () => {
+    settingsState.current = { cartPage: { emptyStateTitle: 'Basket empty', emptyStateText: 'Find something fresh.', emptyStateButtonLabel: 'Browse flowers', emptyStateButtonLink: '/category/flowers' } };
+    cartService.getCart.mockResolvedValue(response([]));
+    mount();
+    expect(await screen.findByRole('heading', { name: 'Basket empty' })).toBeInTheDocument();
+    expect(screen.getByText('Find something fresh.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Browse flowers' })).toHaveAttribute('href', '/category/flowers');
+  });
+
+  it('applies cart layout labels and optional recovery/trust/payment controls', async () => {
+    settingsState.current = { cartPage: { cartTitle: 'Your basket', cartSubtitle: 'Check your items', summaryTitle: 'Your total', checkoutButtonLabel: 'Checkout securely', showEnquiryButton: false, showContinueShopping: false, showClearCart: false, showTrustBadges: false, showPaymentMethods: false, showSecureCheckout: false } };
+    mount();
+    expect(await screen.findByRole('heading', { name: /Your basket/ })).toBeInTheDocument();
+    expect(screen.getByText('Check your items')).toBeInTheDocument();
+    expect(screen.getByText('Your total')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Checkout securely' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Enquire About Cart' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Clear all items' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Continue shopping/i })).not.toBeInTheDocument();
+    expect(screen.queryByText('Easy Returns')).not.toBeInTheDocument();
+    expect(screen.queryByText('WE ACCEPT')).not.toBeInTheDocument();
+    expect(screen.queryByText('256-BIT SSL ENCRYPTED CHECKOUT')).not.toBeInTheDocument();
   });
 });

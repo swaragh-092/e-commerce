@@ -11,6 +11,7 @@ const productListQuerySchema = Joi.object({
   saleLabel: Joi.string().trim().max(100),
   sale: Joi.boolean(),
   onSale: Joi.boolean(),
+  featured: Joi.boolean(),
   hasVariants: Joi.boolean(),
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(1000).default(20),
