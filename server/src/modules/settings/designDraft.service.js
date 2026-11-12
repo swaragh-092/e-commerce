@@ -1,5 +1,6 @@
 'use strict';
 
+const { isDeepStrictEqual } = require('node:util');
 const { sequelize, Setting, DesignDraft, DesignDraftVersion } = require('../index');
 const SettingsService = require('./settings.service');
 const AuditService = require('../audit/audit.service');
@@ -7,7 +8,7 @@ const AppError = require('../../utils/AppError');
 const { getPermissionsForUser, PERMISSIONS } = require('../../config/permissions');
 const { DESIGN_DRAFT_KEY, DESIGN_DRAFT_GROUPS, isDesignDraftTarget } = require('./designDraft');
 
-const valuesEqual = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+const valuesEqual = isDeepStrictEqual;
 
 const serializeDraft = (draft) => {
   if (!draft) return null;
@@ -165,11 +166,13 @@ const saveDraft = async ({ settings, expectedRevision }, user) => {
 
 const findPublishConflicts = (baseSnapshot, currentSnapshot, payload) => {
   const conflicts = [];
-  for (const { group, key } of payload) {
+  for (const { group, key, value, operation } of payload) {
     const baseKeys = baseSnapshot?.[group] || {};
     const currentKeys = currentSnapshot?.[group] || {};
     const hasBase = Object.prototype.hasOwnProperty.call(baseKeys, key);
     const hasCurrent = Object.prototype.hasOwnProperty.call(currentKeys, key);
+    // A concurrent change to the same desired result needs no overwrite.
+    if (operation === 'delete' ? !hasCurrent : hasCurrent && valuesEqual(value, currentKeys[key])) continue;
     if (hasBase !== hasCurrent || (hasBase && !valuesEqual(baseKeys[key], currentKeys[key]))) {
       conflicts.push({ group, key });
     }

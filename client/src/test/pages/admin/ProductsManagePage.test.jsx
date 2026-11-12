@@ -239,6 +239,18 @@ describe('ProductsManagePage storefront state controls', () => {
     expect(screen.getByRole('button', { name: /Low Stock/ })).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('stores the category filter in the URL so it is retained when returning from an editor', async () => {
+    getCategoryTree.mockResolvedValue({ data: [{ id: 'vegetables', name: 'Vegetables', children: [] }] });
+    renderProductsPage();
+
+    await screen.findByText('Test product');
+    await openSelect(screen.getByRole('combobox', { name: 'Category' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Vegetables' }));
+
+    await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({ categoryId: 'vegetables' })));
+    expect(screen.getByTestId('search-url')).toHaveTextContent('?category=vegetables');
+  });
+
   it('preserves an explicitly configured zero low-stock threshold in the product request', async () => {
     settingsMock.catalog.lowStockThreshold = 0;
     renderProductsPage();

@@ -5,6 +5,36 @@ const require = createRequire(import.meta.url);
 const DesignDraftService = require('../../src/modules/settings/designDraft.service');
 
 describe('Design draft safety', () => {
+  it('ignores object key order but preserves array order when comparing live settings', () => {
+    const payload = [{ group: 'homepage', key: 'sections', value: [{ id: 'draft' }] }];
+    expect(DesignDraftService.findPublishConflicts(
+      { homepage: { sections: [{ id: 'hero', enabled: true }] } },
+      { homepage: { sections: [{ enabled: true, id: 'hero' }] } },
+      payload,
+    )).toEqual([]);
+    expect(DesignDraftService.findPublishConflicts(
+      { homepage: { sections: [{ id: 'hero' }, { id: 'footer' }] } },
+      { homepage: { sections: [{ id: 'footer' }, { id: 'hero' }] } },
+      payload,
+    )).toEqual([{ group: 'homepage', key: 'sections' }]);
+  });
+
+  it('allows live changes that already match the desired draft value', () => {
+    expect(DesignDraftService.findPublishConflicts(
+      { theme: { primaryColor: '#000000' } },
+      { theme: { primaryColor: '#ffffff' } },
+      [{ group: 'theme', key: 'primaryColor', value: '#ffffff' }],
+    )).toEqual([]);
+  });
+
+  it('allows a reset when the live override has already been removed', () => {
+    expect(DesignDraftService.findPublishConflicts(
+      { theme: { radius: 12 } },
+      {},
+      [{ group: 'theme', key: 'radius', operation: 'delete' }],
+    )).toEqual([]);
+  });
+
   it('accepts Designer settings and rejects operational groups', () => {
     expect(DesignDraftService.normalizePayload([
       { group: 'theme', key: 'primaryColor', value: '#0f766e' },
