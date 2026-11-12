@@ -14,8 +14,6 @@ export const SettingsContext = createContext(null);
 // settings (payments, shipping, product page) change — only when the
 // theme tokens themselves change. See HomeExperience, HeroSection, etc.
 export const DesignTokensContext = createContext(null);
-const AdminThemeModeContext = createContext({ isDark: false, toggleDarkMode: () => {} });
-export const useAdminThemeMode = () => useContext(AdminThemeModeContext);
 
 /**
  * Slice hook — returns only the resolved design tokens object.
@@ -64,14 +62,8 @@ export const SettingsProvider = ({ children }) => {
 
   const t = settings?.theme || {};
 
-  // Storefront appearance stays light; the admin theme has its own preference.
-  const [adminDarkMode, setAdminDarkMode] = useState(() => localStorage.getItem('adminDarkMode') === 'true');
-  const toggleDarkMode = useCallback(() => {
-    setAdminDarkMode((current) => {
-      const next = !current;
-      localStorage.setItem('adminDarkMode', String(next));
-      return next;
-    });
+  useEffect(() => {
+    localStorage.removeItem('adminDarkMode');
   }, []);
 
   // Memoize fetchSettings so any consumer that depends on `refreshSettings`
@@ -213,10 +205,9 @@ export const SettingsProvider = ({ children }) => {
   }, []);
 
   const storefrontTokens = useMemo(() => resolveDesignTokens(t, 'light'), [t]);
-  const isDark = isAdminRoute && adminDarkMode;
   const themeConfig = useMemo(
-    () => (isAdminRoute ? buildAdminTheme(settings?.admin, isDark ? 'dark' : 'light') : createTheme(buildStorefrontTheme(t, 'light'))),
-    [isAdminRoute, settings?.admin, t, isDark]
+    () => (isAdminRoute ? buildAdminTheme(settings?.admin) : createTheme(buildStorefrontTheme(t, 'light'))),
+    [isAdminRoute, settings?.admin, t]
   );
   // Resolved design tokens — used by DesignTokensContext subscribers.
   // Admin routes deliberately receive the stable admin theme, never merchant
@@ -436,16 +427,14 @@ export const SettingsProvider = ({ children }) => {
   return (
     <SettingsContext.Provider value={value}>
       <DesignTokensContext.Provider value={designTokens}>
-        <AdminThemeModeContext.Provider value={{ isDark, toggleDarkMode }}>
-          <ThemeProvider theme={themeConfig}>
-            <CssBaseline />
-            {loading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-                <CircularProgress />
-              </Box>
-            ) : children}
-          </ThemeProvider>
-        </AdminThemeModeContext.Provider>
+        <ThemeProvider theme={themeConfig}>
+          <CssBaseline />
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+              <CircularProgress />
+            </Box>
+          ) : children}
+        </ThemeProvider>
       </DesignTokensContext.Provider>
     </SettingsContext.Provider>
   );

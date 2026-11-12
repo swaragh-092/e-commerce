@@ -57,38 +57,32 @@ page-specific controls are still separate work. Authenticated production save/pu
 verification was blocked by the live admin sign-in; local synthetic browser and
 isolated PostgreSQL checks are not production proof.
 
+
 ## Search and Cart controls
 
-Search results now honor the Search page's result count, desktop card columns (2–6),
-matching-brand/category visibility, title, initial prompt, and empty-result copy. Per-page
-search results are capped at 50 to match the server search API. Hiding matching brands
-or categories does not disable product search. Search requires at least two characters;
-that validation stays in place.
+Search settings control result page size (capped at the API's 50-result limit), desktop
+columns, matching brand/category visibility, result-count visibility, page heading, search
+placeholder, initial prompt, and no-result copy. Searches still require two characters and
+retain server-side query-length validation.
 
-Cart settings now control empty-state copy and its safe internal recovery link, cart and
-summary labels, checkout/enquiry text, continue-shopping/clear-cart visibility, trust and
-payment strips, and the secure-checkout notice. Checkout/payment availability remains
-gated by existing server-resolved feature visibility; designer settings can hide optional
-presentation but cannot enable a disabled checkout/payment feature. Pricing and totals
-remain calculated by the commerce services and are not editable design settings.
+Cart settings control empty-state copy and its safe internal recovery link, cart/summary
+labels, checkout/enquiry text, continue-shopping/clear-cart visibility, and optional
+trust, payment, and secure-checkout presentation. Checkout/payment availability remains
+server-feature-gated; hiding presentation does not change feature availability. Prices,
+shipping and tax continue to be calculated by commerce services.
 
-Search controls cover page size (capped to the API's 50-result limit), 2–6 desktop
-columns, matching-brand/category chips, result count, title, search placeholder, initial
-prompt and no-result copy. Searches still require at least two characters; server query
-length and pagination validation are unchanged.
+## Product rows on other storefront pages
 
-Cart controls cover empty-state recovery, cart/summary/CTA labels, clear/continue links,
-trust/payment/security presentation. Hiding payment UI does not change enabled payment
-methods or checkout calculations; feature visibility remains server-gated. Cart price,
-shipping and tax totals remain service-calculated.
+The Store Designer can add up to six product rows on Product, Category, Collection,
+Search, and Cart pages. Each row supports Best Sellers, Trending / Most Viewed, Featured,
+New Arrivals, or On Sale sources, with a configurable title, product count, and carousel
+or grid layout. Rows are saved with that page's settings and appended after its primary
+page content; existing product grids and cart controls remain intact.
 
-Search-page settings now include result page size (capped at the API's 50-result limit),
-2–6 desktop columns, matching brand/category visibility, result-count visibility, page
-heading, search placeholder, initial prompt and no-result copy. Searches still require
-two characters and retain the server's query-length validation.
+## Nested category filters
 
-Cart-page settings now include empty-state title/message/button and safe internal link,
-cart/summary/CTA labels, and optional clear-cart, continue-shopping, enquiry, trust,
-payment-method and secure-checkout presentation. Payment/checkout availability remains
-server-feature-gated; these controls only hide optional presentation. Prices, shipping
-and tax continue to be calculated by the commerce services.
+Category settings control nested category-filter depth (1–5 levels) and expansion behavior:
+open the selected path, start collapsed with per-branch disclosure buttons, or expand all
+visible levels. Category-page overrides take precedence over Collection settings;
+Collection settings remain the fallback. Depth limits both rendering and the number of
+levels administrators can expose.

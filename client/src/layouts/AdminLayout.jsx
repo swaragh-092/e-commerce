@@ -66,7 +66,6 @@ import { useSettings, useMode } from '../hooks/useSettings';
 import { isAdminMenuItemVisible } from '../utils/adminMenuVisibility';
 import { PERMISSIONS } from '../utils/permissions';
 import { UnitCatalogProvider } from '../context/UnitCatalogContext';
-import DarkModeToggle from '../components/layout/DarkModeToggle';
 
 const drawerWidth = 240;
 const slimDrawerWidth = 72;
@@ -747,7 +746,6 @@ const AdminLayout = () => {
               Admin Dashboard
             </Typography>
           </Box>
-          <DarkModeToggle />
           <Tooltip title="View Store">
             <IconButton color="inherit" component={RouterLink} to="/" sx={{ mr: 1 }}>
               <StoreIcon />

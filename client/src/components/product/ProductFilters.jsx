@@ -83,15 +83,18 @@ const hasSelectedDescendant = (cat, selectedSlug) => {
     );
 };
 
-const CategoryTree = ({ cats, depth, maxDepth, filters, onFilterChange, parentSlug = '' }) => {
+const CategoryTree = ({ cats, depth, maxDepth, filters, onFilterChange, expandedCategories, onToggleExpanded, expandMode }) => {
     if (!cats?.length) return null;
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
             {cats.map((cat) => {
                 const isSelected = filters.category === cat.slug;
                 const hasChildren = cat.children?.length > 0 && depth < maxDepth;
+                const selectedPath = isSelected || hasSelectedDescendant(cat, filters.category);
+                const defaultExpanded = expandMode === 'all' || (expandMode === 'selected-path' && selectedPath);
+                const expanded = expandedCategories[cat.id] ?? defaultExpanded;
                 return (
-                    <Box key={cat.id}>
+                    <Box key={cat.id} sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>
                         <Button
                             onClick={() => onFilterChange({ ...filters, category: cat.slug, page: 1 })}
                             sx={{
@@ -99,7 +102,7 @@ const CategoryTree = ({ cats, depth, maxDepth, filters, onFilterChange, parentSl
                                 px: 1 + depth * 0.75,
                                 py: 0.5,
                                 minWidth: 0,
-                                width: '100%',
+                                flex: 1,
                                 textAlign: 'left',
                                 borderRadius: 1,
                                 fontSize: depth === 1 ? '0.875rem' : '0.8rem',
@@ -114,14 +117,24 @@ const CategoryTree = ({ cats, depth, maxDepth, filters, onFilterChange, parentSl
                             {isSelected && <Check fontSize="small" sx={{ mr: 0.75, fontSize: '1rem' }} />}
                             {cat.name}
                         </Button>
+                        {hasChildren && <IconButton
+                            size="small"
+                            aria-label={`${expanded ? 'Collapse' : 'Expand'} subcategories for ${cat.name}`}
+                            aria-expanded={expanded}
+                            onClick={() => onToggleExpanded(cat.id, !expanded)}
+                            sx={{ ml: 0.5 }}
+                        >{expanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}</IconButton>}
                         {hasChildren && (
-                            <Collapse in={isSelected || hasSelectedDescendant(cat, filters.category) || (!filters.category && depth < 2)}>
+                            <Collapse in={expanded} sx={{ width: '100%' }}>
                                 <CategoryTree
                                     cats={cat.children}
                                     depth={depth + 1}
                                     maxDepth={maxDepth}
                                     filters={filters}
                                     onFilterChange={onFilterChange}
+                                    expandedCategories={expandedCategories}
+                                    onToggleExpanded={onToggleExpanded}
+                                    expandMode={expandMode}
                                 />
                             </Collapse>
                         )}
@@ -148,14 +161,17 @@ const ActiveFilterBadge = ({ label, onRemove }) => (
     />
 );
 
-const ProductFilters = ({ filters, onFilterChange, priceRange: externalPriceRange }) => {
+const ProductFilters = ({ filters, onFilterChange, priceRange: externalPriceRange, categoryDepth: categoryDepthOverride, categoryExpandMode: expandModeOverride }) => {
     const { categories } = useCategories();
     const { formatPrice, symbol } = useCurrency();
     const { settings } = useSettings();
     const pricingEnabled = useFeatureVisible('pricing', 'storefront');
     const showPrice = useFeature('showPrice');
     const brandsEnabled = useFeature('brands');
-    const categoryDepth = parseInt(settings?.catalog?.categoryDepth) || 3;
+    const categoryDepth = Math.min(5, Math.max(1, Number.parseInt(categoryDepthOverride ?? settings?.catalog?.categoryDepth, 10) || 3));
+    const expandMode = expandModeOverride || settings?.catalog?.categoryExpandMode || 'selected-path';
+    const [expandedCategories, setExpandedCategories] = useState({});
+    const toggleExpanded = (id, open) => setExpandedCategories(current => ({ ...current, [id]: open }));
 
     const priceRangeMin = externalPriceRange?.min ?? 0;
     const priceRangeMax = externalPriceRange?.max ?? 0;
@@ -302,6 +318,9 @@ const ProductFilters = ({ filters, onFilterChange, priceRange: externalPriceRang
                         maxDepth={categoryDepth}
                         filters={filters}
                         onFilterChange={onFilterChange}
+                        expandedCategories={expandedCategories}
+                        onToggleExpanded={toggleExpanded}
+                        expandMode={expandMode}
                     />
                 </Box>
             </FilterSection>
