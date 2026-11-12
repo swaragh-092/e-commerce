@@ -509,6 +509,12 @@ const SectionComposerPage = () => {
       const savedDraft = await saveDesignDraft(payload, draft?.revision);
       setDraft(savedDraft);
       setDraftDeletes((savedDraft?.payload || []).filter((entry) => entry.operation === 'delete').map(({ group, key }) => ({ group, key })));
+      try {
+        const latestDraftState = await getDesignDraft();
+        setDraftConflicts(latestDraftState?.conflicts || []);
+      } catch (error) {
+        setLoadError('Draft saved, but conflict status could not be refreshed. Retry loading before publishing.');
+      }
       notify('Design draft saved. Publish it when the storefront is ready.', 'success');
       if (sectionsRef.current === sectionsToSave) {
         setDirty(false);

@@ -58,6 +58,38 @@ describe('Store Designer section editing', () => {
     expect(service.publishDesignDraft).not.toHaveBeenCalled();
   });
 
+  it.each([{ remainingConflicts: [] }, { remainingConflicts: conflicts }])('refreshes conflict status after saving revised settings: $remainingConflicts', async ({ remainingConflicts }) => {
+    service.getDesignDraft.mockResolvedValueOnce({ draft: oldDraft, conflicts });
+    service.getDesignDraft.mockResolvedValueOnce({ draft: { revision: 47 }, conflicts: remainingConflicts });
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview Old template hero' }));
+    const title = await screen.findByRole('textbox', { name: 'Section title' });
+    fireEvent.change(title, { target: { value: 'Homepage hero' } });
+    fireEvent.blur(title);
+    fireEvent.click(screen.getByRole('button', { name: /Save draft/i }));
+    await waitFor(() => expect(service.getDesignDraft).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Save draft/i })).toBeDisabled());
+    const publish = screen.getByRole('button', { name: 'Publish', exact: true });
+    if (remainingConflicts.length) {
+      expect(publish).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Use live storefront' })).toBeInTheDocument();
+    } else {
+      expect(publish).toBeEnabled();
+      expect(screen.queryByRole('button', { name: 'Use live storefront' })).not.toBeInTheDocument();
+    }
+    expect(title).toHaveValue('Homepage hero');
+  });
+
+  it('blocks publishing if conflict refresh fails after a successful save', async () => {
+    service.getDesignDraft.mockResolvedValueOnce({ draft: oldDraft, conflicts });
+    service.getDesignDraft.mockRejectedValueOnce(new Error('Offline'));
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Hide Old template hero' }));
+    fireEvent.click(screen.getByRole('button', { name: /Save draft/i }));
+    expect(await screen.findByText('Draft saved, but conflict status could not be refreshed. Retry loading before publishing.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Publish', exact: true })).toBeDisabled();
+  });
+
   it('preserves the draft when revision-checked discard fails', async () => {
     service.getDesignDraft.mockResolvedValueOnce({ draft: oldDraft, conflicts });
     service.discardDesignDraft.mockRejectedValueOnce(new Error('Conflict'));
