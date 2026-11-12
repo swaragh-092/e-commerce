@@ -31,6 +31,8 @@ describe('store design ownership', () => {
     expect(isDesignerOwnedSetting('general', 'storeName')).toBe(false);
     expect(isDesignerOwnedSetting('shipping', 'method')).toBe(false);
     expect(isDesignerOwnedSetting('catalog', 'defaultSort')).toBe(true);
+    expect(isDesignerOwnedSetting('categoryPage', 'categoryDepth')).toBe(true);
+    expect(isDesignerOwnedSetting('categoryPage', 'categoryExpandMode')).toBe(true);
     expect(isDesignerOwnedSetting('catalog', 'lowStockThreshold')).toBe(false);
     expect(isDesignerOwnedSetting('advanced', 'headScripts')).toBe(false);
   });
