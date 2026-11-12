@@ -40,13 +40,13 @@ const PAGE_DEFINITIONS = [
   { key: 'collection', label: 'Collection', status: 'active', previewPath: '/products', settingsGroup: 'catalog', ownedKeys: ['templateLayout', 'filterLayout', 'showBreadcrumbs', 'gridColumns', 'defaultPageSize', 'defaultSort', 'showFilters', 'categoryDepth'] },
   { key: 'search', label: 'Search', status: 'active', previewPath: '/search', settingsGroup: 'searchPage', ownedKeys: ['gridColumns', 'resultsPerPage', 'showResultCount', 'showMatchingBrands', 'showMatchingCategories', 'searchTitle', 'searchPlaceholder', 'initialPromptTitle', 'initialPromptMessage', 'noResultsTitle', 'noResultsMessage'] },
   { key: 'cart', label: 'Cart', status: 'active', previewPath: '/cart', settingsGroup: 'cartPage', ownedKeys: ['layout', 'showTrustBadges', 'showPaymentMethods', 'showSecureCheckout', 'showClearCart', 'showContinueShopping', 'showEnquiryButton', 'cartTitle', 'cartSubtitle', 'summaryTitle', 'checkoutButtonLabel', 'enquiryButtonLabel', 'continueShoppingLabel', 'clearCartLabel', 'secureCheckoutLabel', 'emptyStateTitle', 'emptyStateText', 'emptyStateButtonLabel', 'emptyStateButtonLink'] },
-  { key: 'checkout', label: 'Checkout', status: 'active', previewPath: '/checkout' },
+  { key: 'checkout', label: 'Checkout', status: 'active', previewPath: '/checkout', settingsGroup: 'checkoutPage', ownedKeys: ['placeOrderLabel', 'paymentHeading'] },
   { key: 'account', label: 'Account', status: 'active', previewPath: '/account', settingsGroup: 'accountPage', ownedKeys: ['layout', 'showSupportInfo'] },
-  { key: 'orders', label: 'Orders', status: 'active', previewPath: '/orders' },
+  { key: 'orders', label: 'Orders', status: 'active', previewPath: '/orders', settingsGroup: 'ordersPage', ownedKeys: ['emptyHeadline', 'emptyCtaLabel'] },
   { key: 'wishlist', label: 'Wishlist', status: 'active', previewPath: '/wishlist' },
   { key: 'brand', label: 'Brands', status: 'active', previewPath: '/brands', settingsGroup: 'brandsPage', ownedKeys: ['heroTitle', 'heroSubtitle', 'cardLayout', 'gridColumns', 'imageAspectRatio', 'cardStyle', 'cardBorderRadius', 'showDescriptions', 'showProductCount', 'showAlphabeticalFilter', 'showFeaturedSection', 'featuredLayout', 'featuredCount'] },
   { key: 'blog', label: 'Blog', status: 'active', previewPath: '/blogs', settingsGroup: 'blogPage', ownedKeys: ['listLayout', 'articleLayout', 'showAuthor', 'showDate'] },
-  { key: 'not-found', label: '404 Page', status: 'active', previewPath: '/not-found-preview' },
+  { key: 'not-found', label: '404 Page', status: 'active', previewPath: '/not-found-preview', settingsGroup: 'notFoundPage', ownedKeys: ['headline', 'subtext', 'cta1Label', 'cta1Link', 'cta2Label', 'cta2Link'] },
 ];
 
 // Merchant-facing control metadata lives beside ownership metadata so the
@@ -293,7 +293,7 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
           },
           { key: 'cardBorderRadius', label: 'Card Border Radius (px)', type: 'number', defaultValue: 12, min: 0, max: 48 },
           { key: 'showDescriptions', label: 'Show brand descriptions', type: 'boolean', defaultValue: true },
-          { key: 'showProductCount', label: 'Show product count badges', type: 'boolean', defaultValue: true },
+          { key: 'showProductCount', label: 'Show product count badges', type: 'boolean', defaultValue: false },
           { key: 'showAlphabeticalFilter', label: 'Show alphabetical filter', type: 'boolean', defaultValue: true },
         ],
       },
@@ -327,7 +327,7 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
           key: 'layout',
           label: 'Account Navigation Layout',
           type: 'select',
-          defaultValue: 'sidebar',
+          defaultValue: 'tabs',
           options: [
             { value: 'tabs', label: 'Tabs - compact horizontal navigation' },
             { value: 'sidebar', label: 'Sidebar - dashboard style navigation' },
@@ -392,7 +392,7 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
         label: 'Labels',
         fields: [
           { key: 'placeOrderLabel', label: 'Cash on Delivery Button Label', type: 'text', defaultValue: 'Place Order' },
-          { key: 'paymentHeading', label: 'Payment Section Heading', type: 'text', defaultValue: 'Payment' },
+          { key: 'paymentHeading', label: 'Payment Section Heading', type: 'text', defaultValue: 'Payment Method' },
         ],
       },
     ],
@@ -464,7 +464,7 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
         key: 'labels',
         label: 'Labels',
         fields: [
-          { key: 'emptyHeadline', label: 'Empty Orders Headline', type: 'text', defaultValue: "You haven't placed any orders yet" },
+          { key: 'emptyHeadline', label: 'Empty Orders Headline', type: 'text', defaultValue: 'No orders found' },
           { key: 'emptyCtaLabel', label: 'Empty Orders CTA Label', type: 'text', defaultValue: 'Start Shopping' },
         ],
       },

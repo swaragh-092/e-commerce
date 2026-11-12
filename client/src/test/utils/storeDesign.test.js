@@ -48,6 +48,22 @@ describe('store design ownership', () => {
     }
   });
 
+  it('keeps page ownership and initial control values aligned with storefront fallbacks', () => {
+    const pages = Object.fromEntries(DESIGN_PAGE_REGISTRY.map(page => [page.key, page]));
+    for (const [key, group, fields] of [
+      ['checkout', 'checkoutPage', ['paymentHeading']],
+      ['orders', 'ordersPage', ['emptyHeadline']],
+      ['not-found', 'notFoundPage', ['headline', 'cta1Link']],
+    ]) {
+      expect(pages[key].settingsGroup).toBe(group);
+      for (const field of fields) expect(isDesignerOwnedSetting(group, field)).toBe(true);
+    }
+    expect(getDesignPageControlSchema('account').groups[0].fields[0].defaultValue).toBe('tabs');
+    expect(getDesignPageControlSchema('brand').groups.flatMap(group => group.fields).find(field => field.key === 'showProductCount').defaultValue).toBe(false);
+    expect(getDesignPageControlSchema('checkout').groups[0].fields.find(field => field.key === 'paymentHeading').defaultValue).toBe('Payment Method');
+    expect(getDesignPageControlSchema('orders').groups[0].fields.find(field => field.key === 'emptyHeadline').defaultValue).toBe('No orders found');
+  });
+
   it('builds merchant-facing summaries without exposing internal storage names', () => {
     const summary = getStoreDesignSummary({
       'theme.fontFamily': 'Source Sans Pro',

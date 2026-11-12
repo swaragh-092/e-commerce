@@ -295,7 +295,7 @@ const SearchResultsPage = () => {
             color="text.secondary"
             sx={{ maxWidth: 400, mx: 'auto', mb: 3 }}
           >
-            {searchStyle.noResultsMessage || `We couldn't find any products matching "${normalizedQuery}". Try using different keywords or check for typos.`}
+            {searchStyle.noResultsMessage || 'Try different keywords or check for typos.'}
           </Typography>
           {suggestion && (
             <Chip
