@@ -211,10 +211,20 @@ const publishDraft = async ({ expectedRevision }, user) => sequelize.transaction
     await Setting.destroy({ where: { group, key }, transaction: t });
   }
   const publishedAt = new Date();
-  const version = await DesignDraftVersion.create(buildPublishedVersion(draft, user.id, publishedAt), { transaction: t });
+  // Discarding a draft resets its counter, but published history survives.
+  // The locked draft serializes publishers while we allocate the next version.
+  const lastPublishedRevision = await DesignDraftVersion.max('revision', {
+    where: { draftKey: DESIGN_DRAFT_KEY },
+    transaction: t,
+  });
+  const publishedRevision = Math.max(Number(draft.revision) || 1, (Number(lastPublishedRevision) || 0) + 1);
+  const version = await DesignDraftVersion.create(buildPublishedVersion({
+    revision: publishedRevision,
+    payload: draft.payload,
+  }, user.id, publishedAt), { transaction: t });
   const published = await draft.update({
     status: 'published',
-    revision: (Number(draft.revision) || 0) + 1,
+    revision: publishedRevision + 1,
     updatedBy: user.id,
     publishedAt,
     publishedBy: user.id,
