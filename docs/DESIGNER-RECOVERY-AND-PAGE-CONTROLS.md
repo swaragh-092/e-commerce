@@ -56,3 +56,39 @@ Full-design undo, autosave, per-field merge, template-install warnings and remai
 page-specific controls are still separate work. Authenticated production save/publish
 verification was blocked by the live admin sign-in; local synthetic browser and
 isolated PostgreSQL checks are not production proof.
+
+## Search and Cart controls
+
+Search results now honor the Search page's result count, desktop card columns (2–6),
+matching-brand/category visibility, title, initial prompt, and empty-result copy. Per-page
+search results are capped at 50 to match the server search API. Hiding matching brands
+or categories does not disable product search. Search requires at least two characters;
+that validation stays in place.
+
+Cart settings now control empty-state copy and its safe internal recovery link, cart and
+summary labels, checkout/enquiry text, continue-shopping/clear-cart visibility, trust and
+payment strips, and the secure-checkout notice. Checkout/payment availability remains
+gated by existing server-resolved feature visibility; designer settings can hide optional
+presentation but cannot enable a disabled checkout/payment feature. Pricing and totals
+remain calculated by the commerce services and are not editable design settings.
+
+Search controls cover page size (capped to the API's 50-result limit), 2–6 desktop
+columns, matching-brand/category chips, result count, title, search placeholder, initial
+prompt and no-result copy. Searches still require at least two characters; server query
+length and pagination validation are unchanged.
+
+Cart controls cover empty-state recovery, cart/summary/CTA labels, clear/continue links,
+trust/payment/security presentation. Hiding payment UI does not change enabled payment
+methods or checkout calculations; feature visibility remains server-gated. Cart price,
+shipping and tax totals remain service-calculated.
+
+Search-page settings now include result page size (capped at the API's 50-result limit),
+2–6 desktop columns, matching brand/category visibility, result-count visibility, page
+heading, search placeholder, initial prompt and no-result copy. Searches still require
+two characters and retain the server's query-length validation.
+
+Cart-page settings now include empty-state title/message/button and safe internal link,
+cart/summary/CTA labels, and optional clear-cart, continue-shopping, enquiry, trust,
+payment-method and secure-checkout presentation. Payment/checkout availability remains
+server-feature-gated; these controls only hide optional presentation. Prices, shipping
+and tax continue to be calculated by the commerce services.

@@ -107,20 +107,22 @@ const CartSkeleton = () => (
 );
 
 // ── Empty Cart ─────────────────────────────────────────────────────────────────
-const EmptyCart = ({ message }) => (
+const safeStorePath = (value, fallback) => typeof value === 'string' && /^\/(?!\/)[^\\\s]*$/.test(value) ? value : fallback;
+
+const EmptyCart = ({ title, message, buttonLabel, buttonLink }) => (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 14, px: 2 }}>
         <PageSEO title="Cart" type="noindex" />
         <Box sx={{ width: 72, height: 72, borderRadius: '50%', border: '1.5px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2.5 }}>
             <ShoppingBagOutlinedIcon sx={{ fontSize: 30, color: 'text.disabled' }} />
         </Box>
-        <Typography variant="h6" fontWeight={700} letterSpacing={-0.4} gutterBottom>Your cart is empty</Typography>
+        <Typography variant="h6" fontWeight={700} letterSpacing={-0.4} gutterBottom>{title || 'Your cart is empty'}</Typography>
         <Typography color="text.secondary" sx={{ fontSize: '0.85rem', mb: 4, textAlign: 'center', maxWidth: 260, lineHeight: 1.6 }}>
             {message || "Haven't added anything yet. Let's fix that."}
         </Typography>
-        <Button variant="contained" component={Link} to="/products" size="large"
+        <Button variant="contained" component={Link} to={safeStorePath(buttonLink, '/products')} size="large"
             endIcon={<ArrowForwardIcon sx={{ fontSize: 16 }} />}
             sx={{ borderRadius: 1.5, px: 3.5, py: 1.3, fontWeight: 700, boxShadow: 'none', '&:hover': { boxShadow: 'none' } }}>
-            Browse Products
+            {buttonLabel || 'Browse Products'}
         </Button>
     </Box>
 );
@@ -274,7 +276,7 @@ const TrustBadge = ({ icon, title, sub }) => (
 );
 
 // ── Order Summary ─────────────────────────────────────────────────────────────
-const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingPending, shippingMethod, freeThreshold, taxRows, taxInclusive, estimatedTotal, offerSummary, formatPrice, onCheckout, setEnquiryOpen, checkoutEnabled, enquiryEnabled, showTrustBadges = true, checkoutBlockStyle = {}, showShipping = true, showPayments = true, showPrices = true }) => {
+const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingPending, shippingMethod, freeThreshold, taxRows, taxInclusive, estimatedTotal, offerSummary, formatPrice, onCheckout, setEnquiryOpen, checkoutEnabled, enquiryEnabled, showEnquiryButton = true, checkoutButtonLabel = 'Proceed to Checkout', enquiryButtonLabel = 'Enquire About Cart', continueShoppingLabel = 'Continue Shopping', showContinueShopping = true, summaryTitle = 'Order Summary', secureCheckoutLabel = '256-BIT SSL ENCRYPTED CHECKOUT', showSecureCheckout = true, showTrustBadges = true, checkoutBlockStyle = {}, showShipping = true, showPayments = true, showPrices = true }) => {
     const shippingFree = shippingMethod === 'free' || shippingCost === 0;
     const progressPct = freeThreshold > 0 ? Math.min((subtotal / freeThreshold) * 100, 100) : 0;
     const blockRadius = checkoutBlockStyle.radius === 'none' ? 0 : checkoutBlockStyle.radius === 'small' ? 1 : checkoutBlockStyle.radius === 'large' ? 3 : 2;
@@ -291,7 +293,7 @@ const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingPending, s
                 {/* Header stripe */}
                 <Box sx={{ px: 2.5, py: 1.4, bgcolor: headerBg, borderBottom: '1px solid', borderColor: 'divider', color: headerColor, ...row('center', 'space-between') }}>
                     <Typography sx={{ fontSize: '0.63rem', fontWeight: 800, letterSpacing: 2.5, textTransform: 'uppercase', color: 'text.secondary' }}>
-                        Order Summary
+                        {summaryTitle}
                     </Typography>
                     <Typography sx={{ fontSize: '0.7rem', color: 'text.disabled', fontWeight: 500 }}>
                         {visibleCount} {visibleCount === 1 ? 'item' : 'items'}
@@ -366,29 +368,29 @@ const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingPending, s
                         <Button variant="contained" fullWidth size="large" onClick={onCheckout}
                             endIcon={<ArrowForwardIcon sx={{ fontSize: 16 }} />}
                             sx={{ mt: 2, py: 1.55, borderRadius: 1.5, fontWeight: 800, fontSize: '0.88rem', letterSpacing: 0.6, boxShadow: 'none', '&:hover': { boxShadow: 'none', filter: 'brightness(1.08)' } }}>
-                            Proceed to Checkout
+                            {checkoutButtonLabel}
                         </Button>
                     )}
-                    {enquiryEnabled && (
+                    {enquiryEnabled && showEnquiryButton && (
                         <Button variant="outlined" color="secondary" fullWidth size="large" onClick={() => setEnquiryOpen(true)}
                             startIcon={<HelpOutlineIcon sx={{ fontSize: 16 }} />}
                             sx={{ mt: checkoutEnabled ? 1 : 2, py: 1.55, borderRadius: 1.5, fontWeight: 700, fontSize: '0.88rem' }}>
-                            Enquire About Cart
+                            {enquiryButtonLabel}
                         </Button>
                     )}
-                    <Button fullWidth component={Link} to="/products"
+                    {showContinueShopping && <Button fullWidth component={Link} to="/products"
                         sx={{ mt: 0.75, fontSize: '0.78rem', fontWeight: 500, color: 'text.secondary', py: 0.75 }}>
-                        ← Continue Shopping
-                    </Button>
+                        ← {continueShoppingLabel}
+                    </Button>}
                 </Box>
 
                 {/* Secure strip */}
-                <Box sx={{ px: 2.5, py: 1.1, borderTop: '1px solid', borderColor: 'divider', bgcolor: 'action.hover', ...row('center', 'center'), gap: 0.75 }}>
+                {showSecureCheckout && <Box sx={{ px: 2.5, py: 1.1, borderTop: '1px solid', borderColor: 'divider', bgcolor: 'action.hover', ...row('center', 'center'), gap: 0.75 }}>
                     <LockIcon sx={{ fontSize: 11, color: 'text.disabled' }} />
                     <Typography sx={{ fontSize: '0.67rem', color: 'text.disabled', fontWeight: 600, letterSpacing: 0.4 }}>
-                        256-BIT SSL ENCRYPTED CHECKOUT
+                        {secureCheckoutLabel}
                     </Typography>
-                </Box>
+                </Box>}
             </Paper>
 
             {/* Trust badges 2×2 */}
@@ -444,6 +446,11 @@ const CartPage = () => {
     const cartLayout = cartPage.layout || 'standard';
     const isCompactCart = cartLayout === 'compact';
     const showCartTrustBadges = cartPage.showTrustBadges !== false;
+    const showPaymentMethods = showPayments && cartPage.showPaymentMethods !== false;
+    const showSecureCheckout = cartPage.showSecureCheckout !== false;
+    const showClearCart = cartPage.showClearCart !== false;
+    const showContinueShopping = cartPage.showContinueShopping !== false;
+    const showEnquiryButton = cartPage.showEnquiryButton !== false;
     const emptyStateText = cartPage.emptyStateText || "Haven't added anything yet. Let's fix that.";
 
     useEffect(() => {
@@ -514,7 +521,12 @@ const CartPage = () => {
             </Alert>
         </Container>
     );
-    if (items.length === 0) return <EmptyCart message={emptyStateText} />;
+    if (items.length === 0) return <EmptyCart
+        title={cartPage.emptyStateTitle}
+        message={emptyStateText}
+        buttonLabel={cartPage.emptyStateButtonLabel}
+        buttonLink={cartPage.emptyStateButtonLink}
+    />;
 
     const visibleItems = items.filter(i => !removingIds.has(i.id));
     const visibleCount = visibleItems.reduce((s, i) => s + getQty(i), 0);
@@ -527,19 +539,19 @@ const CartPage = () => {
             <Box sx={{ mb: { xs: 3, md: 4 }, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
                 <Box>
                     <Typography sx={{ fontSize: '0.63rem', fontWeight: 800, letterSpacing: 2.5, textTransform: 'uppercase', color: 'text.disabled', mb: 0.25, display: 'block' }}>
-                        Review your order
+                        {cartPage.cartSubtitle || 'Review your order'}
                     </Typography>
                     <Typography variant="h4" component="h1" fontWeight={800} letterSpacing={-0.8} lineHeight={1.1}>
-                        Shopping Cart{' '}
+                        {cartPage.cartTitle || 'Shopping Cart'}{' '}
                         <Box component="span" sx={{ fontSize: '0.95rem', fontWeight: 400, color: 'text.disabled', letterSpacing: 0 }}>
                             ({visibleCount})
                         </Box>
                     </Typography>
                 </Box>
-                <Button component={Link} to="/products" size="small"
+                {showContinueShopping && <Button component={Link} to="/products" size="small"
                     sx={{ color: 'text.secondary', fontSize: '0.78rem', fontWeight: 500 }}>
-                    ← Continue shopping
-                </Button>
+                    ← {cartPage.continueShoppingLabel || 'Continue shopping'}
+                </Button>}
             </Box>
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: isCompactCart ? '1fr' : 'minmax(0, 1fr) 400px' }, gap: { xs: 3, md: 3.5 }, alignItems: 'start' }}>
@@ -555,13 +567,13 @@ const CartPage = () => {
                     </Box>
 
                     {/* Clear all */}
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                    {showClearCart && <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
                         <Button size="small" disabled={clearing} onClick={handleClearCart}
                             startIcon={clearing ? <CircularProgress size={10} /> : <DeleteOutlineIcon sx={{ fontSize: 13 }} />}
                             sx={{ color: 'text.disabled', fontSize: '0.72rem', fontWeight: 500, '&:hover': { color: 'error.main', bgcolor: 'transparent' }, transition: 'color 0.15s' }}>
-                            {clearing ? 'Clearing…' : 'Clear all items'}
+                            {clearing ? 'Clearing…' : (cartPage.clearCartLabel || 'Clear all items')}
                         </Button>
-                    </Box>
+                    </Box>}
 
                     {/* Cart breakdown summary bar */}
                     {visibleItems.length >= 2 && (
@@ -599,10 +611,18 @@ const CartPage = () => {
                     setEnquiryOpen={setEnquiryOpen}
                     checkoutEnabled={checkoutEnabled}
                     enquiryEnabled={enquiryEnabled}
+                    showEnquiryButton={showEnquiryButton}
+                    checkoutButtonLabel={cartPage.checkoutButtonLabel || 'Proceed to Checkout'}
+                    enquiryButtonLabel={cartPage.enquiryButtonLabel || 'Enquire About Cart'}
+                    continueShoppingLabel={cartPage.continueShoppingLabel || 'Continue Shopping'}
+                    showContinueShopping={showContinueShopping}
+                    summaryTitle={cartPage.summaryTitle || 'Order Summary'}
+                    secureCheckoutLabel={cartPage.secureCheckoutLabel || '256-BIT SSL ENCRYPTED CHECKOUT'}
+                    showSecureCheckout={showSecureCheckout}
                     showTrustBadges={showCartTrustBadges}
                     checkoutBlockStyle={checkoutBlockStyle}
                     showShipping={showShipping}
-                    showPayments={showPayments}
+                    showPayments={showPaymentMethods}
                     showPrices={showPrices}
                 />
             </Box>

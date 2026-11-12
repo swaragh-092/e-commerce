@@ -35,6 +35,19 @@ describe('store design ownership', () => {
     expect(isDesignerOwnedSetting('advanced', 'headScripts')).toBe(false);
   });
 
+  it('registers the cart and search controls that their storefront pages consume', () => {
+    const cartFields = DESIGN_PAGE_CONTROL_SCHEMAS.cart.groups.flatMap(group => group.fields.map(field => field.key));
+    const searchFields = DESIGN_PAGE_CONTROL_SCHEMAS.search.groups.flatMap(group => group.fields.map(field => field.key));
+    for (const key of ['emptyStateTitle', 'emptyStateText', 'emptyStateButtonLabel', 'emptyStateButtonLink', 'showPaymentMethods', 'showSecureCheckout', 'showClearCart', 'checkoutButtonLabel']) {
+      expect(cartFields).toContain(key);
+      expect(isDesignerOwnedSetting('cartPage', key)).toBe(true);
+    }
+    for (const key of ['resultsPerPage', 'showMatchingBrands', 'showMatchingCategories', 'initialPromptMessage', 'noResultsMessage']) {
+      expect(searchFields).toContain(key);
+      expect(isDesignerOwnedSetting('searchPage', key)).toBe(true);
+    }
+  });
+
   it('builds merchant-facing summaries without exposing internal storage names', () => {
     const summary = getStoreDesignSummary({
       'theme.fontFamily': 'Source Sans Pro',
