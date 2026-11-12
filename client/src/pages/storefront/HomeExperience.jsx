@@ -209,7 +209,6 @@ const fetchSectionData = async (section) => {
 
 const HomeExperience = () => {
   const { settings } = useSettings();
-  const designerPreview = new URLSearchParams(window.location.search).get('previewMode') === '1';
   const { brands: contextBrands, loading: brandsLoading } = useBrands();
   const pricingEnabled = useFeatureVisible('pricing', 'storefront');
   const ordersEnabled = useFeature('orders');
@@ -290,11 +289,10 @@ const HomeExperience = () => {
           ? PRODUCT_SOURCE_PARAMS[section.source].sort : null;
         const available = data.products[section.id]?.length || 0;
         const campaignLabel = section.type === 'product-row' && section.source === 'sale' ? section.saleLabel : null;
-        if (campaignLabel && !pricingEnabled && !designerPreview) return null;
+        if (campaignLabel && !pricingEnabled) return null;
         const sparse = !loading && ((discoverySort && available < (discoverySort === 'arrivals' ? 1 : 4))
           || (campaignLabel && !available));
-        if (sparse && !designerPreview) return null;
-        const previewSection = designerPreview && (sparse || section.type === 'recently-viewed');
+        if (sparse) return null;
         const renderedSection = campaignLabel
           ? { ...section, viewAllLink: `/products?saleLabel=${encodeURIComponent(campaignLabel)}` }
           : discoverySort && (!section.viewAllLink || section.viewAllLink === '/products?sort=newest')
@@ -307,10 +305,10 @@ const HomeExperience = () => {
         const frameIndex = index === (visibleSections[0] && isHeroSection(visibleSections[0]) ? 1 : 0) ? 0 : index;
 
         return (
-          <Box key={section.id || index} sx={{ display }}>
+          <Box key={section.id || index} data-store-section={section.id} sx={{ display }}>
             <SectionRenderer
               section={renderedSection}
-              mode={previewSection ? 'preview' : 'live'}
+              mode="live"
               data={buildSectionData(section)}
               index={frameIndex}
             />

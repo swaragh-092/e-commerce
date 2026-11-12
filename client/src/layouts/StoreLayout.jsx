@@ -317,7 +317,7 @@ const StoreLayout = () => {
       </Box>
       {/* Announcement Bar */}
       {showAnnouncement && (
-        <Box sx={{
+        <Box data-store-component="announcementBar" sx={{
           bgcolor: announcement.bgColor || 'primary.dark',
           color: announcement.fgColor || '#fff',
           py: 0.75, px: 2,
@@ -344,6 +344,7 @@ const StoreLayout = () => {
       )}
 
       <AppBar
+        data-store-component="headerLayout"
         position={navPosition}
         elevation={0}
         sx={{
@@ -621,7 +622,7 @@ const StoreLayout = () => {
         <Outlet />
       </Box>
 
-      {!isAuthPage && <StorefrontFooter />}
+      {!isAuthPage && <Box data-store-component="footer"><StorefrontFooter /></Box>}
       {/* Resolved entity metadata and URL overrides take precedence over page fallbacks. */}
       <SEO />
     </Box>

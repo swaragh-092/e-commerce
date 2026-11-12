@@ -22,7 +22,7 @@ vi.mock('../../../components/admin/themes/designer/DesignerSectionEditor', () =>
 vi.mock('../../../components/admin/themes/DesignVersionHistoryDialog', () => ({ default: () => null }));
 vi.mock('../../../components/admin/themes/SaveAsTemplateDialog', () => ({ default: () => null }));
 vi.mock('../../../components/admin/sections/AddSectionDialog', () => ({ default: () => null }));
-vi.mock('../../../components/admin/settings/LiveStorefrontPreview', () => ({ default: ({ path, device }) => <div data-testid="live-preview" data-device={device}>Real storefront {path}</div> }));
+vi.mock('../../../components/admin/settings/LiveStorefrontPreview', () => ({ default: ({ path, device, settings, onSelectSection }) => <div data-testid="live-preview" data-device={device}>Real storefront {path}{onSelectSection && settings?.homepage?.sections?.map((section) => <button key={section.id} onClick={() => onSelectSection(section.id)}>Preview {section.title}</button>)}</div> }));
 const homeSection = { id: 'home-hero', type: 'hero-carousel', title: 'Homepage hero' };
 const productSection = { id: 'product-recommendations', type: 'product-row', title: 'Product recommendations', enabled: true };
 const settings = { homepage: { sections: [homeSection] }, productPage: { sections: [productSection] } };
@@ -45,6 +45,7 @@ describe('Store Designer section editing', () => {
     await screen.findByRole('button', { name: 'Preview Old template hero' });
     expect(screen.getByText(/editor is showing your draft, not the live design/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Publish', exact: true })).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent('Publishing unavailable: resolve design conflicts.');
     fireEvent.click(await screen.findByRole('button', { name: 'Use live storefront' }));
     expect(await screen.findByRole('dialog', { name: 'Replace draft with live storefront?' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
@@ -105,6 +106,21 @@ describe('Store Designer section editing', () => {
     mount();
     expect(await screen.findByText('Draft load failed')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Save draft/i })).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent('Publishing unavailable: reload the design.');
+  });
+
+  it('labels the no-draft state as published and explains why publishing is unavailable', async () => {
+    mount();
+    expect(await screen.findByText('Published design')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Publish', exact: true })).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent('No draft to publish.');
+  });
+
+  it('explains that unsaved changes must be saved before publishing', async () => {
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Hide Homepage hero' }));
+    expect(screen.getByRole('button', { name: 'Publish', exact: true })).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent('Save your changes before publishing.');
   });
 
   it('shows recovery when the live design changes after the editor loads', async () => {
