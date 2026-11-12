@@ -205,6 +205,10 @@ export const SettingsProvider = ({ children }) => {
   };
 
   useEffect(() => {
+    if (previewMode && settings) applyDocumentSettings(settings);
+  }, [previewMode, settings]);
+
+  useEffect(() => {
     fetchSettings();
   }, []);
 

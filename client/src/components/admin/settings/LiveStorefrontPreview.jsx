@@ -60,8 +60,42 @@ const formToNestedSettings = (form) => {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function LiveStorefrontPreview({ form, settings, path = '/', device: controlledDevice, showToolbar = true, showStatusText = showToolbar, frameHeight }) {
+export default function LiveStorefrontPreview({ form, settings, path = '/', device: controlledDevice, showToolbar = true, showStatusText = showToolbar, frameHeight, onSelectSection, onSelectComponent }) {
   const iframeRef  = useRef(null);
+  const inspectorCleanup = useRef(() => {});
+  const selectionCallbacks = useRef({ onSelectSection, onSelectComponent });
+  selectionCallbacks.current = { onSelectSection, onSelectComponent };
+  const inspecting = Boolean(onSelectSection || onSelectComponent);
+
+  const attachInspector = useCallback(() => {
+    inspectorCleanup.current();
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc?.head || !inspecting) return;
+    const style = doc.createElement('style');
+    style.textContent = '[data-store-section]:hover,[data-store-component]:hover{outline:2px solid #4f46e5;outline-offset:-2px;cursor:pointer}';
+    doc.head.appendChild(style);
+    const select = (event) => {
+      const target = event.target?.closest?.('[data-store-section],[data-store-component]');
+      // Edit mode must not follow links or submit storefront forms.
+      event.preventDefault();
+      event.stopPropagation();
+      if (!target) return;
+      if (target.dataset.storeSection) selectionCallbacks.current.onSelectSection?.(target.dataset.storeSection);
+      else selectionCallbacks.current.onSelectComponent?.(target.dataset.storeComponent);
+    };
+    doc.addEventListener('click', select, true);
+    doc.addEventListener('submit', select, true);
+    inspectorCleanup.current = () => {
+      doc.removeEventListener('click', select, true);
+      doc.removeEventListener('submit', select, true);
+      style.remove();
+    };
+  }, [inspecting]);
+
+  useEffect(() => {
+    attachInspector();
+    return () => inspectorCleanup.current();
+  }, [attachInspector]);
   const [localDevice, setLocalDevice] = useState('desktop');
   const [iframeKey, setIframeKey] = useState(0); // bump to force iframe reload
   const [ready, setReady]       = useState(false);
@@ -104,6 +138,7 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', devi
 
   const handleLoad = () => {
     syncSettings();
+    attachInspector();
     setReady(true);
   };
 

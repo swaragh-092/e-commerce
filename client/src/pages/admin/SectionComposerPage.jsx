@@ -1052,6 +1052,15 @@ const SectionComposerPage = () => {
       : panelView.mode === 'theme-settings'
         ? panelView.componentKey ? [activePageLabel, 'Store styles', activeComponentConfig.label] : [activePageLabel, 'Store styles']
         : [activePageLabel, 'Sections'];
+  const publishDisabledReason = loadError
+    ? 'Publishing unavailable: reload the design.'
+    : draftConflicts.length > 0
+      ? 'Publishing unavailable: resolve design conflicts.'
+      : dirty
+        ? 'Save your changes before publishing.'
+        : !draft
+          ? 'No draft to publish.'
+          : null;
 
 
   return (
@@ -1065,7 +1074,7 @@ const SectionComposerPage = () => {
               Store Designer
             </Typography>
             <Chip
-              label={dirty ? 'Unsaved changes' : draft ? 'Draft saved' : 'Live'}
+              label={dirty ? 'Unsaved changes' : draft ? 'Draft saved' : 'Published design'}
               size="small"
               color={dirty ? 'warning' : draft ? 'info' : 'success'}
               variant={dirty ? 'outlined' : 'filled'}
@@ -1152,9 +1161,12 @@ const SectionComposerPage = () => {
             <Button size="small" variant="outlined" color="inherit" startIcon={isMobile ? undefined : <SaveIcon />} onClick={handleSave} disabled={Boolean(loadError) || !dirty || saving || publishing}>
               {saving ? 'Saving...' : 'Save draft'}
             </Button>
-            <Tooltip title={dirty ? 'Save your draft before publishing' : !draft ? 'Save a draft to publish changes' : 'Publish your saved draft to the store'}>
-              <span><Button size="small" variant="contained" onClick={() => setPublishOpen(true)} disabled={Boolean(loadError) || !draft || draftConflicts.length > 0 || dirty || saving || publishing}>Publish</Button></span>
-            </Tooltip>
+            <Stack spacing={0.25} alignItems="flex-start">
+              <Tooltip title={publishDisabledReason || 'Publish your saved draft to the store'}>
+                <span><Button size="small" variant="contained" onClick={() => setPublishOpen(true)} disabled={Boolean(loadError) || !draft || draftConflicts.length > 0 || dirty || saving || publishing}>Publish</Button></span>
+              </Tooltip>
+              {publishDisabledReason && <Typography variant="caption" color="text.secondary" role="status">{publishDisabledReason}</Typography>}
+            </Stack>
           </Stack>
         </Box>
       </Paper>
@@ -1403,7 +1415,7 @@ const SectionComposerPage = () => {
                 variant="standard"
                 sx={{ py: 0, alignItems: 'center', '& .MuiAlert-message': { py: 0.5, fontSize: '0.78rem' } }}
               >
-                Click any section to edit it. Save draft to keep your changes, then Publish to update your store.
+                Real storefront rendering and data. Click a section to edit it in the sidebar. Save draft, then Publish to update your store.
               </Alert>
             )}
           </Box>
@@ -1472,6 +1484,19 @@ const SectionComposerPage = () => {
                       frameHeight="100%"
                     />
                   )
+                ) : activePage === 'home' ? (
+                  <LiveStorefrontPreview
+                    settings={livePreviewSettings}
+                    path="/"
+                    device={viewportMode}
+                    showToolbar={false}
+                    frameHeight="100%"
+                    onSelectSection={(sectionId) => {
+                      const section = sections.find((item) => item.id === sectionId);
+                      if (section) selectSection(section);
+                    }}
+                    onSelectComponent={openComponentEditor}
+                  />
                 ) : packageData && (
                   <StorefrontTemplatePreview
                     packageData={packageData}

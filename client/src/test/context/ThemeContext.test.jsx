@@ -112,6 +112,7 @@ describe('SettingsProvider admin/storefront theme separation', () => {
     };
     const updated = {
       ...settings,
+      theme: { ...settings.theme, fontFamily: 'Lora', headingFont: 'Merriweather' },
       features: { wishlist: false, cart: false },
       visibility: { storefrontCart: false },
       productPage: { showBreadcrumbs: false, showSKU: false, showStockBadge: false, addToCartLabel: 'Add to basket' },
@@ -139,6 +140,8 @@ describe('SettingsProvider admin/storefront theme separation', () => {
       expect(JSON.parse(screen.getByTestId('page-settings').textContent)).toEqual(settings);
       send(parent.contentWindow, window.location.origin);
       expect(JSON.parse(screen.getByTestId('page-settings').textContent)).toEqual(updated);
+      expect(document.getElementById('google-font-link')?.href).toContain('family=Lora');
+      expect(document.getElementById('google-font-link')?.href).toContain('family=Merriweather');
       expect(JSON.parse(screen.getByTestId('preview-features').textContent)).toEqual({ wishlist: false, cart: true });
       expect(JSON.parse(screen.getByTestId('preview-visibility').textContent)).toEqual({ storefront: { cart: false } });
     } finally {
