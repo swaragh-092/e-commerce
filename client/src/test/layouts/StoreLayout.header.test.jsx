@@ -34,7 +34,6 @@ vi.mock('../../services/menuService', () => ({
 vi.mock('../../services/pageService', () => ({ default: { getPublicPages: async () => ({ data: [] }) } }));
 vi.mock('../../components/layout/CategoryNav', () => ({ default: () => null }));
 vi.mock('../../components/layout/StorefrontFooter', () => ({ default: () => null }));
-vi.mock('../../components/layout/DarkModeToggle', () => ({ default: () => null }));
 vi.mock('../../components/search/SearchWidget', () => ({ default: () => null }));
 vi.mock('../../components/common/SEO', () => ({ default: () => null }));
 vi.mock('../../components/common/StorefrontAnalytics', () => ({ default: () => null }));
