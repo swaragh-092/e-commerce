@@ -10,6 +10,8 @@
 import {
   Box, Typography, Button, Grid, Chip, Divider, IconButton, Stack,
 } from '@mui/material';
+import OrdersHelp from '../../orders/OrdersHelp';
+import { safeOrdersLink } from '../../../utils/ordersDesign';
 import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
@@ -1060,7 +1062,7 @@ export const renderMockOrdersMain = (settingsObj) => {
   const op = settingsObj?.ordersPage || {};
   const showStatusBadge = op.showStatusBadge !== false;
   const showTotal       = op.showTotal !== false;
-  const emptyHeadline  = op.emptyHeadline || "You haven't placed any orders yet";
+  const emptyHeadline  = op.emptyHeadline || 'No orders found';
   const emptyCtaLabel  = op.emptyCtaLabel || 'Start Shopping';
 
   const mockOrders = [
@@ -1071,7 +1073,8 @@ export const renderMockOrdersMain = (settingsObj) => {
 
   return (
     <Box sx={{ p: 4, maxWidth: 900, mx: 'auto', bgcolor: 'background.default' }}>
-      <Typography variant="h6" fontWeight={800} sx={{ mb: 3, fontFamily: 'var(--store-font-heading)' }}>My Orders</Typography>
+      <Typography variant="h6" fontWeight={800} sx={{ mb: 3, fontFamily: 'var(--store-font-heading)' }}>{op.pageTitle || 'My Orders'}</Typography>
+      <Box component="input" aria-label="Search orders" placeholder={op.searchPlaceholder || 'Search by product name, order ID, status…'} sx={{ width: '100%', p: 1, mb: 2 }} />
       <Stack spacing={2}>
         {mockOrders.map((order) => (
           <Box
@@ -1080,7 +1083,7 @@ export const renderMockOrdersMain = (settingsObj) => {
               border: '1px solid',
               borderColor: 'divider',
               borderRadius: 'var(--store-radius-card)',
-              p: 2,
+              p: op.cardDensity === 'compact' ? 1 : 2,
               bgcolor: 'background.paper',
               display: 'flex',
               alignItems: 'center',
@@ -1088,6 +1091,7 @@ export const renderMockOrdersMain = (settingsObj) => {
               flexWrap: 'wrap',
             }}
           >
+            {op.showProductThumbnails === true && <Box role="img" aria-label="Sample ordered product" sx={{ width: 48, height: 48, bgcolor: 'action.hover', borderRadius: 1 }} />}
             <Box sx={{ flex: 1, minWidth: 140 }}>
               <Typography variant="body2" fontWeight={800}>{order.id}</Typography>
               <Typography variant="caption" color="text.secondary">{order.date} · {order.items} item{order.items > 1 ? 's' : ''}</Typography>
@@ -1103,11 +1107,13 @@ export const renderMockOrdersMain = (settingsObj) => {
         ))}
       </Stack>
 
+      <OrdersHelp settings={op} />
       {/* Empty state preview */}
       <Box sx={{ mt: 5, p: 4, textAlign: 'center', border: '1px dashed', borderColor: 'divider', borderRadius: 'var(--store-radius-card)', bgcolor: 'action.hover' }}>
         <Typography variant="caption" color="text.disabled" fontWeight={700} sx={{ display: 'block', mb: 1 }}>Empty State Preview</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>{emptyHeadline}</Typography>
-        <Button variant="contained" size="small">{emptyCtaLabel}</Button>
+        <Typography variant="body2" sx={{ mb: 2 }}>{op.emptyMessage || "You haven't placed any orders yet."}</Typography>
+        <Button href={safeOrdersLink(op.emptyCtaLink)} variant="contained" size="small">{emptyCtaLabel}</Button>
       </Box>
     </Box>
   );

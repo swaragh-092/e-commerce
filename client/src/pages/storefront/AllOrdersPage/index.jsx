@@ -30,6 +30,8 @@ import { getApiErrorMessage } from '../../../utils/apiErrors';
 import { ORDER_STATUSES, TIME_FILTERS, LIMIT } from './constants';
 import {useDebounce} from '../../../hooks/useDebounce';
 import OrderSkeleton from '../../../components/orders/OrderSkeleton';
+import OrdersHelp from '../../../components/orders/OrdersHelp';
+import { safeOrdersLink } from '../../../utils/ordersDesign';
 import OrderRow from '../../../components/orders/OrderRow';
 import FilterPanel from '../../../components/orders/FilterPanel';
 
@@ -200,7 +202,7 @@ const AllOrdersPage = () => {
 
     return (
         <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
-            <PageSEO title="My Orders" type="noindex" />
+            <PageSEO title={ordersStyle.pageTitle || 'My Orders'} type="noindex" />
 
             {/* Page header */}
             <Box
@@ -224,7 +226,7 @@ const AllOrdersPage = () => {
                             mb: 0.75,
                         }}
                     >
-                        My Orders
+                        {ordersStyle.pageTitle || 'My Orders'}
                     </Typography>
                     {!initialLoading && (
                         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
@@ -320,7 +322,7 @@ const AllOrdersPage = () => {
                     >
                         <SearchIcon sx={{ color: 'text.disabled', fontSize: 18, mr: 1, flexShrink: 0 }} />
                         <TextField
-                            placeholder="Search by product name, order ID, status…"
+                            placeholder={ordersStyle.searchPlaceholder || 'Search by product name, order ID, status…'}
                             value={searchInput}
                             onChange={(e) => setSearchInput(e.target.value)}
                             fullWidth
@@ -439,7 +441,7 @@ const AllOrdersPage = () => {
                                 >
                                     {activeFilterCount > 0 || searchInput
                                         ? 'Try adjusting your search or filters.'
-                                        : "You haven't placed any orders yet."}
+                                        : ordersStyle.emptyMessage || "You haven't placed any orders yet."}
                                 </Typography>
                                 {activeFilterCount > 0 || searchInput ? (
                                     <Button
@@ -457,7 +459,7 @@ const AllOrdersPage = () => {
                                 ) : (
                                     <Button
                                         variant="contained"
-                                        onClick={() => navigate('/products')}
+                                        onClick={() => navigate(safeOrdersLink(ordersStyle.emptyCtaLink))}
                                         sx={{
                                             borderRadius: '4px',
                                             textTransform: 'none',
@@ -479,6 +481,8 @@ const AllOrdersPage = () => {
                                     order={order}
                                     onView={(id) => window.open(`/account/orders/${id}`, '_blank', 'noopener,noreferrer')}
                                     formatPrice={formatPrice}
+                                    density={ordersStyle.cardDensity}
+                                    showThumbnail={ordersStyle.showProductThumbnails === true}
                                 />
                             ))}
 
@@ -507,6 +511,7 @@ const AllOrdersPage = () => {
                     <Box ref={sentinelRef} sx={{ height: 1 }} />
                 </Box>
             </Box>
+            <OrdersHelp settings={ordersStyle} />
         </Container>
     );
 };
