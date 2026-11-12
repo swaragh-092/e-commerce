@@ -140,6 +140,7 @@ const ProductsManagePage = () => {
   // Filters – initialise from URL query params so dashboard cards can pre-apply filters
   const urlSearch = searchParams.get('search') || '';
   const urlStatus = searchParams.get('status') || '';
+  const urlCategory = searchParams.get('category') || '';
   const urlLowStockOnly = searchParams.get('stock') === 'low';
   const lastUrlSearch = useRef(urlSearch);
   const requestVersion = useRef(0);
@@ -147,7 +148,7 @@ const ProductsManagePage = () => {
   const [searchInput, setSearchInput] = useState(() => searchParams.get('search') || '');
   const [status, setStatus] = useState(() => searchParams.get('status') || '');
   const [saleFilter, setSaleFilter] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState(() => searchParams.get('category') || '');
   const tagFilter = searchParams.get('tags') || '';
   const [flatCategories, setFlatCategories] = useState([]);
   const [saleLabels, setSaleLabels] = useState([]);
@@ -160,6 +161,10 @@ const ProductsManagePage = () => {
     setStatus((current) => current === urlStatus ? current : urlStatus);
     setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
   }, [urlStatus]);
+  useEffect(() => {
+    setCategoryFilter((current) => current === urlCategory ? current : urlCategory);
+    setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
+  }, [urlCategory]);
   useEffect(() => {
     setLowStockOnly((current) => current === urlLowStockOnly ? current : urlLowStockOnly);
     setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
@@ -517,6 +522,17 @@ const ProductsManagePage = () => {
   const handleStatusChange = (val) => {
     setStatus(val);
     setPaginationModel((prev) => ({ ...prev, page: 0 }));
+  };
+
+  const handleCategoryChange = (value) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (value) nextParams.set('category', value);
+    else nextParams.delete('category');
+    setCategoryFilter(value);
+    setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
+    if (nextParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextParams, { replace: true });
+    }
   };
 
   // ── Actions ─────────────────────────────────────────────────
@@ -1156,11 +1172,12 @@ const ProductsManagePage = () => {
           </FormControl>
         )}
         <FormControl size="small" sx={{ minWidth: 220 }}>
-          <InputLabel>Category</InputLabel>
+          <InputLabel id="category-filter-label">Category</InputLabel>
           <Select
             value={categoryFilter}
+            labelId="category-filter-label"
             label="Category"
-            onChange={(e) => { setCategoryFilter(e.target.value); setPaginationModel((p) => ({ ...p, page: 0 })); }}
+            onChange={(e) => handleCategoryChange(e.target.value)}
           >
             <MenuItem value="">All Categories</MenuItem>
             {flatCategories.map((c) => (
