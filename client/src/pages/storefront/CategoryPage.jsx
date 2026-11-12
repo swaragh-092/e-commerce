@@ -12,6 +12,7 @@ import ProductGrid from '../../components/product/ProductGrid';
 import ProductFilters from '../../components/product/ProductFilters';
 import StorefrontSidebarMenu from '../../components/layout/StorefrontSidebarMenu';
 import CategorySection from '../../components/storefront/sections/CategorySection';
+import PageProductRows from '../../components/storefront/sections/PageProductRows';
 import PageSEO from '../../components/common/PageSEO';
 import { useSettings, useFeature, useFeatureVisible } from '../../hooks/useSettings';
 import { getCategoryWithProducts } from '../../services/categoryService';
@@ -440,6 +441,7 @@ const CategoryPage = () => {
                     )}
                 </Grid>
             </Grid>
+            <PageProductRows rows={settings?.categoryPage?.productRows} />
 
             {/* ── Mobile filter drawer ──────────────────────────────── */}
             <Drawer anchor="left" open={mobileFilterOpen} onClose={() => setMobileFilterOpen(false)}>

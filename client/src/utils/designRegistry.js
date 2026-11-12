@@ -35,11 +35,11 @@ const COMPONENT_GROUP_DEFINITIONS = [
 
 const PAGE_DEFINITIONS = [
   { key: 'home', label: 'Home', status: 'active', previewPath: '/', settingsGroup: 'homepage' },
-  { key: 'product', label: 'Product', status: 'active', previewPath: '/products', settingsGroup: 'productPage', ownedKeys: ['templateLayout', 'imageAlignment', 'showBreadcrumbs', 'showSKU', 'showStockBadge', 'showStickyAddToCart', 'showTrustBadges', 'showRelatedProducts', 'showRecentlyViewed', 'addToCartLabel', 'showBuyNowButton', 'buyNowLabel'] },
-  { key: 'category', label: 'Category', status: 'active', previewPath: '/category/all', settingsGroup: 'categoryPage', ownedKeys: ['heroTitle', 'headerLayout', 'showSubcategories', 'gridColumns', 'defaultPageSize', 'showFilters', 'defaultSort'] },
-  { key: 'collection', label: 'Collection', status: 'active', previewPath: '/products', settingsGroup: 'catalog', ownedKeys: ['templateLayout', 'filterLayout', 'showBreadcrumbs', 'gridColumns', 'defaultPageSize', 'defaultSort', 'showFilters', 'categoryDepth'] },
-  { key: 'search', label: 'Search', status: 'active', previewPath: '/search', settingsGroup: 'searchPage', ownedKeys: ['gridColumns', 'resultsPerPage', 'showResultCount', 'showMatchingBrands', 'showMatchingCategories', 'searchTitle', 'searchPlaceholder', 'initialPromptTitle', 'initialPromptMessage', 'noResultsTitle', 'noResultsMessage'] },
-  { key: 'cart', label: 'Cart', status: 'active', previewPath: '/cart', settingsGroup: 'cartPage', ownedKeys: ['layout', 'showTrustBadges', 'showPaymentMethods', 'showSecureCheckout', 'showClearCart', 'showContinueShopping', 'showEnquiryButton', 'cartTitle', 'cartSubtitle', 'summaryTitle', 'checkoutButtonLabel', 'enquiryButtonLabel', 'continueShoppingLabel', 'clearCartLabel', 'secureCheckoutLabel', 'emptyStateTitle', 'emptyStateText', 'emptyStateButtonLabel', 'emptyStateButtonLink'] },
+  { key: 'product', label: 'Product', status: 'active', previewPath: '/products', settingsGroup: 'productPage', ownedKeys: ['templateLayout', 'imageAlignment', 'showBreadcrumbs', 'showSKU', 'showStockBadge', 'showStickyAddToCart', 'showTrustBadges', 'showRelatedProducts', 'showRecentlyViewed', 'addToCartLabel', 'showBuyNowButton', 'buyNowLabel'], customOwnedKeys: ['productRows'] },
+  { key: 'category', label: 'Category', status: 'active', previewPath: '/category/all', settingsGroup: 'categoryPage', ownedKeys: ['heroTitle', 'headerLayout', 'showSubcategories', 'gridColumns', 'defaultPageSize', 'showFilters', 'defaultSort'], customOwnedKeys: ['productRows'] },
+  { key: 'collection', label: 'Collection', status: 'active', previewPath: '/products', settingsGroup: 'catalog', ownedKeys: ['templateLayout', 'filterLayout', 'showBreadcrumbs', 'gridColumns', 'defaultPageSize', 'defaultSort', 'showFilters', 'categoryDepth'], customOwnedKeys: ['productRows'] },
+  { key: 'search', label: 'Search', status: 'active', previewPath: '/search', settingsGroup: 'searchPage', ownedKeys: ['gridColumns', 'resultsPerPage', 'showResultCount', 'showMatchingBrands', 'showMatchingCategories', 'searchTitle', 'searchPlaceholder', 'initialPromptTitle', 'initialPromptMessage', 'noResultsTitle', 'noResultsMessage'], customOwnedKeys: ['productRows'] },
+  { key: 'cart', label: 'Cart', status: 'active', previewPath: '/cart', settingsGroup: 'cartPage', ownedKeys: ['layout', 'showTrustBadges', 'showPaymentMethods', 'showSecureCheckout', 'showClearCart', 'showContinueShopping', 'showEnquiryButton', 'cartTitle', 'cartSubtitle', 'summaryTitle', 'checkoutButtonLabel', 'enquiryButtonLabel', 'continueShoppingLabel', 'clearCartLabel', 'secureCheckoutLabel', 'emptyStateTitle', 'emptyStateText', 'emptyStateButtonLabel', 'emptyStateButtonLink'], customOwnedKeys: ['productRows'] },
   { key: 'checkout', label: 'Checkout', status: 'active', previewPath: '/checkout', settingsGroup: 'checkoutPage', ownedKeys: ['placeOrderLabel', 'paymentHeading'] },
   { key: 'account', label: 'Account', status: 'active', previewPath: '/account', settingsGroup: 'accountPage', ownedKeys: ['layout', 'showSupportInfo'] },
   { key: 'orders', label: 'Orders', status: 'active', previewPath: '/orders', settingsGroup: 'ordersPage', ownedKeys: ['emptyHeadline', 'emptyCtaLabel'] },
@@ -1145,7 +1145,7 @@ export const DESIGNER_OWNED_KEYS = Object.freeze(
   Object.fromEntries(
     DESIGN_PAGE_REGISTRY
       .filter((page) => page.settingsGroup && page.ownedKeys?.length)
-      .map((page) => [page.settingsGroup, Object.freeze(page.ownedKeys)])
+      .map((page) => [page.settingsGroup, Object.freeze([...page.ownedKeys, ...(page.customOwnedKeys || [])])])
   )
 );
 

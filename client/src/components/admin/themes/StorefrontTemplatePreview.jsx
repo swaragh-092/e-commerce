@@ -278,7 +278,7 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
     if (section.enabled === false) return false;
     if (activePage !== 'product') return true;
     if (section.type === 'value-props') return productPage?.showTrustBadges !== false;
-    if (section.type === 'product-row') return productPage?.showRelatedProducts !== false;
+    if (section.type === 'product-row') return section.pageProductRow || productPage?.showRelatedProducts !== false;
     if (section.type === 'recently-viewed') return productPage?.showRecentlyViewed !== false;
     return true;
   };

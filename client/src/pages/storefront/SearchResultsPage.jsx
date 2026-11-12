@@ -14,6 +14,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import SearchOffIcon from '@mui/icons-material/SearchOff';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import ProductGrid from '../../components/product/ProductGrid';
+import PageProductRows from '../../components/storefront/sections/PageProductRows';
 import SearchWidget from '../../components/search/SearchWidget';
 import PageSEO from '../../components/common/PageSEO';
 import { useSettings } from '../../hooks/useSettings';
@@ -316,6 +317,8 @@ const SearchResultsPage = () => {
           />
         </Box>
       )}
+
+      <PageProductRows rows={searchStyle.productRows} />
 
       {/* Initial State (no query) */}
       {!loading && !hasSearched && getSearchQueryLength(normalizedQuery) < 2 && (

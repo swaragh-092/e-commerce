@@ -31,6 +31,16 @@ describe('getPageSections', () => {
     ]);
   });
 
+  it('appends configured product rows to the matching non-home page only', () => {
+    const productRows = [{ id: 'trending', type: 'product-row', source: 'mostViewed' }];
+    const settings = { categoryPage: { productRows }, searchPage: { productRows } };
+
+    expect(getPageSections(settings, 'category').at(-1)).toMatchObject({ ...productRows[0], pageProductRow: true });
+    expect(getPageSections(settings, 'search').at(-1)).toMatchObject({ ...productRows[0], pageProductRow: true });
+    expect(getPageSections(settings, 'home')).toEqual([]);
+    expect(getPageSections(settings, 'cart')).toHaveLength(2);
+  });
+
   it('returns independent defaults so editing one draft cannot alter another', () => {
     const first = getPageSections(undefined, 'product');
     first[0].enabled = false;

@@ -25,6 +25,9 @@ describe('store design ownership', () => {
     expect(isDesignerOwnedSetting('productPage', 'templateLayout')).toBe(true);
     expect(isDesignerOwnedSetting('brandsPage', 'cardBorderRadius')).toBe(true);
     expect(isDesignerOwnedSetting('advanced', 'customCSS')).toBe(true);
+    for (const group of ['productPage', 'categoryPage', 'catalog', 'searchPage', 'cartPage']) {
+      expect(isDesignerOwnedSetting(group, 'productRows')).toBe(true);
+    }
   });
 
   it('keeps operational settings editable from System Settings', () => {

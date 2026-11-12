@@ -24,6 +24,7 @@ import { getMediaUrl, onImageError, PLACEHOLDER_PRODUCT } from '../../utils/medi
 
 
 import PageSEO from '../../components/common/PageSEO';
+import PageProductRows from '../../components/storefront/sections/PageProductRows';
 import { AuthContext } from '../../context/AuthContext';
 import { getEligibleCoupons } from '../../services/adminService';
 import { getCartItemUnitPrice, getVariantRegularPrice, getVariantDiscountPercent } from '../../utils/variantPricing';
@@ -521,12 +522,15 @@ const CartPage = () => {
             </Alert>
         </Container>
     );
-    if (items.length === 0) return <EmptyCart
-        title={cartPage.emptyStateTitle}
-        message={emptyStateText}
-        buttonLabel={cartPage.emptyStateButtonLabel}
-        buttonLink={cartPage.emptyStateButtonLink}
-    />;
+    if (items.length === 0) return <>
+        <EmptyCart
+            title={cartPage.emptyStateTitle}
+            message={emptyStateText}
+            buttonLabel={cartPage.emptyStateButtonLabel}
+            buttonLink={cartPage.emptyStateButtonLink}
+        />
+        <Container maxWidth="lg"><PageProductRows rows={cartPage.productRows} /></Container>
+    </>;
 
     const visibleItems = items.filter(i => !removingIds.has(i.id));
     const visibleCount = visibleItems.reduce((s, i) => s + getQty(i), 0);
@@ -626,6 +630,8 @@ const CartPage = () => {
                     showPrices={showPrices}
                 />
             </Box>
+
+            <PageProductRows rows={cartPage.productRows} />
 
             {clearing && (
                 <Box sx={{ position: 'fixed', inset: 0, bgcolor: 'rgba(255,255,255,0.7)', zIndex: 9999, ...row('center', 'center'), backdropFilter: 'blur(2px)' }}>
