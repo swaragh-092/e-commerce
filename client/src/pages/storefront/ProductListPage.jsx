@@ -55,6 +55,7 @@ const ProductListPage = ({ tag = null }) => {
         minPrice: searchParams.get('minPrice') || '',
         maxPrice: searchParams.get('maxPrice') || '',
         ...(searchParams.get('onSale') === 'true' && { onSale: true }),
+        ...(searchParams.get('featured') === 'true' && { featured: true }),
         ...(searchParams.get('saleLabel') && { saleLabel: searchParams.get('saleLabel') }),
         status: 'published',
         limit: defaultLimit,
@@ -127,6 +128,8 @@ const ProductListPage = ({ tag = null }) => {
         || filters.brand
         || filters.minPrice
         || filters.maxPrice
+        || filters.featured
+        || filters.onSale
     );
 
     const tagPath = tag ? `/tags/${encodeURIComponent(tag.slug)}` : '';

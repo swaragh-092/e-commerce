@@ -26,7 +26,14 @@ const DiscoveryRow = ({ row }) => {
   }, [count, source]);
 
   if (!loading && !products.length) return null;
-  const viewAllLink = row.viewAllLink || `/products?sort=${source === 'bestSellers' ? 'best-selling' : source === 'mostViewed' ? 'most-viewed' : source === 'newest' ? 'newest' : source === 'sale' ? 'discount_desc' : 'featured'}`;
+  const sourceLinks = {
+    bestSellers: '/products?sort=best-selling',
+    mostViewed: '/products?sort=most-viewed',
+    newest: '/products?sort=newest',
+    sale: '/products?onSale=true',
+    featured: '/products?featured=true',
+  };
+  const viewAllLink = row.viewAllLink || sourceLinks[source] || sourceLinks.featured;
   return <ProductRow title={row.title || 'Recommended products'} viewAllLink={viewAllLink} products={products} loading={loading} count={count} layout={row.layout || 'carousel'} compact={row.layout === 'grid-compact'} />;
 };
 
