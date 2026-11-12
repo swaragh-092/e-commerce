@@ -1,10 +1,30 @@
 import { createRequire } from 'node:module';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
+const { DesignDraft, Setting, sequelize } = require('../../src/modules');
+afterEach(() => vi.restoreAllMocks());
 const DesignDraftService = require('../../src/modules/settings/designDraft.service');
 
 describe('Design draft safety', () => {
+  it('reports stale live settings on load without modifying the saved draft', async () => {
+    const draft = { status: 'draft', revision: 46, baseSnapshot: { theme: { primaryColor: '#000000' } }, payload: [{ group: 'theme', key: 'primaryColor', value: '#111111' }], toJSON() { return { ...this }; } };
+    vi.spyOn(DesignDraft, 'findOne').mockResolvedValue(draft);
+    vi.spyOn(Setting, 'findAll').mockResolvedValue([{ group: 'theme', key: 'primaryColor', value: '#ffffff' }]);
+    const result = await DesignDraftService.getDraft();
+    expect(result.conflicts).toEqual([{ group: 'theme', key: 'primaryColor' }]);
+    expect(result.draft.revision).toBe(46);
+    expect(result.draft).not.toHaveProperty('baseSnapshot');
+  });
+
+  it('does not discard a draft edited in another session', async () => {
+    const destroy = vi.fn();
+    vi.spyOn(sequelize, 'transaction').mockImplementation(async (fn) => fn({ LOCK: { UPDATE: 'UPDATE' } }));
+    vi.spyOn(DesignDraft, 'findOne').mockResolvedValue({ status: 'draft', revision: 47, destroy, toJSON: () => ({ revision: 47 }) });
+    await expect(DesignDraftService.discardDraft({ id: 'user' }, 46)).rejects.toMatchObject({ code: 'DRAFT_CONFLICT' });
+    expect(destroy).not.toHaveBeenCalled();
+  });
+
   it('ignores object key order but preserves array order when comparing live settings', () => {
     const payload = [{ group: 'homepage', key: 'sections', value: [{ id: 'draft' }] }];
     expect(DesignDraftService.findPublishConflicts(

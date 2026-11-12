@@ -38,7 +38,7 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { useSearchParams } from 'react-router-dom';
 import { useDesignerPreviewPath } from '../../hooks/useDesignerPreviewPath';
 
-import { getDesignDraft, getDesignState, getDesignVersions, getSettingsGroup, publishDesignDraft, restoreDesignVersion, saveDesignDraft } from '../../services/settingsService';
+import { discardDesignDraft, getDesignDraft, getDesignState, getDesignVersions, getSettingsGroup, publishDesignDraft, restoreDesignVersion, saveDesignDraft } from '../../services/settingsService';
 import { useNotification } from '../../context/NotificationContext';
 import { SettingsContext } from '../../context/ThemeContext';
 import { getSectionLabel, SECTION_VARIANTS } from '../../components/storefront/sections/sectionRegistry';
@@ -161,6 +161,9 @@ const SectionComposerPage = () => {
   const [publishing, setPublishing] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [draft, setDraft] = useState(null);
+  const [draftConflicts, setDraftConflicts] = useState([]);
+  const [useLiveOpen, setUseLiveOpen] = useState(false);
+  const [usingLive, setUsingLive] = useState(false);
   const [draftDeletes, setDraftDeletes] = useState([]);
   const [publishOpen, setPublishOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -392,21 +395,22 @@ const SectionComposerPage = () => {
     try {
       const [homepage, draftState, designState] = await Promise.all([
         getSettingsGroup('homepage'),
-        getDesignDraft().catch(() => ({ draft: null })),
-        getDesignState().catch(() => ({ groups: {}, sources: {}, defaults: {} })),
+        getDesignDraft(),
+        getDesignState(),
       ]);
       setDesignSources(designState?.sources || {});
       setDesignDefaults(designState?.defaults || {});
       const existingDraft = draftState?.draft || null;
-      const draftResult = existingDraft
-        ? applyDraftPayload(existingDraft.payload || [], designState?.groups || {}, designState?.defaults || {})
-        : null;
+      setDraftConflicts(draftState?.conflicts || []);
+      const draftResult = applyDraftPayload(existingDraft?.payload || [], designState?.groups || {}, designState?.defaults || {});
       const initialSections = draftResult?.groups?.homepage?.sections || homepage?.sections || [];
       if (existingDraft) {
         draftHydratedRef.current = true;
         setDraft(existingDraft);
         setDraftDeletes(draftResult?.resetTargets || []);
       } else {
+        draftHydratedRef.current = true;
+        setDraft(null);
         setDraftDeletes([]);
       }
       setSections(initialSections);
@@ -426,6 +430,21 @@ const SectionComposerPage = () => {
   useEffect(() => {
     fetchSections();
   }, [fetchSections]);
+
+  const handleUseLive = async () => {
+    setUsingLive(true);
+    try {
+      await discardDesignDraft(draft.revision);
+      setDirty(false);
+      setUseLiveOpen(false);
+      setPanelView({ mode: 'tree', sectionId: null, componentKey: null, blockKey: null, blockIndex: null });
+      await fetchSections();
+    } catch (error) {
+      notify(error.response?.data?.error?.message || 'Could not load the live design. Please retry.', 'error');
+    } finally {
+      setUsingLive(false);
+    }
+  };
 
   const clearDraftDelete = (group, key = null) => {
     setDraftDeletes((current) => current.filter((target) => (
@@ -575,6 +594,10 @@ const SectionComposerPage = () => {
       notify('Design draft published to the storefront.', 'success');
       setPublishOpen(false);
     } catch (error) {
+      if (error.response?.data?.error?.details?.conflicts) {
+        setDraftConflicts(error.response.data.error.details.conflicts);
+        setPublishOpen(false);
+      }
       notify(error.response?.data?.error?.message || error?.message || 'Publish failed. Review the latest design changes and try again.', 'error');
     } finally {
       setPublishing(false);
@@ -1124,7 +1147,7 @@ const SectionComposerPage = () => {
               {saving ? 'Saving...' : 'Save draft'}
             </Button>
             <Tooltip title={dirty ? 'Save your draft before publishing' : !draft ? 'Save a draft to publish changes' : 'Publish your saved draft to the store'}>
-              <span><Button size="small" variant="contained" onClick={() => setPublishOpen(true)} disabled={Boolean(loadError) || !draft || dirty || saving || publishing}>Publish</Button></span>
+              <span><Button size="small" variant="contained" onClick={() => setPublishOpen(true)} disabled={Boolean(loadError) || !draft || draftConflicts.length > 0 || dirty || saving || publishing}>Publish</Button></span>
             </Tooltip>
           </Stack>
         </Box>
@@ -1379,6 +1402,12 @@ const SectionComposerPage = () => {
             )}
           </Box>
 
+          {draftConflicts.length > 0 && (
+            <Alert severity="warning" action={<Button color="inherit" onClick={() => setUseLiveOpen(true)} disabled={saving || publishing || usingLive}>Use live storefront</Button>}>
+              This saved draft differs from changes made to the live storefront, possibly by installing another template. The editor is showing your draft, not the live design. Publishing is blocked to protect those changes.
+            </Alert>
+          )}
+
           {/* Preview Canvas Area */}
           <Box sx={{ flex: 1, minHeight: 0, minWidth: 0, p: viewportMode === 'desktop' ? 0 : { xs: 0, sm: 1.5 }, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden', bgcolor: '#f6f6f7' }}>
             <Box
@@ -1507,6 +1536,17 @@ const SectionComposerPage = () => {
           <Button variant="contained" onClick={handleRestoreVersion} disabled={Boolean(restoringVersionId)}>
             {restoringVersionId ? 'Restoring...' : 'Restore to draft'}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={useLiveOpen} onClose={() => !usingLive && setUseLiveOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Replace draft with live storefront?</DialogTitle>
+        <DialogContent>
+          <Typography>This deletes the saved draft and any unsaved editor changes, then loads the currently installed live design. Your live storefront will not change. Cancel to keep your draft.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setUseLiveOpen(false)} disabled={usingLive}>Cancel</Button>
+          <Button variant="contained" onClick={handleUseLive} disabled={usingLive}>{usingLive ? 'Loading...' : 'Discard draft and load live'}</Button>
         </DialogActions>
       </Dialog>
 

@@ -100,7 +100,12 @@ const assertRevision = (draft, expectedRevision) => {
 
 const getDraft = async () => {
   const draft = await findDraft();
-  return { draft: draft?.status === 'draft' ? serializeDraft(draft) : null };
+  if (draft?.status !== 'draft') return { draft: null, conflicts: [] };
+  const currentSnapshot = await readLiveSnapshot();
+  return {
+    draft: serializeDraft(draft),
+    conflicts: findPublishConflicts(draft.baseSnapshot || {}, currentSnapshot, draft.payload || []),
+  };
 };
 
 const getPublishedVersions = async ({ limit = 30 } = {}) => {
@@ -288,9 +293,10 @@ const restorePublishedVersion = async ({ versionId, expectedRevision }, user) =>
   };
 });
 
-const discardDraft = async (user) => sequelize.transaction(async (t) => {
+const discardDraft = async (user, expectedRevision) => sequelize.transaction(async (t) => {
   const draft = await findDraft(t, { lock: true });
   if (!draft || draft.status !== 'draft') return { discarded: false };
+  assertRevision(draft, expectedRevision);
   await draft.destroy({ transaction: t });
   try {
     await AuditService.log({

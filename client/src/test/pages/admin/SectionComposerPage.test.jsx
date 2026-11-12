@@ -9,7 +9,7 @@ vi.mock('../../../hooks/useDesignerPreviewPath', () => ({ useDesignerPreviewPath
 vi.mock('../../../context/ThemeContext', async () => ({ SettingsContext: (await import('react')).createContext(null) }));
 vi.mock('../../../context/NotificationContext', () => ({ useNotification: () => ({ notify }) }));
 vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () => true }) }));
-vi.mock('../../../services/settingsService', () => ({ getSettingsGroup: vi.fn(), getDesignDraft: vi.fn(), getDesignState: vi.fn(), getDesignVersions: vi.fn(), publishDesignDraft: vi.fn(), restoreDesignVersion: vi.fn(), saveDesignDraft: vi.fn() }));
+vi.mock('../../../services/settingsService', () => ({ getSettingsGroup: vi.fn(), getDesignDraft: vi.fn(), getDesignState: vi.fn(), getDesignVersions: vi.fn(), publishDesignDraft: vi.fn(), restoreDesignVersion: vi.fn(), saveDesignDraft: vi.fn(), discardDesignDraft: vi.fn() }));
 vi.mock('../../../components/admin/themes/StorefrontTemplatePreview', () => ({ default: ({ activePage, currentSettings, onSelectSection }) => <div>{(activePage === 'home' ? currentSettings.homepage.sections : currentSettings.productPage.sections)?.map((section) => <button key={section.id} onClick={() => onSelectSection(section)}>Preview {section.title}</button>)}</div> }));
 vi.mock('../../../components/admin/themes/designer/DesignerTreePanel', () => ({ default: ({ sections, onToggleSection }) => <div>{sections.map((section, index) => <button key={section.id} onClick={() => onToggleSection(index)}>Hide {section.title}</button>)}</div> }));
 vi.mock('../../../components/admin/themes/designer/DesignerSectionEditor', () => ({ default: ({ section, onChange, onBlur }) => (
@@ -36,6 +36,56 @@ beforeEach(() => {
   service.saveDesignDraft.mockImplementation(async (payload) => ({ revision: 1, payload }));
 });
 describe('Store Designer section editing', () => {
+  const oldDraft = { revision: 46, payload: [{ group: 'homepage', key: 'sections', value: [{ ...homeSection, title: 'Old template hero' }] }] };
+  const conflicts = [{ group: 'homepage', key: 'sections' }];
+
+  it('warns about an outdated template draft, keeps it on cancel, then loads live only after confirmation', async () => {
+    service.getDesignDraft.mockResolvedValueOnce({ draft: oldDraft, conflicts });
+    mount();
+    await screen.findByRole('button', { name: 'Preview Old template hero' });
+    expect(screen.getByText(/editor is showing your draft, not the live design/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Publish', exact: true })).toBeDisabled();
+    fireEvent.click(await screen.findByRole('button', { name: 'Use live storefront' }));
+    expect(await screen.findByRole('dialog', { name: 'Replace draft with live storefront?' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
+    expect(service.discardDesignDraft).not.toHaveBeenCalled();
+    expect(await screen.findByText('Preview Old template hero')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Use live storefront' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Discard draft and load live' }));
+    await waitFor(() => expect(service.discardDesignDraft).toHaveBeenCalledWith(46));
+    expect(await screen.findByRole('button', { name: 'Preview Homepage hero' })).toBeInTheDocument();
+    expect(screen.queryByText(/editor is showing your draft, not the live design/)).not.toBeInTheDocument();
+    expect(service.publishDesignDraft).not.toHaveBeenCalled();
+  });
+
+  it('preserves the draft when revision-checked discard fails', async () => {
+    service.getDesignDraft.mockResolvedValueOnce({ draft: oldDraft, conflicts });
+    service.discardDesignDraft.mockRejectedValueOnce(new Error('Conflict'));
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Use live storefront' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Discard draft and load live' }));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith('Could not load the live design. Please retry.', 'error'));
+    expect(await screen.findByText('Preview Old template hero')).toBeInTheDocument();
+  });
+
+  it('does not silently ignore failure to load a saved draft', async () => {
+    service.getDesignDraft.mockRejectedValueOnce(new Error('Draft load failed'));
+    mount();
+    expect(await screen.findByText('Draft load failed')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Save draft/i })).toBeDisabled();
+  });
+
+  it('shows recovery when the live design changes after the editor loads', async () => {
+    service.getDesignDraft.mockResolvedValueOnce({ draft: oldDraft, conflicts: [] });
+    service.publishDesignDraft.mockRejectedValueOnce({ response: { data: { error: { message: 'Live changed', details: { conflicts } } } } });
+    mount();
+    await screen.findByRole('button', { name: 'Preview Old template hero' });
+    fireEvent.click(screen.getByRole('button', { name: 'Publish', exact: true }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Publish design', exact: true }));
+    expect(await screen.findByRole('button', { name: 'Use live storefront' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Publish design draft?' })).not.toBeInTheDocument();
+  });
+
   it('uses the real storefront for Product and preserves homepage sections when switching pages', async () => {
     mount();
     await screen.findByRole('button', { name: 'Preview Homepage hero' });
