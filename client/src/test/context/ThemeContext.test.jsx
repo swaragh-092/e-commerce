@@ -1,10 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { useContext } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { useTheme } from '@mui/material/styles';
-import { SettingsContext, SettingsProvider, useAdminThemeMode, useDesignTokens } from '../../context/ThemeContext';
-import DarkModeToggle from '../../components/layout/DarkModeToggle';
+import { SettingsContext, SettingsProvider, useDesignTokens } from '../../context/ThemeContext';
 
 const settings = {
   theme: {
@@ -28,7 +27,6 @@ vi.mock('../../services/settingsService', () => ({
 
 const Probe = () => {
   const theme = useTheme();
-  const { isDark } = useAdminThemeMode();
   const { cssVariables, isAdminRoute, tokens } = useDesignTokens();
   return (
     <>
@@ -39,11 +37,9 @@ const Probe = () => {
       data-primary={tokens.colors.primary}
       data-ui-primary={theme.palette.primary.main}
       data-ui-mode={theme.palette.mode}
-      data-is-dark={String(isDark)}
       data-store-mode={tokens.mode}
       data-background={theme.palette.background.default}
     />
-    <DarkModeToggle />
     </>
   );
 };
@@ -170,17 +166,14 @@ describe('SettingsProvider admin/storefront theme separation', () => {
     expect(document.documentElement.style.getPropertyValue('--store-theme-mode')).toBe('light');
   });
 
-  it('toggles and persists the admin dark theme independently', async () => {
+  it('keeps the admin theme light and removes the old dark-mode preference', async () => {
+    localStorage.setItem('adminDarkMode', 'true');
     renderAt('/admin');
     const probe = await screen.findByTestId('probe');
 
     await waitFor(() => expect(probe.dataset.uiMode).toBe('light'));
-    fireEvent.click(screen.getByRole('button', { name: 'Switch to dark mode' }));
-
-    await waitFor(() => expect(probe.dataset.uiMode).toBe('dark'));
-    expect(screen.getByRole('button', { name: 'Switch to light mode' })).toBeInTheDocument();
-    expect(probe.dataset.isDark).toBe('true');
-    expect(probe.dataset.background).toBe('#0b1220');
-    expect(localStorage.getItem('adminDarkMode')).toBe('true');
+    expect(probe.dataset.background).toBe('#f8fafc');
+    expect(screen.queryByRole('button', { name: /dark mode/i })).not.toBeInTheDocument();
+    expect(localStorage.getItem('adminDarkMode')).toBeNull();
   });
 });
