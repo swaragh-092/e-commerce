@@ -104,7 +104,7 @@ const restoreDesignVersion = async (req, res, next) => {
 
 const discardDesignDraft = async (req, res, next) => {
   try {
-    const result = await DesignDraftService.discardDraft(req.user);
+    const result = await DesignDraftService.discardDraft(req.user, req.body.expectedRevision);
     return success(res, result, 'Design draft discarded.');
   } catch (err) {
     next(err);

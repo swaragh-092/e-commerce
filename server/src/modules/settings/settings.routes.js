@@ -118,6 +118,7 @@ router.post('/design-versions/:id/restore',
 router.delete('/design-draft',
   authenticate,
   authorizePermissions(PERMISSIONS.SETTINGS_MANAGE),
+  validate(publishDesignDraftSchema),
   settingsController.discardDesignDraft
 );
 
