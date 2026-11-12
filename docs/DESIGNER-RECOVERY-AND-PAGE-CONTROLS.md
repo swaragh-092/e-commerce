@@ -56,3 +56,9 @@ Full-design undo, autosave, per-field merge, template-install warnings and remai
 page-specific controls are still separate work. Authenticated production save/publish
 verification was blocked by the live admin sign-in; local synthetic browser and
 isolated PostgreSQL checks are not production proof.
+
+Category settings also control nested category-filter depth (1–5 levels) and expansion
+behavior: open the selected path, start collapsed with per-branch disclosure buttons,
+or expand all visible levels. Category-page overrides take precedence over Collection
+settings; Collection settings remain the fallback. Depth limits both rendering and the
+number of levels administrators can expose, preventing excessively deep filter trees.
