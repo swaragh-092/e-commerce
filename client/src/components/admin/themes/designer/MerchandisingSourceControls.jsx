@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { FormControl, InputLabel, MenuItem, Select, Stack, TextField } from '@mui/material';
-import { getTags } from '../../../services/tagService';
-import { galleryService } from '../../../services/galleryService';
+import { getTags } from '../../../../services/tagService';
+import { galleryService } from '../../../../services/galleryService';
 
 const rowsOf = (value) => Array.isArray(value) ? value : (value?.data || value?.items || []);
 
