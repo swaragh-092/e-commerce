@@ -9,6 +9,7 @@ const NotificationService = require('../notification/notification.service');
 const AuditService = require('../audit/audit.service');
 const { ACTIONS, AUTH_TIME, ENTITIES } = require('../../config/constants');
 const { enrichUserAuthorization } = require('../../config/permissions');
+const { getPermissionsForUser, ADMIN_PERMISSIONS } = require('../../config/permissions');
 const logger = require('../../utils/logger');
 const { requiresAdminMfa, canUseEmailMfa, assertMfaEnrollment, assertMfaSession, loadMfaPolicy } = require('./mfaPolicy');
 const LoginAttemptStore = require('./loginAttemptStore');
@@ -221,27 +222,20 @@ const login = async (email, password, ipAddress, rememberMe = false, userAgent, 
   const mfaPolicy = await loadMfaPolicy(user);
   assertMfaEnrollment(user, mfaPolicy);
 
-  // If 2FA is enabled, check trusted device cookie before requiring TOTP.
-  // The cookie is a signed JWT (see authCookies.signTrustedDevice) — never a
-  // deterministic hash, so it cannot be forged without the JWT secret.
   if (user.twoFactorEnabled) {
-    const { verifyTrustedDevice } = require('./authCookies');
-    if (!requiresAdminMfa(user, mfaPolicy) && trustedDevice && verifyTrustedDevice(trustedDevice, user.id)) {
-      // Trusted device — skip 2FA
-    } else {
-      const emailMfa = canUseEmailMfa(user, mfaPolicy) ? require('./emailMfa.service') : null;
-      return {
-        requiresTwoFactor: true,
-        tempToken: signTempTwoFactorToken(user.id, emailMfa ? crypto.randomBytes(32).toString('hex') : undefined),
-        ...(emailMfa?.isBound(user) ? { emailChallenge: emailMfa.issueChallenge(user) } : {}),
-      };
-    }
+    const emailMfa = canUseEmailMfa(user, mfaPolicy) ? require('./emailMfa.service') : null;
+    return {
+      requiresTwoFactor: true,
+      tempToken: signTempTwoFactorToken(user.id, emailMfa ? crypto.randomBytes(32).toString('hex') : undefined),
+      ...(emailMfa?.isBound(user) ? { emailChallenge: emailMfa.issueChallenge(user) } : {}),
+    };
   }
 
   // Generate tokens with session ID
   const sessionId = crypto.randomUUID();
   const tokens = generateTokens(user, sessionId);
-  const ttl = rememberMe ? AUTH_TIME.REMEMBER_ME_TTL_MS : AUTH_TIME.REFRESH_TOKEN_TTL_MS;
+  const staffSession = getPermissionsForUser(user).some((permission) => ADMIN_PERMISSIONS.includes(permission));
+  const ttl = staffSession ? 12 * 60 * 60 * 1000 : (rememberMe ? AUTH_TIME.REMEMBER_ME_TTL_MS : AUTH_TIME.REFRESH_TOKEN_TTL_MS);
 
   // New device/IP detection (before creating new token)
   let isNewDevice = false;
@@ -260,6 +254,7 @@ const login = async (email, password, ipAddress, rememberMe = false, userAgent, 
     userId: user.id,
     token: hashToken(tokens.refreshToken),
     expiresAt: new Date(Date.now() + ttl),
+    absoluteExpiresAt: new Date(Date.now() + ttl),
     createdByIp: ipAddress,
     userAgent: userAgent || null,
     deviceName: parseDeviceName(userAgent),
@@ -394,7 +389,9 @@ const refresh = async (refreshTokenStr, ipAddress, userAgent) => {
           const originalTtl = expiresAt - createdAt;
           rememberMe = originalTtl > 8 * 24 * 60 * 60 * 1000;
         } catch { rememberMe = false; }
-        const newExpiry = new Date(Date.now() + (rememberMe ? AUTH_TIME.REMEMBER_ME_TTL_MS : AUTH_TIME.REFRESH_TOKEN_TTL_MS));
+        const staffSession = getPermissionsForUser(user).some((permission) => ADMIN_PERMISSIONS.includes(permission));
+        const absoluteExpiresAt = tokenRecord.absoluteExpiresAt || new Date(new Date(tokenRecord.createdAt).getTime() + originalTtl);
+        const newExpiry = staffSession ? absoluteExpiresAt : new Date(Date.now() + (rememberMe ? AUTH_TIME.REMEMBER_ME_TTL_MS : AUTH_TIME.REFRESH_TOKEN_TTL_MS));
 
         await tokenRecord.update({ revokedAt: new Date(), replacedByTokenId: sessionId }, { transaction: t });
         await RefreshToken.create({
@@ -402,6 +399,9 @@ const refresh = async (refreshTokenStr, ipAddress, userAgent) => {
           userId: user.id,
           token: hashToken(tokens.refreshToken),
           expiresAt: newExpiry,
+          absoluteExpiresAt,
+          createdAt: tokenRecord.createdAt,
+          lastActiveAt: tokenRecord.lastActiveAt,
           createdByIp: ipAddress,
           userAgent: userAgent || tokenRecord.userAgent,
           deviceName: userAgent ? parseDeviceName(userAgent) : tokenRecord.deviceName,

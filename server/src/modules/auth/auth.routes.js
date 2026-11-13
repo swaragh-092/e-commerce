@@ -26,6 +26,7 @@ const {
 } = require('./auth.validation');
 
 const { authenticate } = require('../../middleware/auth.middleware');
+const { RefreshToken } = require('../index');
 const authController = require('./auth.controller');
 const twoFactorController = require('./twoFactor.controller');
 const otpController = require('./otp.controller');
@@ -35,6 +36,33 @@ const { setAuthCookies } = require('./authCookies');
 const { getClientBaseUrl } = require('./authRedirects');
 
 initializeGoogleStrategy();
+
+const adminSession = async (req, res, next) => {
+  try {
+    const session = req.authSession;
+    return success(res, { expiresAt: session.absoluteExpiresAt || new Date(new Date(session.createdAt).getTime() + 12 * 60 * 60 * 1000), lastActiveAt: session.lastActiveAt }, 'Admin session status', 200);
+  } catch (error) { next(error); }
+};
+const adminActivity = async (req, res, next) => {
+  try {
+    await req.authSession.update({ lastActiveAt: new Date() });
+    return success(res, { lastActiveAt: req.authSession.lastActiveAt }, 'Admin activity recorded', 200);
+  } catch (error) { next(error); }
+};
+const requireAdminSession = async (req, res, next) => {
+  try {
+    const { ADMIN_PERMISSIONS } = require('../../config/permissions');
+    if (!(req.user.permissions || []).some((permission) => ADMIN_PERMISSIONS.includes(permission))) return next(new (require('../../utils/AppError'))('FORBIDDEN', 403, 'Admin access required'));
+    const jwt = require('jsonwebtoken');
+    const token = require('./authCookies').getAccessToken(req);
+    const claims = jwt.decode(token);
+    req.authSession = claims?.sid ? await RefreshToken.findByPk(claims.sid) : null;
+    if (!req.authSession) return next(new (require('../../utils/AppError'))('UNAUTHORIZED', 401, 'Admin session not found'));
+    next();
+  } catch (error) { next(error); }
+};
+router.get('/admin-session', authenticate, requireAdminSession, adminSession);
+router.post('/admin-session/activity', authenticate, requireAdminSession, adminActivity);
 
 const Joi = require('joi');
 const { authorizePermissions } = require('../../middleware/role.middleware');

@@ -52,6 +52,11 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    if (error.response?.status === 401 && error.response?.data?.code === 'ADMIN_SESSION_EXPIRED') {
+      window.dispatchEvent(new CustomEvent('admin-session:expired'));
+      return Promise.reject(error);
+    }
+
     const authEndpoint = ['/auth/login', '/auth/refresh', '/auth/logout', '/auth/2fa/verify', '/auth/otp/verify']
       .some(path => originalRequest?.url?.includes(path));
     if (error.response?.status === 401 && originalRequest && !authEndpoint && !originalRequest.skipAuthRefresh) {
