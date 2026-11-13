@@ -12,6 +12,7 @@ import ProductGrid from '../../components/product/ProductGrid';
 import ProductFilters from '../../components/product/ProductFilters';
 import StorefrontSidebarMenu from '../../components/layout/StorefrontSidebarMenu';
 import CategorySection from '../../components/storefront/sections/CategorySection';
+import PageProductRows from '../../components/storefront/sections/PageProductRows';
 import PageSEO from '../../components/common/PageSEO';
 import { useSettings, useFeature, useFeatureVisible } from '../../hooks/useSettings';
 import { getCategoryWithProducts } from '../../services/categoryService';
@@ -163,6 +164,8 @@ const CategoryPage = () => {
     const defaultLimit      = Math.min(100, Math.max(1, Number.parseInt(categoryPage.defaultPageSize ?? catalog.defaultPageSize, 10) || 20));
     const gridCols          = Math.min(6, Math.max(2, Number.parseInt(categoryPage.gridColumns ?? catalog.gridColumns, 10) || 4));
     const showFilters       = (categoryPage.showFilters ?? catalog.showFilters) !== false;
+    const categoryDepth     = Math.min(5, Math.max(1, Number.parseInt(categoryPage.categoryDepth ?? catalog.categoryDepth, 10) || 3));
+    const categoryExpandMode = categoryPage.categoryExpandMode || catalog.categoryExpandMode || 'selected-path';
     const collectionLayout  = catalog.templateLayout || 'sidebar-filters-grid';
     const filterLayout      = catalog.filterLayout  || (collectionLayout.includes('top') ? 'topbar' : 'sidebar');
     const isCompact         = collectionLayout.includes('compact') || collectionLayout.includes('b2b');
@@ -389,6 +392,8 @@ const CategoryPage = () => {
                         filters={filters}
                         onFilterChange={handleFilterChange}
                         priceRange={priceRange}
+                        categoryDepth={categoryDepth}
+                        categoryExpandMode={categoryExpandMode}
                     />
                 </Box>
             )}
@@ -407,6 +412,8 @@ const CategoryPage = () => {
                             filters={filters}
                             onFilterChange={handleFilterChange}
                             priceRange={priceRange}
+                            categoryDepth={categoryDepth}
+                            categoryExpandMode={categoryExpandMode}
                         />
                     </Grid>
                 )}
@@ -440,6 +447,7 @@ const CategoryPage = () => {
                     )}
                 </Grid>
             </Grid>
+            <PageProductRows rows={settings?.categoryPage?.productRows} />
 
             {/* ── Mobile filter drawer ──────────────────────────────── */}
             <Drawer anchor="left" open={mobileFilterOpen} onClose={() => setMobileFilterOpen(false)}>
@@ -449,6 +457,8 @@ const CategoryPage = () => {
                         filters={filters}
                         onFilterChange={(f) => { handleFilterChange(f); setMobileFilterOpen(false); }}
                         priceRange={priceRange}
+                        categoryDepth={categoryDepth}
+                        categoryExpandMode={categoryExpandMode}
                     />
                 </Box>
             </Drawer>

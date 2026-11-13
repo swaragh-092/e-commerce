@@ -19,6 +19,7 @@ import StorefrontIcon from '@mui/icons-material/Storefront';
 import MenuIcon from '@mui/icons-material/Menu';
 import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
 import { getSectionLabel } from '../../../storefront/sections/sectionRegistry';
+import PageProductRowsEditor from './PageProductRowsEditor';
 import {
   ProductPageStyleEditor,
   CategoryPageStyleEditor,
@@ -335,6 +336,12 @@ const DesignerTreePanel = ({
                 <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
                   {pageInfoText}
                 </Typography>
+              )}
+              {['category', 'collection', 'search', 'cart', 'product'].includes(activePage) && (
+                <PageProductRowsEditor
+                  rows={currentPageSettings.productRows || []}
+                  onChange={(productRows) => onPageSettingChange(activePage, { ...currentPageSettings, productRows })}
+                />
               )}
             </AccordionDetails>
           </Accordion>

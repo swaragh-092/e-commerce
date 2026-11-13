@@ -82,6 +82,17 @@ describe('media type segregation', () => {
     }]);
   });
 
+  it('searches name, filename, alt and caption with wildcards escaped', async () => {
+    const findAndCountAll = vi.spyOn(db.Media, 'findAndCountAll').mockResolvedValue({ rows: [], count: 0 });
+
+    await service.listMedia(1, 20, 'createdAt', 'desc', 'image', 'all', ' 50%_off ');
+
+    const conditions = findAndCountAll.mock.calls[0][0].where[Op.and];
+    const search = conditions.find((condition) => condition[Op.or]);
+    expect(search[Op.or]).toEqual(['originalName', 'filename', 'alt', 'caption']
+      .map((field) => ({ [field]: { [Op.iLike]: '%50\\%\\_off%' } })));
+  });
+
   it('includes usage counts and filters unused media before pagination', async () => {
     const findAndCountAll = vi.spyOn(db.Media, 'findAndCountAll').mockResolvedValue({
       rows: [],

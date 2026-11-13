@@ -35,18 +35,18 @@ const COMPONENT_GROUP_DEFINITIONS = [
 
 const PAGE_DEFINITIONS = [
   { key: 'home', label: 'Home', status: 'active', previewPath: '/', settingsGroup: 'homepage' },
-  { key: 'product', label: 'Product', status: 'active', previewPath: '/products', settingsGroup: 'productPage', ownedKeys: ['templateLayout', 'imageAlignment', 'showBreadcrumbs', 'showSKU', 'showStockBadge', 'showStickyAddToCart', 'showTrustBadges', 'showRelatedProducts', 'showRecentlyViewed', 'addToCartLabel', 'showBuyNowButton', 'buyNowLabel'] },
-  { key: 'category', label: 'Category', status: 'active', previewPath: '/category/all', settingsGroup: 'categoryPage', ownedKeys: ['heroTitle', 'headerLayout', 'showSubcategories', 'gridColumns', 'defaultPageSize', 'showFilters', 'defaultSort'] },
-  { key: 'collection', label: 'Collection', status: 'active', previewPath: '/products', settingsGroup: 'catalog', ownedKeys: ['templateLayout', 'filterLayout', 'showBreadcrumbs', 'gridColumns', 'defaultPageSize', 'defaultSort', 'showFilters', 'categoryDepth'] },
-  { key: 'search', label: 'Search', status: 'active', previewPath: '/search' },
-  { key: 'cart', label: 'Cart', status: 'active', previewPath: '/cart', settingsGroup: 'cartPage', ownedKeys: ['layout', 'showTrustBadges', 'emptyStateText'] },
-  { key: 'checkout', label: 'Checkout', status: 'active', previewPath: '/checkout' },
+  { key: 'product', label: 'Product', status: 'active', previewPath: '/products', settingsGroup: 'productPage', ownedKeys: ['templateLayout', 'imageAlignment', 'showBreadcrumbs', 'showSKU', 'showStockBadge', 'showStickyAddToCart', 'showTrustBadges', 'showRelatedProducts', 'showRecentlyViewed', 'addToCartLabel', 'showBuyNowButton', 'buyNowLabel'], customOwnedKeys: ['productRows'] },
+  { key: 'category', label: 'Category', status: 'active', previewPath: '/category/all', settingsGroup: 'categoryPage', ownedKeys: ['heroTitle', 'headerLayout', 'showSubcategories', 'categoryDepth', 'categoryExpandMode', 'gridColumns', 'defaultPageSize', 'showFilters', 'defaultSort'], customOwnedKeys: ['productRows'] },
+  { key: 'collection', label: 'Collection', status: 'active', previewPath: '/products', settingsGroup: 'catalog', ownedKeys: ['templateLayout', 'filterLayout', 'showBreadcrumbs', 'gridColumns', 'defaultPageSize', 'defaultSort', 'showFilters', 'categoryDepth', 'categoryExpandMode'], customOwnedKeys: ['productRows'] },
+  { key: 'search', label: 'Search', status: 'active', previewPath: '/search', settingsGroup: 'searchPage', ownedKeys: ['gridColumns', 'resultsPerPage', 'showResultCount', 'showMatchingBrands', 'showMatchingCategories', 'searchTitle', 'searchPlaceholder', 'initialPromptTitle', 'initialPromptMessage', 'noResultsTitle', 'noResultsMessage'], customOwnedKeys: ['productRows'] },
+  { key: 'cart', label: 'Cart', status: 'active', previewPath: '/cart', settingsGroup: 'cartPage', ownedKeys: ['layout', 'showTrustBadges', 'showPaymentMethods', 'showSecureCheckout', 'showClearCart', 'showContinueShopping', 'showEnquiryButton', 'cartTitle', 'cartSubtitle', 'summaryTitle', 'checkoutButtonLabel', 'enquiryButtonLabel', 'continueShoppingLabel', 'clearCartLabel', 'secureCheckoutLabel', 'emptyStateTitle', 'emptyStateText', 'emptyStateButtonLabel', 'emptyStateButtonLink'], customOwnedKeys: ['productRows'] },
+  { key: 'checkout', label: 'Checkout', status: 'active', previewPath: '/checkout', settingsGroup: 'checkoutPage', ownedKeys: ['placeOrderLabel', 'paymentHeading'] },
   { key: 'account', label: 'Account', status: 'active', previewPath: '/account', settingsGroup: 'accountPage', ownedKeys: ['layout', 'showSupportInfo'] },
-  { key: 'orders', label: 'Orders', status: 'active', previewPath: '/orders' },
+  { key: 'orders', label: 'Orders', status: 'active', previewPath: '/orders', settingsGroup: 'ordersPage', ownedKeys: ['emptyHeadline', 'emptyCtaLabel', 'pageTitle', 'searchPlaceholder', 'cardDensity', 'showProductThumbnails', 'emptyMessage', 'emptyCtaLink', 'showSupportInfo', 'supportTitle', 'supportMessage', 'supportLinkLabel', 'supportLink'] },
   { key: 'wishlist', label: 'Wishlist', status: 'active', previewPath: '/wishlist' },
   { key: 'brand', label: 'Brands', status: 'active', previewPath: '/brands', settingsGroup: 'brandsPage', ownedKeys: ['heroTitle', 'heroSubtitle', 'cardLayout', 'gridColumns', 'imageAspectRatio', 'cardStyle', 'cardBorderRadius', 'showDescriptions', 'showProductCount', 'showAlphabeticalFilter', 'showFeaturedSection', 'featuredLayout', 'featuredCount'] },
   { key: 'blog', label: 'Blog', status: 'active', previewPath: '/blogs', settingsGroup: 'blogPage', ownedKeys: ['listLayout', 'articleLayout', 'showAuthor', 'showDate'] },
-  { key: 'not-found', label: '404 Page', status: 'active', previewPath: '/not-found-preview' },
+  { key: 'not-found', label: '404 Page', status: 'active', previewPath: '/not-found-preview', settingsGroup: 'notFoundPage', ownedKeys: ['headline', 'subtext', 'cta1Label', 'cta1Link', 'cta2Label', 'cta2Link'] },
 ];
 
 // Merchant-facing control metadata lives beside ownership metadata so the
@@ -136,6 +136,8 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
           ],
         },
         { key: 'showSubcategories', label: 'Show subcategory navigation chips', type: 'boolean', defaultValue: true },
+        { key: 'categoryDepth', label: 'Nested category levels', type: 'select', defaultValue: 3, options: [1, 2, 3, 4, 5].map((value) => ({ value, label: value === 1 ? 'Top-level only' : `${value} levels deep` })) },
+        { key: 'categoryExpandMode', label: 'Open nested categories', type: 'select', defaultValue: 'selected-path', options: [{ value: 'selected-path', label: 'Open selected category path' }, { value: 'collapsed', label: 'Keep collapsed until opened' }, { value: 'all', label: 'Expand all visible levels' }] },
         { key: 'gridColumns', label: 'Desktop product columns', type: 'select', defaultValue: 4, options: [2, 3, 4, 5, 6].map((value) => ({ value, label: `${value} columns` })) },
         { key: 'defaultPageSize', label: 'Products per page', type: 'number', defaultValue: 20, min: 1, max: 100 },
         { key: 'showFilters', label: 'Show product filters', type: 'boolean', defaultValue: true },
@@ -203,6 +205,7 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
             { value: 5, label: '5 levels deep' },
           ],
         },
+        { key: 'categoryExpandMode', label: 'Open nested categories', type: 'select', defaultValue: 'selected-path', visibleWhen: { key: 'showFilters', notEquals: false }, options: [{ value: 'selected-path', label: 'Open selected category path' }, { value: 'collapsed', label: 'Keep collapsed until opened' }, { value: 'all', label: 'Expand all visible levels' }] },
       ],
     }],
   },
@@ -293,7 +296,7 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
           },
           { key: 'cardBorderRadius', label: 'Card Border Radius (px)', type: 'number', defaultValue: 12, min: 0, max: 48 },
           { key: 'showDescriptions', label: 'Show brand descriptions', type: 'boolean', defaultValue: true },
-          { key: 'showProductCount', label: 'Show product count badges', type: 'boolean', defaultValue: true },
+          { key: 'showProductCount', label: 'Show product count badges', type: 'boolean', defaultValue: false },
           { key: 'showAlphabeticalFilter', label: 'Show alphabetical filter', type: 'boolean', defaultValue: true },
         ],
       },
@@ -327,7 +330,7 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
           key: 'layout',
           label: 'Account Navigation Layout',
           type: 'select',
-          defaultValue: 'sidebar',
+          defaultValue: 'tabs',
           options: [
             { value: 'tabs', label: 'Tabs - compact horizontal navigation' },
             { value: 'sidebar', label: 'Sidebar - dashboard style navigation' },
@@ -355,15 +358,33 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
       },
       {
         key: 'features',
-        label: 'Features',
+        label: 'Cart Features',
         fields: [
-          { key: 'showTrustBadges', label: 'Show trust badges and secure checkout messaging', type: 'boolean', defaultValue: true },
+          { key: 'showTrustBadges', label: 'Show trust badges', type: 'boolean', defaultValue: true },
+          { key: 'showPaymentMethods', label: 'Show payment method strip', type: 'boolean', defaultValue: true },
+          { key: 'showSecureCheckout', label: 'Show secure checkout notice', type: 'boolean', defaultValue: true },
+          { key: 'showClearCart', label: 'Allow clearing all items', type: 'boolean', defaultValue: true },
+          { key: 'showContinueShopping', label: 'Show continue shopping links', type: 'boolean', defaultValue: true },
+          { key: 'showEnquiryButton', label: 'Show cart enquiry button', type: 'boolean', defaultValue: true },
         ],
       },
       {
         key: 'content',
-        label: 'Empty Cart Content',
-        fields: [{ key: 'emptyStateText', label: 'Empty Cart Message', type: 'text', defaultValue: "Haven't added anything yet. Let's fix that.", multiline: true }],
+        label: 'Cart Content & Labels',
+        fields: [
+          { key: 'cartTitle', label: 'Cart page title', type: 'text', defaultValue: 'Shopping Cart' },
+          { key: 'cartSubtitle', label: 'Cart page subtitle', type: 'text', defaultValue: 'Review your order' },
+          { key: 'summaryTitle', label: 'Order summary title', type: 'text', defaultValue: 'Order Summary' },
+          { key: 'checkoutButtonLabel', label: 'Checkout button label', type: 'text', defaultValue: 'Proceed to Checkout' },
+          { key: 'enquiryButtonLabel', label: 'Enquiry button label', type: 'text', defaultValue: 'Enquire About Cart' },
+          { key: 'continueShoppingLabel', label: 'Continue shopping label', type: 'text', defaultValue: 'Continue Shopping' },
+          { key: 'clearCartLabel', label: 'Clear cart label', type: 'text', defaultValue: 'Clear all items' },
+          { key: 'secureCheckoutLabel', label: 'Secure checkout notice', type: 'text', defaultValue: '256-BIT SSL ENCRYPTED CHECKOUT' },
+          { key: 'emptyStateTitle', label: 'Empty cart title', type: 'text', defaultValue: 'Your cart is empty' },
+          { key: 'emptyStateText', label: 'Empty cart message', type: 'text', defaultValue: "Haven't added anything yet. Let's fix that.", multiline: true },
+          { key: 'emptyStateButtonLabel', label: 'Empty cart button label', type: 'text', defaultValue: 'Browse Products' },
+          { key: 'emptyStateButtonLink', label: 'Empty cart button link', type: 'text', defaultValue: '/products', helperText: 'Use a store path starting with /.' },
+        ],
       },
     ],
   },
@@ -374,7 +395,7 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
         label: 'Labels',
         fields: [
           { key: 'placeOrderLabel', label: 'Cash on Delivery Button Label', type: 'text', defaultValue: 'Place Order' },
-          { key: 'paymentHeading', label: 'Payment Section Heading', type: 'text', defaultValue: 'Payment' },
+          { key: 'paymentHeading', label: 'Payment Section Heading', type: 'text', defaultValue: 'Payment Method' },
         ],
       },
     ],
@@ -390,12 +411,9 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
             label: 'Grid Columns',
             type: 'select',
             defaultValue: 4,
-            options: [
-              { value: 2, label: '2 — Wide cards' },
-              { value: 3, label: '3 columns' },
-              { value: 4, label: '4 columns' },
-            ],
+            options: [2, 3, 4, 5, 6].map((value) => ({ value, label: `${value} columns` })),
           },
+          { key: 'resultsPerPage', label: 'Results per page', type: 'number', defaultValue: 20, min: 1, max: 50 },
         ],
       },
       {
@@ -403,14 +421,20 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
         label: 'Features',
         fields: [
           { key: 'showResultCount', label: 'Show result count', type: 'boolean', defaultValue: true },
+          { key: 'showMatchingBrands', label: 'Show matching brands', type: 'boolean', defaultValue: true },
+          { key: 'showMatchingCategories', label: 'Show matching categories', type: 'boolean', defaultValue: true },
         ],
       },
       {
         key: 'labels',
         label: 'Labels',
         fields: [
-          { key: 'searchPlaceholder', label: 'Search Input Placeholder', type: 'text', defaultValue: 'Search products…' },
-          { key: 'noResultsMessage', label: 'No Results Message', type: 'text', defaultValue: 'No products found for your search.', multiline: true },
+          { key: 'searchTitle', label: 'Search page title', type: 'text', defaultValue: 'Search products' },
+          { key: 'searchPlaceholder', label: 'Search input placeholder', type: 'text', defaultValue: 'Search products…' },
+          { key: 'initialPromptTitle', label: 'Before search title', type: 'text', defaultValue: 'What are you looking for?' },
+          { key: 'initialPromptMessage', label: 'Before search message', type: 'text', defaultValue: 'Type at least 2 characters to start searching' },
+          { key: 'noResultsTitle', label: 'No results title', type: 'text', defaultValue: 'No results found' },
+          { key: 'noResultsMessage', label: 'No results message', type: 'text', defaultValue: 'Try different keywords or check for typos.', multiline: true },
         ],
       },
     ],
@@ -443,7 +467,18 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
         key: 'labels',
         label: 'Labels',
         fields: [
-          { key: 'emptyHeadline', label: 'Empty Orders Headline', type: 'text', defaultValue: "You haven't placed any orders yet" },
+          { key: 'pageTitle', label: 'Page title', type: 'text', defaultValue: 'My Orders' },
+          { key: 'searchPlaceholder', label: 'Search placeholder', type: 'text', defaultValue: 'Search by product name, order ID, status…' },
+          { key: 'cardDensity', label: 'Order card spacing', type: 'select', defaultValue: 'comfortable', options: [{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }] },
+          { key: 'showProductThumbnails', label: 'Show product thumbnails', type: 'boolean', defaultValue: false },
+          { key: 'emptyMessage', label: 'Empty orders message', type: 'text', defaultValue: "You haven't placed any orders yet.", multiline: true },
+          { key: 'emptyCtaLink', label: 'Empty orders button link', type: 'text', defaultValue: '/products', helperText: 'Use an internal store path starting with /.' },
+          { key: 'showSupportInfo', label: 'Show help block', type: 'boolean', defaultValue: false },
+          { key: 'supportTitle', label: 'Help heading', type: 'text', defaultValue: 'Need help with an order?' },
+          { key: 'supportMessage', label: 'Help message', type: 'text', defaultValue: 'Open your order details for updates, or contact our team.', multiline: true },
+          { key: 'supportLinkLabel', label: 'Help link label', type: 'text', defaultValue: 'My account' },
+          { key: 'supportLink', label: 'Help link', type: 'text', defaultValue: '/account', helperText: 'Use an internal store path starting with /.' },
+          { key: 'emptyHeadline', label: 'Empty Orders Headline', type: 'text', defaultValue: 'No orders found' },
           { key: 'emptyCtaLabel', label: 'Empty Orders CTA Label', type: 'text', defaultValue: 'Start Shopping' },
         ],
       },
@@ -1124,7 +1159,7 @@ export const DESIGNER_OWNED_KEYS = Object.freeze(
   Object.fromEntries(
     DESIGN_PAGE_REGISTRY
       .filter((page) => page.settingsGroup && page.ownedKeys?.length)
-      .map((page) => [page.settingsGroup, Object.freeze(page.ownedKeys)])
+      .map((page) => [page.settingsGroup, Object.freeze([...page.ownedKeys, ...(page.customOwnedKeys || [])])])
   )
 );
 

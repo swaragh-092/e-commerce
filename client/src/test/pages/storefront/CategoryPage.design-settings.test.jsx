@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CategoryPage from '../../../pages/storefront/CategoryPage';
@@ -10,7 +10,7 @@ const gridSpy = vi.hoisted(() => vi.fn());
 vi.mock('../../../services/categoryService', () => ({ getCategoryWithProducts: vi.fn() }));
 vi.mock('../../../components/common/PageSEO', () => ({ default: () => null }));
 vi.mock('../../../components/product/ProductGrid', () => ({ default: (props) => { gridSpy(props); return <div data-testid="product-grid" />; } }));
-vi.mock('../../../components/product/ProductFilters', () => ({ default: () => null }));
+vi.mock('../../../components/product/ProductFilters', () => ({ default: ({ categoryDepth, categoryExpandMode }) => <div data-testid="category-filter-settings" data-depth={categoryDepth} data-expand-mode={categoryExpandMode} /> }));
 vi.mock('../../../components/layout/StorefrontSidebarMenu', () => ({ default: () => null }));
 vi.mock('../../../components/storefront/sections/CategorySection', () => ({ default: () => null }));
 vi.mock('../../../hooks/useSettings', () => ({ useSettings: () => ({ settings: state.settings }), useFeature: () => true, useFeatureVisible: () => true }));
@@ -31,10 +31,12 @@ beforeEach(() => {
 
 describe('Category listing design settings', () => {
   it('uses category overrides for fetch limit and desktop grid columns', async () => {
-    state.settings.categoryPage = { defaultPageSize: 7, gridColumns: 5 };
+    state.settings.categoryPage = { defaultPageSize: 7, gridColumns: 5, categoryDepth: 4, categoryExpandMode: 'collapsed' };
     renderPage();
     await waitFor(() => expect(getCategoryWithProducts).toHaveBeenCalledWith('flowers', expect.objectContaining({ limit: 7 })));
     expect(gridSpy).toHaveBeenLastCalledWith(expect.objectContaining({ gridCols: 5 }));
+    expect(screen.getByTestId('category-filter-settings')).toHaveAttribute('data-depth', '4');
+    expect(screen.getByTestId('category-filter-settings')).toHaveAttribute('data-expand-mode', 'collapsed');
   });
 
   it('reacts to settings changes and falls back to catalog values when category overrides are removed', async () => {

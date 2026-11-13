@@ -3,28 +3,34 @@ export const getPageSections = (settingsObj, activePg, defaultLayoutSections) =>
   if (activePg === 'home') {
     return settingsObj?.homepage?.sections || defaultLayoutSections || [];
   }
+  const withProductRows = (sections, pageSettings) => {
+    const rows = pageSettings?.productRows;
+    return Array.isArray(rows) && rows.length
+      ? [...sections, ...rows.map((section) => ({ ...section, pageProductRow: true }))]
+      : sections;
+  };
   if (activePg === 'product') {
-    return settingsObj?.productPage?.sections || [
+    return withProductRows(settingsObj?.productPage?.sections || [
       { id: 'prod-info',    type: 'product-info',    enabled: true },
       { id: 'prod-trust',   type: 'value-props',     enabled: true },
       { id: 'prod-reviews', type: 'product-reviews', enabled: true },
       { id: 'prod-row',     type: 'product-row',     enabled: true, title: 'You May Also Like', source: 'featured', count: 3 },
       { id: 'prod-recent',  type: 'recently-viewed', enabled: true },
-    ];
+    ], settingsObj?.productPage);
   }
   if (activePg === 'category') {
-    return settingsObj?.categoryPage?.sections || [
+    return withProductRows(settingsObj?.categoryPage?.sections || [
       { id: 'cat-header',   type: 'category-header',   enabled: true },
       { id: 'cat-products', type: 'category-products', enabled: true },
       { id: 'cat-recent',   type: 'recently-viewed',   enabled: true },
-    ];
+    ], settingsObj?.categoryPage);
   }
   if (activePg === 'collection') {
-    return settingsObj?.catalog?.sections || [
+    return withProductRows(settingsObj?.catalog?.sections || [
       { id: 'catalog-header',   type: 'catalog-header',   enabled: true },
       { id: 'catalog-products', type: 'catalog-products', enabled: true },
       { id: 'catalog-recent',   type: 'recently-viewed',  enabled: true },
-    ];
+    ], settingsObj?.catalog);
   }
   if (activePg === 'brand') {
     return settingsObj?.brandsPage?.sections || [
@@ -44,10 +50,10 @@ export const getPageSections = (settingsObj, activePg, defaultLayoutSections) =>
     ];
   }
   if (activePg === 'cart') {
-    return settingsObj?.cartPage?.sections || [
+    return withProductRows(settingsObj?.cartPage?.sections || [
       { id: 'cart-main',   type: 'cart-main',       enabled: true },
       { id: 'cart-recent', type: 'recently-viewed', enabled: true },
-    ];
+    ], settingsObj?.cartPage);
   }
   if (activePg === 'checkout') {
     return settingsObj?.checkoutPage?.sections || [
@@ -60,9 +66,9 @@ export const getPageSections = (settingsObj, activePg, defaultLayoutSections) =>
     ];
   }
   if (activePg === 'search') {
-    return settingsObj?.searchPage?.sections || [
+    return withProductRows(settingsObj?.searchPage?.sections || [
       { id: 'search-main', type: 'search-main', enabled: true },
-    ];
+    ], settingsObj?.searchPage);
   }
   if (activePg === 'not-found') {
     return settingsObj?.notFoundPage?.sections || [

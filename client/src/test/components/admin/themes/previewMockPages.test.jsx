@@ -86,7 +86,7 @@ describe('store designer sample page previews', () => {
     } }));
 
     expect(screen.getByText('No purchases yet')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Explore the shop' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Explore the shop' })).toBeInTheDocument();
   });
 
   it('shows Category drawer filters as a sidebar on desktop', () => {

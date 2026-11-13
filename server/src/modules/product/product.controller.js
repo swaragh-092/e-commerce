@@ -7,7 +7,7 @@ const hasProductAdminView = (user) => getPermissionsForUser(user).includes(PERMI
 
 exports.list = async (req, res, next) => {
   try {
-    const { page, limit, search, brand, category, categoryId, minPrice, maxPrice, status, saleStatus, saleLabel, sale, onSale, sort, sortBy, sortOrder, tags, maxQty, include, hasVariants, ids, discoveryRow } = req.query;
+    const { page, limit, search, brand, category, categoryId, minPrice, maxPrice, status, saleStatus, saleLabel, sale, onSale, featured, sort, sortBy, sortOrder, tags, maxQty, include, hasVariants, ids, discoveryRow } = req.query;
     const publicDiscovery = ids || saleLabel || discoveryRow || ['arrivals', 'best-selling', 'most-viewed'].includes(sort);
     const isAdmin = !publicDiscovery && hasProductAdminView(req.user);
     
@@ -22,7 +22,7 @@ exports.list = async (req, res, next) => {
       }
     }
 
-    const filters = { search, brand, category, categoryId, minPrice, maxPrice, status, saleStatus, saleLabel, sale, onSale, sort, sortBy, sortOrder, tags, maxQty, hasVariants, ids, discoveryRow, include: sanitizedInclude };
+    const filters = { search, brand, category, categoryId, minPrice, maxPrice, status, saleStatus, saleLabel, sale, onSale, featured, sort, sortBy, sortOrder, tags, maxQty, hasVariants, ids, discoveryRow, include: sanitizedInclude };
     const result = await productService.getProducts(filters, page, limit, isAdmin);
     return success(res, result.data, 'Products found', 200, {
       total: result.totalItems,

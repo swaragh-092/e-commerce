@@ -1,10 +1,15 @@
 import React from 'react';
 import { Box, Typography, Button } from '@mui/material';
 import { KeyboardArrowRight as ArrowIcon } from '@mui/icons-material';
+import { getMediaUrl, onImageError } from '../../utils/media';
 import StatusBadge from './StatusBadge';
 import { getProductSummary, formatOrderDate } from '../../utils/orderHelpers';
 
-const OrderRow = ({ order, onView, formatPrice }) => {
+const OrderRow = ({ order, onView, formatPrice, density = 'comfortable', showThumbnail = false }) => {
+    const item = (order.items || order.OrderItems || [])[0];
+    const product = item?.product || item?.Product;
+    const image = product?.images?.find(image => image.isPrimary) || product?.images?.[0];
+    const thumbnail = item?.snapshotImage || image?.url;
     const { summary, qty } = getProductSummary(order);
 
     const date = formatOrderDate(
@@ -19,7 +24,7 @@ const OrderRow = ({ order, onView, formatPrice }) => {
             sx={{
                 borderBottom: '1px solid',
                 borderColor: 'divider',
-                py: 2.5,
+                py: density === 'compact' ? 1.25 : 2.5,
                 px: { xs: 2, md: 3 },
                 cursor: 'pointer',
                 transition: 'background 0.12s',
@@ -67,6 +72,7 @@ const OrderRow = ({ order, onView, formatPrice }) => {
                 <StatusBadge order={order} />
             </Box>
 
+            {showThumbnail && thumbnail && <Box component="img" src={getMediaUrl(thumbnail)} onError={onImageError} alt={item?.snapshotName || product?.name || 'Ordered product'} sx={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 1, mb: 1 }} />}
             {/* Row 2 — products */}
             <Typography
                 sx={{

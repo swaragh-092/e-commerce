@@ -43,3 +43,13 @@ it('refetches collection products when the designer changes page size or default
   view.rerender(<MemoryRouter><ProductListPage /></MemoryRouter>);
   await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 12, sort: 'price_asc' })));
 });
+
+it.each([
+  ['featured=true', { featured: true }],
+  ['onSale=true', { onSale: true }],
+])('retains the %s discovery filter across pagination', async (query, filter) => {
+  render(<MemoryRouter initialEntries={[`/products?${query}`]}><ProductListPage /></MemoryRouter>);
+  await waitFor(() => expect(getProducts).toHaveBeenCalledWith(expect.objectContaining(filter)));
+  fireEvent.click(await screen.findByRole('button', { name: 'Go to page 2' }));
+  await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({ ...filter, page: 2 })));
+});

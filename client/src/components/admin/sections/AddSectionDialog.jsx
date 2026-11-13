@@ -6,6 +6,24 @@ import {
 import { SECTION_DEFINITIONS, SECTION_VARIANTS } from '../../storefront/sections/sectionRegistry';
 import { createDefaultSection, getSectionPresetGallery, SECTION_PRESET_GOALS } from '../../../utils/sectionPresets';
 
+const productChoices = [
+  { key: 'products-most-viewed', label: 'Most Viewed', source: 'mostViewed', link: '/products?sort=most-viewed' },
+  { key: 'products-trending', label: 'Trending Products', source: 'featured', link: '/products?featured=true' },
+  { key: 'products-best-sellers', label: 'Best Sellers', source: 'bestSellers', link: '/products?sort=best-selling' },
+  { key: 'products-featured', label: 'Featured Products', source: 'featured', link: '/products?featured=true' },
+  { key: 'products-newest', label: 'New Arrivals', source: 'newest', link: '/products?sort=newest' },
+  { key: 'products-sale', label: 'On Sale', source: 'sale', link: '/products?onSale=true' },
+].map((choice) => ({
+  ...choice,
+  type: 'product-row',
+  family: 'merchandising',
+  goal: 'merchandising',
+  variant: 'carousel',
+  description: choice.source === 'featured'
+    ? 'Show hand-picked featured products.'
+    : `Show ${choice.label.toLowerCase()} products in a carousel or grid.`,
+}));
+
 const sectionOptions = Object.entries(SECTION_DEFINITIONS)
   .filter(([type, def]) => def.family !== 'system')
   .map(([type, def]) => ({
@@ -25,14 +43,16 @@ const generateId = (type, existingIds) => {
 const AddSectionDialog = ({ open, onClose, onAdd, existingIds = [], sectionPresets = {}, insertLabel = 'last section' }) => {
   const typeLabelId = useId();
   const variantLabelId = useId();
-  const [type, setType] = useState('');
+  const [selection, setSelection] = useState('');
   const [variant, setVariant] = useState('');
   const [title, setTitle] = useState('');
   const [goal, setGoal] = useState('all');
 
+  const productChoice = productChoices.find((choice) => choice.key === selection);
+  const type = productChoice?.type || selection;
   const variants = type ? (SECTION_VARIANTS[type] || []) : [];
-  const presetCards = getSectionPresetGallery(sectionPresets).filter((preset) => goal === 'all' || preset.goal === goal);
-  const selectedPreset = presetCards.find((preset) => preset.type === type) || getSectionPresetGallery(sectionPresets).find((preset) => preset.type === type);
+  const presetCards = [...productChoices, ...getSectionPresetGallery(sectionPresets)].filter((preset) => goal === 'all' || preset.goal === goal);
+  const selectedPreset = productChoice || presetCards.find((preset) => preset.type === type) || getSectionPresetGallery(sectionPresets).find((preset) => preset.type === type);
 
   const handleAdd = () => {
     if (!type) return;
@@ -42,11 +62,20 @@ const AddSectionDialog = ({ open, onClose, onAdd, existingIds = [], sectionPrese
       title,
       sectionPresets,
     });
-    onAdd(section);
-    setType(''); setVariant(''); setTitle('');
+    onAdd(productChoice ? {
+      ...section,
+      source: productChoice.source,
+      title: title || productChoice.label,
+      subtitle: '',
+      viewAllLink: productChoice.link,
+      dataSourceSlug: '',
+      query: {},
+      saleLabel: '',
+    } : section);
+    setSelection(''); setVariant(''); setTitle('');
   };
 
-  const handleClose = () => { onClose(); setType(''); setVariant(''); setTitle(''); setGoal('all'); };
+  const handleClose = () => { onClose(); setSelection(''); setVariant(''); setTitle(''); setGoal('all'); };
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
@@ -69,15 +98,15 @@ const AddSectionDialog = ({ open, onClose, onAdd, existingIds = [], sectionPrese
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' }, gap: 1.5, maxHeight: 360, overflowY: 'auto', pr: 0.5 }}>
             {presetCards.map((preset) => (
               <Card
-                key={preset.type}
+                key={preset.key || preset.type}
                 variant="outlined"
-                onClick={() => { setType(preset.type); setVariant(preset.variant || ''); setTitle(''); }}
+                onClick={() => { setSelection(preset.key || preset.type); setVariant(preset.variant || ''); setTitle(''); }}
                 sx={{
                   p: 1.75,
                   cursor: 'pointer',
-                  borderColor: type === preset.type ? 'primary.main' : 'divider',
-                  borderWidth: type === preset.type ? 2 : 1,
-                  bgcolor: type === preset.type ? 'action.selected' : 'background.paper',
+                  borderColor: selection === (preset.key || preset.type) ? 'primary.main' : 'divider',
+                  borderWidth: selection === (preset.key || preset.type) ? 2 : 1,
+                  bgcolor: selection === (preset.key || preset.type) ? 'action.selected' : 'background.paper',
                   '&:hover': { borderColor: 'primary.main', boxShadow: '0 8px 24px rgba(15,23,42,0.08)' },
                 }}
               >
@@ -98,9 +127,9 @@ const AddSectionDialog = ({ open, onClose, onAdd, existingIds = [], sectionPrese
 
           <FormControl size="small" fullWidth>
             <InputLabel id={typeLabelId}>Section Type</InputLabel>
-            <Select labelId={typeLabelId} value={type} label="Section Type" onChange={(e) => { setType(e.target.value); setVariant(''); }}>
-              {sectionOptions.map((opt) => (
-                <MenuItem key={opt.type} value={opt.type}>
+            <Select labelId={typeLabelId} value={selection} label="Section Type" onChange={(e) => { setSelection(e.target.value); setVariant(''); }}>
+              {[...productChoices, ...sectionOptions].map((opt) => (
+                <MenuItem key={opt.key || opt.type} value={opt.key || opt.type}>
                   <Stack direction="row" alignItems="center" spacing={1}>
                     <span>{opt.label}</span>
                     <Chip label={opt.family} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.7rem' }} />

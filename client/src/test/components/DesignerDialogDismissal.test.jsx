@@ -16,6 +16,24 @@ describe('Designer dialog dismissal during requests', () => {
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+  it.each([
+    ['Most Viewed', 'mostViewed'],
+    ['Trending Products', 'featured'],
+    ['Best Sellers', 'bestSellers'],
+    ['Featured Products', 'featured'],
+    ['New Arrivals', 'newest'],
+    ['On Sale', 'sale'],
+  ])('adds %s directly from the section picker', (label, source) => {
+    const onAdd = vi.fn();
+    render(<AddSectionDialog open onClose={vi.fn()} onAdd={onAdd}
+      sectionPresets={{ 'product-row': { type: 'product-row', variant: 'grid', source: 'sale', dataSourceSlug: 'theme-feed', query: { sale: true } } }} />);
+    fireEvent.click(screen.getByText(label, { selector: 'h6' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Section' }));
+    expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'product-row', source, title: label, dataSourceSlug: '', query: {},
+    }));
+  });
+
   it('allows history to close while its read-only list is loading', () => {
     const onClose = vi.fn();
     render(<DesignVersionHistoryDialog open loading onClose={onClose} />);

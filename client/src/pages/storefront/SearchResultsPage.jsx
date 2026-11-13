@@ -14,6 +14,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import SearchOffIcon from '@mui/icons-material/SearchOff';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import ProductGrid from '../../components/product/ProductGrid';
+import PageProductRows from '../../components/storefront/sections/PageProductRows';
 import SearchWidget from '../../components/search/SearchWidget';
 import PageSEO from '../../components/common/PageSEO';
 import { useSettings } from '../../hooks/useSettings';
@@ -33,7 +34,10 @@ const SearchResultsPage = () => {
   const { settings } = useSettings();
   const catalog = settings?.catalog || {};
   const searchStyle = settings?.searchPage || {};
-  const gridCols = parseInt(searchStyle.gridColumns ?? catalog.gridColumns, 10) || 4;
+  const gridCols = Math.min(6, Math.max(2, Number.parseInt(searchStyle.gridColumns ?? catalog.gridColumns, 10) || 4));
+  const resultsPerPage = Math.min(50, Math.max(1, Number.parseInt(searchStyle.resultsPerPage ?? catalog.defaultPageSize, 10) || 20));
+  const showMatchingBrands = searchStyle.showMatchingBrands !== false;
+  const showMatchingCategories = searchStyle.showMatchingCategories !== false;
   const collectionLayout = catalog.templateLayout || 'sidebar-filters-grid';
   const isCompactCatalog = collectionLayout.includes('compact') || collectionLayout.includes('table') || collectionLayout.includes('b2b');
 
@@ -89,7 +93,7 @@ const SearchResultsPage = () => {
       setSearchError('');
       setCanRetry(false);
       try {
-        const res = await searchProducts({ q: normalizedQuery, page: urlPage, limit: 20 });
+        const res = await searchProducts({ q: normalizedQuery, page: urlPage, limit: resultsPerPage });
         if (cancelled) return;
         const data = res.data || {};
         const productData = data.products || {};
@@ -121,7 +125,10 @@ const SearchResultsPage = () => {
 
     fetchResults();
     return () => { cancelled = true; };
-  }, [normalizedQuery, urlPage, retryNonce]);
+  }, [normalizedQuery, urlPage, retryNonce, resultsPerPage]);
+
+  const visibleBrands = showMatchingBrands ? brands : [];
+  const visibleCategories = showMatchingCategories ? categories : [];
 
   const handlePageChange = (_, page) => {
     setSearchParams({ q: normalizedQuery, page: String(page) });
@@ -148,7 +155,7 @@ const SearchResultsPage = () => {
         }}
       >
         <Typography variant="h4" component="h1" fontWeight={700} sx={{ mb: 2 }}>
-          {normalizedQuery ? `Search results for "${normalizedQuery}"` : 'Search products'}
+          {normalizedQuery ? `Search results for "${normalizedQuery}"` : (searchStyle.searchTitle || 'Search products')}
         </Typography>
         <Box
           sx={{
@@ -195,13 +202,13 @@ const SearchResultsPage = () => {
         <ProductGrid products={[]} loading={true} gridCols={gridCols} variant={isCompactCatalog ? 'compact-list' : 'grid'} />
       )}
 
-      {!loading && hasSearched && (brands.length > 0 || categories.length > 0) && (
+      {!loading && hasSearched && (visibleBrands.length > 0 || visibleCategories.length > 0) && (
         <Box sx={{ display: 'grid', gap: 2.5, mb: 3 }}>
-          {brands.length > 0 && (
+          {visibleBrands.length > 0 && (
             <Box component="section" aria-label="Matching brands">
               <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>Matching brands</Typography>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {brands.map((brand) => (
+                {visibleBrands.map((brand) => (
                   <Chip
                     key={brand.id}
                     label={brand.name}
@@ -213,11 +220,11 @@ const SearchResultsPage = () => {
               </Box>
             </Box>
           )}
-          {categories.length > 0 && (
+          {visibleCategories.length > 0 && (
             <Box component="section" aria-label="Matching categories">
               <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>Matching categories</Typography>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {categories.map((category) => (
+                {visibleCategories.map((category) => (
                   <Chip
                     key={category.id}
                     label={category.name}
@@ -267,7 +274,7 @@ const SearchResultsPage = () => {
       )}
 
       {/* No Results State */}
-      {!loading && hasSearched && products.length === 0 && brands.length === 0 && categories.length === 0 && !searchError && normalizedQuery && (
+      {!loading && hasSearched && products.length === 0 && visibleBrands.length === 0 && visibleCategories.length === 0 && !searchError && normalizedQuery && (
         <Box
           sx={{
             textAlign: 'center',
@@ -282,14 +289,14 @@ const SearchResultsPage = () => {
             }}
           />
           <Typography variant="h5" gutterBottom fontWeight={600}>
-            No results found
+            {searchStyle.noResultsTitle || 'No results found'}
           </Typography>
           <Typography
             variant="body1"
             color="text.secondary"
             sx={{ maxWidth: 400, mx: 'auto', mb: 3 }}
           >
-            {searchStyle.noResultsMessage || `We couldn't find any products matching "${normalizedQuery}". Try using different keywords or check for typos.`}
+            {searchStyle.noResultsMessage || 'Try different keywords or check for typos.'}
           </Typography>
           {suggestion && (
             <Chip
@@ -311,6 +318,8 @@ const SearchResultsPage = () => {
         </Box>
       )}
 
+      <PageProductRows rows={searchStyle.productRows} />
+
       {/* Initial State (no query) */}
       {!loading && !hasSearched && getSearchQueryLength(normalizedQuery) < 2 && (
         <Box
@@ -327,10 +336,10 @@ const SearchResultsPage = () => {
             }}
           />
           <Typography variant="h5" gutterBottom fontWeight={600}>
-            What are you looking for?
+            {searchStyle.initialPromptTitle || 'What are you looking for?'}
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            {normalizedQuery ? 'Enter at least 2 characters to search.' : 'Type at least 2 characters to start searching'}
+            {normalizedQuery ? (searchStyle.minimumQueryMessage || 'Enter at least 2 characters to search.') : (searchStyle.initialPromptMessage || 'Type at least 2 characters to start searching')}
           </Typography>
         </Box>
       )}
