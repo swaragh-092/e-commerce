@@ -26,7 +26,6 @@ const {
 } = require('./auth.validation');
 
 const { authenticate } = require('../../middleware/auth.middleware');
-const { RefreshToken } = require('../index');
 const authController = require('./auth.controller');
 const twoFactorController = require('./twoFactor.controller');
 const otpController = require('./otp.controller');
