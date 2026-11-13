@@ -167,7 +167,7 @@ exports.uploadFont = async (file) => {
   return media;
 };
 
-exports.listMedia = async (page, limit, sortBy = 'createdAt', sortDir = 'DESC', type = 'image', usage = 'all') => {
+exports.listMedia = async (page, limit, sortBy = 'createdAt', sortDir = 'DESC', type = 'image', usage = 'all', search = '') => {
   const { limit: queryLimit, offset } = getPagination(page, limit);
   
   // Map frontend sort names to database columns
@@ -196,6 +196,15 @@ exports.listMedia = async (page, limit, sortBy = 'createdAt', sortDir = 'DESC', 
     where[Op.and] = [...(where[Op.and] || []), Media.sequelize.literal(`${usageCountSql} > 0`)];
   } else if (usage === 'unused') {
     where[Op.and] = [...(where[Op.and] || []), Media.sequelize.literal(`${usageCountSql} = 0`)];
+  }
+
+  const term = String(search || '').trim();
+  if (term) {
+    // Escape LIKE wildcards so user input is matched literally.
+    const pattern = `%${term.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+    where[Op.and] = [...(where[Op.and] || []), {
+      [Op.or]: ['originalName', 'filename', 'alt', 'caption'].map((field) => ({ [field]: { [Op.iLike]: pattern } })),
+    }];
   }
 
   const { rows, count } = await Media.findAndCountAll({

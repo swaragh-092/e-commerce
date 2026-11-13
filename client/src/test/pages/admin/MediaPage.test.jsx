@@ -102,6 +102,25 @@ describe('Media Library tabs', () => {
     expect(screen.getByText('1 icon')).toBeInTheDocument();
   });
 
+  it('sends the search term to the server', async () => {
+    render(<MediaPage />);
+    await screen.findByText('media-1.png');
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search media' }), { target: { value: ' beet ' } });
+
+    await waitFor(() => expect(mediaService.list).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, search: 'beet' })));
+  });
+
+  it('opens the image editor dialog with crop tools when an image is clicked', async () => {
+    render(<MediaPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open editor for media-1.png' }));
+
+    expect(await screen.findByRole('heading', { name: 'Edit Image' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Crop, rotate & resize' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Copy URL' })).toBeInTheDocument();
+    expect(screen.getByDisplayValue('media-1.png')).toBeInTheDocument();
+  });
+
   it('shows per-image usage and requests the unused filter from the server', async () => {
     render(<MediaPage />);
 
