@@ -92,6 +92,7 @@ const twoFactorVerifySchema = Joi.object({
   }),
   trustDevice: Joi.boolean().default(false),
 });
+const mfaEnrollmentSchema = Joi.object({ enrollmentToken: Joi.string().max(4096).required() });
 const otpSendSchema = Joi.object({ phone: Joi.string().pattern(/^\d{10,15}$/).required() });
 const otpVerifySchema = Joi.object({
   phone: Joi.string().pattern(/^\d{10,15}$/).required(),
@@ -138,6 +139,10 @@ router.post('/2fa/email/verify', twoFactorLimiter,
 
 // 2FA routes
 router.post('/2fa/verify', twoFactorLimiter, validate(twoFactorVerifySchema), authController.verifyTwoFactor);
+router.post('/2fa/enrollment/setup', twoFactorLimiter, validate(mfaEnrollmentSchema), twoFactorController.enrollmentSetup);
+router.post('/2fa/enrollment/enable', twoFactorLimiter,
+  validate(mfaEnrollmentSchema.keys({ code: Joi.string().length(6).pattern(/^\d+$/).required() })),
+  twoFactorController.enrollmentEnable);
 router.post('/2fa/setup', authenticate, twoFactorLimiter, twoFactorController.setup);
 router.post('/2fa/enable', authenticate, twoFactorLimiter, validate(totpCodeSchema), twoFactorController.enable);
 router.post('/2fa/disable', authenticate, twoFactorLimiter, validate(disableTwoFactorSchema), twoFactorController.disable);

@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { expect, it, vi } from 'vitest';
 import AdminLoginPage from '../../../pages/admin/AdminLoginPage';
 const login = vi.hoisted(() => vi.fn());
-vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ login, isAuthenticated: false, user: null }) }));
+vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ login, finalizeAuthenticatedSession: vi.fn(), isAuthenticated: false, user: null }) }));
 vi.mock('../../../components/storefront/AuthPageShell', () => ({ default: ({ children }) => <div>{children}</div> }));
 it('offers remembered-device recognition without promising persistent admin access', async () => {
   login.mockResolvedValue({ requiresTwoFactor: true, tempToken: 'signed-mfa-context' });
@@ -14,4 +14,15 @@ it('offers remembered-device recognition without promising persistent admin acce
   fireEvent.click(screen.getByRole('checkbox', { name: 'Remember this device for 30 days' }));
   fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
   await waitFor(() => expect(login).toHaveBeenCalledWith('admin@example.test', 'test-password', true));
+});
+
+
+it('sends an unenrolled protected user into authenticator setup instead of granting access', async () => {
+  login.mockResolvedValue({ requiresMfaEnrollment: true, enrollmentToken: 'one-time-enrollment' });
+  render(<MemoryRouter><AdminLoginPage /></MemoryRouter>);
+  fireEvent.change(screen.getByLabelText(/^Email/), { target: { value: 'admin@example.test' } });
+  fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'test-password' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
+  expect(await screen.findByRole('heading', { name: 'Set up your authenticator' })).toBeInTheDocument();
+  expect(screen.getByText(/cannot replace this first setup step/i)).toBeInTheDocument();
 });

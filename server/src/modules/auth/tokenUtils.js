@@ -36,4 +36,21 @@ const signTempTwoFactorToken = (userId, passwordBinding, context = {}) => {
   });
 };
 
-module.exports = { getIssAud, hashToken, generateTokens, signTempTwoFactorToken };
+// This is deliberately not an access token: it can only start and complete
+// authenticator enrollment after a successful password sign-in.
+const signMfaEnrollmentToken = (userId) => {
+  const { issuer, audience } = getIssAud();
+  return jwt.sign({ id: userId, purpose: 'mfa_enrollment' }, process.env.JWT_ACCESS_SECRET, {
+    expiresIn: '10m',
+    issuer,
+    audience,
+  });
+};
+const verifyMfaEnrollmentToken = (token) => {
+  const { issuer, audience } = getIssAud();
+  const claims = jwt.verify(token, process.env.JWT_ACCESS_SECRET, { algorithms: ['HS256'], issuer, audience });
+  if (claims.purpose !== 'mfa_enrollment' || !claims.id) throw new jwt.JsonWebTokenError('Invalid MFA enrollment token');
+  return claims;
+};
+
+module.exports = { getIssAud, hashToken, generateTokens, signTempTwoFactorToken, signMfaEnrollmentToken, verifyMfaEnrollmentToken };

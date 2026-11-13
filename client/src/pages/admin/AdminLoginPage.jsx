@@ -12,6 +12,7 @@ import { getApiErrorMessage } from '../../utils/apiErrors';
 import { EmailOutlined, LockOutlined } from '@mui/icons-material';
 import EmailMfaStep from '../../components/auth/EmailMfaStep';
 import AuthPageShell from '../../components/storefront/AuthPageShell';
+import MfaEnrollmentStep from '../../components/auth/MfaEnrollmentStep';
 
 const AdminLoginPage = () => {
   const theme = useTheme();
@@ -33,6 +34,7 @@ const AdminLoginPage = () => {
   const [tempToken, setTempToken] = useState('');
   const [totpCode, setTotpCode] = useState('');
   const [useBackupCode, setUseBackupCode] = useState(false);
+  const [enrollmentToken, setEnrollmentToken] = useState('');
 
   // If already logged in and has admin access, redirect them directly to the admin area
   if (isAuthenticated) {
@@ -88,6 +90,12 @@ const AdminLoginPage = () => {
 
     try {
       const data = await login(formData.email, formData.password, rememberDevice);
+
+      if (data.requiresMfaEnrollment) {
+        setEnrollmentToken(data.enrollmentToken);
+        setLoading(false);
+        return;
+      }
 
       // Handle 2FA requirement
       if (data.requiresTwoFactor) {
@@ -148,7 +156,19 @@ const AdminLoginPage = () => {
           <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>
         )}
 
-        {emailStep ? (
+        {enrollmentToken ? (
+          <MfaEnrollmentStep
+            enrollmentToken={enrollmentToken}
+            onComplete={async () => {
+              const signedInUser = await finalizeAuthenticatedSession();
+              const adminPath = getFirstAccessibleAdminPath(signedInUser);
+              if (!adminPath) throw new Error('Your account does not have admin access.');
+              const fromPath = location.state?.from?.pathname;
+              navigate(fromPath?.startsWith('/admin') ? fromPath : adminPath, { replace: true });
+            }}
+            onBack={() => { setEnrollmentToken(''); setFormData(current => ({ ...current, password: '' })); setError(''); }}
+          />
+        ) : emailStep ? (
           <EmailMfaStep challenge={emailChallenge} onBack={() => setEmailStep(false)} onComplete={async () => {
             const signedInUser = await finalizeAuthenticatedSession();
             const adminPath = getFirstAccessibleAdminPath(signedInUser);

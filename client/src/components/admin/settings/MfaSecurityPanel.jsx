@@ -158,7 +158,7 @@ export default function MfaSecurityPanel() {
         <Chip size="small" label={changed ? 'Unsaved changes' : 'Current policy'} color={changed ? 'warning' : 'default'} variant="outlined" />
       </Stack>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Choose who needs a second sign-in step and which methods they can use. Customer MFA is managed separately.
+        Set up your own authenticator, then choose who needs a second sign-in step and which methods they can use. Customer MFA is managed separately.
       </Typography>
       {!canManage && <Alert severity="info" sx={{ mb: 2 }}>You can view this policy, but only a super administrator can change it.</Alert>}
       {saveError && <Alert severity="error" sx={{ mb: 2 }}>{saveError}</Alert>}
@@ -169,7 +169,7 @@ export default function MfaSecurityPanel() {
             <Box>
               <Typography variant="subtitle1" fontWeight={700}>Your authenticator</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: .5 }}>
-                {config.mfaEnabled ? 'Your account is ready to verify security policy changes.' : 'Set up an authenticator app on your account before allowing email codes.'}
+                {config.mfaEnabled ? 'Your account is ready to verify security policy changes.' : 'Set up an authenticator app before allowing email codes or confirming policy changes with a code.'}
               </Typography>
             </Box>
             <Chip size="small" label={config.mfaEnabled ? 'Set up' : 'Not set up'} color={config.mfaEnabled ? 'success' : 'warning'} variant="outlined" />
@@ -206,7 +206,7 @@ export default function MfaSecurityPanel() {
               {!hasSelectedRoles && <Typography variant="caption" color="error">Select at least one staff role before saving.</Typography>}
             </Box>}
             {enforcementEnabled && <Alert severity="warning">
-              Before enabling mandatory MFA, make sure every affected active administrator and staff member has enrolled. New staff assigned a required role will need operator-assisted enrollment before their first sign-in.
+              Before enabling mandatory MFA, make sure every affected active administrator and staff member has enrolled. On their next password sign-in, anyone who has not enrolled will be guided through authenticator setup before access is granted.
             </Alert>}
           </Stack>
         </Paper>
@@ -223,7 +223,7 @@ export default function MfaSecurityPanel() {
             An alternative for verified staff email addresses after an initial password-and-authenticator sign-in. A password or email change requires the authenticator again.
           </Typography>
           {!config.mfaEnabled && <Alert severity="info" sx={{ mt: 2 }}>
-            {emailSetupRequired ? 'Email codes are selected, but your authenticator is not set up. Complete setup before saving, or turn email codes off.' : 'Email codes are unavailable until you set up your authenticator. Use the setup action above, then refresh its status.'}
+            {emailSetupRequired ? 'Email codes are selected, but your authenticator is not set up. Complete setup before saving, or turn email codes off.' : 'Email codes are unavailable until you set up your authenticator. Select Set up authenticator, then refresh this status.'}
           </Alert>}
         </Paper>
 
