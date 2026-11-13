@@ -57,7 +57,7 @@ describe('Settings follow platform features and permissions', () => {
     expect(updateSettings.mock.calls[0][0]).not.toContainEqual(expect.objectContaining({ group: 'auth', key: 'mfaPolicy' }));
     openTab('Security');
     expect(screen.getByText('Dedicated security policy editor')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Save All' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Save All' })).not.toBeInTheDocument();
   });
   it('hides unavailable designer tabs and links while preserving catalog and menu operations', async () => {
     render(view());

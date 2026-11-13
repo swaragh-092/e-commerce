@@ -495,9 +495,9 @@ const SettingsPage = () => {
         <Typography variant="h5" component="h1" fontWeight={700}>
           Settings
         </Typography>
-        <Button variant="contained" onClick={handleSave} disabled={saving || !canManageSettings || currentTab === 'Security'}>
+        {currentTab !== 'Security' && <Button variant="contained" onClick={handleSave} disabled={saving || !canManageSettings}>
           {saving ? 'Saving…' : 'Save All'}
-        </Button>
+        </Button>}
       </Box>
 
       {!canManageSettings && (
