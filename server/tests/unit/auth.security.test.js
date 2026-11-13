@@ -148,6 +148,7 @@ describe('MFA bypass paths', () => {
     vi.spyOn(LoginAttemptStore, 'clear').mockResolvedValue(undefined);
     const cookies = require('../../src/modules/auth/authCookies');
     const verify = vi.spyOn(cookies, 'verifyTrustedDevice').mockReturnValue(true);
+    vi.spyOn(db.RememberedDevice, 'findOne').mockResolvedValue(null);
     vi.spyOn(db.User, 'scope').mockReturnValue({ findOne: async () => ({ ...admin, twoFactorEnabled: true, validatePassword: async () => true }) });
     vi.spyOn(features, 'getResolvedFeature').mockResolvedValue(false);
     expect(await auth.login(admin.email, 'correct', '127.0.0.1', false, '', 'trusted-cookie')).toMatchObject({ requiresTwoFactor: true });
@@ -156,13 +157,13 @@ describe('MFA bypass paths', () => {
   it('rejects pre-MFA administrator refresh sessions', async () => {
     vi.spyOn(features, 'getResolvedFeature').mockResolvedValue(false);
     vi.spyOn(db.sequelize, 'transaction').mockImplementation(async (_options, callback) => callback({ LOCK: { UPDATE: 'UPDATE' } }));
-    vi.spyOn(db.RefreshToken, 'findOne').mockResolvedValue({ id: 'old', userId: 'admin', expiresAt: new Date(Date.now() + 60000) });
+    vi.spyOn(db.RefreshToken, 'findOne').mockResolvedValue({ id: 'old', userId: 'admin', createdAt: new Date(), lastActiveAt: new Date(), absoluteExpiresAt: new Date(Date.now() + 60000), expiresAt: new Date(Date.now() + 60000) });
     vi.spyOn(db.User, 'findByPk').mockResolvedValue({ ...admin, twoFactorEnabled: true });
     await expect(auth.refresh(generateTokens(admin, 'old').refreshToken, '127.0.0.1')).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
   it('rejects pre-MFA administrator access sessions', async () => {
     const { authenticate } = require('../../src/middleware/auth.middleware');
-    vi.spyOn(db.RefreshToken, 'findByPk').mockResolvedValue({ id: 'old', revokedAt: null, expiresAt: new Date(Date.now() + 60000) });
+    vi.spyOn(db.RefreshToken, 'findByPk').mockResolvedValue({ id: 'old', revokedAt: null, createdAt: new Date(), lastActiveAt: new Date(), absoluteExpiresAt: new Date(Date.now() + 60000), expiresAt: new Date(Date.now() + 60000) });
     vi.spyOn(db.User, 'findByPk').mockResolvedValue({ ...admin, twoFactorEnabled: true });
     const next = vi.fn();
     await authenticate({ headers: { authorization: `Bearer ${generateTokens(admin, 'old').accessToken}` } }, {}, next);
@@ -175,6 +176,7 @@ describe('MFA bypass paths', () => {
   ])('rejects an access token with a %s durable session', async (_state, session) => {
     const { authenticate } = require('../../src/middleware/auth.middleware');
     const findSession = vi.spyOn(db.RefreshToken, 'findByPk').mockResolvedValue(session);
+    if (_state === 'expired') vi.spyOn(db.User, 'findByPk').mockResolvedValue({ id: 'admin', role: 'customer', status: 'active', twoFactorEnabled: false });
     const next = vi.fn();
     await authenticate({ headers: { authorization: `Bearer ${generateTokens(admin, 'old').accessToken}` } }, {}, next);
     expect(findSession).toHaveBeenCalledWith('old', expect.any(Object));
