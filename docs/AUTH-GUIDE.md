@@ -8,6 +8,8 @@
 
 ---
 
+> Administrator timeout and device-recognition policy: [Admin session lifecycle](ADMIN-SESSION-POLICY.md).
+
 ## Table of Contents
 
 1. [Authentication Endpoints](#authentication-endpoints)
@@ -42,7 +44,7 @@ POST /api/auth/login
 Body: { email, password, rememberMe? }
 Response: { user } OR { requiresTwoFactor: true, tempToken }
 ```
-- `rememberMe: true` → refresh token lasts 30 days (default: 7 days)
+- Customer refresh retention uses the existing remember-me policy. Administrator access and remembered-device recognition are separate; see [Admin session lifecycle](ADMIN-SESSION-POLICY.md).
 - Email pre-filled on next visit from localStorage
 - If 2FA enabled → returns `tempToken` instead of creating an authenticated cookie session
 - Rate limit: 20 requests / 15 min
