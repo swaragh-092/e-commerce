@@ -133,6 +133,23 @@ describe('Media Library tabs', () => {
     await waitFor(() => expect(mediaService.list).toHaveBeenLastCalledWith(expect.objectContaining({ usage: 'unused' })));
   });
 
+  it('shows file size, uploader, and upload date in the metadata dialog', async () => {
+    const uploadedAt = '2026-11-13T10:00:00.000Z';
+    mediaService.list.mockResolvedValueOnce({
+      data: [{
+        id: 'media-details', url: '/details.png', originalName: 'details.png', size: 1024,
+        mimeType: 'image/png', createdAt: uploadedAt, uploader: { firstName: 'Jane', lastName: 'Doe' },
+      }],
+      meta: { totalItems: 1, page: 1, totalPages: 1 },
+    });
+
+    render(<MediaPage />);
+    fireEvent.click((await screen.findByTestId('EditIcon')).closest('button'));
+
+    expect(await screen.findByText('image/png · 1.0 KB · Used 0 times')).toBeInTheDocument();
+    expect(screen.getByText(`Uploaded by Jane Doe · ${new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(uploadedAt))}`)).toBeInTheDocument();
+  });
+
   it('copies a media image URL with the current site origin', async () => {
     const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
     const originalSecureContext = Object.getOwnPropertyDescriptor(window, 'isSecureContext');

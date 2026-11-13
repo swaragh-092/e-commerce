@@ -64,6 +64,18 @@ const formatSize = (bytes) => {
   return `${((bytes / (1024 * 1024))).toFixed(1)} MB`;
 };
 
+const formatUploadDate = (value) => {
+  if (!value) return 'Unknown date';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Unknown date';
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+};
+
+const getUploaderName = (uploader) => {
+  const name = [uploader?.firstName, uploader?.lastName].filter(Boolean).join(' ').trim();
+  return name || uploader?.email || 'Unknown uploader';
+};
+
 const getDateGroup = (dateStr) => {
   if (!dateStr) return 'Unknown';
   const d = new Date(dateStr);
@@ -1014,6 +1026,9 @@ const MediaPage = () => {
                 </Box>
                 <Typography variant="caption" color="text.secondary">
                   {[editingFile.mimeType, formatSize(editingFile.size), `Used ${Number(editingFile.usageCount) || 0} time${Number(editingFile.usageCount) === 1 ? '' : 's'}`].filter(Boolean).join(' · ')}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Uploaded by {getUploaderName(editingFile.uploader)} · {formatUploadDate(editingFile.createdAt)}
                 </Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                   <Tooltip title={editingFile.mimeType === 'image/gif' ? 'GIF editing is unavailable to preserve animation' : ''}>
