@@ -144,6 +144,9 @@ const AdminLoginPage = () => {
 
   return (
     <AuthPageShell type="admin" fullHeight>
+        {location.state?.sessionExpired && !twoFactorStep && (
+          <Alert severity="info" sx={{ mb: 3 }}>Your admin session expired. Sign in again to continue.</Alert>
+        )}
         {error && (
           <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>
         )}
