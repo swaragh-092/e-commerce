@@ -1,203 +1,121 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Typography } from '@mui/material';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle } from '@mui/material';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { getAdminSession, reauthenticateAdmin, reportAdminActivity } from '../../services/adminSessionService';
-import authService from '../../services/authService';
-import { activateAdminSessionGuard, getAdminSessionErrorCode, isAdminSessionLocked, lockAdminSession, setAdminSessionDeadline, unlockAdminSession } from '../../services/adminSessionLock';
-import EmailMfaStep from '../auth/EmailMfaStep';
+import { getAdminSession, reportAdminActivity } from '../../services/adminSessionService';
+import { activateAdminSessionGuard, lockAdminSession, setAdminSessionDeadline } from '../../services/adminSessionLock';
 
-const LOCK_EVENT = 'admin-session:expired';
-const CHANNEL_NAME = 'admin-session:lock';
-const ACTIVITY_THROTTLE_MS = 60_000;
-const getUserId = user => user?._id || user?.id || user?.userId;
-const broadcast = message => {
-  try {
-    const channel = new BroadcastChannel(CHANNEL_NAME);
-    channel.postMessage(message);
-    channel.close();
-  } catch { /* BroadcastChannel is optional. */ }
-};
+const WARNING_MS = 120_000;
 
-const AdminSessionGuard = () => {
-  const { user, finalizeAuthenticatedSession } = useAuth();
-  const userId = getUserId(user);
-  const [locked, setLocked] = useState(false);
-  const [warning, setWarning] = useState(false);
-  const [password, setPassword] = useState('');
-  const [code, setCode] = useState('');
-  const [tempToken, setTempToken] = useState('');
-  const [emailChallenge, setEmailChallenge] = useState('');
-  const [emailStep, setEmailStep] = useState(false);
-  const [backupCode, setBackupCode] = useState(false);
+export default function AdminSessionGuard() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [warning, setWarning] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [reauthContext, setReauthContext] = useState('');
-  const [knownDevice, setKnownDevice] = useState(false);
-  const userIdRef = useRef(getUserId(user));
-  const lastActivityRef = useRef(0);
-  const lastWarningRef = useRef(false);
-  const identityRef = useRef(null);
-  const expiresAtRef = useRef(0);
+  const [error, setError] = useState(false);
+  const latest = useRef({ logout, location, navigate });
+  const continueSession = useRef(null);
+  useEffect(() => { latest.current = { logout, location, navigate }; }, [logout, location, navigate]);
+  const userId = user?.id || user?._id || user?.userId;
 
-  const refreshStatus = useCallback(async ({ allowIdentityChange = false } = {}) => {
-    try {
-      const next = await getAdminSession();
-      const serverNow = new Date(next.serverTime || Date.now()).getTime();
-      const serverOffset = serverNow - Date.now();
-      const absoluteExpiry = new Date(next.absoluteExpiresAt || next.expiresAt).getTime();
-      const idleExpiry = next.idleExpiresAt
-        ? new Date(next.idleExpiresAt).getTime()
-        : new Date(next.lastActiveAt).getTime() + 30 * 60 * 1000;
-      const expiry = Math.min(absoluteExpiry, idleExpiry);
-      if (!Number.isFinite(expiry) || !Number.isFinite(serverNow) || !next.userId || next.userId !== userIdRef.current) {
-        window.dispatchEvent(new Event(LOCK_EVENT));
-        return null;
+  useEffect(() => {
+    if (!userId) return undefined;
+    const deactivate = activateAdminSessionGuard();
+    let active = true;
+    let signingOut = false;
+    let deadline = 0;
+    let absolute = 0;
+    let lastActivity = 0;
+    const channel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('admin-session:logout') : null;
+
+    const signOut = async (broadcast = true) => {
+      if (signingOut || !active) return;
+      signingOut = true;
+      lockAdminSession();
+      if (broadcast) channel?.postMessage(userId);
+      try {
+        await latest.current.logout();
+      } catch {
+        window.dispatchEvent(new Event('auth:unauthorized'));
+      } finally {
+        latest.current.navigate('/admin/login', { replace: true, state: { from: latest.current.location, sessionExpired: true } });
       }
-      if (next.reauthContext) setReauthContext(next.reauthContext);
-      setKnownDevice(next.knownDevice === true);
-      const identity = `${next.userId}:${next.startedAt || next.createdAt || ''}`;
-      if (!allowIdentityChange && identityRef.current && identityRef.current !== identity) {
-        window.dispatchEvent(new Event(LOCK_EVENT));
-        return null;
+    };
+    const onExpired = () => { void signOut(); };
+    if (channel) channel.onmessage = event => {
+      if (event.data === userId) void signOut(false);
+    };
+    const tick = () => {
+      if (!active || signingOut || !deadline) return;
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) onExpired();
+      else setWarning(remaining <= WARNING_MS ? (deadline === absolute ? 'maximum' : 'idle') : null);
+    };
+    const refresh = async () => {
+      const status = await getAdminSession();
+      if (!active || signingOut) return;
+      const offset = Date.now() - Date.parse(status.serverTime);
+      absolute = Date.parse(status.absoluteExpiresAt) + offset;
+      deadline = Math.min(absolute, Date.parse(status.idleExpiresAt) + offset);
+      if (status.userId !== userId || !Number.isFinite(deadline)) return onExpired();
+      setAdminSessionDeadline(deadline);
+      tick();
+    };
+    const onActivity = event => {
+      if (!event.isTrusted || document.visibilityState !== 'visible' || signingOut
+          || (deadline && deadline - Date.now() <= WARNING_MS)
+          || Date.now() - lastActivity < 60_000) return;
+      lastActivity = Date.now();
+      reportAdminActivity().then(refresh).catch(() => {});
+    };
+    const onContinue = async () => {
+      if (signingOut) return;
+      setBusy(true);
+      setError(false);
+      try {
+        await reportAdminActivity();
+        await refresh();
+      } catch {
+        if (active && !signingOut) setError(true);
+      } finally {
+        if (active) setBusy(false);
       }
-      if (allowIdentityChange || !identityRef.current) identityRef.current = identity;
-      expiresAtRef.current = expiry - serverOffset;
-      setAdminSessionDeadline(expiresAtRef.current);
-      const remaining = expiresAtRef.current - Date.now();
-      const shouldWarn = remaining <= 120_000 && remaining > 0;
-      setWarning(shouldWarn);
-      if (remaining <= 0) window.dispatchEvent(new Event(LOCK_EVENT));
-      if (shouldWarn && !lastWarningRef.current) {
-        broadcast({ type: 'warning' });
-      }
-      lastWarningRef.current = shouldWarn;
-      return next;
-    } catch (err) {
-      if (err.response?.status === 401 && getAdminSessionErrorCode(err) === 'ADMIN_SESSION_EXPIRED') window.dispatchEvent(new Event(LOCK_EVENT));
-      return null;
-    }
+    };
+    const events = ['pointerdown', 'keydown', 'touchstart', 'wheel', 'touchmove'];
+    events.forEach(type => window.addEventListener(type, onActivity, { passive: true }));
+    window.addEventListener('admin-session:expired', onExpired);
+    continueSession.current = onContinue;
+    void refresh().catch(() => {});
+    const statusTimer = window.setInterval(() => { if (!signingOut) void refresh().catch(() => {}); }, 15_000);
+    const timer = window.setInterval(tick, 250);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.clearInterval(statusTimer);
+      events.forEach(type => window.removeEventListener(type, onActivity));
+      window.removeEventListener('admin-session:expired', onExpired);
+      continueSession.current = null;
+      channel?.close();
+      deactivate();
+    };
   }, [userId]);
 
-  useEffect(() => {
-    userIdRef.current = userId;
-    if (!user) {
-      identityRef.current = null;
-      return undefined;
-    }
-    const deactivateGuard = activateAdminSessionGuard();
-    refreshStatus();
-    const timer = window.setInterval(() => {
-      if (!isAdminSessionLocked()) refreshStatus();
-    }, 15_000);
-    const deadlineTimer = window.setInterval(() => {
-      const remaining = expiresAtRef.current - Date.now();
-      if (expiresAtRef.current && remaining <= 120_000 && remaining > 0) setWarning(true);
-      if (expiresAtRef.current && remaining <= 0) window.dispatchEvent(new Event(LOCK_EVENT));
-    }, 250);
-    let channel;
-    try {
-      channel = new BroadcastChannel(CHANNEL_NAME);
-      channel.onmessage = event => {
-        if (event.data?.type === 'lock') {
-          lockAdminSession();
-          setLocked(true);
-        }
-        if (event.data?.type === 'warning') setWarning(true);
-        if (event.data?.type === 'unlock') {
-          refreshStatus({ allowIdentityChange: true }).then(current => {
-            if (!current || Date.now() >= expiresAtRef.current) return;
-            unlockAdminSession();
-            setLocked(false);
-          });
-        }
-      };
-    } catch { /* BroadcastChannel is optional. */ }
-    const onLock = () => {
-      lockAdminSession();
-      setLocked(true);
-      channel?.postMessage({ type: 'lock' });
-    };
-    window.addEventListener(LOCK_EVENT, onLock);
-    return () => {
-      window.clearInterval(timer);
-      window.clearInterval(deadlineTimer);
-      window.removeEventListener(LOCK_EVENT, onLock);
-      channel?.close();
-      deactivateGuard();
-    };
-  }, [userId, refreshStatus]);
-
-  useEffect(() => {
-    if (locked || !user) return undefined;
-    const activity = event => {
-      if (!event.isTrusted) return;
-      const now = Date.now();
-      if (document.visibilityState !== 'visible' || now - lastActivityRef.current < ACTIVITY_THROTTLE_MS) return;
-      lastActivityRef.current = now;
-      reportAdminActivity().then(() => refreshStatus()).catch(err => {
-        if (getAdminSessionErrorCode(err) === 'ADMIN_SESSION_EXPIRED') window.dispatchEvent(new Event(LOCK_EVENT));
-      });
-    };
-    const types = ['pointerdown', 'keydown', 'touchstart', 'wheel', 'touchmove'];
-    types.forEach(type => window.addEventListener(type, activity, { passive: true }));
-    return () => types.forEach(type => window.removeEventListener(type, activity));
-  }, [locked, userId]);
-
-  const finishUnlock = async () => {
-    const current = await refreshStatus({ allowIdentityChange: true });
-    if (!current || current.userId !== userIdRef.current) throw new Error('The admin session is no longer valid for this account.');
-    unlockAdminSession();
-    try {
-      const verifiedUser = await finalizeAuthenticatedSession();
-      if (getUserId(verifiedUser) !== userIdRef.current) throw new Error('Sign in with the same account to unlock this session.');
-    } catch (err) {
-      lockAdminSession();
-      throw err;
-    }
-    setLocked(false); setWarning(false); setTempToken(''); setCode(''); setPassword('');
-    setEmailChallenge(''); setEmailStep(false); setBackupCode(false);
-    broadcast({ type: 'unlock' });
-  };
-
-  const reauthenticate = async event => {
-    event.preventDefault();
-    setBusy(true); setError('');
-    try {
-      const result = tempToken
-        ? await authService.verifyTwoFactor(tempToken, code)
-        : await reauthenticateAdmin(user?.email, password, reauthContext);
-      if (result.requiresTwoFactor) {
-        setTempToken(result.tempToken);
-        setEmailChallenge(result.emailChallenge || '');
-        return;
-      }
-      await finishUnlock();
-    } catch (err) {
-      setError(err.response?.data?.error?.message || err.response?.data?.message || err.message || 'Unable to reauthenticate.');
-    } finally { setBusy(false); }
-  };
-
-  return <>
-    {warning && !locked && <Alert severity="warning" sx={{ position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 1500, boxShadow: 3 }}>
-      Your admin session is about to expire. Use the admin area to continue working.
-    </Alert>}
-    <Dialog open={locked} disableEscapeKeyDown>
-      <Box component={emailStep ? 'div' : 'form'} onSubmit={emailStep ? undefined : reauthenticate}>
-        <DialogTitle>Admin session locked</DialogTitle>
-        <DialogContent>
-          <Typography sx={{ mb: 2 }}>Your admin session expired. Reauthenticate with the same account to continue; your open work remains in place.</Typography>
-          {knownDevice && <Alert severity="info" sx={{ mb: 2 }}>This device is remembered; password and required MFA are still needed.</Alert>}
-          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-          {emailStep ? <EmailMfaStep challenge={emailChallenge} onBack={() => setEmailStep(false)} onComplete={finishUnlock} /> : tempToken ? <>
-            <TextField autoFocus fullWidth label={backupCode ? 'Backup code' : 'Verification code'} value={code} onChange={e => setCode(backupCode ? e.target.value.replace(/[^a-f0-9]/gi, '').toLowerCase().slice(0, 8) : e.target.value.replace(/\D/g, '').slice(0, 6))} />
-            <Button onClick={() => { setBackupCode(!backupCode); setCode(''); }}>{backupCode ? 'Use authenticator code' : 'Use backup code'}</Button>
-            {emailChallenge && <Button onClick={() => setEmailStep(true)}>Use an email code</Button>}
-          </> : <TextField autoFocus fullWidth type="password" label="Password" value={password} onChange={e => setPassword(e.target.value)} />}
-        </DialogContent>
-        {!emailStep && <DialogActions sx={{ px: 3, pb: 2 }}><Button type="submit" variant="contained" disabled={busy || (tempToken ? !code : !password)}>{busy ? <CircularProgress size={20} /> : 'Unlock'}</Button></DialogActions>}
-      </Box>
+  return (
+    <Dialog open={Boolean(warning)} disableEscapeKeyDown aria-labelledby="admin-expiry-title">
+      <DialogTitle id="admin-expiry-title">Your admin session is about to expire</DialogTitle>
+      <DialogContent>
+        {warning === 'maximum'
+          ? 'You’ve reached the end of your 12-hour session. You’ll need to sign in again.'
+          : 'Select Stay signed in to continue. Otherwise, you’ll be signed out.'}
+        {' Unsaved changes may be lost.'}
+        {error && <Alert severity="error">Could not extend your session. Try again before it expires.</Alert>}
+      </DialogContent>
+      {warning === 'idle' && <DialogActions>
+        <Button autoFocus variant="contained" disabled={busy} onClick={() => continueSession.current?.()}>
+          {busy ? 'Extending session…' : 'Stay signed in'}
+        </Button>
+      </DialogActions>}
     </Dialog>
-  </>;
-};
-
-export default AdminSessionGuard;
+  );
+}
