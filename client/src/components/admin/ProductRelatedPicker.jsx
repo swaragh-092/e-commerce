@@ -7,22 +7,34 @@ const rowsOf = (value) => Array.isArray(value) ? value : (value?.data || value?.
 export default function ProductRelatedPicker({ productId, canEdit = false }) {
   const [selected, setSelected] = useState([]);
   const [options, setOptions] = useState([]);
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     let active = true;
-    Promise.all([getRelatedSelection(productId), getProducts({ limit: 100, status: 'published' })])
-      .then(([related, products]) => {
-        if (!active) return;
-        setSelected(rowsOf(related));
-        setOptions(rowsOf(products).filter((item) => item.id !== productId));
-      })
+    getRelatedSelection(productId)
+      .then((related) => { if (active) setSelected(rowsOf(related)); })
       .catch(() => { if (active) setError('Could not load related products.'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [productId]);
+
+  useEffect(() => {
+    let active = true;
+    const timer = setTimeout(() => {
+      const query = search.trim();
+      getProducts({ page: 1, limit: 100, ...(query.length >= 2 ? { search: query } : {}) })
+        .then((result) => {
+          if (!active) return;
+          const available = rowsOf(result).filter((item) => item.id !== productId);
+          setOptions([...new Map([...selected, ...available].map((item) => [item.id, item])).values()]);
+        })
+        .catch(() => { if (active) setError('Could not search products.'); });
+    }, 250);
+    return () => { active = false; clearTimeout(timer); };
+  }, [productId, search, selected]);
 
   const selectedIds = useMemo(() => selected.map((item) => item.id), [selected]);
   const save = async () => {
@@ -36,13 +48,15 @@ export default function ProductRelatedPicker({ productId, canEdit = false }) {
 
   return <Stack spacing={2}>
     <Box><Typography variant="h6">Related products</Typography>
-      <Typography variant="body2" color="text.secondary">Choose up to 12 products to recommend on this product page.</Typography></Box>
+      <Typography variant="body2" color="text.secondary">Choose up to 12 products to recommend on this product page. Type to search the full catalog.</Typography></Box>
     {loading ? <CircularProgress size={24} /> : <>
       <Autocomplete multiple options={options} value={selected}
+        inputValue={search} onInputChange={(_, value) => setSearch(value)}
         isOptionEqualToValue={(a, b) => a.id === b.id}
         getOptionLabel={(item) => item.name || item.title || item.sku || item.id}
         onChange={(_, value) => setSelected(value.slice(0, 12))}
         disabled={!canEdit || saving}
+        filterOptions={(items) => items}
         renderTags={(value, getTagProps) => value.map((option, index) =>
           <Chip label={option.name || option.title || option.sku} {...getTagProps({ index })} key={option.id} />)}
         renderInput={(params) => <TextField {...params} label="Related products" placeholder="Search products" />}
