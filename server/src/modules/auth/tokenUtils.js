@@ -27,9 +27,9 @@ const generateTokens = (user, sessionId = null, { mfaVerified = false, mfaMethod
   };
 };
 
-const signTempTwoFactorToken = (userId, passwordBinding) => {
+const signTempTwoFactorToken = (userId, passwordBinding, context = {}) => {
   const { issuer, audience } = getIssAud();
-  return jwt.sign({ id: userId, purpose: '2fa', ...(passwordBinding ? { passwordBinding } : {}) }, process.env.JWT_ACCESS_SECRET, {
+  return jwt.sign({ id: userId, purpose: '2fa', ...(passwordBinding ? { passwordBinding } : {}), ...context }, process.env.JWT_ACCESS_SECRET, {
     expiresIn: '5m',
     issuer,
     audience,
