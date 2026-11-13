@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, act } from '@testing-library/react';
 import AdminSessionGuard from '../../components/admin/AdminSessionGuard';
-import { lockAdminSession, unlockAdminSession } from '../../services/adminSessionLock';
+import { unlockAdminSession } from '../../services/adminSessionLock';
 
 const mocks = vi.hoisted(() => ({
   getAdminSession: vi.fn(),
