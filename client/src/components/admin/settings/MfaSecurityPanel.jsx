@@ -206,7 +206,7 @@ export default function MfaSecurityPanel() {
               {!hasSelectedRoles && <Typography variant="caption" color="error">Select at least one staff role before saving.</Typography>}
             </Box>}
             {enforcementEnabled && <Alert severity="warning">
-              Before enabling mandatory MFA, make sure every affected active administrator and staff member has enrolled. On their next password sign-in, anyone who has not enrolled will be guided through authenticator setup before access is granted.
+              After you save, people covered by this rule who haven’t set up an authenticator must set one up at their next password sign-in before they can access the dashboard.
             </Alert>}
           </Stack>
         </Paper>
