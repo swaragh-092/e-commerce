@@ -28,10 +28,10 @@ const makeSession = async (user, { absolute = Date.now() + 43200000, activity = 
 };
 (async () => {
   await db.sequelize.authenticate();
-  const password = `${crypto.randomBytes(24).toString('hex')}Aa1!`;
-  const customer = await db.User.create({ email: `${marker}-customer@example.com`, firstName: 'Test', lastName: 'Customer', password, role: 'customer', status: 'active', emailVerified: true });
+  const testCredential = `${crypto.randomBytes(24).toString('hex')}Aa1!`;
+  const customer = await db.User.create({ email: `${marker}-customer@example.com`, firstName: 'Test', lastName: 'Customer', password: testCredential, role: 'customer', status: 'active', emailVerified: true });
   users.push(customer);
-  const staff = await db.User.create({ email: `${marker}-staff@example.com`, firstName: 'Test', lastName: 'Staff', password, role: 'admin', status: 'active', emailVerified: true });
+  const staff = await db.User.create({ email: `${marker}-staff@example.com`, firstName: 'Test', lastName: 'Staff', password: testCredential, role: 'admin', status: 'active', emailVerified: true });
   users.push(staff);
   role = await db.Role.create({ name: marker, slug: marker, baseRole: 'admin' });
   const [permission] = await db.Permission.findOrCreate({ where: { key: 'dashboard.view' }, defaults: { name: 'Dashboard', group: 'dashboard' } });
@@ -87,14 +87,14 @@ const makeSession = async (user, { absolute = Date.now() + 43200000, activity = 
     assert.ok(+expired.row.lastActiveAt < Date.now() - 1800000);
   });
   await check('remember-me admin login stays bounded and reauthentication rejects a different account', async () => {
-    const result = await auth.login(staff.email, password, '127.0.0.1', true, 'local integration');
+    const result = await auth.login(staff.email, testCredential, '127.0.0.1', true, 'local integration');
     assert.ok(result.rememberedDeviceToken);
     const row = await db.RefreshToken.findOne({ where: { token: hashToken(result.tokens.refreshToken) } });
     assert.ok(+row.absoluteExpiresAt <= Date.now() + 43200000);
     const policy = require('../../src/modules/auth/adminSession');
     const context = policy.status(staff, row).reauthContext;
-    await assert.rejects(auth.login(customer.email, password, '127.0.0.1', false, 'local integration', null, context), e => e.code === 'FORBIDDEN');
-    const customerLogin = await auth.login(customer.email, password, '127.0.0.1', true, 'local integration');
+    await assert.rejects(auth.login(customer.email, testCredential, '127.0.0.1', false, 'local integration', null, context), e => e.code === 'FORBIDDEN');
+    const customerLogin = await auth.login(customer.email, testCredential, '127.0.0.1', true, 'local integration');
     assert.equal(customerLogin.rememberedDeviceToken, undefined);
   });
   await check('customer sessions ignore admin idle and absolute deadlines', async () => {
