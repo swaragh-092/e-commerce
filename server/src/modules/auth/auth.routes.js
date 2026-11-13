@@ -26,15 +26,43 @@ const {
 } = require('./auth.validation');
 
 const { authenticate } = require('../../middleware/auth.middleware');
+const { RefreshToken } = require('../index');
 const authController = require('./auth.controller');
 const twoFactorController = require('./twoFactor.controller');
 const otpController = require('./otp.controller');
 const passport = require('passport');
 const { initializeGoogleStrategy } = require('./oauth.service');
-const { setAuthCookies } = require('./authCookies');
+const { setAuthCookies, setRememberedDeviceCookie } = require('./authCookies');
 const { getClientBaseUrl } = require('./authRedirects');
 
 initializeGoogleStrategy();
+
+const adminSession = async (req, res, next) => {
+  try {
+    res.setHeader('Cache-Control', 'no-store');
+    const data = require('./adminSession').status(req.user, req.authSession);
+    data.knownDevice = await require('./rememberedDevice').recognize(req.cookies?.remembered_device, req.user.id);
+    return success(res, data, 'Admin session status');
+  } catch (error) { next(error); }
+};
+const adminActivity = async (req, res, next) => {
+  try {
+    res.setHeader('Cache-Control', 'no-store');
+    const data = await require('./adminSession').recordActivity(req.user, req.authSession.id);
+    return success(res, data, 'Admin activity recorded');
+  } catch (error) { next(error); }
+};
+const requireAdminSession = async (req, res, next) => {
+  try {
+    const { isAdminUser } = require('../../config/permissions');
+    if (!isAdminUser(req.user)) return next(new (require('../../utils/AppError'))('FORBIDDEN', 403, 'Admin access required'));
+    req.authSession = req.authSession || null;
+    if (!req.authSession) return next(new (require('../../utils/AppError'))('UNAUTHORIZED', 401, 'Admin session not found'));
+    next();
+  } catch (error) { next(error); }
+};
+router.get('/admin-session', authenticate, requireAdminSession, adminSession);
+router.post('/admin-session/activity', authenticate, requireAdminSession, adminActivity);
 
 const Joi = require('joi');
 const { authorizePermissions } = require('../../middleware/role.middleware');
@@ -103,7 +131,8 @@ router.post('/2fa/email/verify', twoFactorLimiter,
     try {
       res.setHeader('Cache-Control', 'no-store');
       const result = await emailMfa.verifyCode(req.validated.emailChallenge, req.validated.code, req.ip);
-      setAuthCookies(res, result.tokens);
+      setAuthCookies(res, result.tokens, { rememberMe: result.rememberMe, adminSessionExpiresAt: result.adminSessionExpiresAt });
+      setRememberedDeviceCookie(res, result.rememberedDeviceToken);
       return success(res, stripAuthTokens(result));
     } catch (error) { return next(error); }
   });

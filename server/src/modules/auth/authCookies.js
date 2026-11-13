@@ -6,6 +6,7 @@ const { AUTH_TIME } = require('../../config/constants');
 const ACCESS_COOKIE = 'auth_access_token';
 const REFRESH_COOKIE = 'auth_refresh_token';
 const TRUSTED_DEVICE_COOKIE = 'trusted_device';
+const REMEMBERED_DEVICE_COOKIE = 'remembered_device';
 
 const getJwtIssAud = () => ({
   issuer: process.env.JWT_ISSUER || 'ecommerce-pro',
@@ -24,7 +25,7 @@ const getCookieOptions = () => {
     };
 };
 
-const setAuthCookies = (res, tokens, { rememberMe = false } = {}) => {
+const setAuthCookies = (res, tokens, { rememberMe = false, adminSessionExpiresAt } = {}) => {
     if (!tokens?.accessToken || !tokens?.refreshToken) return;
 
     const options = getCookieOptions();
@@ -34,7 +35,9 @@ const setAuthCookies = (res, tokens, { rememberMe = false } = {}) => {
     });
     res.cookie(REFRESH_COOKIE, tokens.refreshToken, {
         ...options,
-        maxAge: rememberMe ? AUTH_TIME.REMEMBER_ME_TTL_MS : AUTH_TIME.REFRESH_TOKEN_TTL_MS,
+        maxAge: adminSessionExpiresAt
+          ? Math.max(0, +new Date(adminSessionExpiresAt) - Date.now())
+          : (rememberMe ? AUTH_TIME.REMEMBER_ME_TTL_MS : AUTH_TIME.REFRESH_TOKEN_TTL_MS),
     });
 };
 
@@ -51,10 +54,16 @@ const getAccessToken = (req) => req.headers.authorization?.startsWith('Bearer ')
 const getRefreshToken = (req) => req.body?.refreshToken || req.cookies?.[REFRESH_COOKIE] || null;
 
 const stripAuthTokens = (result) => {
-    if (!result || !result.tokens) return result;
-    const { tokens, ...safeResult } = result;
+    if (!result) return result;
+    const { tokens, rememberedDeviceToken, ...safeResult } = result;
     return safeResult;
 };
+
+const setRememberedDeviceCookie = (res, token) => {
+    if (!token) return;
+    res.cookie(REMEMBERED_DEVICE_COOKIE, token, { ...getCookieOptions(), maxAge: 30 * 24 * 60 * 60 * 1000 });
+};
+const clearRememberedDeviceCookie = res => res.clearCookie(REMEMBERED_DEVICE_COOKIE, getCookieOptions());
 
 const crypto = require('crypto');
 
@@ -133,6 +142,7 @@ module.exports = {
     ACCESS_COOKIE,
     REFRESH_COOKIE,
     TRUSTED_DEVICE_COOKIE,
+    REMEMBERED_DEVICE_COOKIE,
     clearAuthCookies,
     getAccessToken,
     getRefreshToken,
@@ -141,6 +151,8 @@ module.exports = {
     createTrustedDeviceToken,
     verifyTrustedDevice,
     setTrustedDeviceCookie,
+    setRememberedDeviceCookie,
+    clearRememberedDeviceCookie,
     encrypt,
     decrypt,
 };
