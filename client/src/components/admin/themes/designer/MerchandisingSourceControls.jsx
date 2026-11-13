@@ -10,10 +10,14 @@ export default function MerchandisingSourceControls({ section = {}, onChange, on
   const [galleries, setGalleries] = useState([]);
   useEffect(() => {
     let active = true;
-    Promise.all([getTags({ limit: 100 }), galleryService.list({ limit: 100 })])
-      .then(([tagResult, galleryResult]) => {
-        if (active) { setTags(rowsOf(tagResult)); setGalleries(rowsOf(galleryResult)); }
-      }).catch(() => {});
+    getTags({ limit: 100 })
+      .then((result) => { if (active) setTags(rowsOf(result)); })
+      .catch(() => {});
+    galleryService.list({ limit: 100 })
+      .then((result) => {
+        if (active) setGalleries(rowsOf(result).filter((gallery) => gallery.isActive === true));
+      })
+      .catch(() => {});
     return () => { active = false; };
   }, []);
   const set = (key, value) => onChange?.(key, value);
