@@ -3,11 +3,12 @@
 const jwt = require('jsonwebtoken');
 const AppError = require('../utils/AppError');
 const { User, Role, Permission, RefreshToken } = require('../modules');
-const { enrichUserAuthorization } = require('../config/permissions');
+const { enrichUserAuthorization, isAdminUser } = require('../config/permissions');
 const logger = require('../utils/logger');
 const tokenBlocklist = require('../utils/tokenBlocklist');
 const { assertMfaSession, loadMfaPolicy } = require('../modules/auth/mfaPolicy');
 const { getAccessToken } = require('../modules/auth/authCookies');
+const enforceAdminSession = (user, decoded, session) => require('../modules/auth/adminSession').enforce(user, session);
 
 const JWT_VERIFY_OPTS = { algorithms: ['HS256'], issuer: process.env.JWT_ISSUER || 'ecommerce-pro', audience: process.env.JWT_AUDIENCE || 'ecommerce-pro-client' };
 
@@ -52,9 +53,10 @@ const authenticate = async (req, res, next) => {
     // The refresh-token row is the durable session record. Checking it here
     // makes logout, password resets, and force-logout effective across workers
     // and after a process restart, not just in this worker's memory.
+    let session = null;
     if (decoded.sid) {
-      const session = await RefreshToken.findByPk(decoded.sid, { attributes: ['id', 'revokedAt', 'expiresAt'] });
-      if (!session || session.revokedAt || (!session.expiresAt || !Number.isFinite(new Date(session.expiresAt).getTime()) || new Date(session.expiresAt) <= new Date())) {
+      session = await RefreshToken.findByPk(decoded.sid, { attributes: ['id', 'revokedAt', 'expiresAt', 'absoluteExpiresAt', 'lastActiveAt', 'createdAt'] });
+      if (!session || session.revokedAt) {
         throw new AppError('UNAUTHORIZED', 401, 'Session has been revoked');
       }
     }
@@ -79,6 +81,16 @@ const authenticate = async (req, res, next) => {
     }
 
     assertMfaSession(user, decoded, await loadMfaPolicy(user));
+    if (isAdminUser(user)) {
+      enforceAdminSession(user, decoded, session);
+    } else if (decoded.sid) {
+      if (!session.expiresAt || !Number.isFinite(new Date(session.expiresAt).getTime()) || new Date(session.expiresAt) <= new Date()) {
+        throw new AppError('UNAUTHORIZED', 401, 'Session has been revoked');
+      }
+    }
+    if (session) {
+      req.authSession = session;
+    }
     req.user = enrichUserAuthorization(user);
     next();
   } catch (error) {
@@ -111,7 +123,7 @@ const optionalAuth = async (req, res, next) => {
     }
 
     if (decoded.sid) {
-      const session = await RefreshToken.findByPk(decoded.sid, { attributes: ['id', 'revokedAt', 'expiresAt'] });
+      const session = await RefreshToken.findByPk(decoded.sid, { attributes: ['id', 'revokedAt', 'expiresAt', 'absoluteExpiresAt', 'lastActiveAt', 'createdAt'] });
       if (!session || session.revokedAt || (!session.expiresAt || !Number.isFinite(new Date(session.expiresAt).getTime()) || new Date(session.expiresAt) <= new Date())) return next();
     }
 
@@ -122,6 +134,9 @@ const optionalAuth = async (req, res, next) => {
 
     if (user && user.status === 'active') {
       try { assertMfaSession(user, decoded, await loadMfaPolicy(user)); } catch { return next(); }
+      if (decoded.sid) {
+        try { enforceAdminSession(user, decoded, await RefreshToken.findByPk(decoded.sid)); } catch { return next(); }
+      }
       req.user = enrichUserAuthorization(user);
     }
     next();
@@ -131,4 +146,4 @@ const optionalAuth = async (req, res, next) => {
   }
 };
 
-module.exports = { authenticate, optionalAuth };
+module.exports = { authenticate, optionalAuth, enforceAdminSession };
