@@ -41,6 +41,7 @@ const generateBackupCodes = () => {
 const setup = async (userId) => {
   const user = await User.findByPk(userId);
   if (!user) throw new AppError('NOT_FOUND', 404, 'User not found');
+  if (user.status !== 'active') throw new AppError('FORBIDDEN', 403, 'Your account is inactive');
   if (user.twoFactorEnabled) throw new AppError('VALIDATION_ERROR', 400, '2FA is already enabled');
 
   const secret = authenticator.generateSecret();

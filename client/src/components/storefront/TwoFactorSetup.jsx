@@ -3,7 +3,7 @@ import { Box, Typography, TextField, Button, Alert, Paper } from '@mui/material'
 import authService from '../../services/authService';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 
-const TwoFactorSetup = ({ user, onUpdate }) => {
+const TwoFactorSetup = ({ user, onUpdate, onComplete, setupRequest, enableRequest, embedded = false }) => {
   const [step, setStep] = useState('idle'); // idle | setup | verify | showCodes
   const [qrData, setQrData] = useState(null);
   const [backupCodes, setBackupCodes] = useState(null);
@@ -19,7 +19,7 @@ const TwoFactorSetup = ({ user, onUpdate }) => {
   const handleSetup = async () => {
     setLoading(true); setError('');
     try {
-      const data = await authService.setup2FA();
+      const data = await (setupRequest || authService.setup2FA)();
       setQrData(data);
       setStep('verify');
     } catch (err) { setError(getApiErrorMessage(err, 'Failed to setup 2FA')); }
@@ -29,7 +29,7 @@ const TwoFactorSetup = ({ user, onUpdate }) => {
   const handleEnable = async (e) => {
     e.preventDefault(); setLoading(true); setError('');
     try {
-      const data = await authService.enable2FA(code);
+      const data = await (enableRequest || authService.enable2FA)(code);
       setBackupCodes(data.backupCodes);
       setStep('showCodes');
       setCode(''); setQrData(null);
@@ -61,9 +61,16 @@ const TwoFactorSetup = ({ user, onUpdate }) => {
     finally { setLoading(false); }
   };
 
+  const Container = embedded ? Box : Paper;
+  const handleBackupCodesSaved = () => {
+    setStep('idle');
+    setBackupCodes(null);
+    Promise.resolve(onUpdate?.()).catch(() => {}).finally(() => onComplete?.());
+  };
+
   return (
-    <Paper sx={{ p: 3, mt: 3 }}>
-      <Typography variant="h6" sx={{ mb: 2 }}>Two-Factor Authentication</Typography>
+    <Container sx={embedded ? { pt: 0 } : { p: 3, mt: 3 }}>
+      <Typography variant="h6" sx={{ mb: 2 }}>{embedded ? 'Set up your authenticator app' : 'Two-Factor Authentication'}</Typography>
       
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
@@ -97,8 +104,8 @@ const TwoFactorSetup = ({ user, onUpdate }) => {
               Download
             </Button>
           </Box>
-          <Button variant="contained" onClick={() => { setStep('idle'); setBackupCodes(null); if (onUpdate) Promise.resolve(onUpdate()).catch(() => {}); }}>
-            I've saved my codes
+          <Button variant="contained" onClick={handleBackupCodesSaved}>
+            I've saved my recovery codes
           </Button>
         </Box>
       ) : is2FAEnabled ? (
@@ -165,7 +172,7 @@ const TwoFactorSetup = ({ user, onUpdate }) => {
           </Button>
         </Box>
       )}
-    </Paper>
+    </Container>
   );
 };
 

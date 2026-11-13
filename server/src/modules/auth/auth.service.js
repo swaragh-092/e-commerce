@@ -12,10 +12,10 @@ const { enrichUserAuthorization } = require('../../config/permissions');
 const { isAdminUser } = require('../../config/permissions');
 const { verifyTrustedDevice } = require('./authCookies');
 const logger = require('../../utils/logger');
-const { requiresAdminMfa, canUseEmailMfa, assertMfaEnrollment, assertMfaSession, loadMfaPolicy } = require('./mfaPolicy');
+const { requiresAdminMfa, canUseEmailMfa, isEnrollmentRequired, assertMfaEnrollment, assertMfaSession, loadMfaPolicy } = require('./mfaPolicy');
 const LoginAttemptStore = require('./loginAttemptStore');
 
-const { hashToken, generateTokens, signTempTwoFactorToken } = require('./tokenUtils');
+const { hashToken, generateTokens, signTempTwoFactorToken, signMfaEnrollmentToken } = require('./tokenUtils');
 const rememberedDevices = require('./rememberedDevice');
 
 const authUserInclude = [
@@ -235,7 +235,11 @@ const login = async (email, password, ipAddress, rememberMe = false, userAgent, 
   }
 
   const mfaPolicy = await loadMfaPolicy(user);
-  assertMfaEnrollment(user, mfaPolicy);
+  if (isEnrollmentRequired(user, mfaPolicy) && !user.twoFactorEnabled) {
+    // Password verification creates a short-lived enrollment capability, not a
+    // usable session. The token is accepted only by the two enrollment routes.
+    return { requiresMfaEnrollment: true, enrollmentToken: signMfaEnrollmentToken(user.id) };
+  }
 
   if (user.twoFactorEnabled && (requiresAdminMfa(user, mfaPolicy) || !verifyTrustedDevice(trustedDeviceToken, user.id))) {
     const emailMfa = canUseEmailMfa(user, mfaPolicy) ? require('./emailMfa.service') : null;

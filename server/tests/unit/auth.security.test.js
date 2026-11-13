@@ -64,14 +64,16 @@ describe('Authentication security regressions', () => {
     expect(committed).toBe(true);
   });
 
-  it.each(['admin', 'super_admin'])('denies password login for %s without MFA', async (role) => {
+  it.each(['admin', 'super_admin'])('returns a limited enrollment token for %s without MFA after password verification', async (role) => {
     vi.spyOn(LoginAttemptStore, 'checkLock').mockResolvedValue(undefined);
     vi.spyOn(LoginAttemptStore, 'clear').mockResolvedValue(undefined);
     vi.spyOn(LoginAttemptStore, 'recordFailure').mockResolvedValue(undefined);
     vi.spyOn(db.User, 'scope').mockReturnValue({ findOne: async () => ({ id: 'admin', role, status: 'active', twoFactorEnabled: false, validatePassword: async () => true }) });
     vi.spyOn(features, 'getResolvedFeature').mockResolvedValue(false);
     const create = vi.spyOn(db.RefreshToken, 'create').mockResolvedValue({});
-    await expect(auth.login('admin@example.test', 'correct', '127.0.0.1')).rejects.toMatchObject({ code: 'MFA_REQUIRED', statusCode: 403 });
+    const result = await auth.login('admin@example.test', 'correct', '127.0.0.1');
+    expect(result).toMatchObject({ requiresMfaEnrollment: true, enrollmentToken: expect.any(String) });
+    expect(require('jsonwebtoken').decode(result.enrollmentToken)).toMatchObject({ id: 'admin', purpose: 'mfa_enrollment' });
     expect(create).not.toHaveBeenCalled();
   });
 });

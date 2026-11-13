@@ -61,6 +61,19 @@ const authService = {
     return response.data.data;
   },
 
+  setupMfaEnrollment: async (enrollmentToken) => {
+    const response = await api.post('/auth/2fa/enrollment/setup', { enrollmentToken }, { skipAuthRefresh: true });
+    return response.data.data;
+  },
+
+  enableMfaEnrollment: async (enrollmentToken, code) => {
+    const response = await changeAuthSession(
+      () => api.post('/auth/2fa/enrollment/enable', { enrollmentToken, code }, { skipAuthRefresh: true }),
+      { restoreOnRejectedLoginResponse: true },
+    );
+    return response.data.data;
+  },
+
   enable2FA: async (code) => {
     const response = await changeMfa('/auth/2fa/enable', code);
     return response.data.data;
