@@ -9,14 +9,16 @@ const {
   getAccessToken,
   getRefreshToken,
   setAuthCookies,
-  setTrustedDeviceCookie,
   stripAuthTokens,
+  setRememberedDeviceCookie,
+  clearRememberedDeviceCookie,
 } = require('./authCookies');
 
 const sendAuthSuccess = (res, result, message, options = {}) => {
   if (result?.tokens) {
     setAuthCookies(res, result.tokens, options);
   }
+  if (result?.rememberedDeviceToken) setRememberedDeviceCookie(res, result.rememberedDeviceToken);
   return success(res, stripAuthTokens(result), message);
 };
 
@@ -37,10 +39,10 @@ const register = async (req, res, next) => {
 const login = async (req, res, next) => {
   try {
     const { email, password, rememberMe } = req.validated;
-    const trustedDevice = req.cookies?.trusted_device;
-    const result = await AuthService.login(email, password, req.ip, rememberMe, req.headers['user-agent'], trustedDevice);
+    const trustedDevice = req.cookies?.remembered_device;
+    const result = await AuthService.login(email, password, req.ip, rememberMe, req.headers['user-agent'], trustedDevice, req.validated.reauthContext);
     if (result.requiresTwoFactor) res.setHeader('Cache-Control', 'no-store');
-    return sendAuthSuccess(res, result, 'Login successful', { rememberMe });
+    return sendAuthSuccess(res, result, 'Login successful', { rememberMe: result.rememberMe ?? rememberMe });
   } catch (err) {
     next(err);
   }
@@ -64,6 +66,8 @@ const logout = async (req, res, next) => {
   try {
     const refreshToken = getRefreshToken(req);
     if (refreshToken) await AuthService.logout(refreshToken, req.user?.id);
+    await require('./rememberedDevice').revoke(req.cookies?.remembered_device);
+    clearRememberedDeviceCookie(res);
     // Persist the session revocation so every worker rejects this access token
     // and any sibling access token from the same session.
     const accessToken = getAccessToken(req);
@@ -141,16 +145,11 @@ const verifyEmail = async (req, res, next) => {
 
 const verifyTwoFactor = async (req, res, next) => {
   try {
-    const { tempToken, code, trustDevice } = req.validated;
+    const { tempToken, code } = req.validated;
     const ipAddress = req.ip;
     const result = await AuthService.verifyTwoFactor(tempToken, code, ipAddress);
 
-    // Set trusted device cookie if requested (30 days, signed JWT — not forgeable)
-    if (trustDevice) {
-      setTrustedDeviceCookie(res, result.user.id);
-    }
-
-    return sendAuthSuccess(res, result, 'Login successful');
+    return sendAuthSuccess(res, result, 'Login successful', { rememberMe: result.rememberMe });
   } catch (err) {
     next(err);
   }
