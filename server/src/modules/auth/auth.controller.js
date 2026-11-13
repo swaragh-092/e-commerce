@@ -9,7 +9,6 @@ const {
   getAccessToken,
   getRefreshToken,
   setAuthCookies,
-  setTrustedDeviceCookie,
   stripAuthTokens,
 } = require('./authCookies');
 
@@ -38,9 +37,9 @@ const login = async (req, res, next) => {
   try {
     const { email, password, rememberMe } = req.validated;
     const trustedDevice = req.cookies?.trusted_device;
-    const result = await AuthService.login(email, password, req.ip, rememberMe, req.headers['user-agent'], trustedDevice);
+    const result = await AuthService.login(email, password, req.ip, rememberMe, req.headers['user-agent'], trustedDevice, req.validated.reauthContext);
     if (result.requiresTwoFactor) res.setHeader('Cache-Control', 'no-store');
-    return sendAuthSuccess(res, result, 'Login successful', { rememberMe });
+    return sendAuthSuccess(res, result, 'Login successful', { rememberMe: result.rememberMe ?? rememberMe });
   } catch (err) {
     next(err);
   }
@@ -141,16 +140,11 @@ const verifyEmail = async (req, res, next) => {
 
 const verifyTwoFactor = async (req, res, next) => {
   try {
-    const { tempToken, code, trustDevice } = req.validated;
+    const { tempToken, code } = req.validated;
     const ipAddress = req.ip;
     const result = await AuthService.verifyTwoFactor(tempToken, code, ipAddress);
 
-    // Set trusted device cookie if requested (30 days, signed JWT — not forgeable)
-    if (trustDevice) {
-      setTrustedDeviceCookie(res, result.user.id);
-    }
-
-    return sendAuthSuccess(res, result, 'Login successful');
+    return sendAuthSuccess(res, result, 'Login successful', { rememberMe: result.rememberMe });
   } catch (err) {
     next(err);
   }

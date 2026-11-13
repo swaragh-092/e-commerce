@@ -26,6 +26,7 @@ const {
 } = require('./auth.validation');
 
 const { authenticate } = require('../../middleware/auth.middleware');
+const { RefreshToken } = require('../index');
 const authController = require('./auth.controller');
 const twoFactorController = require('./twoFactor.controller');
 const otpController = require('./otp.controller');
@@ -35,6 +36,32 @@ const { setAuthCookies } = require('./authCookies');
 const { getClientBaseUrl } = require('./authRedirects');
 
 initializeGoogleStrategy();
+
+const adminSession = async (req, res, next) => {
+  try {
+    const session = req.authSession;
+    const jwt = require('jsonwebtoken');
+    const reauthContext = jwt.sign({ id: req.user.id, sid: session.id, purpose: 'admin_reauth' }, process.env.JWT_ACCESS_SECRET, { issuer: process.env.JWT_ISSUER || 'ecommerce-pro', audience: process.env.JWT_AUDIENCE || 'ecommerce-pro-client', expiresIn: '12h' });
+    return success(res, { expiresAt: session.absoluteExpiresAt || new Date(new Date(session.createdAt).getTime() + 12 * 60 * 60 * 1000), lastActiveAt: session.lastActiveAt, reauthContext }, 'Admin session status', 200);
+  } catch (error) { next(error); }
+};
+const adminActivity = async (req, res, next) => {
+  try {
+    await req.authSession.update({ lastActiveAt: new Date() });
+    return success(res, { lastActiveAt: req.authSession.lastActiveAt }, 'Admin activity recorded', 200);
+  } catch (error) { next(error); }
+};
+const requireAdminSession = async (req, res, next) => {
+  try {
+    const { ADMIN_PERMISSIONS } = require('../../config/permissions');
+    if (!(req.user.permissions || []).some((permission) => ADMIN_PERMISSIONS.includes(permission))) return next(new (require('../../utils/AppError'))('FORBIDDEN', 403, 'Admin access required'));
+    req.authSession = req.authSession || null;
+    if (!req.authSession) return next(new (require('../../utils/AppError'))('UNAUTHORIZED', 401, 'Admin session not found'));
+    next();
+  } catch (error) { next(error); }
+};
+router.get('/admin-session', authenticate, requireAdminSession, adminSession);
+router.post('/admin-session/activity', authenticate, requireAdminSession, adminActivity);
 
 const Joi = require('joi');
 const { authorizePermissions } = require('../../middleware/role.middleware');

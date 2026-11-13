@@ -9,6 +9,7 @@ const NotificationService = require('../notification/notification.service');
 const AuditService = require('../audit/audit.service');
 const { ACTIONS, AUTH_TIME, ENTITIES } = require('../../config/constants');
 const { enrichUserAuthorization } = require('../../config/permissions');
+const { getPermissionsForUser, ADMIN_PERMISSIONS } = require('../../config/permissions');
 const logger = require('../../utils/logger');
 const { requiresAdminMfa, canUseEmailMfa, assertMfaEnrollment, assertMfaSession, loadMfaPolicy } = require('./mfaPolicy');
 const LoginAttemptStore = require('./loginAttemptStore');
@@ -185,7 +186,7 @@ const DUMMY_HASH = '$2a$12$dpabKKLz0iNKPD1LEZL0oOGI86Zcks4c1j0jbtA3f1FwXE55zzNXa
 const { parseDeviceName } = require('../../utils/deviceParser');
 const AccountEvents = require('./accountEvents');
 
-const login = async (email, password, ipAddress, rememberMe = false, userAgent, trustedDevice) => {
+const login = async (email, password, ipAddress, rememberMe = false, userAgent, trustedDevice, reauthContext) => {
   const normalizedEmail = String(email || '').trim().toLowerCase();
   await LoginAttemptStore.checkLock(normalizedEmail);
   const user = await User.scope('withPassword').findOne({
@@ -201,6 +202,14 @@ const login = async (email, password, ipAddress, rememberMe = false, userAgent, 
   if (!user || !isValid) {
     await LoginAttemptStore.recordFailure(normalizedEmail);
     throw new AppError('UNAUTHORIZED', 401, 'Invalid email or password');
+  }
+  let reauth = null;
+  if (reauthContext) {
+    try { reauth = jwt.verify(reauthContext, process.env.JWT_ACCESS_SECRET, { algorithms: ['HS256'], issuer: JWT_ISS, audience: JWT_AUD }); }
+    catch { throw new AppError('UNAUTHORIZED', 401, 'Admin reauthentication context expired'); }
+    if (reauth.purpose !== 'admin_reauth' || reauth.id !== user.id || !reauth.sid) {
+      throw new AppError('FORBIDDEN', 403, 'Reauthentication must use the same administrator account');
+    }
   }
   await LoginAttemptStore.clear(normalizedEmail);
 
@@ -221,27 +230,21 @@ const login = async (email, password, ipAddress, rememberMe = false, userAgent, 
   const mfaPolicy = await loadMfaPolicy(user);
   assertMfaEnrollment(user, mfaPolicy);
 
-  // If 2FA is enabled, check trusted device cookie before requiring TOTP.
-  // The cookie is a signed JWT (see authCookies.signTrustedDevice) — never a
-  // deterministic hash, so it cannot be forged without the JWT secret.
   if (user.twoFactorEnabled) {
-    const { verifyTrustedDevice } = require('./authCookies');
-    if (!requiresAdminMfa(user, mfaPolicy) && trustedDevice && verifyTrustedDevice(trustedDevice, user.id)) {
-      // Trusted device — skip 2FA
-    } else {
-      const emailMfa = canUseEmailMfa(user, mfaPolicy) ? require('./emailMfa.service') : null;
-      return {
-        requiresTwoFactor: true,
-        tempToken: signTempTwoFactorToken(user.id, emailMfa ? crypto.randomBytes(32).toString('hex') : undefined),
-        ...(emailMfa?.isBound(user) ? { emailChallenge: emailMfa.issueChallenge(user) } : {}),
-      };
-    }
+    const emailMfa = canUseEmailMfa(user, mfaPolicy) ? require('./emailMfa.service') : null;
+    return {
+      requiresTwoFactor: true,
+      tempToken: signTempTwoFactorToken(user.id, emailMfa ? crypto.randomBytes(32).toString('hex') : undefined, { rememberMe: Boolean(rememberMe), ...(reauth ? { reauthSid: reauth.sid } : {}) }),
+      ...(emailMfa?.isBound(user) ? { emailChallenge: emailMfa.issueChallenge(user, { rememberMe: Boolean(rememberMe), ...(reauth ? { reauthSid: reauth.sid } : {}) }) } : {}),
+    };
   }
 
   // Generate tokens with session ID
   const sessionId = crypto.randomUUID();
   const tokens = generateTokens(user, sessionId);
-  const ttl = rememberMe ? AUTH_TIME.REMEMBER_ME_TTL_MS : AUTH_TIME.REFRESH_TOKEN_TTL_MS;
+  const staffSession = getPermissionsForUser(user).some((permission) => ADMIN_PERMISSIONS.includes(permission));
+  if (reauth && !staffSession) throw new AppError('FORBIDDEN', 403, 'Admin reauthentication requires an administrator account');
+  const ttl = staffSession ? 12 * 60 * 60 * 1000 : (rememberMe ? AUTH_TIME.REMEMBER_ME_TTL_MS : AUTH_TIME.REFRESH_TOKEN_TTL_MS);
 
   // New device/IP detection (before creating new token)
   let isNewDevice = false;
@@ -260,6 +263,7 @@ const login = async (email, password, ipAddress, rememberMe = false, userAgent, 
     userId: user.id,
     token: hashToken(tokens.refreshToken),
     expiresAt: new Date(Date.now() + ttl),
+    absoluteExpiresAt: new Date(Date.now() + ttl),
     createdByIp: ipAddress,
     userAgent: userAgent || null,
     deviceName: parseDeviceName(userAgent),
@@ -340,6 +344,11 @@ const refresh = async (refreshTokenStr, ipAddress, userAgent) => {
         if (!tokenRecord) {
           throw new AppError('UNAUTHORIZED', 401, 'Token not found');
         }
+        const staffSession = getPermissionsForUser(user).some((permission) => ADMIN_PERMISSIONS.includes(permission));
+        if (staffSession) {
+          const sessionPolicy = require('../../middleware/auth.middleware').enforceAdminSession;
+          sessionPolicy(enrichUserAuthorization(user), decoded, tokenRecord);
+        }
         if (tokenRecord.expiresAt < new Date()) {
           throw new AppError('UNAUTHORIZED', 401, 'Token expired');
         }
@@ -394,7 +403,8 @@ const refresh = async (refreshTokenStr, ipAddress, userAgent) => {
           const originalTtl = expiresAt - createdAt;
           rememberMe = originalTtl > 8 * 24 * 60 * 60 * 1000;
         } catch { rememberMe = false; }
-        const newExpiry = new Date(Date.now() + (rememberMe ? AUTH_TIME.REMEMBER_ME_TTL_MS : AUTH_TIME.REFRESH_TOKEN_TTL_MS));
+        const rotatedAbsoluteExpiry = tokenRecord.absoluteExpiresAt || new Date(new Date(tokenRecord.createdAt).getTime() + originalTtl);
+        const newExpiry = staffSession ? rotatedAbsoluteExpiry : new Date(Date.now() + (rememberMe ? AUTH_TIME.REMEMBER_ME_TTL_MS : AUTH_TIME.REFRESH_TOKEN_TTL_MS));
 
         await tokenRecord.update({ revokedAt: new Date(), replacedByTokenId: sessionId }, { transaction: t });
         await RefreshToken.create({
@@ -402,6 +412,9 @@ const refresh = async (refreshTokenStr, ipAddress, userAgent) => {
           userId: user.id,
           token: hashToken(tokens.refreshToken),
           expiresAt: newExpiry,
+          absoluteExpiresAt: rotatedAbsoluteExpiry,
+          createdAt: tokenRecord.createdAt,
+          lastActiveAt: tokenRecord.lastActiveAt,
           createdByIp: ipAddress,
           userAgent: userAgent || tokenRecord.userAgent,
           deviceName: userAgent ? parseDeviceName(userAgent) : tokenRecord.deviceName,
@@ -725,6 +738,10 @@ const verifyTwoFactor = async (tempToken, totpCode, ipAddress) => {
   if (!user || user.status !== 'active') {
     throw new AppError('FORBIDDEN', 403, 'User inactive');
   }
+  if (decoded.reauthSid) {
+    const lockedSession = await RefreshToken.findByPk(decoded.reauthSid, { attributes: ['id', 'userId'] });
+    if (!lockedSession || lockedSession.userId !== user.id) throw new AppError('FORBIDDEN', 403, 'Reauthentication must use the same administrator account');
+  }
   if (user.scheduledDeletionAt && new Date(user.scheduledDeletionAt) <= new Date()) {
     throw new AppError('FORBIDDEN', 403, 'Account deletion period has expired');
   }
@@ -751,7 +768,8 @@ const verifyTwoFactor = async (tempToken, totpCode, ipAddress) => {
     id: sessionId,
     userId: user.id,
     token: hashToken(tokens.refreshToken),
-    expiresAt: getRefreshTokenExpiryDate(),
+    expiresAt: new Date(Date.now() + (getPermissionsForUser(user).some((permission) => ADMIN_PERMISSIONS.includes(permission)) ? 12 * 60 * 60 * 1000 : (decoded.rememberMe ? AUTH_TIME.REMEMBER_ME_TTL_MS : AUTH_TIME.REFRESH_TOKEN_TTL_MS))),
+    absoluteExpiresAt: new Date(Date.now() + (getPermissionsForUser(user).some((permission) => ADMIN_PERMISSIONS.includes(permission)) ? 12 * 60 * 60 * 1000 : (decoded.rememberMe ? AUTH_TIME.REMEMBER_ME_TTL_MS : AUTH_TIME.REFRESH_TOKEN_TTL_MS))),
     createdByIp: ipAddress,
   });
 
@@ -771,7 +789,7 @@ const verifyTwoFactor = async (tempToken, totpCode, ipAddress) => {
     }
   } catch (e) {}
 
-  return { user: enrichUserAuthorization(userData), tokens };
+  return { user: enrichUserAuthorization(userData), tokens, rememberMe: decoded.rememberMe === true };
 };
 
 const loginByPhone = async (phone, ipAddress) => {
