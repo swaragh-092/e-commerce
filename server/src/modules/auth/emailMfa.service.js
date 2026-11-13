@@ -17,8 +17,9 @@ const hashCode = (...values) => crypto.createHmac('sha256', process.env.JWT_ACCE
   .update(JSON.stringify([PURPOSE, ...values])).digest('hex');
 const binding = user => user.emailMfaPasswordBinding;
 const isBound = user => Boolean(binding(user));
-const issueChallenge = user => jwt.sign({
+const issueChallenge = (user, context = {}) => jwt.sign({
   id: user.id, purpose: PURPOSE, binding: binding(user), jti: crypto.randomUUID(),
+  ...context,
 }, process.env.JWT_ACCESS_SECRET, { ...getIssAud(), algorithm: 'HS256', expiresIn: '5m' });
 
 const readChallenge = token => {
@@ -77,6 +78,10 @@ const sendCode = async (token, ipAddress) => {
 
 const verifyCode = async (token, code, ipAddress) => {
   const result = await withChallenge(token, async ({ user, claims, record, transaction }) => {
+    if (claims.reauthSid) {
+      const lockedSession = await RefreshToken.findByPk(claims.reauthSid, { attributes: ['id', 'userId', 'revokedAt'], transaction });
+      if (!lockedSession || lockedSession.userId !== user.id || lockedSession.revokedAt) throw new AppError('FORBIDDEN', 403, 'Reauthentication must use the same administrator account');
+    }
     if (!record || record.expiresAt <= new Date() || record.attempts >= record.maxAttempts) return null;
     const expected = Buffer.from(record.otpHash, 'hex');
     const submitted = Buffer.from(hashCode(claims.jti, code), 'hex');
@@ -93,16 +98,21 @@ const verifyCode = async (token, code, ipAddress) => {
       mfaMethod: 'email',
       mfaBinding: user.emailMfaPasswordBinding,
     });
+    const staffSession = require('../../config/permissions').isAdminUser(user);
+    const ttl = staffSession ? 12 * 60 * 60 * 1000 : (claims.rememberMe ? AUTH_TIME.REMEMBER_ME_TTL_MS : AUTH_TIME.REFRESH_TOKEN_TTL_MS);
     await RefreshToken.create({
       id, userId: user.id, token: hashToken(tokens.refreshToken), createdByIp: ipAddress,
-      expiresAt: new Date(Date.now() + AUTH_TIME.REFRESH_TOKEN_TTL_MS),
+      expiresAt: new Date(Date.now() + ttl),
+      absoluteExpiresAt: new Date(Date.now() + ttl),
+      lastActiveAt: new Date(),
     }, { transaction });
     await user.update({ lastLoginAt: new Date() }, { transaction });
     const publicUser = await User.findByPk(user.id, {
       include: [{ model: Role, as: 'roles', include: [{ model: Permission, as: 'permissions' }] }],
       transaction,
     });
-    return { user: enrichUserAuthorization(publicUser), tokens };
+    return { user: enrichUserAuthorization(publicUser), tokens, rememberMe: claims.rememberMe === true,
+      ...(claims.rememberMe ? { rememberedDeviceToken: await require('./rememberedDevice').issue(user.id) } : {}) };
   });
   if (!result) throw new AppError('VALIDATION_ERROR', 400, 'Invalid or expired email code. Check the code or use your authenticator.');
   return result;

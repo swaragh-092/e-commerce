@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { getSessionId } from './session';
 import { createRefreshCoordinator } from './refreshCoordinator';
+import { getAdminSessionErrorCode, isAdminSessionLocked } from './adminSessionLock';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
@@ -29,6 +30,12 @@ const clearSession = error => {
 
 api.interceptors.request.use(
   (config) => {
+    const authEndpoint = ['/auth/login', '/auth/2fa/', '/auth/otp/verify', '/auth/logout']
+      .some(path => config.url?.includes(path));
+    if (isAdminSessionLocked() && !authEndpoint && config.method && config.method.toLowerCase() !== 'get') {
+      window.dispatchEvent(new Event('admin-session:expired'));
+      return Promise.reject(Object.assign(new Error('Admin session is locked; write was not sent.'), { code: 'ADMIN_SESSION_LOCKED', config }));
+    }
     config._authRefreshVersion = refreshCoordinator.getVersion();
     try {
       if (config && config.headers && !config.headers['X-Session-Id'] && !config.headers['x-session-id']) {
@@ -51,6 +58,11 @@ api.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config;
+
+    if (error.response?.status === 401 && getAdminSessionErrorCode(error) === 'ADMIN_SESSION_EXPIRED') {
+      window.dispatchEvent(new CustomEvent('admin-session:expired'));
+      return Promise.reject(error);
+    }
 
     const authEndpoint = ['/auth/login', '/auth/refresh', '/auth/logout', '/auth/2fa/verify', '/auth/otp/verify']
       .some(path => originalRequest?.url?.includes(path));
