@@ -13,6 +13,8 @@ import NewsletterSection from './NewsletterSection';
 import CountdownSection from './CountdownSection';
 import RecentlyViewedSection from './RecentlyViewedSection';
 import BrandShowcaseSection from './BrandShowcaseSection';
+import TagShowcaseSection from './TagShowcaseSection';
+import GalleryGridSection from './GalleryGridSection';
 
 const LAZY_ROOT_MARGIN = '720px 0px';
 
@@ -88,6 +90,12 @@ const SectionRenderer = ({
   let content = null;
 
   switch (type) {
+    case SECTION_TYPES.TAG_SHOWCASE:
+      content = <TagShowcaseSection section={section} mode={mode} />;
+      break;
+    case SECTION_TYPES.GALLERY_GRID:
+      content = <GalleryGridSection section={section} mode={mode} />;
+      break;
     case SECTION_TYPES.HERO_CAROUSEL:
       content = <HeroSection section={section} slides={data.slides || data.heroSlides || []} mode={mode} onSelectComponent={onSelectComponent} {...editorProps} />;
       break;

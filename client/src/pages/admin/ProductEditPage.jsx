@@ -73,6 +73,7 @@ import { formatOpenEndedDateRange } from '../../utils/dates';
 import ProductTagsInput from '../../components/admin/ProductTagsInput';
 import ProductCustomTabs from '../../components/admin/ProductCustomTabs';
 import ProductComboBuilder from '../../components/admin/ProductComboBuilder';
+import ProductRelatedPicker from '../../components/admin/ProductRelatedPicker';
 import TaxConfigSection from '../../components/admin/ProductTaxConfig';
 import VariantsPanel from '../../components/admin/ProductVariantsPanel';
 import InventoryStockSummary from '../../components/admin/InventoryStockSummary';
@@ -1553,6 +1554,12 @@ const ProductEditPage = () => {
               canEdit={canUpdateProducts}
             />
           </Box>
+        )}
+
+        {!isNew && (
+          <Paper sx={{ p: 3, mt: 3 }} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}>
+            <ProductRelatedPicker productId={id} canEdit={canUpdateProducts} />
+          </Paper>
         )}
 
         {/* SEO Configuration — always last, even after Attributes and Variants */}

@@ -14,6 +14,7 @@ const settingsService = require('../settings/settings.service');
 const Joi = require('joi');
 const { recordView } = require('./product.discovery');
 const { publicApiLimiter } = require('../../middleware/rateLimiter.middleware');
+const relatedProductsSchema = Joi.object({ productIds: Joi.array().items(Joi.string().uuid()).max(12).unique().required() });
 const productViewSchema = Joi.object({ browserId: Joi.string().uuid({ version: 'uuidv4' }).required() });
 
 
@@ -53,7 +54,9 @@ router.get('/id/:id', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_RE
 router.post('/bulk-sale', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_BULK_SALE), validate(bulkSaleSchema), auditLog('Product'), productController.bulkSale);
 router.delete('/bulk', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_DELETE), validate(bulkDeleteSchema), auditLog('Product'), productController.bulkDelete);
 router.patch('/bulk', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_UPDATE), validate(bulkUpdateSchema), auditLog('Product'), productController.bulkUpdate);
-router.get('/id/:id/related', optionalAuth, productController.getRelated);
+router.get('/id/:id/related', optionalAuth, validate(idParamSchema, 'params'), productController.getRelated);
+router.get('/id/:id/related-products', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_READ), validate(idParamSchema, 'params'), productController.getRelatedSelection);
+router.put('/id/:id/related-products', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_UPDATE), validate(idParamSchema, 'params'), validate(relatedProductsSchema), auditLog('Product'), productController.setRelatedProducts);
 router.get('/id/:id/stock-history', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_READ), validate(idParamSchema, 'params'), productController.getStockHistory);
 
 router.post('/id/:id/view', publicApiLimiter, optionalAuth, validate(idParamSchema, 'params'), validate(productViewSchema), async (req, res, next) => {

@@ -132,6 +132,25 @@ exports.getRelated = async (req, res, next) => {
   }
 };
 
+exports.getRelatedSelection = async (req, res, next) => {
+  try {
+    const products = await productService.getRelatedSelection(req.params.id);
+    return success(res, products);
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.setRelatedProducts = async (req, res, next) => {
+  try {
+    const auditContext = { userId: req.user?.id, ip: req.ip, userAgent: req.get('User-Agent') };
+    const products = await productService.setRelatedProducts(req.params.id, req.body.productIds, auditContext);
+    return success(res, products, 'Related products saved');
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.getStockHistory = async (req, res, next) => {
   try {
     const { InventoryTransaction, User, Order, ProductVariant } = require('../index');

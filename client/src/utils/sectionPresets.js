@@ -15,6 +15,8 @@ export const SECTION_PRESET_GOALS = Object.freeze([
 ]);
 
 const SECTION_PRESET_META = Object.freeze({
+  [SECTION_TYPES.TAG_SHOWCASE]: { goal: 'merchandising', description: 'Link shoppers to curated product tags.' },
+  [SECTION_TYPES.GALLERY_GRID]: { goal: 'content', description: 'Display images from a published gallery.' },
   [SECTION_TYPES.HERO_CAROUSEL]: { goal: 'hero', description: 'A high-impact first screen for launches, brand stories, or campaigns.' },
   [SECTION_TYPES.PRODUCT_ROW]: { goal: 'merchandising', description: 'Feature products, new arrivals, offers, or recommended items.' },
   [SECTION_TYPES.CATEGORY_SHORTCUTS]: { goal: 'merchandising', description: 'Give shoppers fast visual routes into important categories.' },
@@ -33,6 +35,8 @@ const SECTION_PRESET_META = Object.freeze({
 });
 
 const SECTION_PRESETS = Object.freeze({
+  [SECTION_TYPES.TAG_SHOWCASE]: { title: 'Shop by Tag', tagSlugs: [], count: 8 },
+  [SECTION_TYPES.GALLERY_GRID]: { title: 'Gallery', gallerySlug: '', count: 8 },
   [SECTION_TYPES.HERO_CAROUSEL]: {
     title: 'Build your dream store',
     subtitle: 'Curated collections, sharp deals, and a smoother shopping experience.',
