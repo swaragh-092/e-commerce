@@ -149,7 +149,7 @@ describe('MfaSecurityPanel', () => {
     render(<MfaSecurityPanel />);
     await screen.findByText('MFA security policy');
     fireEvent.click(screen.getByRole('checkbox', { name: 'Require MFA for administrators' }));
-    expect(screen.getByRole('alert')).toHaveTextContent(/every affected active administrator and staff member has enrolled/i);
+    expect(screen.getByRole('alert')).toHaveTextContent(/must set one up at their next password sign-in/i);
     await choose('Staff MFA requirement', 'Require for selected staff roles');
     expect(screen.getByRole('button', { name: 'Save MFA policy' })).toBeDisabled();
     expect(within(screen.getByRole('group', { name: 'Staff roles requiring MFA' })).getAllByRole('checkbox')).toHaveLength(2);

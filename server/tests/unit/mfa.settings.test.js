@@ -81,11 +81,11 @@ describe('Verified MFA policy updates', () => {
     await expect(service.update(actor, input({ ...selected, requiredRoleIds: ['20000000-0000-4000-8000-000000000001'] })))
       .rejects.toMatchObject({ statusCode: 400 });
   });
-  it('rejects policies that lock out existing unenrolled accounts', async () => {
+  it('saves the policy before existing staff enroll', async () => {
     db.User.findAll.mockResolvedValue([{ role: 'admin', twoFactorEnabled: false,
       roles: [{ id: roleId, slug: 'support', baseRole: 'admin' }] }]);
-    await expect(service.update(actor, input(selected))).rejects.toMatchObject({ code: 'MFA_ENROLLMENT_REQUIRED' });
-    expect(db.Setting.upsert).not.toHaveBeenCalled();
+    await expect(service.update(actor, input(selected))).resolves.toMatchObject({ policy: selected });
+    expect(db.Setting.upsert).toHaveBeenCalled();
   });
   it('saves selected scopes transactionally without logging verification secrets', async () => {
     actor.twoFactorEnabled = true;

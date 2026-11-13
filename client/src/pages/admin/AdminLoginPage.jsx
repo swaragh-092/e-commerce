@@ -152,6 +152,9 @@ const AdminLoginPage = () => {
 
   return (
     <AuthPageShell type="admin" fullHeight>
+        {location.state?.mfaEnrollmentRequired && !enrollmentToken && (
+          <Alert severity="info" sx={{ mb: 2 }}>Sign in here to set up your staff authenticator.</Alert>
+        )}
         {location.state?.sessionExpired && !twoFactorStep && (
           <Alert severity="info" sx={{ mb: 3 }}>Your admin session expired. Sign in again to continue.</Alert>
         )}

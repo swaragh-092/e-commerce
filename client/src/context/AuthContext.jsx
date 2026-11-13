@@ -121,7 +121,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password, rememberMe = false) => {
     const data = await authService.login(email, password, rememberMe);
     // If 2FA is required, return early — caller handles the 2FA step
-    if (data.requiresTwoFactor) {
+    if (data.requiresTwoFactor || data.requiresMfaEnrollment) {
       return data;
     }
     const fullUser = await finalizeAuthenticatedSession();

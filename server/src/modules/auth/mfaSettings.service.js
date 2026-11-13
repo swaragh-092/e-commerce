@@ -1,12 +1,12 @@
 'use strict';
 
-const { Op, literal } = require('sequelize');
+const { Op } = require('sequelize');
 const { sequelize, Setting, User, Role, Permission, AuditLog } = require('../index');
 const AppError = require('../../utils/AppError');
 const { isSuperAdminUser, getPermissionsForUser, PERMISSIONS } = require('../../config/permissions');
 const factors = require('./twoFactor.service');
 const {
-  POLICY_GROUP, POLICY_KEY, policySchema, environmentPolicy, isEnrollmentRequired,
+  POLICY_GROUP, POLICY_KEY, policySchema, environmentPolicy,
 } = require('./mfaPolicy');
 
 const canManage = user => isSuperAdminUser(user)
@@ -60,20 +60,6 @@ const update = async (actingUser, input, request = {}) => {
     throw new AppError('VALIDATION_ERROR', 400, 'Select active staff roles only. Customer MFA cannot be required.');
   }
   await sequelize.transaction(async transaction => {
-    // Include legacy administrative accounts and customers with persisted staff
-    // grants, without loading every customer in the store.
-    const users = await User.findAll({
-      where: { status: 'active', [Op.or]: [
-        { role: { [Op.in]: ['admin', 'super_admin'] } },
-        literal('EXISTS (SELECT 1 FROM user_roles mfa_ur JOIN roles mfa_r ON mfa_r.id = mfa_ur.role_id WHERE mfa_ur.user_id = "User"."id" AND mfa_r.base_role IN (\'admin\', \'super_admin\'))'),
-      ] },
-      attributes: ['id', 'role', 'twoFactorEnabled'],
-      include: [{ model: Role, as: 'roles', through: { attributes: [] } }], transaction,
-      order: [['id', 'ASC']], lock: { level: transaction.LOCK.UPDATE, of: User },
-    });
-    const missing = users.filter(user => isEnrollmentRequired(user, policy) && !user.twoFactorEnabled);
-    if (missing.length) throw new AppError('MFA_ENROLLMENT_REQUIRED', 409,
-      `Enroll ${missing.length} affected active staff account(s) before requiring MFA. No settings were changed.`);
     const saved = await readSaved(transaction);
     await Setting.upsert({ group: POLICY_GROUP, key: POLICY_KEY, value: policy, updatedBy: actor.id }, { transaction });
     // Verification secrets never enter settings or audit logs.

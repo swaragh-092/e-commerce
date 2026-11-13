@@ -42,7 +42,7 @@ const login = async (req, res, next) => {
     const { email, password, rememberMe } = req.validated;
     const rememberedDeviceToken = req.cookies?.remembered_device;
     const result = await AuthService.login(email, password, req.ip, rememberMe, req.headers['user-agent'], rememberedDeviceToken, req.validated.reauthContext, req.cookies?.trusted_device);
-    if (result.requiresTwoFactor) res.setHeader('Cache-Control', 'no-store');
+    if (result.requiresTwoFactor || result.requiresMfaEnrollment) res.setHeader('Cache-Control', 'no-store');
     return sendAuthSuccess(res, result, 'Login successful', { rememberMe: result.rememberMe ?? rememberMe });
   } catch (err) {
     next(err);

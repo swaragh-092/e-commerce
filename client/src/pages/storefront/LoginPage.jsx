@@ -143,6 +143,10 @@ const LoginPage = () => {
 
     try {
       const result = await login(formData.email, formData.password, rememberMe);
+      if (result.requiresMfaEnrollment) {
+        navigate('/admin/login', { replace: true, state: { sessionExpired: false, mfaEnrollmentRequired: true } });
+        return;
+      }
       if (result.requiresTwoFactor) {
         setTwoFactorStep(true);
         setTempToken(result.tempToken);
