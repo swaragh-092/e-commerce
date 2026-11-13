@@ -15,7 +15,10 @@ exports.revertImage = async (req, res, next) => {
 exports.upload = async (req, res, next) => {
     try {
         const type = req.body?.type || req.query?.type || 'image';
-        const media = await mediaService.uploadMedia(req.file, type, { allowDuplicate: req.body?.allowDuplicate === 'true' });
+        const media = await mediaService.uploadMedia(req.file, type, {
+            allowDuplicate: req.body?.allowDuplicate === 'true',
+            uploadedBy: req.user.id,
+        });
         return success(res, { media }, 'File uploaded successfully', 201);
     } catch (err) {
         next(err);
@@ -24,7 +27,7 @@ exports.upload = async (req, res, next) => {
 
 exports.uploadFont = async (req, res, next) => {
     try {
-        const media = await mediaService.uploadFont(req.file);
+        const media = await mediaService.uploadFont(req.file, req.user.id);
         return success(res, { media }, 'Font uploaded successfully', 201);
     } catch (err) {
         next(err);

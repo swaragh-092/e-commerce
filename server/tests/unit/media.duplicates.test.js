@@ -34,11 +34,11 @@ describe('exact duplicate media detection', () => {
     expect(Media.findOne.mock.calls[0][0].where.contentHash).toBe(createHash('sha256').update(file.buffer).digest('hex'));
   });
   it('permits an explicit additional copy and stores the fingerprint', async () => {
-    const result = await service.uploadMedia(file, 'image', { allowDuplicate: true });
+    const result = await service.uploadMedia(file, 'image', { allowDuplicate: true, uploadedBy: 'user-1' });
     expect(result.contentHash).toBe(createHash('sha256').update(file.buffer).digest('hex'));
     expect(Media.findOne).not.toHaveBeenCalled();
     expect(stored).toHaveBeenCalledTimes(4);
-    expect(Media.create).toHaveBeenCalledWith(expect.objectContaining({ type: 'image' }), { transaction });
+    expect(Media.create).toHaveBeenCalledWith(expect.objectContaining({ type: 'image', uploadedBy: 'user-1' }), { transaction });
   });
   it('matches older files by bytes and caches the fingerprint', async () => {
     const update = vi.fn().mockResolvedValue({});

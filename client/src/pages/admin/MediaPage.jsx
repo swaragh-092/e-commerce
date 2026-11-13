@@ -63,6 +63,18 @@ const formatSize = (bytes) => {
   return `${((bytes / (1024 * 1024))).toFixed(1)} MB`;
 };
 
+const formatUploadDate = (value) => {
+  if (!value) return 'Unknown date';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Unknown date';
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+};
+
+const getUploaderName = (uploader) => {
+  const name = [uploader?.firstName, uploader?.lastName].filter(Boolean).join(' ').trim();
+  return name || uploader?.email || 'Unknown uploader';
+};
+
 const getDateGroup = (dateStr) => {
   if (!dateStr) return 'Unknown';
   const d = new Date(dateStr);
@@ -966,7 +978,7 @@ const MediaPage = () => {
         <DialogContent dividers>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, py: 1 }}>
             {editingFile && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', mb: 1 }}>
                 <Card variant="outlined" sx={{ width: 120, height: 120, borderRadius: 2 }}>
                   <CardMedia
                     component="img"
@@ -975,6 +987,14 @@ const MediaPage = () => {
                     sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
                 </Card>
+                <Box sx={{ mt: 1, textAlign: 'center' }}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    {editingFile.mimeType || 'File'} · {formatSize(editingFile.size)}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    Uploaded by {getUploaderName(editingFile.uploader)} · {formatUploadDate(editingFile.createdAt)}
+                  </Typography>
+                </Box>
               </Box>
             )}
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
