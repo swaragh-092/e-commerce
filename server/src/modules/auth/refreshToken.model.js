@@ -25,6 +25,7 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.DATE,
             allowNull: false,
         },
+        absoluteExpiresAt: { type: DataTypes.DATE, allowNull: true, field: 'absolute_expires_at' },
             createdByIp: {
                 type: DataTypes.STRING(100),
                 allowNull: true,

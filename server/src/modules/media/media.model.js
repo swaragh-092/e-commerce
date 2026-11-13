@@ -32,10 +32,6 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(255),
             allowNull: true,
         },
-        uploadedBy: {
-            type: DataTypes.UUID,
-            allowNull: true,
-        },
         alt: {
             type: DataTypes.STRING(255),
             allowNull: true,
@@ -65,7 +61,6 @@ module.exports = (sequelize, DataTypes) => {
 
     Media.associate = (models) => {
         Media.hasMany(models.ProductImage, { foreignKey: 'mediaId', as: 'productImages' });
-        Media.belongsTo(models.User, { foreignKey: 'uploadedBy', as: 'uploader', onDelete: 'SET NULL' });
     };
 
     return Media;

@@ -29,6 +29,16 @@ describe('HttpOnly auth cookies', () => {
     expect(stripAuthTokens({ user: { id: 'user-1' }, tokens })).toEqual({ user: { id: 'user-1' } });
   });
 
+  it('caps active admin cookies separately from remembered-device retention', () => {
+    const response = { cookie: vi.fn(), clearCookie: vi.fn() };
+    const expiry = new Date(Date.now() + 12 * 60 * 60 * 1000);
+    setAuthCookies(response, { accessToken: 'access', refreshToken: 'refresh' }, { rememberMe: true, adminSessionExpiresAt: expiry });
+    const options = response.cookie.mock.calls.find(([name]) => name === REFRESH_COOKIE)[2];
+    expect(options.maxAge).toBeLessThanOrEqual(12 * 60 * 60 * 1000);
+    expect(options.maxAge).toBeGreaterThan(11 * 60 * 60 * 1000);
+    expect(stripAuthTokens({ user: { id: 'admin' }, tokens: {}, rememberedDeviceToken: 'secret-device' })).toEqual({ user: { id: 'admin' } });
+  });
+
   it('clears both auth cookies and prefers legacy headers/body only when present', () => {
     const response = { cookie: vi.fn(), clearCookie: vi.fn() };
 

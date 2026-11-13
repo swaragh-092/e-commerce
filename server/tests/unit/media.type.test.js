@@ -69,19 +69,6 @@ describe('media type segregation', () => {
     expect(where.type).toBeDefined();
   });
 
-  it('includes uploader names without loading unrelated user fields', async () => {
-    const findAndCountAll = vi.spyOn(db.Media, 'findAndCountAll').mockResolvedValue({ rows: [], count: 0 });
-
-    await service.listMedia(1, 20);
-
-    expect(findAndCountAll.mock.calls[0][0].include).toEqual([{
-      model: db.User,
-      as: 'uploader',
-      attributes: ['firstName', 'lastName', 'email'],
-      required: false,
-    }]);
-  });
-
   it('searches name, filename, alt and caption with wildcards escaped', async () => {
     const findAndCountAll = vi.spyOn(db.Media, 'findAndCountAll').mockResolvedValue({ rows: [], count: 0 });
 

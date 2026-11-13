@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const sharp = require('sharp');
 const { v4: uuidv4 } = require('uuid');
-const { Media, User } = require('../index');
+const { Media } = require('../index');
 const { getPagination, getPagingData } = require('../../utils/pagination');
 const AppError = require('../../utils/AppError');
 
@@ -33,7 +33,7 @@ const mediaUsageCountSql = () => `(
     WHERE COALESCE(attribute_image->>'mediaId', attribute_image->>'media_id') = "Media"."id"::text)
 )`;
 
-exports.uploadMedia = async (file, type = 'image', { allowDuplicate = false, uploadedBy = null } = {}) => {
+exports.uploadMedia = async (file, type = 'image', { allowDuplicate = false } = {}) => {
   if (!file) throw new AppError('VALIDATION_ERROR', 400, 'No file provided');
 
   const validTypes = ['image', 'icon', 'font', 'document'];
@@ -122,7 +122,6 @@ exports.uploadMedia = async (file, type = 'image', { allowDuplicate = false, upl
       mimeType: typeInfo.mime,
       size: file.size,
       type: mediaType,
-      uploadedBy,
       contentHash,
       provider: process.env.STORAGE_PROVIDER || 'local',
     }, { transaction });
@@ -135,7 +134,7 @@ exports.uploadMedia = async (file, type = 'image', { allowDuplicate = false, upl
   return result;
 };
 
-exports.uploadFont = async (file, uploadedBy = null) => {
+exports.uploadFont = async (file) => {
   if (!file) throw new AppError('VALIDATION_ERROR', 400, 'No file provided');
 
   const allowedExtensions = ['.woff2', '.woff', '.ttf', '.otf'];
@@ -162,7 +161,6 @@ exports.uploadFont = async (file, uploadedBy = null) => {
     mimeType: typeInfo.mime,
     size: file.size,
     type: 'font',
-    uploadedBy,
     provider: process.env.STORAGE_PROVIDER || 'local',
   });
 
@@ -212,7 +210,6 @@ exports.listMedia = async (page, limit, sortBy = 'createdAt', sortDir = 'DESC', 
   const { rows, count } = await Media.findAndCountAll({
     where,
     attributes: { include: [[Media.sequelize.literal(usageCountSql), 'usageCount']] },
-    include: [{ model: User, as: 'uploader', attributes: ['firstName', 'lastName', 'email'], required: false }],
     limit: queryLimit,
     offset,
     order: [[orderCol, orderDir]],
