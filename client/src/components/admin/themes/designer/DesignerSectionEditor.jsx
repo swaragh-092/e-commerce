@@ -1,3 +1,4 @@
+import MerchandisingSourceControls from './MerchandisingSourceControls';
 import { useState, useEffect } from 'react';
 import {
   Box, Stack, Typography, IconButton, Button, Chip, Divider,
@@ -720,6 +721,10 @@ const DesignerSectionEditor = ({
                 />
               )}
             </FieldGroup>
+          )}
+
+          {['tag-showcase', 'gallery-grid'].includes(section.type) && (
+            <MerchandisingSourceControls section={section} onChange={onChange} onBlur={onBlur} />
           )}
 
           {/* ── CONTENT (skip for pure system sections) ── */}

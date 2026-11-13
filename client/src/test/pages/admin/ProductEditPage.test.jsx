@@ -26,6 +26,7 @@ vi.mock('../../../components/common/MediaPicker', () => ({ default: ({ open, onS
 }}>Choose product photo</button> : null }));
 vi.mock('../../../components/admin/UnitSelector', () => ({ default: () => null }));
 vi.mock('../../../components/admin/ProductCustomTabs', () => ({ default: () => null }));
+vi.mock('../../../components/admin/ProductRelatedPicker', () => ({ default: () => null }));
 vi.mock('../../../components/admin/ProductTaxConfig', () => ({ default: () => null }));
 vi.mock('../../../components/admin/ProductComboBuilder', () => ({ default: () => <div>Bundle builder</div> }));
 vi.mock('../../../components/admin/ProductVariantsPanel', () => ({ default: ({ onStockTotalChange, pricingEnabled }) => <div data-testid="variant-editor" data-pricing-enabled={pricingEnabled}>Variant editor<button type="button" onClick={() => onStockTotalChange(14, 2, undefined, 2)}>Update variant stock</button><button type="button" onClick={() => onStockTotalChange(14, 1, undefined, 1, [{ id: 'v', stockQty: 14, reservedQty: 2, isActive: true, _dirty: true }])}>Draft variant stock</button><button type="button" onClick={() => onStockTotalChange(0, 0, undefined, 1, [{ id: 'v', stockQty: 5, reservedQty: 2, isActive: false, _dirty: true }])}>Draft variant disabled</button></div> }));

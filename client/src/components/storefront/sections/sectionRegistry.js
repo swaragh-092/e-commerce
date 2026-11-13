@@ -5,6 +5,8 @@ export const SECTION_TYPES = Object.freeze({
   PROMO_BANNERS: 'promo-banners',
   PRODUCT_ROW: 'product-row',
   BRAND_SHOWCASE: 'brand-showcase',
+  TAG_SHOWCASE: 'tag-showcase',
+  GALLERY_GRID: 'gallery-grid',
   EDITORIAL_IMAGE_TEXT: 'editorial-image-text',
   TESTIMONIALS: 'testimonials',
   LOGO_CLOUD: 'logo-cloud',
@@ -58,6 +60,8 @@ export const SECTION_BLOCK_SCHEMAS = Object.freeze({
 });
 
 export const SECTION_DEFINITIONS = Object.freeze({
+  [SECTION_TYPES.TAG_SHOWCASE]: { label: 'Shop by Tag', family: 'merchandising', data: 'tags', live: true, preview: true, defaultVariant: null },
+  [SECTION_TYPES.GALLERY_GRID]: { label: 'Gallery Grid', family: 'story', data: 'gallery', live: true, preview: true, defaultVariant: null },
   [SECTION_TYPES.HERO_CAROUSEL]: { label: 'Hero carousel', family: 'hero', data: 'content', live: true, preview: true, defaultVariant: 'overlay' },
   [SECTION_TYPES.VALUE_PROPS]: { label: 'Value props', family: 'trust', data: 'content', live: true, preview: true, defaultVariant: 'icon-row' },
   [SECTION_TYPES.CATEGORY_SHORTCUTS]: { label: 'Category shortcuts', family: 'merchandising', data: 'categories', live: true, preview: true, defaultVariant: 'image-tiles' },

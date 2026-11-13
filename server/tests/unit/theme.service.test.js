@@ -448,3 +448,21 @@ function buildMinimalPackage(overrides = {}) {
     ...overrides,
   };
 }
+
+describe('tag and gallery theme sections', () => {
+  it('preserves content selections through package validation', () => {
+    const homepageSections = [
+      { id: 'tags', type: 'tag-showcase', enabled: true, title: 'Shop by Tag', tagSlugs: ['summer', 'garden'], count: 8 },
+      { id: 'gallery', type: 'gallery-grid', enabled: true, title: 'Our Gallery', gallerySlug: 'our-store', count: 6 },
+    ];
+    const { value, error } = packageSchema.validate(buildMinimalPackage({ layout: { homepageSections } }));
+    expect(error).toBeUndefined();
+    expect(value.layout.homepageSections).toEqual(homepageSections);
+  });
+  it('rejects unsafe gallery slugs and excessive tag selections', () => {
+    const section = { id: 'gallery', type: 'gallery-grid', enabled: true, gallerySlug: '../private' };
+    expect(packageSchema.validate(buildMinimalPackage({ layout: { homepageSections: [section] } })).error).toBeDefined();
+    const tags = { id: 'tags', type: 'tag-showcase', enabled: true, tagSlugs: Array.from({ length: 13 }, (_, i) => `tag-${i}`) };
+    expect(packageSchema.validate(buildMinimalPackage({ layout: { homepageSections: [tags] } })).error).toBeDefined();
+  });
+});

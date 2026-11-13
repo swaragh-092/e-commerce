@@ -15,6 +15,7 @@ const {
   Media,
   ProductTab,
   ProductComboItem,
+  ProductRelated,
   Sequelize,
   sequelize,
 } = require('../index');
@@ -1309,12 +1310,15 @@ exports.bulkUpdateSale = async (payload, actingUserId = null, auditContext = nul
   });
 };
 
+const MAX_RELATED_PRODUCTS = 12;
+
+// Storefront related products: admin-curated picks first (in their saved order),
+// then filled from the same categories, then the same brand.
 exports.getRelatedProducts = async (productId, limit = 6) => {
   const { features } = await SettingsService.getFeatures();
   const brandsVisible = isBrandVisible(features);
   const baseQuery = (extraWhere = {}, categoryInclude = null) => ({
     where: {
-      id: { [Op.ne]: productId },
       status: 'published',
       isEnabled: true,
       ...extraWhere,
@@ -1326,33 +1330,56 @@ exports.getRelatedProducts = async (productId, limit = 6) => {
       { model: Tag, as: 'tags', attributes: { exclude: ['description'] } },
     ],
     order: [['createdAt', 'DESC']],
-    limit,
     distinct: true,
   });
 
   const product = await Product.findByPk(productId, {
     include: [{ model: Category, as: 'categories', attributes: ['id'] }],
-    attributes: ['id'],
+    attributes: ['id', 'brandId'],
   });
   if (!product) return [];
 
-  const categoryIds = (product.categories || []).map((c) => c.id);
+  const rows = [];
+  const excludeIds = () => [productId, ...rows.map((r) => r.id)];
+  const remaining = () => limit - rows.length;
 
-  let rows;
-
-  if (categoryIds.length > 0) {
-    const result = await Product.findAndCountAll(baseQuery({}, {
-      model: Category,
-      as: 'categories',
-      where: { id: { [Op.in]: categoryIds } },
-      required: true,
-    }));
-    rows = result.rows;
+  const links = await ProductRelated.findAll({
+    where: { productId },
+    attributes: ['relatedProductId'],
+    order: [['sortOrder', 'ASC']],
+  });
+  const curatedIds = links.map((l) => l.relatedProductId).filter((rid) => rid !== productId);
+  if (curatedIds.length) {
+    const curated = await Product.findAll(baseQuery({ id: { [Op.in]: curatedIds } }));
+    const byId = new Map(curated.map((p) => [p.id, p]));
+    curatedIds.forEach((rid) => { if (byId.has(rid) && rows.length < limit) rows.push(byId.get(rid)); });
   }
 
-  if (!rows || rows.length === 0) {
-    const result = await Product.findAndCountAll(baseQuery());
-    rows = result.rows;
+  const categoryIds = (product.categories || []).map((c) => c.id);
+  if (remaining() > 0 && categoryIds.length > 0) {
+    const result = await Product.findAndCountAll({
+      ...baseQuery({ id: { [Op.notIn]: excludeIds() } }, {
+        model: Category,
+        as: 'categories',
+        where: { id: { [Op.in]: categoryIds } },
+        required: true,
+      }),
+      limit: remaining(),
+    });
+    rows.push(...result.rows);
+  }
+
+  if (remaining() > 0 && brandsVisible && product.brandId) {
+    const result = await Product.findAndCountAll({
+      ...baseQuery({ id: { [Op.notIn]: excludeIds() }, brandId: product.brandId }),
+      limit: remaining(),
+    });
+    rows.push(...result.rows);
+  }
+
+  if (rows.length === 0) {
+    const result = await Product.findAndCountAll({ ...baseQuery({ id: { [Op.ne]: productId } }), limit });
+    rows.push(...result.rows);
   }
 
   const labelPresets = await getLabelPresets();
@@ -1361,6 +1388,78 @@ exports.getRelatedProducts = async (productId, limit = 6) => {
     return brandsVisible ? serialized : stripBrandFields(serialized);
   });
 };
+
+// Admin view of the curated list; includes drafts/disabled items so staff can see why they are hidden.
+exports.getRelatedSelection = async (productId) => {
+  const product = await Product.findByPk(productId, { attributes: ['id'] });
+  if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
+  const links = await ProductRelated.findAll({
+    where: { productId },
+    order: [['sortOrder', 'ASC']],
+    include: [{
+      model: Product,
+      as: 'relatedProduct',
+      required: true,
+      attributes: ['id', 'name', 'slug', 'sku', 'status', 'isEnabled', 'type'],
+      include: [{ model: ProductImage, as: 'images', attributes: ['url', 'isPrimary', 'sortOrder'] }],
+    }],
+  });
+  return links.map(({ relatedProduct: p }) => {
+    const images = [...(p.images || [])].sort((a, b) => (Number(b.isPrimary) - Number(a.isPrimary)) || (a.sortOrder - b.sortOrder));
+    return {
+      id: p.id,
+      name: p.name,
+      slug: p.slug,
+      sku: p.sku,
+      status: p.status,
+      isEnabled: p.isEnabled,
+      type: p.type,
+      imageUrl: images[0]?.url || null,
+    };
+  });
+};
+
+exports.setRelatedProducts = async (productId, relatedProductIds, auditContext = null) => {
+  const ids = [...new Set(relatedProductIds)];
+  if (ids.includes(productId)) throw new AppError('VALIDATION_ERROR', 400, 'A product cannot be related to itself.');
+  if (ids.length > MAX_RELATED_PRODUCTS) {
+    throw new AppError('VALIDATION_ERROR', 400, `You can pick up to ${MAX_RELATED_PRODUCTS} related products.`);
+  }
+  const product = await Product.findByPk(productId, { attributes: ['id'] });
+  if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
+  if (ids.length) {
+    const found = await Product.count({ where: { id: { [Op.in]: ids } } });
+    if (found !== ids.length) throw new AppError('VALIDATION_ERROR', 400, 'One or more selected products no longer exist.');
+  }
+
+  await sequelize.transaction(async (transaction) => {
+    await ProductRelated.destroy({ where: { productId }, transaction });
+    if (ids.length) {
+      await ProductRelated.bulkCreate(
+        ids.map((relatedProductId, sortOrder) => ({ productId, relatedProductId, sortOrder })),
+        { transaction }
+      );
+    }
+  });
+
+  try {
+    await AuditService.log({
+      userId: auditContext?.userId || null,
+      action: ACTIONS.UPDATE,
+      entity: ENTITIES.PRODUCT,
+      entityId: productId,
+      changes: { relatedProductIds: ids },
+      ipAddress: auditContext?.ip,
+      userAgent: auditContext?.userAgent,
+    });
+  } catch (e) {
+    logger.error('Failed to log audit for related products update:', e);
+  }
+
+  return exports.getRelatedSelection(productId);
+};
+
+exports.MAX_RELATED_PRODUCTS = MAX_RELATED_PRODUCTS;
 
 exports.buildSqlSaleCondition = buildSqlSaleCondition;
 exports.getSqlEffectivePriceExpr = getSqlEffectivePriceExpr;

@@ -28,7 +28,7 @@ const BUTTON_STYLES = ['solid', 'soft', 'outline', 'pill'];
 const CARD_STYLES = ['elevated', 'outlined', 'flat'];
 const BG_STYLES = ['softGradient', 'solid'];
 const FONT_WEIGHTS = ['300', '400', '500', '600', '700', '800', '900'];
-const SECTION_TYPES = ['hero-carousel', 'value-props', 'category-shortcuts', 'promo-banners', 'product-row', 'brand-showcase', 'editorial-image-text', 'testimonials', 'logo-cloud', 'newsletter-signup', 'countdown-sale', 'featured-collection-grid', 'faq', 'trust-badges', 'recently-viewed'];
+const SECTION_TYPES = ['tag-showcase', 'gallery-grid', 'hero-carousel', 'value-props', 'category-shortcuts', 'promo-banners', 'product-row', 'brand-showcase', 'editorial-image-text', 'testimonials', 'logo-cloud', 'newsletter-signup', 'countdown-sale', 'featured-collection-grid', 'faq', 'trust-badges', 'recently-viewed'];
 const PRODUCT_SOURCES = ['featured', 'sale', 'bestSellers', 'mostViewed', 'newest', 'recommended'];
 const DATA_SOURCE_TYPES = ['apiBuilder'];
 const API_BUILDER_RESOURCES = ['products', 'categories', 'brands', 'productImages', 'tags', 'media', 'pages'];
@@ -177,6 +177,8 @@ const announcementStyleSchema = Joi.object({
 }).unknown(false);
 
 const homepageSectionSchema = Joi.object({
+  tagSlugs: Joi.array().items(Joi.string().pattern(/^[a-z0-9-]+$/).max(140)).unique().max(12),
+  gallerySlug: Joi.string().pattern(/^[a-z0-9-]+$/).max(140).allow(''),
   id: Joi.string().max(50).required(),
   type: Joi.string().valid(...SECTION_TYPES).required(),
   enabled: Joi.boolean().required(),
