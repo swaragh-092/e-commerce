@@ -16,7 +16,7 @@ export default function MerchandisingSourceControls({ section = {}, onChange, on
       }).catch(() => {});
     return () => { active = false; };
   }, []);
-  const set = (key, value) => onChange?.({ ...section, [key]: value });
+  const set = (key, value) => onChange?.(key, value);
   return <Stack spacing={2} sx={{ my: 2 }}>
     {section.type === 'tag-showcase' ? <>
       <FormControl fullWidth size="small">
