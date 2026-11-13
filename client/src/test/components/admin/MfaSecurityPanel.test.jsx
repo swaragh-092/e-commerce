@@ -10,6 +10,9 @@ vi.mock('../../../services/authService', () => ({
   },
 }));
 
+vi.mock('../../../components/storefront/TwoFactorSetup', () => ({
+  default: ({ onUpdate }) => <button onClick={onUpdate}>Finish setup</button>,
+}));
 const payload = (overrides = {}) => ({
   policy: { requireAdministrators: false, staffMode: 'optional', requiredRoleIds: [], ...overrides.policy },
   roles: [{ id: 'role-support', name: 'Support', slug: 'support' }, { id: 'role-ops', name: 'Operations', slug: 'operations' }],
@@ -24,7 +27,9 @@ const choose = async (label, option) => {
   fireEvent.click(await screen.findByRole('option', { name: option }));
 };
 
+const openSave = () => fireEvent.click(screen.getByRole('button', { name: 'Save MFA policy' }));
 const enterVerification = () => {
+  openSave();
   fireEvent.change(screen.getByLabelText(/Current password/), { target: { value: 'correct horse' } });
   fireEvent.change(screen.getByRole('textbox', { name: 'Authenticator code' }), { target: { value: '123456' } });
 };
@@ -43,15 +48,14 @@ describe('MfaSecurityPanel', () => {
     await choose('Staff MFA requirement', 'Require for selected staff roles');
     fireEvent.click(screen.getByRole('checkbox', { name: 'Support (support)' }));
     enterVerification();
-    fireEvent.click(screen.getByRole('button', { name: 'Save MFA policy' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm and save' }));
 
     await waitFor(() => expect(authService.updateMfaPolicy).toHaveBeenCalledWith({
       policy: { requireAdministrators: true, staffMode: 'selected', requiredRoleIds: ['role-support'] },
       verification: { currentPassword: 'correct horse', code: '123456' },
     }));
     expect(await screen.findByRole('status')).toHaveTextContent('MFA policy saved.');
-    expect(screen.getByLabelText(/Current password/)).toHaveValue('');
-    expect(screen.getByRole('textbox', { name: 'Authenticator code' })).toHaveValue('');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('removes deselected role IDs and omits TOTP when the managing account is not enrolled', async () => {
@@ -62,8 +66,9 @@ describe('MfaSecurityPanel', () => {
     render(<MfaSecurityPanel />);
     await screen.findByText('MFA security policy');
     fireEvent.click(screen.getByRole('checkbox', { name: 'Operations (operations)' }));
+    openSave();
     fireEvent.change(screen.getByLabelText(/Current password/), { target: { value: 'correct horse' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save MFA policy' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm and save' }));
 
     await waitFor(() => expect(authService.updateMfaPolicy).toHaveBeenCalledWith({
       policy: { requireAdministrators: true, staffMode: 'selected', requiredRoleIds: ['role-support'] },
@@ -77,8 +82,7 @@ describe('MfaSecurityPanel', () => {
     render(<MfaSecurityPanel />);
     await screen.findByText('MFA security policy');
     expect(screen.getByRole('checkbox', { name: 'Allow email codes after password sign-in' })).toBeDisabled();
-    expect(screen.getByRole('link', { name: 'Set up authenticator' })).toHaveAttribute('href', '/admin/profile#authenticator');
-    expect(screen.getByText(/Email codes are unavailable until/)).toBeInTheDocument();
+    expect(screen.getByText('Set up your authenticator to enable email codes.')).toBeInTheDocument();
     expect(authService.updateMfaPolicy).not.toHaveBeenCalled();
   });
 
@@ -86,7 +90,6 @@ describe('MfaSecurityPanel', () => {
     authService.getMfaPolicy.mockResolvedValue(payload({ mfaEnabled: false, policy: { allowEmailCodes: true, staffMode: 'optional', requiredRoleIds: [] } }));
     render(<MfaSecurityPanel />);
     await screen.findByText('MFA security policy');
-    fireEvent.change(screen.getByLabelText(/Current password/), { target: { value: 'test input' } });
     expect(screen.getByRole('button', { name: 'Save MFA policy' })).toBeDisabled();
     const emailOption = screen.getByRole('checkbox', { name: 'Allow email codes after password sign-in' });
     expect(emailOption).not.toBeDisabled();
@@ -99,7 +102,8 @@ describe('MfaSecurityPanel', () => {
     render(<MfaSecurityPanel />);
     await screen.findByText('MFA security policy');
     fireEvent.click(screen.getByRole('checkbox', { name: 'Require MFA for administrators' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh setup status' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Set up authenticator' })[1]);
+    fireEvent.click(screen.getByRole('button', { name: 'Finish setup' }));
     await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Allow email codes after password sign-in' })).toBeEnabled());
     expect(screen.getByRole('checkbox', { name: 'Require MFA for administrators' })).toBeChecked();
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
@@ -123,8 +127,9 @@ describe('MfaSecurityPanel', () => {
     authService.updateMfaPolicy.mockRejectedValueOnce({ response: { data: { error: { message: 'Password verification failed.' } } } });
     render(<MfaSecurityPanel />);
     await screen.findByText('MFA security policy');
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Require MFA for administrators' }));
     enterVerification();
-    fireEvent.click(screen.getByRole('button', { name: 'Save MFA policy' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm and save' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Password verification failed.');
     expect(screen.getByLabelText(/Current password/)).toHaveValue('');

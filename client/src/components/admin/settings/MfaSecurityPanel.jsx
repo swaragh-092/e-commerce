@@ -7,6 +7,9 @@ import {
   Chip,
   Paper,
   CircularProgress,
+  Dialog,
+  DialogContent,
+  DialogTitle,
   FormControl,
   FormControlLabel,
   FormGroup,
@@ -19,6 +22,7 @@ import {
   Typography,
 } from '@mui/material';
 import authService from '../../../services/authService';
+import TwoFactorSetup from '../../storefront/TwoFactorSetup';
 
 const emptyPolicy = () => ({
   requireAdministrators: false,
@@ -39,6 +43,8 @@ export default function MfaSecurityPanel() {
   const [saving, setSaving] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [code, setCode] = useState('');
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
 
   const load = useCallback(async (active = () => true) => {
     setLoading(true);
@@ -75,6 +81,7 @@ export default function MfaSecurityPanel() {
     try {
       const result = await authService.getMfaPolicy();
       setConfig(current => ({ ...current, ...result }));
+      if (result.mfaEnabled) setSetupOpen(false);
       setSaveError('');
     } catch (error) {
       setSaveError(errorMessage(error, 'Unable to refresh authenticator status.'));
@@ -124,6 +131,7 @@ export default function MfaSecurityPanel() {
         setConfig(current => ({ ...current, policy: payload.policy }));
       }
       setSaveSuccess(true);
+      setConfirmOpen(false);
     } catch (error) {
       setSaveError(errorMessage(error, 'Unable to save MFA policy.'));
     } finally {
@@ -155,13 +163,16 @@ export default function MfaSecurityPanel() {
     <Box component="section" aria-labelledby="mfa-policy-title" sx={{ maxWidth: 1040 }}>
       <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2} sx={{ mb: 1 }}>
         <Typography id="mfa-policy-title" variant="h6" fontWeight={700}>MFA security policy</Typography>
-        <Chip size="small" label={changed ? 'Unsaved changes' : 'Current policy'} color={changed ? 'warning' : 'default'} variant="outlined" />
+        <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+          <Chip size="small" label={changed ? 'Unsaved changes' : 'Current policy'} color={changed ? 'warning' : 'default'} variant="outlined" />
+          {canManage && <Button variant="contained" disabled={!changed || !hasSelectedRoles || emailSetupRequired} onClick={() => { setSaveError(''); setConfirmOpen(true); }}>Save MFA policy</Button>}
+        </Stack>
       </Stack>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
         Set up your own authenticator, then choose who needs a second sign-in step and which methods they can use. Customer MFA is managed separately.
       </Typography>
       {!canManage && <Alert severity="info" sx={{ mb: 2 }}>You can view this policy, but only a super administrator can change it.</Alert>}
-      {saveError && <Alert severity="error" sx={{ mb: 2 }}>{saveError}</Alert>}
+      {saveError && !confirmOpen && <Alert severity="error" sx={{ mb: 2 }}>{saveError}</Alert>}
       {saveSuccess && <Alert severity="success" role="status" sx={{ mb: 2 }}>MFA policy saved.</Alert>}
       <Stack spacing={2.5}>
         <Paper variant="outlined" sx={cardSx}>
@@ -175,8 +186,7 @@ export default function MfaSecurityPanel() {
             <Chip size="small" label={config.mfaEnabled ? 'Set up' : 'Not set up'} color={config.mfaEnabled ? 'success' : 'warning'} variant="outlined" />
           </Stack>
           {!config.mfaEnabled && <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: 'wrap', gap: 1 }}>
-            <Button component="a" href="/admin/profile#authenticator" target="_blank" rel="noopener noreferrer" variant="outlined" size="small">Set up authenticator</Button>
-            <Button onClick={refreshEnrollment} disabled={saving} size="small">Refresh setup status</Button>
+            <Button onClick={() => { setSetupOpen(true); document.getElementById('mfa-inline-setup')?.scrollIntoView({ block: 'center' }); }} variant="outlined" size="small">Set up authenticator</Button>
           </Stack>}
         </Paper>
 
@@ -222,12 +232,24 @@ export default function MfaSecurityPanel() {
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
             An alternative for verified staff email addresses after an initial password-and-authenticator sign-in. A password or email change requires the authenticator again.
           </Typography>
-          {!config.mfaEnabled && <Alert severity="info" sx={{ mt: 2 }}>
-            {emailSetupRequired ? 'Email codes are selected, but your authenticator is not set up. Complete setup before saving, or turn email codes off.' : 'Email codes are unavailable until you set up your authenticator. Select Set up authenticator, then refresh this status.'}
+          {!config.mfaEnabled && <Alert severity="info" sx={{ mt: 2 }} action={<Button onClick={() => setSetupOpen(true)}>Set up authenticator</Button>}>
+            {emailSetupRequired ? 'Finish authenticator setup or turn off email codes before saving.' : 'Set up your authenticator to enable email codes.'}
           </Alert>}
+          <Box id="mfa-inline-setup">
+            {setupOpen && <TwoFactorSetup user={{ twoFactorEnabled: false }} onUpdate={refreshEnrollment} />}
+          </Box>
         </Paper>
 
-        {canManage && <Paper component="form" variant="outlined" onSubmit={handleSave} sx={cardSx}>
+        {canManage && <Dialog open={confirmOpen} onClose={() => {
+          if (saving) return;
+          setConfirmOpen(false);
+          setCurrentPassword('');
+          setCode('');
+        }} aria-labelledby="confirm-mfa-policy">
+          <DialogTitle id="confirm-mfa-policy">Confirm MFA policy changes</DialogTitle>
+          <DialogContent>
+          <Box component="form" onSubmit={handleSave}>
+          {saveError && <Alert severity="error" sx={{ mb: 2 }}>{saveError}</Alert>}
           <Typography variant="subtitle1" fontWeight={700}>Review and save</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: .5, mb: 2 }}>
             Changes apply only after saving. Confirm your identity with your current password{config.mfaEnabled ? ' and authenticator code' : ''}.
@@ -237,10 +259,12 @@ export default function MfaSecurityPanel() {
             {config.mfaEnabled && <TextField label="Authenticator code" inputProps={{ inputMode: 'numeric', maxLength: 6 }} autoComplete="one-time-code" required value={code} onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))} disabled={saving} helperText="Enter a current authenticator code." />}
           </Box>
           <Button type="submit" variant="contained" sx={{ mt: 2 }} disabled={saving || !currentPassword || (config.mfaEnabled && code.length !== 6) || !hasSelectedRoles || emailSetupRequired}>
-            {saving ? 'Saving MFA policy…' : 'Save MFA policy'}
+            {saving ? 'Saving MFA policy…' : 'Confirm and save'}
           </Button>
           {emailSetupRequired && <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>Complete authenticator setup or turn off email codes to save this policy.</Typography>}
-        </Paper>}
+          </Box>
+          </DialogContent>
+        </Dialog>}
       </Stack>
     </Box>
   );
