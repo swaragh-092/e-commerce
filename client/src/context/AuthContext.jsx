@@ -5,6 +5,7 @@ import { userService } from '../services/userService';
 import cartService from '../services/cartService';
 import { wishlistService } from '../services/wishlistService';
 import { getPermissionsForUser, getRolesForUser } from '../utils/permissions';
+import { resetAdminSessionLock } from '../services/adminSessionLock';
 
 export const AuthContext = createContext(null);
 
@@ -58,6 +59,7 @@ export const AuthProvider = ({ children }) => {
     initAuth();
 
     const handleUnauthorized = () => {
+      resetAdminSessionLock();
       localStorage.removeItem('userProfile');
       setUser(null);
       setIsAuthenticated(false);
@@ -158,6 +160,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     await authService.logout();
+    resetAdminSessionLock();
     setUser(null);
     setIsAuthenticated(false);
     localStorage.removeItem('userProfile');

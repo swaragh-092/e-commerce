@@ -31,6 +31,7 @@ import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { Outlet, Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
+import AdminSessionGuard from '../components/admin/AdminSessionGuard';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import CategoryIcon from '@mui/icons-material/Category';
@@ -865,6 +866,7 @@ const AdminLayout = () => {
         <Toolbar sx={{ flexShrink: 0 }} />
         <UnitCatalogProvider><Outlet /></UnitCatalogProvider>
       </Box>
+      <AdminSessionGuard />
     </Box>
   );
 };
