@@ -70,4 +70,68 @@ describe('API refresh retry behavior', () => {
     await expect(api.post('/auth/2fa/verify', {})).rejects.toThrow('Unauthorized');
     expect(refresh).not.toHaveBeenCalled();
   });
+
+  it('locks admin sessions without clearing auth or replaying the expired request', async () => {
+    const refresh = vi.spyOn(axios, 'post').mockResolvedValue({ status: 200 });
+    localStorage.setItem('userProfile', JSON.stringify({ id: 'admin-1' }));
+    const expired = Object.assign(new Error('Admin session expired'), {
+      response: { status: 401, data: { error: { code: 'ADMIN_SESSION_EXPIRED' } } },
+    });
+    api.defaults.adapter = vi.fn(async config => { expired.config = config; throw expired; });
+    const onExpired = vi.fn();
+    window.addEventListener('admin-session:expired', onExpired);
+    await expect(api.put('/admin/products/1', { name: 'unsaved' })).rejects.toBe(expired);
+    window.removeEventListener('admin-session:expired', onExpired);
+    expect(onExpired).toHaveBeenCalledTimes(1);
+    expect(refresh).not.toHaveBeenCalled();
+    expect(localStorage.getItem('userProfile')).toBe(JSON.stringify({ id: 'admin-1' }));
+  });
+
+  it('blocks writes locally once the authoritative admin deadline passes', async () => {
+    const { activateAdminSessionGuard, setAdminSessionDeadline, resetAdminSessionLock } = await import('../../services/adminSessionLock');
+    const deactivate = activateAdminSessionGuard();
+    const adapter = vi.fn();
+    api.defaults.adapter = adapter;
+    setAdminSessionDeadline(Date.now() - 1);
+    await expect(api.put('/products/1', { name: 'unsaved' })).rejects.toMatchObject({ code: 'ADMIN_SESSION_LOCKED' });
+    expect(adapter).not.toHaveBeenCalled();
+    deactivate();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    resetAdminSessionLock();
+  });
+
+  it('releases the admin write gate after logout before customer cart requests', async () => {
+    const { activateAdminSessionGuard, setAdminSessionDeadline, resetAdminSessionLock } = await import('../../services/adminSessionLock');
+    const deactivate = activateAdminSessionGuard();
+    setAdminSessionDeadline(Date.now() - 1);
+    const adapter = vi.fn(async config => ({ data: { ok: true }, status: 200, headers: {}, config }));
+    api.defaults.adapter = adapter;
+    await expect(api.put('/admin/products/1', {})).rejects.toMatchObject({ code: 'ADMIN_SESSION_LOCKED' });
+    deactivate();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await expect(api.post('/cart/items', { productId: 'p1' })).resolves.toMatchObject({ data: { ok: true } });
+    expect(adapter).toHaveBeenCalledTimes(1);
+    resetAdminSessionLock();
+  });
+
+  it('locks without clearing auth when idle expiry is returned from the refresh request', async () => {
+    const { unlockAdminSession } = await import('../../services/adminSessionLock');
+    unlockAdminSession();
+    localStorage.setItem('userProfile', JSON.stringify({ id: 'admin-1' }));
+    const expiredRefresh = Object.assign(new Error('Admin session expired'), {
+      response: { status: 401, data: { error: { code: 'ADMIN_SESSION_EXPIRED' } } },
+    });
+    vi.spyOn(axios, 'post').mockRejectedValue(expiredRefresh);
+    const unauthorized = vi.fn();
+    const locked = vi.fn();
+    window.addEventListener('auth:unauthorized', unauthorized);
+    window.addEventListener('admin-session:expired', locked);
+    api.defaults.adapter = vi.fn(async config => { throw denied(config); });
+    await expect(api.get('/users/me')).rejects.toBe(expiredRefresh);
+    expect(unauthorized).not.toHaveBeenCalled();
+    expect(locked).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem('userProfile')).toBe(JSON.stringify({ id: 'admin-1' }));
+    window.removeEventListener('auth:unauthorized', unauthorized);
+    window.removeEventListener('admin-session:expired', locked);
+  });
 });
