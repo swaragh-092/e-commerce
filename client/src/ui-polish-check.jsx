@@ -1,0 +1,12 @@
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {ThemeProvider,createTheme,CssBaseline,Box,Typography} from '@mui/material';
+import authService from './services/authService';
+import MfaSecurityPanel from './components/admin/settings/MfaSecurityPanel';
+import AddSectionDialog from './components/admin/sections/AddSectionDialog';
+const policy={requireAdministrators:false,allowEmailCodes:false,staffMode:'selected',requiredRoleIds:['support']};
+const config={policy,canManage:true,mfaEnabled:false,source:'settings',roles:[{id:'support',name:'Support',slug:'support'},{id:'operations',name:'Operations',slug:'operations'}]};
+authService.getMfaPolicy=async()=>config;
+authService.updateMfaPolicy=async({policy})=>({...config,policy});
+const dialog=new URLSearchParams(location.search).has('dialog');
+createRoot(document.getElementById('root')).render(<ThemeProvider theme={createTheme({palette:{primary:{main:'#5146e5'}}})}><CssBaseline/><Box sx={{p:{xs:2,md:4},bgcolor:'#f8fafc',minHeight:'100vh'}}><Typography variant="h5" sx={{mb:3}}>Admin settings · synthetic verification</Typography>{dialog?<AddSectionDialog open onClose={()=>{}} onAdd={section=>{document.getElementById('result').textContent=section.title;}} sectionPresets={{'hero-carousel':{type:'hero-carousel',variant:'split'}}}/>:<MfaSecurityPanel/>}<div id="result"/></Box></ThemeProvider>);

@@ -72,6 +72,39 @@ describe('MfaSecurityPanel', () => {
     expect(screen.queryByLabelText('Authenticator code')).not.toBeInTheDocument();
   });
 
+  it('prevents enabling email codes before authenticator setup and links to setup', async () => {
+    authService.getMfaPolicy.mockResolvedValue(payload({ mfaEnabled: false }));
+    render(<MfaSecurityPanel />);
+    await screen.findByText('MFA security policy');
+    expect(screen.getByRole('checkbox', { name: 'Allow email codes after password sign-in' })).toBeDisabled();
+    expect(screen.getByRole('link', { name: 'Set up authenticator' })).toHaveAttribute('href', '/admin/profile#authenticator');
+    expect(screen.getByText(/Email codes are unavailable until/)).toBeInTheDocument();
+    expect(authService.updateMfaPolicy).not.toHaveBeenCalled();
+  });
+
+  it('lets an unenrolled manager turn off an existing email-code policy instead of submitting an invalid save', async () => {
+    authService.getMfaPolicy.mockResolvedValue(payload({ mfaEnabled: false, policy: { allowEmailCodes: true, staffMode: 'optional', requiredRoleIds: [] } }));
+    render(<MfaSecurityPanel />);
+    await screen.findByText('MFA security policy');
+    fireEvent.change(screen.getByLabelText(/Current password/), { target: { value: 'test input' } });
+    expect(screen.getByRole('button', { name: 'Save MFA policy' })).toBeDisabled();
+    const emailOption = screen.getByRole('checkbox', { name: 'Allow email codes after password sign-in' });
+    expect(emailOption).not.toBeDisabled();
+    fireEvent.click(emailOption);
+    expect(screen.getByRole('button', { name: 'Save MFA policy' })).toBeEnabled();
+  });
+
+  it('refreshes setup readiness without discarding the policy draft', async () => {
+    authService.getMfaPolicy.mockResolvedValueOnce(payload({ mfaEnabled: false })).mockResolvedValueOnce(payload({ mfaEnabled: true }));
+    render(<MfaSecurityPanel />);
+    await screen.findByText('MFA security policy');
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Require MFA for administrators' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh setup status' }));
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Allow email codes after password sign-in' })).toBeEnabled());
+    expect(screen.getByRole('checkbox', { name: 'Require MFA for administrators' })).toBeChecked();
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+  });
+
   it('shows a read-only policy to users who cannot manage it', async () => {
     authService.getMfaPolicy.mockResolvedValue(payload({
       canManage: false,

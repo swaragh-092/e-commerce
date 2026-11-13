@@ -159,7 +159,7 @@ const AdminProfilePage = () => {
           </Stack>
         </Paper>
       </Box>
-      <TwoFactorSetup user={user} onUpdate={refreshUser} />
+      <Box id="authenticator" sx={{ scrollMarginTop: 96 }}><TwoFactorSetup user={user} onUpdate={refreshUser} /></Box>
       <Accordion disableGutters elevation={0} sx={{ mt: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
         <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="profile-permissions" id="profile-permissions-heading"><Typography fontWeight={600}>View permissions ({new Set(permissions).size})</Typography></AccordionSummary>
         <AccordionDetails id="profile-permissions">
