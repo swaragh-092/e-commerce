@@ -1,6 +1,6 @@
 import { useState, useId } from 'react';
 import {
-  Box, Card, Dialog, DialogTitle, DialogContent, DialogActions, Button,
+  Box, Card, CardActionArea, Dialog, DialogTitle, DialogContent, DialogActions, Button,
   FormControl, InputLabel, Select, MenuItem, Stack, TextField, Typography, Chip,
 } from '@mui/material';
 import { SECTION_DEFINITIONS, SECTION_VARIANTS } from '../../storefront/sections/sectionRegistry';
@@ -95,32 +95,47 @@ const AddSectionDialog = ({ open, onClose, onAdd, existingIds = [], sectionPrese
             ))}
           </Stack>
 
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' }, gap: 1.5, maxHeight: 360, overflowY: 'auto', pr: 0.5 }}>
+          <Box sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
+            gridAutoRows: 'min-content',
+            alignContent: 'start',
+            gap: 1.5,
+            maxHeight: { xs: 240, sm: 360 },
+            minHeight: 0,
+            overflowY: 'auto',
+            overscrollBehaviorY: 'contain',
+            pr: 0.5,
+            flexShrink: 0,
+          }}>
             {presetCards.map((preset) => (
               <Card
                 key={preset.key || preset.type}
                 variant="outlined"
-                onClick={() => { setSelection(preset.key || preset.type); setVariant(preset.variant || ''); setTitle(''); }}
                 sx={{
-                  p: 1.75,
-                  cursor: 'pointer',
                   borderColor: selection === (preset.key || preset.type) ? 'primary.main' : 'divider',
                   borderWidth: selection === (preset.key || preset.type) ? 2 : 1,
                   bgcolor: selection === (preset.key || preset.type) ? 'action.selected' : 'background.paper',
                   '&:hover': { borderColor: 'primary.main', boxShadow: '0 8px 24px rgba(15,23,42,0.08)' },
                 }}
               >
-                <Stack spacing={1}>
-                  <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
-                    <Typography variant="subtitle2" fontWeight={800}>{preset.label}</Typography>
-                    {preset.installed && <Chip label="Theme" size="small" color="primary" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />}
+                <CardActionArea
+                  aria-pressed={selection === (preset.key || preset.type)}
+                  onClick={() => { setSelection(preset.key || preset.type); setVariant(preset.variant || ''); setTitle(''); }}
+                  sx={{ height: '100%', p: 1.75, textAlign: 'left', alignItems: 'stretch' }}
+                >
+                  <Stack spacing={1}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+                      <Typography variant="subtitle2" fontWeight={800}>{preset.label}</Typography>
+                      {preset.installed && <Chip label="Theme" size="small" color="primary" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />}
+                    </Stack>
+                    <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.5 }}>{preset.description}</Typography>
+                    <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                      <Chip label={preset.goal} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />
+                      {preset.variant && <Chip label={preset.variant} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />}
+                    </Stack>
                   </Stack>
-                  <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.5 }}>{preset.description}</Typography>
-                  <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
-                    <Chip label={preset.goal} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />
-                    {preset.variant && <Chip label={preset.variant} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />}
-                  </Stack>
-                </Stack>
+                </CardActionArea>
               </Card>
             ))}
           </Box>
