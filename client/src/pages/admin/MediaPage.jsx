@@ -42,6 +42,7 @@ import StorageIcon from '@mui/icons-material/Storage';
 import LayersClearIcon from '@mui/icons-material/LayersClear';
 import CategoryIcon from '@mui/icons-material/Category';
 import SearchIcon from '@mui/icons-material/Search';
+import ClearIcon from '@mui/icons-material/Clear';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { mediaService } from '../../services/mediaService';
 import { useNotification } from '../../context/NotificationContext';
@@ -118,7 +119,15 @@ const MediaCard = ({ file, canDeleteMedia, canUpdateMedia, canEditImage, onTrans
           component="img"
           image={url}
           alt={file.alt || file.originalName || file.filename || 'media'}
-          sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+          {...(canUpdateMedia && !busy ? {
+            role: 'button',
+            tabIndex: 0,
+            'aria-label': `Open editor for ${file.originalName || file.filename || 'image'}`,
+            title: 'Open image editor',
+            onClick: () => onEdit(file),
+            onKeyDown: (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onEdit(file); } },
+          } : {})}
+          sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', cursor: canUpdateMedia && !busy ? 'pointer' : 'default' }}
         />
         {(canDeleteMedia || canEditImage) && <Checkbox checked={selected} disabled={busy} onChange={() => onSelect(file)}
           inputProps={{ 'aria-label': `Select ${file.originalName || file.filename || 'image'}` }}
@@ -184,6 +193,8 @@ const MediaPage = () => {
   const [sortDir, setSortDir] = useState('desc'); // 'asc' | 'desc'
   const [groupBy, setGroupBy] = useState('none'); // 'none' | 'date' | 'size' | 'type'
   const [usageFilter, setUsageFilter] = useState('all');
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
   const [selectedFiles, setSelectedFiles] = useState([]);
   const selectedIds = useMemo(() => new Set(selectedFiles.map((file) => file.id)), [selectedFiles]);
   const [batchDeleting, setBatchDeleting] = useState(false);
@@ -247,6 +258,7 @@ const MediaPage = () => {
         sortBy,
         sortDir,
         usage: usageFilter,
+        ...(search ? { search } : {}),
       });
       
       if (generation !== mediaGenerationRef.current) return;
@@ -270,12 +282,17 @@ const MediaPage = () => {
     }
   };
 
-  useEffect(() => { setSelectedFiles([]); setDeleteFailures([]); }, [sortBy, sortDir, usageFilter, activeLibrary]);
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchInput.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => { setSelectedFiles([]); setDeleteFailures([]); }, [sortBy, sortDir, usageFilter, search, activeLibrary]);
 
   useEffect(() => {
     fetchMedia(1);
     return () => { mediaGenerationRef.current += 1; };
-  }, [sortBy, sortDir, usageFilter]);
+  }, [sortBy, sortDir, usageFilter, search]);
 
   // Infinite scroll observer
   useEffect(() => {
@@ -562,6 +579,24 @@ const MediaPage = () => {
           borderColor: 'divider',
         }}
       >
+        <TextField
+          size="small"
+          placeholder="Search by name, alt text or caption"
+          value={searchInput}
+          onChange={(event) => setSearchInput(event.target.value)}
+          disabled={batchDeleting}
+          inputProps={{ 'aria-label': 'Search media', maxLength: 100 }}
+          sx={{ minWidth: { xs: '100%', sm: 280 } }}
+          InputProps={{
+            startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment>,
+            endAdornment: searchInput ? (
+              <InputAdornment position="end">
+                <IconButton size="small" aria-label="Clear search" onClick={() => setSearchInput('')}><ClearIcon fontSize="small" /></IconButton>
+              </InputAdornment>
+            ) : null,
+          }}
+        />
+
         {/* Sort by */}
         <FormControl disabled={batchDeleting} size="small" sx={{ minWidth: 130 }}>
           <InputLabel id="media-page-sort-label">Sort by</InputLabel>
@@ -669,7 +704,9 @@ const MediaPage = () => {
         </Box>
       ) : !loading && files.length === 0 && !error ? (
         <Alert severity="info">
-          {usageFilter === 'unused'
+          {search
+            ? `No media files match "${search}".`
+            : usageFilter === 'unused'
             ? 'No unused media files found.'
             : usageFilter === 'used'
               ? 'No media files are currently in use.'
@@ -954,30 +991,53 @@ const MediaPage = () => {
         />
       </Suspense>}
 
-      {/* Edit Metadata Dialog */}
+      {/* Edit Image Dialog: large preview, image tools and metadata */}
       <Dialog
         open={Boolean(editingFile)}
         onClose={() => !savingEdit && setEditingFile(null)}
-        maxWidth="xs"
+        maxWidth="md"
         fullWidth
         PaperProps={{ sx: { borderRadius: 3 } }}
       >
-        <DialogTitle sx={{ fontWeight: 700 }}>Edit Media Metadata</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700 }}>Edit Image</DialogTitle>
         <DialogContent dividers>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, py: 1 }}>
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3, py: 1 }}>
             {editingFile && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}>
-                <Card variant="outlined" sx={{ width: 120, height: 120, borderRadius: 2 }}>
-                  <CardMedia
+              <Box sx={{ flex: '1 1 55%', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                <Box sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider', bgcolor: 'grey.100', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 240, maxHeight: 440, overflow: 'hidden' }}>
+                  <Box
                     component="img"
-                    image={getMediaUrl(editingFile.url)}
+                    src={getMediaUrl(editingFile.url, editingFile.updatedAt)}
                     alt={editingFile.alt || editingFile.originalName || 'Preview'}
-                    sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    sx={{ maxWidth: '100%', maxHeight: 440, objectFit: 'contain', display: 'block' }}
                   />
-                </Card>
+                </Box>
+                <Typography variant="caption" color="text.secondary">
+                  {[editingFile.mimeType, formatSize(editingFile.size), `Used ${Number(editingFile.usageCount) || 0} time${Number(editingFile.usageCount) === 1 ? '' : 's'}`].filter(Boolean).join(' · ')}
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  <Tooltip title={editingFile.mimeType === 'image/gif' ? 'GIF editing is unavailable to preserve animation' : ''}>
+                    <span>
+                      <Button variant="contained" startIcon={<CropIcon />} disabled={savingEdit || editingFile.mimeType === 'image/gif'}
+                        onClick={() => { const file = editingFile; setEditingFile(null); setTransformingFile(file); }}>
+                        Crop, rotate & resize
+                      </Button>
+                    </span>
+                  </Tooltip>
+                  <Button variant="outlined" startIcon={<ContentCopyIcon />} disabled={savingEdit}
+                    onClick={() => copyUrl(getMediaUrl(editingFile.url, editingFile.updatedAt))}>
+                    Copy URL
+                  </Button>
+                  {canDeleteMedia && (
+                    <Button variant="outlined" color="error" startIcon={<DeleteIcon />} disabled={savingEdit}
+                      onClick={async () => { const { id } = editingFile; setEditingFile(null); await handleDelete(id); }}>
+                      Delete
+                    </Button>
+                  )}
+                </Box>
               </Box>
             )}
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <Box sx={{ flex: '1 1 45%', display: 'flex', flexDirection: 'column', gap: 2 }}>
               <TextField
                 label="Filename"
                 fullWidth

@@ -15,6 +15,7 @@ exports.listMediaSchema = Joi.object({
     sortDir: Joi.string().valid('asc', 'desc').optional().default('desc'),
     type: Joi.string().valid('image', 'icon', 'font', 'all').optional().default('image'),
     usage: Joi.string().valid('all', 'used', 'unused').optional().default('all'),
+    search: Joi.string().trim().max(100).allow('').optional(),
 });
 
 exports.cropPresetSchema = Joi.object({
