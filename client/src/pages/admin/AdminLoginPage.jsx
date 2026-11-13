@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-import { Box, Typography, TextField, Button, Alert, useTheme, Paper, IconButton, InputAdornment, CircularProgress } from '@mui/material';
+import { Box, Typography, TextField, Button, Alert, useTheme, Paper, IconButton, InputAdornment, CircularProgress, Checkbox, FormControlLabel } from '@mui/material';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import { useNavigate, useLocation, Navigate, Link as RouterLink } from 'react-router-dom';
@@ -24,6 +24,7 @@ const AdminLoginPage = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberDevice, setRememberDevice] = useState(false);
 
   // 2FA state
   const [twoFactorStep, setTwoFactorStep] = useState(false);
@@ -86,7 +87,7 @@ const AdminLoginPage = () => {
     setLoading(true);
 
     try {
-      const data = await login(formData.email, formData.password);
+      const data = await login(formData.email, formData.password, rememberDevice);
 
       // Handle 2FA requirement
       if (data.requiresTwoFactor) {
@@ -272,6 +273,10 @@ const AdminLoginPage = () => {
             }}
           />
 
+          <FormControlLabel control={<Checkbox checked={rememberDevice} onChange={event => setRememberDevice(event.target.checked)} />} label="Remember this device for 30 days" />
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+            Device recognition does not keep admin access open. Sign in again after 30 minutes idle or 12 hours; required MFA still applies.
+          </Typography>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
             <Typography variant="body2" component={RouterLink} to="/admin/forgot-password" sx={{ textDecoration: 'none', color: theme.palette.primary.main }}>
               Forgot password?

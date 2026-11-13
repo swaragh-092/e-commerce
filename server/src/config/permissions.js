@@ -10,6 +10,7 @@ const SYSTEM_ROLE_DEFINITIONS = Object.freeze({ ...authorizationSchema.systemRol
 const ADMIN_PERMISSIONS = [...authorizationSchema.adminPermissionKeys];
 
 const CUSTOMER_PERMISSIONS = [...authorizationSchema.customerPermissionKeys];
+const ADMIN_ONLY_PERMISSIONS = ADMIN_PERMISSIONS.filter((permission) => !CUSTOMER_PERMISSIONS.includes(permission));
 
 const SUPER_ADMIN_PERMISSIONS = [...new Set([
   ...Object.values(PERMISSIONS),
@@ -117,11 +118,19 @@ const getSystemRoles = () =>
     permissions: getPermissionsForRole(role.key),
   }));
 
+const isAdminUser = (user) => {
+  const roles = getRolesForUser(user);
+  return roles.some((role) => [ROLES.ADMIN, ROLES.SUPER_ADMIN].includes(role))
+    || getPermissionsForUser(user).some((permission) => ADMIN_ONLY_PERMISSIONS.includes(permission));
+};
+
 module.exports = {
   PERMISSIONS,
   SYSTEM_ROLE_DEFINITIONS,
   ADMIN_PERMISSIONS,
   CUSTOMER_PERMISSIONS,
+  ADMIN_ONLY_PERMISSIONS,
+  isAdminUser,
   ROLE_PERMISSIONS,
   SUPER_ADMIN_PERMISSIONS,
   RESERVED_SUPER_ADMIN_PERMISSIONS,

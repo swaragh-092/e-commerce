@@ -21,6 +21,7 @@ const loginSchema = Joi.object({
   email: Joi.string().email().required().lowercase(),
   password: Joi.string().required(),
   rememberMe: Joi.boolean().default(false),
+  reauthContext: Joi.string().max(2048).optional(),
 });
 
 const refreshSchema = Joi.object({
