@@ -138,7 +138,7 @@ const AdminSessionGuard = () => {
         if (getAdminSessionErrorCode(err) === 'ADMIN_SESSION_EXPIRED') window.dispatchEvent(new Event(LOCK_EVENT));
       });
     };
-    const types = ['pointerdown', 'keydown', 'touchstart'];
+    const types = ['pointerdown', 'keydown', 'touchstart', 'wheel', 'touchmove'];
     types.forEach(type => window.addEventListener(type, activity, { passive: true }));
     return () => types.forEach(type => window.removeEventListener(type, activity));
   }, [locked, userId]);
