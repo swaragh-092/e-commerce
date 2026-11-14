@@ -1,9 +1,9 @@
 'use strict';
 
-const handlebars = require('handlebars');
 const { NotificationTemplate } = require('../index');
 const { success, error } = require('../../utils/response');
 const AppError = require('../../utils/AppError');
+const NotificationService = require('./notification.service');
 const { DEFAULTS, TEMPLATE_VARIABLES, SAMPLE_VARIABLES } = require('./notification.defaults');
 const { TEMPLATE_VARIABLES: LIFECYCLE_TEMPLATE_VARIABLES } = require('./notification.lifecycleDefaults');
 
@@ -122,23 +122,8 @@ const previewTemplate = async (req, res, next) => {
         if (!allowed.has(key)) vars[key] = null;
       }
     }
-    try {
-      const SettingsService = require('../settings/settings.service');
-      const [general, logo, footer] = await Promise.all([
-        SettingsService.getByGroup('general'),
-        SettingsService.getByGroup('logo'),
-        SettingsService.getByGroup('footer'),
-      ]);
-      vars.store_name    = general.storeName  || vars.store_name;
-      vars.support_email = footer.email       || vars.support_email;
-      vars.store_logo    = logo.main ? `${process.env.API_PUBLIC_URL || ''}${logo.main}` : null;
-    } catch (_) { /* use sample defaults */ }
-
-    const renderedHtml    = handlebars.compile(bodyHtml)(vars);
-    const renderedText    = handlebars.compile(bodyText)(vars);
-    const renderedSubject = handlebars.compile(subject)(vars);
-
-    return success(res, { html: renderedHtml, text: renderedText, subject: renderedSubject });
+    const rendered = await NotificationService.compileTemplate({ bodyHtml, bodyText, subject }, vars);
+    return success(res, rendered);
   } catch (err) {
     next(err);
   }
@@ -226,7 +211,6 @@ const sendTestNotification = async (req, res, next) => {
 
     try {
       if (template) {
-        const NotificationService = require('./notification.service');
         const sent = await NotificationService.sendImmediate(templateName, finalRecipient, SAMPLE_VARIABLES, null, null, channel);
         if (!sent) {
           return error(res, `Test ${channel} could not be sent. Check the template, recipient, and channel settings.`, 400, 'SEND_FAILED');

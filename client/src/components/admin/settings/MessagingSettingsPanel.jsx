@@ -163,7 +163,8 @@ const MessagingSettingsPanel = ({ form, set }) => {
               fullWidth
               size="small"
               label="Sender Email (From)"
-              placeholder='"Store Name" <noreply@example.com>'
+              placeholder="noreply@example.com"
+              helperText="The sender display name comes from Store Identity."
               value={form['messaging.emailFrom'] || ''}
               onChange={(e) => set('messaging.emailFrom', e.target.value)}
             />

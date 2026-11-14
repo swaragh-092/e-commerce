@@ -50,27 +50,33 @@ const normalizeVariables = (variables = {}) => {
 
 const getGlobalVariables = async () => {
     const SettingsService = require('../settings/settings.service');
-    const [general, seo, logo, footer] = await Promise.all([
+    const [general, logo, footer] = await Promise.all([
         SettingsService.getByGroup('general'),
-        SettingsService.getByGroup('seo'),
         SettingsService.getByGroup('logo'),
         SettingsService.getByGroup('footer')
     ]);
 
+    const storeName = general.storeName || 'Our Store';
+    const logoPath = logo.main;
+    const apiOrigin = (process.env.API_PUBLIC_URL || '').replace(/\/+$/, '');
+    const storeLogo = logoPath && (/^(https?:)?\/\//i.test(logoPath) || !apiOrigin
+        ? logoPath
+        : `${apiOrigin}/${logoPath.replace(/^\/+/, '')}`);
+
     return {
-        store_name:    general.storeName || 'Our Store',
+        store_name:    storeName,
         website_url:   (process.env.CLIENT_URL || 'http://localhost:3000').split(',')[0].trim().replace(/\/+$/, ''),
-        support_email: footer.email || 'support@example.com',
-        store_logo:    logo.main ? `${process.env.API_PUBLIC_URL || ''}${logo.main}` : null,
+        support_email: footer.email || general.contactEmail || 'support@example.com',
+        store_logo:    storeLogo || null,
         copyright:     (footer.copyright || '© {{year}} {{store_name}}. All rights reserved.')
                         .replace('{{year}}', new Date().getFullYear())
-                        .replace('{{store_name}}', general.storeName || 'Our Store'),
+                        .replace('{{store_name}}', () => storeName),
         current_year:  new Date().getFullYear(),
     };
 };
 
 const compileTemplate = async (template, variables = {}) => {
-    const mergedVariables = { ...(await getGlobalVariables()), ...normalizeVariables(variables) };
+    const mergedVariables = { ...normalizeVariables(variables), ...(await getGlobalVariables()) };
     const subject = handlebars.compile(template.subject || '')(mergedVariables);
     const html = handlebars.compile(template.bodyHtml || '')(mergedVariables);
     const text = handlebars.compile(template.bodyText || '')(mergedVariables);

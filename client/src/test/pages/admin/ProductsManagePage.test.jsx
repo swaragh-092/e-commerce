@@ -6,6 +6,7 @@ import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ProductsManagePage from '../../../pages/admin/ProductsManagePage';
 import { bulkUpdateProducts, getProducts, updateProduct } from '../../../services/productService';
+import { getBrands } from '../../../services/brandService';
 import { getCategoryTree } from '../../../services/categoryService';
 import { getSaleLabels } from '../../../services/adminService';
 
@@ -46,6 +47,7 @@ vi.mock('../../../services/productService', () => ({
   getStockHistory: vi.fn(),
 }));
 
+vi.mock('../../../services/brandService', () => ({ getBrands: vi.fn().mockResolvedValue({ data: { data: [] } }) }));
 vi.mock('../../../services/categoryService', () => ({ getCategoryTree: vi.fn().mockResolvedValue({ data: [] }) }));
 vi.mock('../../../services/adminService', () => ({ getSaleLabels: vi.fn().mockResolvedValue({ data: { data: [] } }) }));
 vi.mock('../../../hooks/useSettings', () => ({
@@ -209,6 +211,26 @@ describe('ProductsManagePage storefront state controls', () => {
       isEnabled: true,
     }));
     await waitFor(() => expect(screen.queryByText('1 selected')).not.toBeInTheDocument());
+  });
+
+  it('combines the selected brand with the storefront state and clears it with All Brands', async () => {
+    getBrands.mockResolvedValueOnce({ data: { data: [{ id: 'brand-1', name: 'Orbi' }] } });
+    renderProductsPage(['/admin/products?status=published']);
+
+    await screen.findByText('Test product');
+    const brandFilter = screen.getByRole('combobox', { name: 'Brand' });
+    await openSelect(brandFilter);
+    fireEvent.click(await screen.findByRole('option', { name: 'Orbi' }));
+
+    await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({
+      brand: 'brand-1',
+      status: 'published',
+      page: 1,
+    })));
+
+    await openSelect(brandFilter);
+    fireEvent.click(await screen.findByRole('option', { name: 'All Brands' }));
+    await waitFor(() => expect(getProducts.mock.lastCall[0]).not.toHaveProperty('brand'));
   });
 
   it('applies the Paused summary card filter to the product request', async () => {
