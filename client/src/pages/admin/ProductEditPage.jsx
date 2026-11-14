@@ -1558,7 +1558,7 @@ const ProductEditPage = () => {
 
         {!isNew && (
           <Paper sx={{ p: 3, mt: 3 }} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}>
-            <ProductRelatedPicker productId={id} canEdit={canUpdateProducts} />
+            <ProductRelatedPicker key={id} productId={id} canEdit={canUpdateProducts} />
           </Paper>
         )}
 

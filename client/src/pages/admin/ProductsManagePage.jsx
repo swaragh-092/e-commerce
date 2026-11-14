@@ -20,6 +20,7 @@ import { getProducts, getProductById, deleteProduct, updateProduct, bulkUpdateSa
 import attributeService from '../../services/attributeService';
 import BulkProductTagsDialog from '../../components/admin/BulkProductTagsDialog';
 import ProductTagFilter from '../../components/admin/ProductTagFilter';
+import { getBrands } from '../../services/brandService';
 import { getCategoryTree } from '../../services/categoryService';
 import { getSaleLabels } from '../../services/adminService';
 import { getMediaUrl } from '../../utils/media';
@@ -120,6 +121,7 @@ const ProductsManagePage = () => {
   const isTabletScreen = useMediaQuery('(max-width: 1024px)');
   const isSmallScreen = useMediaQuery((theme) => theme.breakpoints.down('sm'));
   const pricingEnabled = useFeatureVisible('pricing', 'admin');
+  const brandsEnabled = useFeatureVisible('brands', 'admin');
   const pricingCapability = useFeature('pricing');
   // Stock tracking is only meaningful in ecommerce mode (cart Tier-1 feature).
   // In catalog mode cart=false, so we hide stock column + stepper entirely.
@@ -149,6 +151,9 @@ const ProductsManagePage = () => {
   const [status, setStatus] = useState(() => searchParams.get('status') || '');
   const [saleFilter, setSaleFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState(() => searchParams.get('category') || '');
+  const [selectedBrand, setSelectedBrand] = useState('');
+  const [brands, setBrands] = useState([]);
+  const brandFilter = brandsEnabled ? selectedBrand : '';
   const tagFilter = searchParams.get('tags') || '';
   const [flatCategories, setFlatCategories] = useState([]);
   const [saleLabels, setSaleLabels] = useState([]);
@@ -217,7 +222,7 @@ const ProductsManagePage = () => {
     saving: false,
   });
   const [counts, setCounts] = useState({ published: 0, paused: 0, draft: 0, archived: 0 });
-  const hasActiveFilters = Boolean(search || status || saleFilter || categoryFilter || tagFilter || lowStockOnly);
+  const hasActiveFilters = Boolean(search || status || saleFilter || categoryFilter || brandFilter || tagFilter || lowStockOnly);
 
   // Step amount for the stock stepper — persists between quick-edit opens
   // Stock history dialog
@@ -466,6 +471,31 @@ const ProductsManagePage = () => {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (!brandsEnabled) return;
+    let cancelled = false;
+
+    const loadBrands = async () => {
+      const limit = 1000;
+      const brands = [];
+      let page = 1;
+      let totalPages;
+      do {
+        const { data } = await getBrands({ page, limit });
+        if (cancelled) return;
+        brands.push(...(data?.data || []));
+        totalPages = data?.meta?.totalPages || 1;
+        page += 1;
+      } while (page <= totalPages);
+      setBrands(brands);
+    };
+
+    loadBrands().catch(() => {
+      if (!cancelled) setBrands([]);
+    });
+    return () => { cancelled = true; };
+  }, [brandsEnabled]);
+
   const fetchProducts = useCallback(() => {
     const version = ++requestVersion.current;
     setLoading(true);
@@ -477,6 +507,7 @@ const ProductsManagePage = () => {
       ...(status && { status }),
       ...(saleFilter && { saleStatus: saleFilter }),
       ...(categoryFilter && { categoryId: categoryFilter }),
+      ...(brandFilter && { brand: brandFilter }),
       ...(tagFilter && { tags: tagFilter }),
       ...(sortModel[0] && { sortBy: sortModel[0].field, sortOrder: sortModel[0].sort }),
       // Low-stock filter: pass maxQty=lowStockThreshold so the server returns only low-stock items
@@ -491,7 +522,7 @@ const ProductsManagePage = () => {
       })
       .catch((error) => { if (version === requestVersion.current) console.error(error); })
       .finally(() => { if (version === requestVersion.current) setLoading(false); });
-  }, [paginationModel, search, status, saleFilter, categoryFilter, tagFilter, sortModel, lowStockOnly, lowStockThreshold]);
+  }, [paginationModel, search, status, saleFilter, categoryFilter, brandFilter, tagFilter, sortModel, lowStockOnly, lowStockThreshold]);
 
   useEffect(() => {
     fetchProducts();
@@ -990,6 +1021,7 @@ const ProductsManagePage = () => {
             setStatus('');
             setSaleFilter('');
             setCategoryFilter('');
+            setSelectedBrand('');
             setSearchParams({});
             setLowStockOnly(false);
             setPaginationModel((p) => ({ ...p, page: 0 }));
@@ -1185,6 +1217,26 @@ const ProductsManagePage = () => {
             ))}
           </Select>
         </FormControl>
+        {brandsEnabled && (
+          <FormControl size="small" sx={{ minWidth: 180 }}>
+            <InputLabel id="product-brand-filter-label" shrink>Brand</InputLabel>
+            <Select
+              labelId="product-brand-filter-label"
+              label="Brand"
+              value={brandFilter}
+              displayEmpty
+              onChange={(event) => {
+                setSelectedBrand(event.target.value);
+                setPaginationModel((current) => ({ ...current, page: 0 }));
+              }}
+            >
+              <MenuItem value="">All Brands</MenuItem>
+              {brands.map((brand) => (
+                <MenuItem key={brand.id} value={brand.id}>{brand.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
         <ProductTagFilter value={tagFilter} onChange={(value) => {
           const next = new URLSearchParams(searchParams);
           if (value) next.set('tags', value); else next.delete('tags');

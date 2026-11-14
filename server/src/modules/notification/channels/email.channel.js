@@ -1,6 +1,7 @@
 'use strict';
 
 const nodemailer = require('nodemailer');
+const addressparser = require('nodemailer/lib/addressparser');
 const logger = require('../../../utils/logger');
 const SettingsService = require('../../settings/settings.service');
 
@@ -138,11 +139,12 @@ const send = async ({ to, subject, html, text, headers, sensitive = false }) => 
     const general = await SettingsService.getByGroup('general');
 
     const storeName = general.storeName || 'E-Commerce Store';
-    const defaultFrom = smtp.user ? `"${storeName}" <${smtp.user}>` : null;
+    const from = requireSetting(smtp.from || smtp.user, 'Sender Email');
+    const [sender] = addressparser(from, { flatten: true });
 
     try {
         await transporter.sendMail({
-            from: smtp.from || defaultFrom || requireSetting(smtp.user, 'Sender Email'),
+            from: { name: storeName, address: requireSetting(sender?.address, 'Sender Email') },
             to,
             subject,
             text,
