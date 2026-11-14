@@ -1,12 +1,13 @@
 import { createContext, useContext, useState } from 'react';
-import { Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Grid, TableCell, Typography } from '@mui/material';
+import { Alert, Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Grid, TableCell, Typography } from '@mui/material';
 import TuneIcon from '@mui/icons-material/Tune';
 
 const DisplayContext = createContext(null);
+export const AnalyticsRequestContext = createContext(null);
 const WidgetContext = createContext(null);
 const emptyPreferences = () => ({ hiddenCards: [], hiddenFields: {} });
 
-export const AnalyticsDisplayProvider = ({ storageKey, widgets, children }) => {
+export const AnalyticsDisplayProvider = ({ storageKey, widgets, reportIds, children }) => {
   const [preferences, setPreferences] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey));
@@ -19,7 +20,7 @@ export const AnalyticsDisplayProvider = ({ storageKey, widgets, children }) => {
     try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* Browser storage may be unavailable. */ }
   };
   const visible = (id) => widgets.some((widget) => widget.id === id) && !preferences.hiddenCards.includes(id);
-  return <DisplayContext.Provider value={{ preferences, update, visible, widgets }}>{children}</DisplayContext.Provider>;
+  return <DisplayContext.Provider value={{ preferences, update, visible, widgets, reportIds }}>{children}</DisplayContext.Provider>;
 };
 
 export const useAnalyticsDisplay = () => useContext(DisplayContext);
@@ -57,9 +58,14 @@ export const AnalyticsCustomizeButton = () => {
 };
 
 export const AnalyticsWidget = ({ metric, children, component: Component = Grid, ...props }) => {
-  const { visible } = useAnalyticsDisplay();
-  if (!visible(metric)) return null;
-  return <WidgetContext.Provider value={metric}><Component {...props}>{children}</Component></WidgetContext.Provider>;
+  const { visible, reportIds } = useAnalyticsDisplay();
+  const request = useContext(AnalyticsRequestContext);
+  if (!visible(metric) || (reportIds && !reportIds.includes(metric))) return null;
+  return <WidgetContext.Provider value={metric}><Component data-analytics-report={metric} {...props}>{!request?.loading && request?.failed.has(metric) ? (
+    <Alert severity="error" action={<Button color="inherit" size="small" disabled={request.retrying.has(metric)} onClick={() => request.retry(metric)}>{request.retrying.has(metric) ? "Retrying…" : "Retry"}</Button>}>
+      {request.labels[metric]} could not load.
+    </Alert>
+  ) : children}</Component></WidgetContext.Provider>;
 };
 
 export const AnalyticsField = ({ name, children, ...props }) => {
