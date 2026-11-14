@@ -213,7 +213,8 @@ const VariantsPanel = ({
   const hasVariantChanges = variants.some((variant) => variant._dirty);
   const skuCounts = variants.reduce((counts, variant) => { const sku = variant.sku?.trim(); if (sku) counts.set(sku, (counts.get(sku) || 0) + 1); return counts; }, new Map());
   const duplicateSku = (variant) => (skuCounts.get(variant.sku?.trim()) || 0) > 1;
-  const hasInvalidChanges = variants.some((variant) => variant._dirty && ((pricingEnabled && !validPrice(variant.price)) || !validStock(variant) || duplicateSku(variant)));
+  const validCost = (value) => value == null || value === "" || validPrice(value);
+  const hasInvalidChanges = variants.some((variant) => variant._dirty && ((pricingEnabled && (!validPrice(variant.price) || !validCost(variant.costPrice))) || !validStock(variant) || duplicateSku(variant)));
   const variantBusy = saving || generating || cloning || deleting;
   const canEditVariants = canManageVariants && !variantBusy && !loading && !loadError;
 
@@ -236,6 +237,7 @@ const VariantsPanel = ({
         await attributeService.updateProductVariant(productId, variant.id, {
           sku: variant.sku?.trim() || null,
           ...(pricingEnabled ? { price: Number(variant.price || 0) } : {}),
+          ...(pricingEnabled ? { costPrice: variant.costPrice == null || variant.costPrice === "" ? null : Number(variant.costPrice) } : {}),
           stockQty: Number(variant.stockQty || 0),
           weightGrams: variant.weightGrams !== '' && variant.weightGrams != null ? Number(variant.weightGrams) : null,
           lengthCm: variant.lengthCm !== '' && variant.lengthCm != null ? Number(variant.lengthCm) : null,
@@ -551,6 +553,16 @@ const VariantsPanel = ({
                             </Button>
                           </Box>
                         </Grid>
+                        {pricingEnabled && <Grid item xs={12} sm={6}>
+                          <TextField fullWidth size="small" label="Unit cost" type="number"
+                            value={variant.costPrice ?? ''}
+                            onChange={(e) => handleVariantChange(index, 'costPrice', e.target.value)}
+                            disabled={!canEditVariants}
+                            inputProps={{ min: 0, step: '0.01', max: 99999999.99 }}
+                            error={!validCost(variant.costPrice)}
+                            helperText={validCost(variant.costPrice) ? "Blank uses the product unit cost." : "Enter a nonnegative cost with up to 2 decimals."}
+                          />
+                        </Grid>}
                         {pricingEnabled && <Grid item xs={12} sm={6}>
                           <TextField
                             fullWidth

@@ -1680,10 +1680,12 @@ const placeOrder = async (userId, payload) => {
                 variantId: item.variantId || null,
                 snapshotName: item.currentProduct.name,
                 snapshotPrice: item.currentPrice,
+                snapshotCostPrice: item.variant?.costPrice ?? item.currentProduct.costPrice ?? null,
                 snapshotImage: getPrimaryProductImageUrl(item.currentProduct),
                 snapshotSku: item.variant?.sku || item.currentProduct.sku || null,
                 variantInfo: {
-                    ...(item.variant ? (typeof item.variant.toJSON === 'function' ? item.variant.toJSON() : item.variant) : {}),
+                    ...Object.fromEntries(Object.entries(item.variant?.toJSON?.() ?? item.variant ?? {})
+                        .filter(([key]) => key !== 'costPrice')),
                     ...(item.currentProduct?.unit ? { unit: item.currentProduct.unit } : {}),
                 },
                 quantity: item.quantity,

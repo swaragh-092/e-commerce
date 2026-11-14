@@ -259,6 +259,7 @@ const ProductEditPage = () => {
     sku: '',
     unit: '',
     price: '',
+    costPrice: '',
     salePrice: '',
     saleStartAt: '',
     saleEndAt: '',
@@ -347,6 +348,7 @@ const ProductEditPage = () => {
               sku: p.sku || '',
               unit: p.unit || '',
               price: p.price || '',
+              costPrice: p.costPrice ?? '',
               salePrice: p.salePrice || '',
               saleStartAt: toDateTimeLocal(p.saleStartAt),
               saleEndAt: toDateTimeLocal(p.saleEndAt),
@@ -550,6 +552,7 @@ const ProductEditPage = () => {
       const payload = {
         ...formData,
         price: formData.price === '' ? null : Number(formData.price),
+        costPrice: formData.costPrice === "" ? null : Number(formData.costPrice),
         salePrice:
           formData.salePrice !== '' && formData.salePrice !== null && !isNaN(parseFloat(formData.salePrice))
             ? parseFloat(formData.salePrice)
@@ -935,6 +938,18 @@ const ProductEditPage = () => {
                           ? { color: 'success.main', fontWeight: 600 }
                           : {},
                       }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Unit Cost"
+                      type="number"
+                      InputProps={{ startAdornment: <InputAdornment position="start">{symbol}</InputAdornment> }}
+                      inputProps={{ step: '0.01', min: 0 }}
+                      value={formData.costPrice}
+                      onChange={(e) => setField('costPrice', e.target.value)}
+                      helperText="Internal cost used for gross margin reports."
                     />
                   </Grid>
                   <Grid item xs={12}>

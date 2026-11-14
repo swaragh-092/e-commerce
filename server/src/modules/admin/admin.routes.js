@@ -97,6 +97,7 @@ router.delete('/access-control/users/:id', ...accessManageOnly, validate(idParam
 // Analytics
 router.use('/analytics', featureGate('analytics'));
 router.get('/analytics/catalog-overview', ...adminOnly, validate(catalogAnalyticsQuerySchema, 'query'), adminController.getCatalogOverview);
+router.get('/analytics/product-profitability', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getProductProfitability);
 router.get('/analytics/top-products', ...analyticsOnly, validate(analyticsQuerySchema, 'query'), adminController.getTopProducts);
 router.get('/analytics/aov-trend', ...analyticsOnly, ordersFeature, validate(analyticsTrendSchema, 'query'), adminController.getAovTrend);
 router.get('/analytics/abandoned-carts', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getAbandonedCarts);

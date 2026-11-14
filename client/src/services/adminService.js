@@ -124,6 +124,7 @@ const reorderSaleLabels = (labels) => api.put('/settings/sale-labels', { labels 
 
 // Analytics
 const getCatalogOverview = (params = {}) => api.get(withQueryString(`/${A}/analytics/catalog-overview`, params, { omitEmpty: true }));
+const getProductProfitability = (params = {}) => api.get(withQueryString(`/${A}/analytics/product-profitability`, params, { omitEmpty: true }));
 const getTopProducts = (params = {}) => api.get(withQueryString(`/${A}/analytics/top-products`, params, { omitEmpty: true }));
 const getAovTrend = (params = {}) => api.get(withQueryString(`/${A}/analytics/aov-trend`, params, { omitEmpty: true }));
 const getAbandonedCarts = (params = {}) => api.get(withQueryString(`/${A}/analytics/abandoned-carts`, params, { omitEmpty: true }));
@@ -175,7 +176,7 @@ export {
   validateCoupon, getPublicCoupons, getEligibleCoupons,
   getAddresses, createAddress, updateAddress, deleteAddress, setDefaultAddress,
   getSaleLabels, createSaleLabel, updateSaleLabel, deleteSaleLabel, reorderSaleLabels,
-  getTopProducts, getAovTrend, getAbandonedCarts, getRevenueByCategory, getRepeatCustomers, getRefundRate,
+  getTopProducts, getProductProfitability, getAovTrend, getAbandonedCarts, getRevenueByCategory, getRepeatCustomers, getRefundRate,
   getGeographicSales, getRevenueByPaymentMethod, getCustomerLifetimeValue, getConversionRate, getTrafficSources,
   getProductFunnel, getUtmAttribution, getCouponPerformance, exportAnalyticsCsv,
   getCohortRetention, getRfmSegmentation, getOrderHeatmap, getRevenueForecast, getDrillDown, sendTestReport,

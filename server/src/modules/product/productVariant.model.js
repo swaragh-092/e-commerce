@@ -21,6 +21,7 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: true,
             field: 'media_id',
         },
+        costPrice: { type: DataTypes.DECIMAL(10, 2), allowNull: true, field: 'cost_price' },
         price: {
             type: DataTypes.DECIMAL(10, 2),
             allowNull: false,

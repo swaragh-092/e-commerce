@@ -18,7 +18,7 @@ import { CATALOG_ANALYTICS_WIDGETS, SALES_ANALYTICS_WIDGETS } from '../../utils/
 import CatalogAnalytics from '../../components/admin/analytics/CatalogAnalytics';
 import { AnalyticsDisplayProvider, AnalyticsCustomizeButton, AnalyticsWidget, AnalyticsField, useAnalyticsDisplay } from '../../components/admin/analytics/AnalyticsCustomization';
 import {
-  getTopProducts, getAovTrend, getAbandonedCarts,
+  getTopProducts, getProductProfitability, getAovTrend, getAbandonedCarts,
   getRevenueByCategory, getRepeatCustomers, getRefundRate,
   getGeographicSales, getRevenueByPaymentMethod, getCustomerLifetimeValue,
   getConversionRate, getTrafficSources, getProductFunnel, getUtmAttribution,
@@ -128,6 +128,7 @@ const SalesAnalyticsPage = () => {
     setError('');
     const requestId = ++requestRef.current;
     const requests = [
+      ['productProfitability', () => getProductProfitability({ ...qp, limit: 50 })],
       ['topProducts', () => getTopProducts({ ...qp, limit: 10, sortBy: 'revenue' })],
       ['aovTrend', () => getAovTrend(tp)],
       ['abandonedCarts', () => getAbandonedCarts(qp)],
@@ -301,6 +302,41 @@ const SalesAnalyticsPage = () => {
                 </>
               ) : <Typography color="text.secondary">No sales data.</Typography>
             )}
+          </Paper>
+        </AnalyticsWidget>
+
+        <AnalyticsWidget metric="productProfitability" item xs={12}>
+          <Paper sx={{ p: 3, overflowX: 'auto' }} elevation={0}>
+            <SectionHeader title="Product Profitability" metric="product-profitability" params={{ ...qp, limit: 50 }} />
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Net sales deduct allocated merchandise discounts and completed refunds. Refunds are spread by line sales and capped at merchandise sales after discounts. Recorded profit uses order-time costs and keeps the original cost of goods. Estimated profit also uses current costs where snapshots are missing.
+            </Typography>
+            {loading ? <CardSkeleton /> : data.productProfitability?.length ? (
+              <Table size="small" sx={{ minWidth: 1050 }}>
+                <TableHead><TableRow>
+                  <AnalyticsField name="0">Product</AnalyticsField>
+                  <AnalyticsField name="1">SKU</AnalyticsField>
+                  <AnalyticsField name="2" align="right">Units sold</AnalyticsField>
+                  <AnalyticsField name="3" align="right">Net sales</AnalyticsField>
+                  <AnalyticsField name="4" align="right">Cost of goods</AnalyticsField>
+                  <AnalyticsField name="5" align="right">Gross profit</AnalyticsField>
+                  <AnalyticsField name="6" align="right">Gross margin</AnalyticsField>
+                  <AnalyticsField name="7" align="right">Cost coverage</AnalyticsField>
+                </TableRow></TableHead>
+                <TableBody>{data.productProfitability.map((row, index) => (
+                  <TableRow key={`${row.productId || row.sku}-${index}`}>
+                    <AnalyticsField name="0">{row.product}</AnalyticsField>
+                    <AnalyticsField name="1">{row.sku}</AnalyticsField>
+                    <AnalyticsField name="2" align="right">{row.unitsSold}</AnalyticsField>
+                    <AnalyticsField name="3" align="right">{formatPrice(row.netSales)}</AnalyticsField>
+                    <AnalyticsField name="4" align="right">{formatPrice(row.costOfGoods)}</AnalyticsField>
+                    <AnalyticsField name="5" align="right">{row.grossProfit == null ? '—' : formatPrice(row.grossProfit)}</AnalyticsField>
+                    <AnalyticsField name="6" align="right">{row.grossMargin == null ? 'Add unit cost' : `${row.grossMargin}%`}</AnalyticsField>
+                    <AnalyticsField name="7" align="right">{row.costCoverage}%{row.estimatedUnits > 0 && <Typography variant="caption" display="block">Estimated profit {formatPrice(row.estimatedGrossProfit)} ({row.estimatedUnits} units use current costs)</Typography>}</AnalyticsField>
+                  </TableRow>
+                ))}</TableBody>
+              </Table>
+            ) : <Typography color="text.secondary">No product sales in this period.</Typography>}
           </Paper>
         </AnalyticsWidget>
 

@@ -13,6 +13,7 @@ export const CATALOG_ANALYTICS_WIDGETS = [
 export const SALES_ANALYTICS_WIDGETS = [
   widget('conversionRate', 'Conversion summary'),
   widget('productFunnel', 'Product funnel', ['Product', 'Views', 'Add to cart', 'Orders', 'Units sold', 'View to cart', 'Cart to order']),
+  widget('productProfitability', 'Product profitability', ['Product', 'SKU', 'Units sold', 'Net sales', 'Cost of goods', 'Gross profit', 'Gross margin', 'Cost coverage']),
   widget('topProducts', 'Top selling products', ['Rank', 'Product', 'Revenue']),
   widget('aovTrend', 'Average order value'),
   widget('utmAttribution', 'Marketing attribution', ['Source', 'Medium', 'Campaign', 'Orders', 'Revenue']),

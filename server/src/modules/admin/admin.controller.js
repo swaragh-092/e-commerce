@@ -177,6 +177,13 @@ const getCatalogOverview = async (req, res, next) => {
   catch (err) { next(err); }
 };
 
+const getProductProfitability = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getProductProfitability', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
 const getTopProducts = async (req, res, next) => {
   try {
     const data = await analyticsWithCompare('getTopProducts', req.query);
@@ -279,6 +286,7 @@ const exportAnalyticsCsv = async (req, res, next) => {
   try {
     const { metric } = req.params;
     const methodMap = {
+      'product-profitability': 'getProductProfitability',
       'top-products': 'getTopProducts',
       'aov-trend': 'getAovTrend',
       'abandoned-carts': 'getAbandonedCarts',
@@ -395,6 +403,7 @@ module.exports = {
   createStaffUser,
   deleteStaffUser,
   getTopProducts,
+  getProductProfitability,
   getAovTrend,
   getAbandonedCarts,
   getRevenueByCategory,

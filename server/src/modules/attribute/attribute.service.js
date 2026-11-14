@@ -644,7 +644,7 @@ const updateProductVariant = async (productId, variantId, data, auditContext = n
         await validateImageRows(data.images);
     }
 
-    const allowed = ['sku', 'price', 'stockQty', 'isActive', 'sortOrder', 'mediaId', 'media_id', 'weightGrams', 'lengthCm', 'breadthCm', 'heightCm'];
+    const allowed = ['sku', 'price', 'costPrice', 'stockQty', 'isActive', 'sortOrder', 'mediaId', 'media_id', 'weightGrams', 'lengthCm', 'breadthCm', 'heightCm'];
     const updates = {};
     for (const field of allowed) {
         if (data[field] !== undefined) {

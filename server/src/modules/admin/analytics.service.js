@@ -961,7 +961,92 @@ const getDrillDown = async ({ metric, filterKey, filterValue, period = '30d', pa
   };
 };
 
+/** Product gross profit using immutable unit-cost snapshots from each order. */
+const getProductProfitability = async ({ period = '30d', startDate, endDate, limit = 50, _dateRange } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
+  const rows = await db.sequelize.query(`
+    WITH eligible_orders AS (
+      SELECT o.id, o.discount_amount, o.applied_discounts
+      FROM orders o
+      WHERE o.status IN (${VALID_STATUSES_SQL})
+        AND o.created_at BETWEEN :start AND :end
+    ), refunds AS (
+      SELECT r.order_id, SUM(r.amount) AS amount
+      FROM order_refunds r JOIN eligible_orders o ON o.id = r.order_id
+      WHERE r.status IN ('refunded', 'partially_refunded')
+      GROUP BY r.order_id
+    ), lines AS (
+      SELECT oi.*, SUM(oi.total) OVER (PARTITION BY oi.order_id) AS order_sales,
+        GREATEST(0, COALESCE(o.discount_amount, 0) - COALESCE((
+          SELECT SUM((d->>'shippingDiscount')::numeric)
+          FROM jsonb_array_elements(CASE WHEN jsonb_typeof(o.applied_discounts) = 'array'
+            THEN o.applied_discounts ELSE '[]'::jsonb END) d
+        ), 0)) AS merchandise_discount,
+        COALESCE(r.amount, 0) AS refund_amount
+      FROM order_items oi JOIN eligible_orders o ON o.id = oi.order_id
+      LEFT JOIN refunds r ON r.order_id = o.id
+    ), allocated AS (
+      SELECT lines.*,
+        COALESCE(LEAST(order_sales, merchandise_discount) * total / NULLIF(order_sales, 0), 0) AS discount,
+        COALESCE(LEAST(GREATEST(0, order_sales - merchandise_discount), refund_amount)
+          * total / NULLIF(order_sales, 0), 0) AS refund
+      FROM lines
+    )
+    SELECT oi.product_id AS product_id,
+      COALESCE(oi.snapshot_name, p.name, 'Deleted product') AS product,
+      COALESCE(oi.snapshot_sku, p.sku, '—') AS sku,
+      SUM(oi.quantity)::int AS units_sold,
+      SUM(oi.total) AS sales,
+      ROUND(SUM(oi.discount), 2) AS allocated_discount,
+      ROUND(SUM(oi.refund), 2) AS allocated_refund,
+      ROUND(SUM(oi.total - oi.discount - oi.refund), 2) AS net_sales,
+      ROUND(SUM((oi.total - oi.discount - oi.refund) -
+        COALESCE(oi.snapshot_cost_price, pv.cost_price, p.cost_price) * oi.quantity)
+        FILTER (WHERE COALESCE(oi.snapshot_cost_price, pv.cost_price, p.cost_price) IS NOT NULL), 2) AS estimated_profit,
+      SUM(oi.quantity) FILTER (WHERE oi.snapshot_cost_price IS NULL AND COALESCE(pv.cost_price, p.cost_price) IS NOT NULL) AS estimated_units,
+      COALESCE(SUM(CASE WHEN oi.snapshot_cost_price IS NOT NULL
+        THEN oi.snapshot_cost_price * oi.quantity ELSE 0 END), 0) AS cost_of_goods,
+      COALESCE(SUM(CASE WHEN oi.snapshot_cost_price IS NOT NULL
+        THEN oi.total - oi.discount - oi.refund ELSE 0 END), 0) AS costed_sales,
+      COALESCE(SUM(CASE WHEN oi.snapshot_cost_price IS NOT NULL
+        THEN oi.quantity ELSE 0 END), 0)::int AS costed_units
+    FROM allocated oi
+    LEFT JOIN products p ON p.id = oi.product_id
+    LEFT JOIN product_variants pv ON pv.id = oi.variant_id
+    GROUP BY oi.product_id, COALESCE(oi.snapshot_name, p.name, 'Deleted product'),
+      COALESCE(oi.snapshot_sku, p.sku, '—')
+    ORDER BY net_sales DESC, oi.product_id, product, sku
+    LIMIT :limit
+  `, {
+    replacements: { start, end, limit: parseInt(limit, 10) },
+    type: db.sequelize.QueryTypes.SELECT,
+  });
+  return rows.map((row) => {
+    const sales = parseFloat(row.sales);
+    const costOfGoods = parseFloat(row.cost_of_goods);
+    const costedSales = parseFloat(row.costed_sales);
+    const grossProfit = Number(row.costed_units) > 0 ? Number((costedSales - costOfGoods).toFixed(2)) : null;
+    return {
+      productId: row.product_id,
+      product: row.product,
+      sku: row.sku,
+      unitsSold: Number(row.units_sold),
+      sales,
+      allocatedDiscount: Number(row.allocated_discount),
+      allocatedRefund: Number(row.allocated_refund),
+      netSales: Number(row.net_sales),
+      estimatedUnits: Number(row.estimated_units || 0),
+      estimatedGrossProfit: Number(row.estimated_units) > 0 ? Number(row.estimated_profit) : null,
+      costOfGoods,
+      grossProfit,
+      grossMargin: costedSales > 0 ? Number(((grossProfit / costedSales) * 100).toFixed(1)) : null,
+      costCoverage: Number(row.units_sold) > 0 ? Number(((Number(row.costed_units) / Number(row.units_sold)) * 100).toFixed(1)) : 0,
+    };
+  });
+};
+
 module.exports = {
+  getProductProfitability,
   resolveDateRange,
   getTopProducts,
   getAovTrend,
