@@ -97,7 +97,7 @@ router.delete('/access-control/users/:id', ...accessManageOnly, validate(idParam
 // Analytics
 router.use('/analytics', featureGate('analytics'));
 router.get('/analytics/catalog-overview', ...adminOnly, validate(catalogAnalyticsQuerySchema, 'query'), adminController.getCatalogOverview);
-router.get('/analytics/top-products', ...analyticsOnly, validate(analyticsQuerySchema, 'query'), adminController.getTopProducts);
+router.get('/analytics/top-products', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getTopProducts);
 router.get('/analytics/product-profitability', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getProductProfitability);
 router.get('/analytics/variant-performance', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getVariantPerformance);
 router.get('/analytics/inventory-performance', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getInventoryPerformance);
@@ -111,7 +111,7 @@ router.get('/analytics/return-reasons', ...analyticsOnly, ordersFeature, validat
 router.get('/analytics/order-status', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getOrderStatusReport);
 router.get('/analytics/customer-type-sales', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getCustomerTypeSales);
 router.get('/analytics/product-return-rates', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getProductReturnRates);
-router.get('/analytics/shipping-performance', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getShippingPerformance);
+router.get('/analytics/shipping-performance', ...analyticsOnly, ordersFeature, featureGate('shipping'), validate(analyticsQuerySchema, 'query'), adminController.getShippingPerformance);
 router.get('/analytics/sales-reconciliation', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getSalesReconciliation);
 router.get('/analytics/repeat-customers', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getRepeatCustomers);
 router.get('/analytics/refund-rate', ...analyticsOnly, ordersFeature, validate(analyticsTrendSchema, 'query'), adminController.getRefundRate);
@@ -119,12 +119,12 @@ router.get('/analytics/geographic-sales', ...analyticsOnly, ordersFeature, valid
 router.get('/analytics/revenue-by-payment', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getRevenueByPaymentMethod);
 router.get('/analytics/customer-lifetime-value', ...customerAnalyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getCustomerLifetimeValue);
 router.get('/analytics/conversion-rate', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getConversionRate);
-router.get('/analytics/traffic-sources', ...analyticsOnly, validate(analyticsQuerySchema, 'query'), adminController.getTrafficSources);
-router.get('/analytics/landing-pages', ...analyticsOnly, validate(analyticsQuerySchema, 'query'), adminController.getLandingPagePerformance);
-router.get('/analytics/devices', ...analyticsOnly, validate(analyticsQuerySchema, 'query'), adminController.getDevicePerformance);
-router.get('/analytics/product-funnel', ...analyticsOnly, validate(analyticsQuerySchema, 'query'), adminController.getProductFunnel);
+router.get('/analytics/traffic-sources', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getTrafficSources);
+router.get('/analytics/landing-pages', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getLandingPagePerformance);
+router.get('/analytics/devices', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getDevicePerformance);
+router.get('/analytics/product-funnel', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getProductFunnel);
 router.get('/analytics/checkout-funnel', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getCheckoutFunnel);
-router.get('/analytics/utm-attribution', ...analyticsOnly, validate(analyticsQuerySchema, 'query'), adminController.getUtmAttribution);
+router.get('/analytics/utm-attribution', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getUtmAttribution);
 router.post('/analytics/campaign-spend', ...analyticsOnly, ordersFeature, validate(campaignSpendSchema), adminController.saveCampaignSpend);
 router.get('/analytics/coupon-performance', ...analyticsOnly, ordersFeature, featureGate('coupons'), validate(analyticsQuerySchema, 'query'), adminController.getCouponPerformance);
 router.get('/analytics/cohort-retention', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getCohortRetention);
@@ -134,6 +134,7 @@ router.get('/analytics/revenue-forecast', ...analyticsOnly, ordersFeature, valid
 router.get('/analytics/drill-down', ...customerAnalyticsOnly, ordersFeature, adminController.getDrillDown);
 router.post('/analytics/send-test-report', ...customerAnalyticsOnly, ordersFeature, adminController.sendTestReport);
 const exportMetricFeatureGate = (req, res, next) => {
+	if (req.params.metric === 'shipping-performance') return featureGate('shipping')(req, res, next);
 	if (req.params.metric === 'coupon-performance') {
 		return featureGate('coupons')(req, res, next);
 	}

@@ -2,6 +2,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const db = require('../modules/index');
+const { getResolvedFeature } = require('./featureGate.middleware');
 const logger = require('../utils/logger');
 
 /**
@@ -47,6 +48,7 @@ const trackVisit = (req, res, next) => {
 
   setImmediate(async () => {
     try {
+      if (!await getResolvedFeature('analytics')) return;
       // Resolve product_id from slug if this is a product page
       let productId = null;
       if (productSlug) {

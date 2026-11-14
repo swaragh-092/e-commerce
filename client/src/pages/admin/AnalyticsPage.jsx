@@ -1275,6 +1275,7 @@ const AnalyticsPage = () => {
   if (!features.analytics) return <Alert severity="info">Analytics is disabled in Platform Features.</Alert>;
   const sales = mode === 'ecommerce' && features.orders === true && hasPermission(PERMISSIONS.ORDERS_READ);
   const widgets = sales ? SALES_ANALYTICS_WIDGETS.filter(({ id }) =>
+    (id !== 'shippingPerformance' || features.shipping === true) &&
     (id !== 'couponPerformance' || features.coupons === true) &&
     (id !== 'clv' || hasPermission(PERMISSIONS.CUSTOMERS_READ))) : CATALOG_ANALYTICS_WIDGETS;
   const storageKey = `analytics-display:${user?.id || 'staff'}:${mode}:${sales ? 'sales' : 'catalog'}`;

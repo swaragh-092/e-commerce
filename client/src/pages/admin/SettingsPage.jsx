@@ -492,6 +492,7 @@ const SettingsPage = () => {
     if (appMode !== 'ecommerce' && ['Checkout', 'Promotions', 'Invoice'].includes(name)) return false;
     if (name === 'Checkout' && !adminCart && !adminCheckout && !adminPayments && !adminShipping) return false;
     if (name === 'Promotions' && !adminPricing) return false;
+    if (name === 'Analytics Reports' && (!resolvedFeatures?.analytics || !adminOrders)) return false;
     if (name === 'Invoice' && !adminOrders) return false;
     if (name === 'Advanced' && !canManageAdvancedSettings) return false;
     return ['Notifications', 'Security'].includes(name) || panels[index]?.length > 0;

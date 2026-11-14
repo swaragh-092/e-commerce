@@ -106,6 +106,8 @@ const getReportData = async (period = '7d') => {
 
 const sendReport = async (schedule = null) => {
   try {
+    const { features } = await SettingsService.getFeatures();
+    if (!features.analytics || !features.orders) return { sent: 0, reason: 'feature-disabled' };
     const reportSettings = await SettingsService.getByGroup('analytics_reports');
     if (!reportSettings || !(reportSettings.enabled === true || reportSettings.enabled === 'true')) {
       logger.info('Analytics reports disabled, skipping.');

@@ -498,6 +498,7 @@ const sendTestReport = async (req, res, next) => {
     const result = await AnalyticsReportService.sendReport();
     if (!result.sent) {
       const messages = {
+        'feature-disabled': 'Enable Analytics and Orders before sending a report.',
         disabled: 'Enable scheduled reports before sending a test report.',
         'no-recipients': 'Add at least one recipient before sending a test report.',
         'invalid-recipients': 'Check recipient addresses; one or more email addresses are invalid.',
