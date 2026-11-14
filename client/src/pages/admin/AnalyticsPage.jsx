@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import {
   Box, Typography, Paper, Grid, Select, MenuItem, Skeleton, Alert, Button,
@@ -17,7 +18,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { CATALOG_ANALYTICS_WIDGETS, SALES_ANALYTICS_WIDGETS } from '../../utils/analyticsWidgets';
 import CatalogAnalytics from '../../components/admin/analytics/CatalogAnalytics';
-import { AnalyticsDisplayProvider, AnalyticsCustomizeButton, AnalyticsWidget, AnalyticsField, useAnalyticsDisplay } from '../../components/admin/analytics/AnalyticsCustomization';
+import { AnalyticsRequestContext, AnalyticsDisplayProvider, AnalyticsCustomizeButton, AnalyticsWidget, AnalyticsField, useAnalyticsDisplay } from '../../components/admin/analytics/AnalyticsCustomization';
 import {
   getTopProducts, getProductProfitability, getVariantPerformance, getInventoryPerformance, getStockoutHistory, getAovTrend, getAbandonedCarts,
   getRevenueByCategory, getTaxReport, getTaxByState, getReturnReasons, getOrderStatusReport, getCustomerTypeSales, getProductReturnRates, getShippingPerformance, getSalesReconciliation, getRepeatCustomers, getRefundRate,
@@ -62,14 +63,38 @@ const SectionHeader = ({ title, metric, params }) => (
   </Box>
 );
 
-const SalesAnalyticsPage = ({ userId }) => {
+const REPORT_GROUPS = [
+  { key: 'overview', label: 'Overview', ids: ['conversionRate', 'insights', 'checkoutFunnel', 'topProducts'] },
+  { key: 'sales', label: 'Sales', ids: ['salesReconciliation', 'orderStatus', 'aovTrend', 'paymentMethods', 'revenueByCategory', 'geographicSales', 'orderHeatmap', 'revenueForecast'] },
+  { key: 'products', label: 'Products & stock', ids: ['productProfitability', 'topProducts', 'variantPerformance', 'inventoryPerformance', 'stockoutHistory'] },
+  { key: 'customers', label: 'Customers', ids: ['customerTypeSales', 'repeatCustomers', 'clv', 'cohortRetention', 'rfmSegmentation'] },
+  { key: 'marketing', label: 'Marketing & traffic', ids: ['utmAttribution', 'couponPerformance', 'trafficSources', 'landingPages', 'devicePerformance'] },
+  { key: 'conversion', label: 'Conversion', ids: ['conversionRate', 'checkoutFunnel', 'productFunnel', 'abandonedCarts'] },
+  { key: 'operations', label: 'Tax & fulfillment', ids: ['taxReport', 'taxByState', 'shippingPerformance', 'returnReasons', 'productReturnRates', 'refundRate'] },
+];
+
+const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
   const theme = useTheme();
   const { formatPrice } = useCurrency();
   const pageRef = useRef(null);
   const requestRef = useRef(0);
   const { widgets, visible } = useAnalyticsDisplay();
-  const visibleIds = widgets.filter(({ id }) => visible(id)).map(({ id }) => id).join(',');
-  const [period, setPeriod] = useState('30d');
+  const visibleIds = widgets.filter(({ id }) => report.ids.includes(id) && visible(id)).map(({ id }) => id).join(',');
+  const insightSources = report.key === 'overview' && visible('insights')
+    ? ['salesReconciliation', 'abandonedCarts', 'inventoryPerformance', 'productProfitability', 'conversionRate']
+      .filter((id) => visible(id)).join(',')
+    : '';
+  const [filters, setFilters] = useSearchParams();
+  const period = PERIODS.find(({ value }) => value === filters.get('period'))?.value ?? '30d';
+  const compare = filters.get('compare') === '1';
+  const updateFilters = (changes) => setFilters((current) => {
+    const next = new URLSearchParams(current);
+    Object.entries(changes).forEach(([key, value]) => {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    });
+    return next;
+  }, { preventScrollReset: true });
   const savedViewsKey = `analytics-saved-views:${userId || 'staff'}`;
   const [savedViews, setSavedViews] = useState(() => {
     try { return JSON.parse(localStorage.getItem(savedViewsKey) || '[]'); } catch { return []; }
@@ -77,11 +102,18 @@ const SalesAnalyticsPage = ({ userId }) => {
   const [selectedSavedView, setSelectedSavedView] = useState('');
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [savedViewName, setSavedViewName] = useState('');
-  const [customRange, setCustomRange] = useState(() => {
+  const [defaultRange] = useState(() => {
     const end = new Date();
     const start = new Date(end.getTime() - 29 * 864e5);
     return { startDate: start.toISOString().slice(0, 10), endDate: end.toISOString().slice(0, 10) };
   });
+  const validDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value ?? '')
+    && Number.isFinite(Date.parse(value))
+    && new Date(value).toISOString().slice(0, 10) === value;
+  const startDate = filters.get('startDate');
+  const endDate = filters.get('endDate');
+  const customRange = validDate(startDate) && validDate(endDate) && startDate <= endDate
+    ? { startDate, endDate } : defaultRange;
   const [trendPeriod, setTrendPeriod] = useState('monthly');
   const [attributionModel, setAttributionModel] = useState('last');
   const [spendDialogOpen, setSpendDialogOpen] = useState(false);
@@ -89,13 +121,31 @@ const SalesAnalyticsPage = ({ userId }) => {
   const [spendForm, setSpendForm] = useState({
     spendDate: new Date().toISOString().slice(0, 10), source: '', medium: '', campaign: '', amount: '',
   });
-  const [compare, setCompare] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pdfLoading, setPdfLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [retryingReports, setRetryingReports] = useState(() => new Set());
+  const [failedReports, setFailedReports] = useState(() => new Set());
   const [data, setData] = useState({});
   const [comparison, setComparison] = useState({});
   const [drillDown, setDrillDown] = useState({ open: false, metric: null, filterValue: null, label: null });
+
+  const [directoryOpen, setDirectoryOpen] = useState(false);
+  const [reportQuery, setReportQuery] = useState('');
+  const pendingReport = useRef(null);
+  const directory = widgets.filter(({ id }) => id !== 'insights' && visible(id)).flatMap((widget) => {
+    const group = groups.find(({ key, ids }) => key !== 'overview' && ids.includes(widget.id));
+    if (!group || !`${widget.label} ${group.label}`.toLowerCase().includes(reportQuery.trim().toLowerCase())) return [];
+    return [{ ...widget, group }];
+  });
+
+  useEffect(() => {
+    if (loading || pendingReport.current?.group !== report.key) return;
+    const target = pageRef.current?.querySelector(`[data-analytics-report="${pendingReport.current.id}"]`);
+    if (target) {
+      target.scrollIntoView({ block: 'start' });
+      pendingReport.current = null;
+    }
+  }, [loading, report.key, directoryOpen]);
 
   const handleExportPdf = async () => {
     if (!pageRef.current) return;
@@ -144,7 +194,7 @@ const SalesAnalyticsPage = ({ userId }) => {
   const saveCurrentView = () => {
     const name = savedViewName.trim();
     if (!name) return;
-    const view = { id: `${Date.now()}`, name, period, customRange: { ...customRange } };
+    const view = { id: `${Date.now()}`, name, period, compare, customRange: { ...customRange } };
     setSavedViews((current) => [...current.filter((item) => item.name.toLowerCase() !== name.toLowerCase()), view]);
     setSelectedSavedView(view.id);
     setSaveDialogOpen(false);
@@ -155,8 +205,7 @@ const SalesAnalyticsPage = ({ userId }) => {
     setSelectedSavedView(id);
     const view = savedViews.find((item) => item.id === id);
     if (!view) return;
-    setPeriod(view.period);
-    setCustomRange(view.customRange || customRange);
+    updateFilters({ period: view.period, compare: view.compare ? '1' : null, ...(view.customRange || customRange) });
   };
 
   const removeSavedView = () => {
@@ -170,11 +219,7 @@ const SalesAnalyticsPage = ({ userId }) => {
     return { current: result, previous: null, changes: null };
   };
 
-  const fetchAll = () => {
-    setLoading(true);
-    setError('');
-    const requestId = ++requestRef.current;
-    const requests = [
+  const reportRequests = () => [
       ['topProducts', () => getTopProducts({ ...qp, limit: 10, sortBy: 'revenue' })],
       ['productProfitability', () => getProductProfitability({ ...qp, limit: 50 })],
       ['variantPerformance', () => getVariantPerformance({ ...qp, limit: 20 })],
@@ -208,7 +253,35 @@ const SalesAnalyticsPage = ({ userId }) => {
       ['rfmSegmentation', () => getRfmSegmentation(qp)],
       ['orderHeatmap', () => getOrderHeatmap(qp)],
       ['revenueForecast', () => getRevenueForecast(qp)],
-    ].filter(([id]) => widgets.some((widget) => widget.id === id) && visible(id));
+    ].filter(([id]) => visible(id) && (report.ids.includes(id) || insightSources.split(',').includes(id)));
+
+  const retryReport = async (id) => {
+    const request = reportRequests().find(([key]) => key === id);
+    if (!request || retryingReports.has(id)) return;
+    const requestId = requestRef.current;
+    setRetryingReports((current) => new Set(current).add(id));
+    try {
+      const result = await request[1]();
+      if (requestId !== requestRef.current) return;
+      const normalized = normalizeResult(result.data.data, compare);
+      setData((current) => ({ ...current, [id]: normalized.current }));
+      if (compare) setComparison((current) => ({ ...current, [id]: normalized }));
+      setFailedReports((current) => new Set([...current].filter((key) => key !== id)));
+    } catch {
+      // Keep the report error visible so staff can try again.
+    } finally {
+      if (requestId === requestRef.current) {
+        setRetryingReports((current) => new Set([...current].filter((key) => key !== id)));
+      }
+    }
+  };
+
+  const fetchAll = () => {
+    setLoading(true);
+    setFailedReports(new Set());
+    setRetryingReports(new Set());
+    const requestId = ++requestRef.current;
+    const requests = reportRequests();
     Promise.allSettled(requests.map(([, load]) => load())).then((results) => {
       if (requestId !== requestRef.current) return;
       const raw = Object.fromEntries(results.map((result, index) => [requests[index][0],
@@ -233,7 +306,7 @@ const SalesAnalyticsPage = ({ userId }) => {
         setComparison({});
       }
 
-      if (results.length > 0 && results.every(r => r.status === 'rejected')) setError('Failed to load analytics data.');
+      setFailedReports(new Set(requests.filter((_, index) => results[index].status === 'rejected').map(([id]) => id)));
     }).finally(() => { if (requestId === requestRef.current) setLoading(false); });
   };
 
@@ -283,16 +356,21 @@ const SalesAnalyticsPage = ({ userId }) => {
   useEffect(() => {
     fetchAll();
     return () => { requestRef.current += 1; };
-  }, [period, customRange.startDate, customRange.endDate, trendPeriod, attributionModel, compare, visibleIds]);
+  }, [period, customRange.startDate, customRange.endDate, trendPeriod, attributionModel, compare, visibleIds, insightSources]);
 
   return (
-    <Box ref={pageRef} sx={{ "& [id]": { scrollMarginTop: 88 } }}>
+    <AnalyticsRequestContext.Provider value={{
+      loading, failed: failedReports, retrying: retryingReports, retry: retryReport,
+      labels: Object.fromEntries(widgets.map(({ id, label }) => [id, label])),
+    }}>
+    <Box ref={pageRef} sx={{ "& [id], & [data-analytics-report]": { scrollMarginTop: 88 } }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
         <Box>
           <Typography variant="h4" component="h1" fontWeight={700}>Analytics</Typography>
           <Typography variant="body2" color="text.secondary">Sales, customer behavior, and store performance.</Typography>
         </Box>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+          <Button variant="outlined" onClick={() => { setReportQuery(''); setDirectoryOpen(true); }}>Find a report</Button>
           <AnalyticsCustomizeButton />
           <Select size="small" displayEmpty inputProps={{ "aria-label": "Saved views" }} value={selectedSavedView} onChange={(event) => loadSavedView(event.target.value)} sx={{ minWidth: 150 }}>
             <MenuItem value=""><em>Saved views</em></MenuItem>
@@ -302,7 +380,7 @@ const SalesAnalyticsPage = ({ userId }) => {
           {selectedSavedView && <Tooltip title="Delete saved view"><IconButton aria-label="Delete saved view" size="small" onClick={removeSavedView}><DeleteOutlineIcon fontSize="small" /></IconButton></Tooltip>}
           <Tooltip title="Export as PDF">
             <span>
-              <IconButton aria-label="Export analytics as PDF" onClick={handleExportPdf} disabled={pdfLoading || loading}>
+              <IconButton aria-label="Export current analytics view as PDF" onClick={handleExportPdf} disabled={pdfLoading || loading}>
                 {pdfLoading ? <CircularProgress size={20} /> : <PictureAsPdfIcon />}
               </IconButton>
             </span>
@@ -313,50 +391,109 @@ const SalesAnalyticsPage = ({ userId }) => {
       <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2 }}>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
           <FormControlLabel
-            control={<Switch size="small" checked={compare} onChange={(e) => setCompare(e.target.checked)} />}
+            control={<Switch size="small" checked={compare} onChange={(e) => updateFilters({ compare: e.target.checked ? '1' : null })} />}
             label={<Typography variant="body2">Compare</Typography>}
             sx={{ mr: 1 }}
           />
-          <Select size="small" inputProps={{ "aria-label": "Report date range" }} value={period} onChange={(e) => setPeriod(e.target.value)} sx={{ minWidth: 120 }}>
+          <Select size="small" inputProps={{ "aria-label": "Report date range" }} value={period} onChange={(e) => updateFilters({ period: e.target.value, ...(e.target.value === 'custom' ? customRange : {}) })} sx={{ minWidth: 120 }}>
             {PERIODS.map(p => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
           </Select>
           {period === 'custom' && <>
             <TextField size="small" type="date" label="From" value={customRange.startDate}
-              onChange={(e) => setCustomRange((range) => ({ ...range, startDate: e.target.value }))}
+              onChange={(e) => { if (validDate(e.target.value) && e.target.value <= customRange.endDate) updateFilters({ ...customRange, startDate: e.target.value }); }}
               slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: customRange.endDate } }} />
             <TextField size="small" type="date" label="To" value={customRange.endDate}
-              onChange={(e) => setCustomRange((range) => ({ ...range, endDate: e.target.value }))}
+              onChange={(e) => { if (validDate(e.target.value) && e.target.value >= customRange.startDate) updateFilters({ ...customRange, endDate: e.target.value }); }}
               slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: customRange.startDate } }} />
           </>}
         </Box>
       </Paper>
 
-      <Box component="nav" aria-label="Jump to report" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 3 }}>
-        {[
-          ['checkoutFunnel', 'Checkout'],
-          ['salesReconciliation', 'Sales'],
-          ['productProfitability', 'Profitability'],
-          ['inventoryPerformance', 'Inventory'],
-          ['customerTypeSales', 'Customers'],
-          ['utmAttribution', 'Marketing'],
-        ].filter(([id]) => visible(id)).map(([id, label]) => (
-          <Button key={id} size="small" variant="outlined" href={`#${id}`}>{label}</Button>
+      <Paper component="nav" aria-label="Analytics reports" variant="outlined"
+        sx={{ display: 'flex', gap: 0.5, overflowX: 'auto', p: 0.75, mb: 3 }}>
+        {groups.map((group) => (
+          <Button key={group.key} size="small" onClick={() => selectReport(group.key)}
+            aria-current={report.key === group.key ? 'page' : undefined}
+            variant={report.key === group.key ? 'contained' : 'text'}
+            sx={{ whiteSpace: 'nowrap', flexShrink: 0, textTransform: 'none' }}>
+            {group.label}
+          </Button>
         ))}
-      </Box>
+      </Paper>
+      <Typography variant="h6" component="h2" sx={{ mb: 2 }}>{report.label}</Typography>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }} action={<Button color="inherit" size="small" onClick={fetchAll}>Retry</Button>}>{error}</Alert>}
+      <Dialog open={directoryOpen} onClose={() => setDirectoryOpen(false)} fullWidth maxWidth="sm"
+        aria-labelledby="analytics-report-directory">
+        <DialogTitle id="analytics-report-directory">Find a report</DialogTitle>
+        <DialogContent dividers>
+          <TextField autoFocus fullWidth size="small" label="Search by report or category"
+            value={reportQuery} onChange={(event) => setReportQuery(event.target.value)} sx={{ mb: 2 }} />
+          {directory.length ? directory.map(({ id, label, group }) => (
+            <Button key={id} fullWidth onClick={() => {
+              pendingReport.current = { id, group: group.key };
+              selectReport(group.key);
+              setDirectoryOpen(false);
+            }} sx={{ justifyContent: 'space-between', textAlign: 'left', textTransform: 'none', py: 1 }}>
+              {label}
+              <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 2 }}>{group.label}</Typography>
+            </Button>
+          )) : <Typography color="text.secondary">No visible reports match your search.</Typography>}
+        </DialogContent>
+        <DialogActions><Button onClick={() => setDirectoryOpen(false)}>Close</Button></DialogActions>
+      </Dialog>
 
-      {!visibleIds && <Alert severity="info" sx={{ mb: 2 }}>All cards are hidden. Use Customize to choose cards or restore the defaults.</Alert>}
 
-      <AnalyticsWidget metric="insights" component={Box}>
+      {!visibleIds && <Alert severity="info" sx={{ mb: 2 }}>This view has no visible reports. Use Customize to show its cards.</Alert>}
+
+      {/* Conversion Rate Banner */}
+      {!loading && (data.conversionRate || failedReports.has('conversionRate')) && (
+        <AnalyticsWidget metric="conversionRate" component={Box}><Paper id="conversionRate" sx={{ p: { xs: 2, md: 3 }, mb: 3, display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' }, gap: 2, border: 1, borderColor: 'divider' }} elevation={0}>
+          <Box>
+            <Typography variant="body2" color="text.secondary">Page views</Typography>
+            <Typography variant="h5" fontWeight={700}>{data.conversionRate?.visits?.toLocaleString()}
+              {compare && comparison.conversionRate?.changes?.visits != null && <ComparisonIndicator change={comparison.conversionRate.changes.visits} />}
+            </Typography>
+          </Box>
+          <Box>
+            <Typography variant="body2" color="text.secondary">Unique visitors</Typography>
+            <Typography variant="h5" fontWeight={700}>{data.conversionRate?.visitors?.toLocaleString()}
+              {compare && comparison.conversionRate?.changes?.visitors != null && <ComparisonIndicator change={comparison.conversionRate.changes.visitors} />}
+            </Typography>
+          </Box>
+          <Box>
+            <Typography variant="body2" color="text.secondary">Orders</Typography>
+            <Typography variant="h5" fontWeight={700}>{data.conversionRate?.orders?.toLocaleString()}
+              {compare && comparison.conversionRate?.changes?.orders != null && <ComparisonIndicator change={comparison.conversionRate.changes.orders} />}
+            </Typography>
+          </Box>
+          <Box>
+            <Tooltip title="Orders divided by unique visitors. A dash means no visitors could be identified in this period.">
+              <Typography variant="body2" color="text.secondary" sx={{ textDecoration: 'underline dotted', cursor: 'help' }}>Visitor conversion</Typography>
+            </Tooltip>
+            <Typography variant="h5" fontWeight={700} color="primary.main">{data.conversionRate?.visitors > 0 ? `${data.conversionRate.rate}%` : '—'}
+              {compare && data.conversionRate?.visitors > 0 && comparison.conversionRate?.changes?.rate != null && <ComparisonIndicator change={comparison.conversionRate.changes.rate} />}
+            </Typography>
+          </Box>
+          {data.conversionRate?.message && <Typography variant="caption" color="text.secondary">{data.conversionRate.message}</Typography>}
+        </Paper></AnalyticsWidget>
+      )}
+
+      {!loading && insights.length > 0 && <AnalyticsWidget metric="insights" component={Box}>
         <Paper sx={{ p: 3, mb: 3 }} elevation={0}>
           <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>Analytics insights</Typography>
-          {loading ? <CardSkeleton /> : insights.length ? (
+
             <Grid container spacing={1.5}>
               {insights.slice(0, 6).map((insight, index) => (
                 <Grid item xs={12} md={6} key={`${insight.target}-${index}`}>
                   <Alert severity={insight.severity} action={
-                    <Button color="inherit" size="small" onClick={() => document.getElementById(insight.target)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
+                    <Button color="inherit" size="small" onClick={() => {
+                      const target = document.getElementById(insight.target);
+                      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      else {
+                        const group = groups.find(({ key, ids }) => key !== report.key && ids.includes(insight.target));
+                        if (group) selectReport(group.key);
+                      }
+                    }}>
                       {insight.action}
                     </Button>
                   }>
@@ -366,9 +503,9 @@ const SalesAnalyticsPage = ({ userId }) => {
                 </Grid>
               ))}
             </Grid>
-          ) : <Typography variant="body2" color="text.secondary">No priority issues detected from the available data. Turn on Compare to see revenue movement against the previous period.</Typography>}
+
         </Paper>
-      </AnalyticsWidget>
+      </AnalyticsWidget>}
 
       <AnalyticsWidget metric="checkoutFunnel" component={Box}>
         <Paper id="checkoutFunnel" sx={{ p: 3, mb: 3 }} elevation={0}>
@@ -396,38 +533,7 @@ const SalesAnalyticsPage = ({ userId }) => {
         </Paper>
       </AnalyticsWidget>
 
-      {/* Conversion Rate Banner */}
-      {!loading && data.conversionRate && (
-        <AnalyticsWidget metric="conversionRate" component={Box}><Paper id="conversionRate" sx={{ p: 2, mb: 3, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }} elevation={0}>
-          <Box>
-            <Typography variant="body2" color="text.secondary">Page views</Typography>
-            <Typography variant="h5" fontWeight={700}>{data.conversionRate.visits?.toLocaleString()}
-              {compare && comparison.conversionRate?.changes?.visits != null && <ComparisonIndicator change={comparison.conversionRate.changes.visits} />}
-            </Typography>
-          </Box>
-          <Box>
-            <Typography variant="body2" color="text.secondary">Unique visitors</Typography>
-            <Typography variant="h5" fontWeight={700}>{data.conversionRate.visitors?.toLocaleString()}
-              {compare && comparison.conversionRate?.changes?.visitors != null && <ComparisonIndicator change={comparison.conversionRate.changes.visitors} />}
-            </Typography>
-          </Box>
-          <Box>
-            <Typography variant="body2" color="text.secondary">Orders</Typography>
-            <Typography variant="h5" fontWeight={700}>{data.conversionRate.orders?.toLocaleString()}
-              {compare && comparison.conversionRate?.changes?.orders != null && <ComparisonIndicator change={comparison.conversionRate.changes.orders} />}
-            </Typography>
-          </Box>
-          <Box>
-            <Tooltip title="Orders divided by unique visitors in the selected period">
-              <Typography variant="body2" color="text.secondary" sx={{ textDecoration: 'underline dotted', cursor: 'help' }}>Visitor conversion</Typography>
-            </Tooltip>
-            <Typography variant="h5" fontWeight={700} color="primary.main">{data.conversionRate.rate}%
-              {compare && comparison.conversionRate?.changes?.rate != null && <ComparisonIndicator change={comparison.conversionRate.changes.rate} />}
-            </Typography>
-          </Box>
-          {data.conversionRate.message && <Typography variant="caption" color="text.secondary">{data.conversionRate.message}</Typography>}
-        </Paper></AnalyticsWidget>
-      )}
+
 
       <Grid container spacing={3}>
         {/* Product Funnel */}
@@ -590,7 +696,8 @@ const SalesAnalyticsPage = ({ userId }) => {
           <Paper id="inventoryPerformance" sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Inventory Performance" metric="inventory-performance" params={{ ...qp, limit: 50 }} />
             {loading ? <CardSkeleton /> : data.inventoryPerformance?.length ? (
-              <Table size="small">
+              <Box role="region" aria-label="Inventory performance results" tabIndex={0} sx={{ maxHeight: 420, overflow: "auto" }}>
+              <Table stickyHeader size="small" sx={{ minWidth: 560 }}>
                 <TableHead><TableRow>
                   <AnalyticsField name="0">Product</AnalyticsField>
                   <AnalyticsField name="1">SKU</AnalyticsField>
@@ -610,6 +717,7 @@ const SalesAnalyticsPage = ({ userId }) => {
                   </TableRow>
                 ))}</TableBody>
               </Table>
+              </Box>
             ) : <Typography color="text.secondary">No inventory data for this period.</Typography>}
           </Paper>
         </AnalyticsWidget>
@@ -1147,6 +1255,9 @@ const SalesAnalyticsPage = ({ userId }) => {
         <AnalyticsWidget metric="refundRate" item xs={12}>
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Refund Trend" metric="refund-rate" params={tp} />
+          <Select size="small" inputProps={{ "aria-label": "Trend interval" }} value={trendPeriod} onChange={(e) => setTrendPeriod(e.target.value)} sx={{ minWidth: 110 }}>
+            {TREND_PERIODS.map(p => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
+          </Select>
             {loading ? <CardSkeleton /> : (
               data.refundRate?.length > 0 ? (
                 <ResponsiveContainer width="100%" height={240}>
@@ -1169,7 +1280,7 @@ const SalesAnalyticsPage = ({ userId }) => {
         {/* Cohort Retention */}
         <AnalyticsWidget metric="cohortRetention" item xs={12}>
           <Paper sx={{ p: 3 }} elevation={0}>
-            <SectionHeader title="Cohort Retention" metric="cohort-retention" params={{ period }} />
+            <SectionHeader title="Cohort Retention" metric="cohort-retention" params={qp} />
             {loading ? <CardSkeleton /> : (
               data.cohortRetention?.length > 0 ? (
                 <CohortHeatmap data={data.cohortRetention} formatPrice={formatPrice} />
@@ -1181,7 +1292,7 @@ const SalesAnalyticsPage = ({ userId }) => {
         {/* RFM Segmentation */}
         <AnalyticsWidget metric="rfmSegmentation" item xs={12} lg={6}>
           <Paper sx={{ p: 3 }} elevation={0}>
-            <SectionHeader title="Customer Segmentation (RFM)" metric="rfm-segmentation" params={{ period }} />
+            <SectionHeader title="Customer Segmentation (RFM)" metric="rfm-segmentation" params={qp} />
             {loading ? <CardSkeleton /> : (
               data.rfmSegmentation?.length > 0 ? (
                 <>
@@ -1289,11 +1400,13 @@ const SalesAnalyticsPage = ({ userId }) => {
         </DialogActions>
       </Dialog>
     </Box>
+    </AnalyticsRequestContext.Provider>
   );
 };
 
 const AnalyticsPage = () => {
   const { features, mode } = useSettings();
+  const [params, setParams] = useSearchParams();
   const { user, hasPermission } = useAuth();
   if (!features) return <CardSkeleton />;
   if (!features.analytics) return <Alert severity="info">Analytics is disabled in Platform Features.</Alert>;
@@ -1302,9 +1415,17 @@ const AnalyticsPage = () => {
     (id !== 'shippingPerformance' || features.shipping === true) &&
     (id !== 'couponPerformance' || features.coupons === true) &&
     (id !== 'clv' || hasPermission(PERMISSIONS.CUSTOMERS_READ))) : CATALOG_ANALYTICS_WIDGETS;
+  const groups = REPORT_GROUPS.filter(({ ids }) => ids.some((id) => widgets.some((widget) => widget.id === id)));
+  const report = groups.find(({ key }) => key === params.get('report')) ?? groups[0];
+  const selectReport = (key) => setParams((current) => {
+    const next = new URLSearchParams(current);
+    if (key === 'overview') next.delete('report');
+    else next.set('report', key);
+    return next;
+  }, { preventScrollReset: true });
   const storageKey = `analytics-display:${user?.id || 'staff'}:${mode}:${sales ? 'sales' : 'catalog'}`;
-  return <AnalyticsDisplayProvider key={storageKey} storageKey={storageKey} widgets={widgets}>
-    {sales ? <SalesAnalyticsPage userId={user?.id} /> : <CatalogAnalytics />}
+  return <AnalyticsDisplayProvider key={storageKey} storageKey={storageKey} widgets={widgets} reportIds={sales ? report.ids : undefined}>
+    {sales ? <SalesAnalyticsPage userId={user?.id} report={report} groups={groups} selectReport={selectReport} /> : <CatalogAnalytics />}
   </AnalyticsDisplayProvider>;
 };
 
