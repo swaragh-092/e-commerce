@@ -54,7 +54,7 @@ const SaleLabelsPage = () => {
     endDate: '',
   });
 
-  const { notify } = useNotification();
+  const { notify, confirm } = useNotification();
   const { hasPermission } = useAuth();
   const canManage = hasPermission(PERMISSIONS.SETTINGS_MANAGE);
   const canBulkSale = hasPermission(PERMISSIONS.PRODUCTS_BULK_SALE);
@@ -202,7 +202,7 @@ const SaleLabelsPage = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this sale label? Products using this label will fall back to displaying the raw ID text.')) {
+    if (!(await confirm({ title: 'Delete sale label?', message: 'Are you sure you want to delete this sale label? Products using this label will fall back to displaying the raw ID text.', confirmText: 'Delete label', severity: 'error' }))) {
       return;
     }
 

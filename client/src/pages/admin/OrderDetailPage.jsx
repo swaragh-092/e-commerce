@@ -1088,7 +1088,7 @@ const OrderDetailPage = () => {
   const { formatPrice } = useCurrency();
   const { hasPermission } = useAuth();
   const canViewCustomers = useFeature('customers') && hasPermission(PERMISSIONS.CUSTOMERS_READ);
-  const { notify } = useNotification();
+  const { notify, confirm } = useNotification();
   const canUpdateOrderStatus = hasPermission(PERMISSIONS.ORDERS_UPDATE_STATUS);
   const canRefundOrders = hasPermission(PERMISSIONS.ORDERS_REFUND);
 
@@ -1413,7 +1413,7 @@ const OrderDetailPage = () => {
   };
 
   const handleCancelShipment = async (shipment) => {
-    const confirmed = window.confirm('Cancel this shipment with the carrier? The items will remain allocated to this order. Create a replacement shipment or cancel the order to release them.');
+    const confirmed = await confirm({ title: 'Cancel shipment?', message: 'Cancel this shipment with the carrier? The items will remain allocated to this order. Create a replacement shipment or cancel the order to release them.', confirmText: 'Cancel shipment', severity: 'error' });
     if (!confirmed) return;
     try {
       await updateShipment(id, shipment.id, { status: 'cancelled' });

@@ -57,7 +57,7 @@ import TabPanel from '../../components/common/TabPanel';
 import { getSettingsGroup, updateSettingsBulk } from '../../services/settingsService';
 
 const ShippingPage = () => {
-  const { notify } = useNotification();
+  const { notify, confirm } = useNotification();
   const { symbol, formatPrice } = useCurrency();
   const [tabIndex, setTabIndex] = useState(0);
 
@@ -474,7 +474,7 @@ const ShippingPage = () => {
   };
 
   const handleDeleteZone = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this zone?')) return;
+    if (!(await confirm({ title: 'Delete shipping zone?', message: 'Are you sure you want to delete this zone?', confirmText: 'Delete zone', severity: 'error' }))) return;
     try {
       await deleteShippingZone(id);
       notify('Zone deleted successfully', 'success');
@@ -613,7 +613,7 @@ const ShippingPage = () => {
   };
 
   const handleDeleteRule = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this rule?')) return;
+    if (!(await confirm({ title: 'Delete shipping rule?', message: 'Are you sure you want to delete this rule?', confirmText: 'Delete rule', severity: 'error' }))) return;
     try {
       await deleteShippingRule(id);
       notify('Rule deleted successfully', 'success');

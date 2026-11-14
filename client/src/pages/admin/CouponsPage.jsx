@@ -104,7 +104,7 @@ const CouponsPage = () => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
-  const { notify } = useNotification();
+  const { notify, confirm } = useNotification();
   const { formatPrice } = useCurrency();
   const { hasPermission } = useAuth();
   const brandsEnabled = useFeature('brands');
@@ -448,7 +448,7 @@ const CouponsPage = () => {
       return;
     }
 
-    if (!window.confirm('Delete this coupon?')) return;
+    if (!(await confirm({ title: 'Delete coupon?', message: 'Delete this coupon?', confirmText: 'Delete coupon', severity: 'error' }))) return;
     deleteCoupon(id)
       .then(() => {
         fetchCoupons();
