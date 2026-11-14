@@ -64,7 +64,7 @@ const SectionHeader = ({ title, metric, params }) => (
 );
 
 const REPORT_GROUPS = [
-  { key: 'overview', label: 'Overview', ids: ['conversionRate', 'insights', 'checkoutFunnel', 'topProducts'] },
+  { key: 'overview', label: 'Overview', ids: ['conversionRate', 'insights', 'checkoutFunnel', 'topProducts', 'salesReconciliation'] },
   { key: 'sales', label: 'Sales', ids: ['salesReconciliation', 'orderStatus', 'aovTrend', 'paymentMethods', 'revenueByCategory', 'geographicSales', 'orderHeatmap', 'revenueForecast'] },
   { key: 'products', label: 'Products & stock', ids: ['productProfitability', 'topProducts', 'variantPerformance', 'inventoryPerformance', 'stockoutHistory'] },
   { key: 'customers', label: 'Customers', ids: ['customerTypeSales', 'repeatCustomers', 'clv', 'cohortRetention', 'rfmSegmentation'] },
@@ -146,6 +146,52 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
       pendingReport.current = null;
     }
   }, [loading, report.key, directoryOpen]);
+
+  const openReport = (group, id) => {
+    pendingReport.current = { group, id };
+    if (group === report.key) {
+      pageRef.current?.querySelector(`[data-analytics-report="${id}"]`)?.scrollIntoView({ block: 'start' });
+      pendingReport.current = null;
+    } else selectReport(group);
+  };
+  const currentSales = data.salesReconciliation || [];
+  const priorSales = compare ? comparison.salesReconciliation?.previous || [] : [];
+  const salesDays = (rows) => new Map(rows.map(({ date, netAfterRefunds }) => [String(date).slice(0, 10), Number(netAfterRefunds)]));
+  const currentByDay = salesDays(currentSales);
+  const priorByDay = salesDays(priorSales);
+  const rangeEnd = new Date();
+  const rangeStart = new Date(rangeEnd);
+  const duration = Number.parseInt(period, 10);
+  if (period.endsWith('m')) rangeStart.setMonth(rangeStart.getMonth() - duration);
+  else rangeStart.setUTCDate(rangeStart.getUTCDate() - duration);
+  const currentStart = period === 'custom' ? customRange.startDate : rangeStart.toISOString().slice(0, 10);
+  const priorStart = period === 'custom'
+    ? new Date(Date.parse(customRange.startDate) - (Date.parse(customRange.endDate) - Date.parse(customRange.startDate) + 864e5)).toISOString().slice(0, 10)
+    : new Date(rangeStart.getTime() - (rangeEnd.getTime() - rangeStart.getTime())).toISOString().slice(0, 10);
+  const dayMs = 864e5;
+  const startMs = Date.parse(currentStart);
+  const previousStartMs = Date.parse(priorStart);
+  const endMs = Date.parse(period === 'custom' ? customRange.endDate : rangeEnd.toISOString().slice(0, 10));
+  const dayCount = Math.round((endMs - startMs) / dayMs) + 1;
+  const offsets = new Set([
+    ...Array.from(currentByDay.keys(), (date) => (Date.parse(date) - startMs) / dayMs),
+    ...Array.from(priorByDay.keys(), (date) => (Date.parse(date) - previousStartMs) / dayMs),
+  ]);
+  // Bound chart size for unusually long custom ranges.
+  if (offsets.size && dayCount <= 3660) {
+    for (let day = 0; day < dayCount; day += 1) offsets.add(day);
+  }
+  const salesChart = [...offsets].sort((a, b) => a - b).map((offset) => {
+    const date = new Date(startMs + offset * dayMs).toISOString().slice(0, 10);
+    const priorDate = new Date(previousStartMs + offset * dayMs).toISOString().slice(0, 10);
+    return {
+      date,
+      priorDate,
+      current: currentByDay.get(date) ?? 0,
+      previous: compare && Array.isArray(comparison.salesReconciliation?.previous)
+        ? priorByDay.get(priorDate) ?? 0 : null,
+    };
+  });
 
   const handleExportPdf = async () => {
     if (!pageRef.current) return;
@@ -420,7 +466,39 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
           </Button>
         ))}
       </Paper>
-      <Typography variant="h6" component="h2" sx={{ mb: 2 }}>{report.label}</Typography>
+      {report.key !== 'overview' && <Typography variant="h6" component="h2" sx={{ mb: 2 }}>{report.label}</Typography>}
+      {report.key === 'overview' && (
+        <AnalyticsWidget metric="salesReconciliation" component={Box}>
+          <Paper variant="outlined" sx={{ mb: 3, overflow: 'hidden', borderRadius: 3 }}>
+            <Box sx={{ p: { xs: 2, md: 3 }, borderBottom: 1, borderColor: 'divider', bgcolor: 'action.hover', display: 'flex', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
+              <Box>
+                <Typography variant="subtitle2" color="text.secondary" component="h2">Sales after refunds</Typography>
+                <Typography variant="h3" fontWeight={700} sx={{ fontSize: { xs: 32, md: 44 }, mt: 0.5, fontVariantNumeric: 'tabular-nums' }}>
+                  {loading ? <Skeleton width={150} /> : formatPrice((data.salesReconciliation || []).reduce((sum, day) => sum + Number(day.netAfterRefunds || 0), 0))}
+                </Typography>
+              </Box>
+              <Button variant="outlined" size="small" sx={{ alignSelf: 'flex-start' }} disabled={!visible('salesReconciliation')} onClick={() => openReport('sales', 'salesReconciliation')}>View sales report</Button>
+            </Box>
+            <Box sx={{ px: { xs: 1, md: 3 }, py: 2 }}>
+              {loading ? <CardSkeleton /> : salesChart.length ? (
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={salesChart} margin={{ top: 12, right: 24, left: 12, bottom: 4 }}>
+                    <CartesianGrid vertical={false} stroke={theme.palette.divider} />
+                    <XAxis dataKey="date" tickFormatter={fmt} tickLine={false} axisLine={false} minTickGap={28} />
+                    <YAxis tickFormatter={formatPrice} tickLine={false} axisLine={false} width={86} />
+                    <RTooltip labelFormatter={fmt} formatter={(value, name, entry) => [
+                      formatPrice(value), name === 'Previous period' && entry.payload?.priorDate ? `Previous period (${fmt(entry.payload?.priorDate)})` : name,
+                    ]} />
+                    {compare && <Legend />}
+                    <Line type="linear" dataKey="current" name="Selected period" stroke={theme.palette.primary.main} strokeWidth={3} dot={currentSales.length === 1} />
+                    {compare && <Line dataKey="previous" name="Previous period" stroke={theme.palette.text.secondary} strokeDasharray="5 4" strokeWidth={2} dot={priorSales.length === 1} />}
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>No sales in this period. Choose another date range to see activity.</Typography>}
+            </Box>
+          </Paper>
+        </AnalyticsWidget>
+      )}
 
       <Dialog open={directoryOpen} onClose={() => setDirectoryOpen(false)} fullWidth maxWidth="sm"
         aria-labelledby="analytics-report-directory">
@@ -449,26 +527,26 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
       {!loading && (data.conversionRate || failedReports.has('conversionRate')) && (
         <AnalyticsWidget metric="conversionRate" component={Box}><Paper id="conversionRate" sx={{ p: { xs: 2, md: 3 }, mb: 3, display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' }, gap: 2, border: 1, borderColor: 'divider' }} elevation={0}>
           <Box>
-            <Typography variant="body2" color="text.secondary">Page views</Typography>
+            <Button size="small" disabled={!visible('trafficSources')} onClick={() => openReport('marketing', 'trafficSources')} sx={{ p: 0, minHeight: 44, textTransform: 'none' }}>Page views ↗</Button>
             <Typography variant="h5" fontWeight={700}>{data.conversionRate?.visits?.toLocaleString()}
               {compare && comparison.conversionRate?.changes?.visits != null && <ComparisonIndicator change={comparison.conversionRate.changes.visits} />}
             </Typography>
           </Box>
           <Box>
-            <Typography variant="body2" color="text.secondary">Unique visitors</Typography>
+            <Button size="small" disabled={!visible('trafficSources')} onClick={() => openReport('marketing', 'trafficSources')} sx={{ p: 0, minHeight: 44, textTransform: 'none' }}>Unique visitors ↗</Button>
             <Typography variant="h5" fontWeight={700}>{data.conversionRate?.visitors?.toLocaleString()}
               {compare && comparison.conversionRate?.changes?.visitors != null && <ComparisonIndicator change={comparison.conversionRate.changes.visitors} />}
             </Typography>
           </Box>
           <Box>
-            <Typography variant="body2" color="text.secondary">Orders</Typography>
+            <Button size="small" disabled={!visible('orderStatus')} onClick={() => openReport('sales', 'orderStatus')} sx={{ p: 0, minHeight: 44, textTransform: 'none' }}>Orders ↗</Button>
             <Typography variant="h5" fontWeight={700}>{data.conversionRate?.orders?.toLocaleString()}
               {compare && comparison.conversionRate?.changes?.orders != null && <ComparisonIndicator change={comparison.conversionRate.changes.orders} />}
             </Typography>
           </Box>
           <Box>
             <Tooltip title="Orders divided by unique visitors. A dash means no visitors could be identified in this period.">
-              <Typography variant="body2" color="text.secondary" sx={{ textDecoration: 'underline dotted', cursor: 'help' }}>Visitor conversion</Typography>
+              <Button size="small" disabled={!visible('checkoutFunnel')} onClick={() => openReport('conversion', 'checkoutFunnel')} sx={{ p: 0, minHeight: 44, textTransform: 'none' }}>Visitor conversion ↗</Button>
             </Tooltip>
             <Typography variant="h5" fontWeight={700} color="primary.main">{data.conversionRate?.visitors > 0 ? `${data.conversionRate.rate}%` : '—'}
               {compare && data.conversionRate?.visitors > 0 && comparison.conversionRate?.changes?.rate != null && <ComparisonIndicator change={comparison.conversionRate.changes.rate} />}
@@ -871,7 +949,7 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
           </Paper>
         </AnalyticsWidget>
 
-        <AnalyticsWidget metric="salesReconciliation" item xs={12}>
+        {report.key !== 'overview' && <AnalyticsWidget metric="salesReconciliation" item xs={12}>
           <Paper id="salesReconciliation" sx={{ p: 3, overflowX: 'auto' }} elevation={0}>
             <SectionHeader title="Sales Reconciliation" metric="sales-reconciliation" params={qp} />
             {loading ? <CardSkeleton /> : data.salesReconciliation?.length ? (
@@ -903,7 +981,7 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
               </Table>
             ) : <Typography color="text.secondary">No sales data for this period.</Typography>}
           </Paper>
-        </AnalyticsWidget>
+        </AnalyticsWidget>}
 
         <AnalyticsWidget metric="taxByState" item xs={12}>
           <Paper sx={{ p: 3, overflowX: 'auto' }} elevation={0}>
