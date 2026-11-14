@@ -16,7 +16,7 @@ const getDateRange = (params = {}) => {
   if (params.startDate && params.endDate) {
     const start = new Date(params.startDate);
     const end = new Date(params.endDate);
-    if (/^\d{4}-\d{2}-\d{2}$/.test(params.endDate)) end.setUTCHours(23, 59, 59, 999);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(params.endDate) || (params.endDate instanceof Date && end.toISOString().endsWith('T00:00:00.000Z'))) end.setUTCHours(23, 59, 59, 999);
     return { start, end };
   }
   return resolveDateRange(params.period || '30d');
@@ -90,8 +90,8 @@ const withComparison = async (fn, params) => {
 /**
  * Top selling products by quantity or revenue.
  */
-const getTopProducts = async ({ period = '30d', limit = 10, sortBy = 'quantity', _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getTopProducts = async ({ period = '30d', limit = 10, sortBy = 'quantity', _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
 
   const orderAttr = sortBy === 'revenue'
     ? [[fn('COALESCE', fn('SUM', col('"OrderItem".total')), 0), 'totalRevenue']]
@@ -225,8 +225,8 @@ const getProductProfitability = async ({ period = '30d', startDate, endDate, lim
 };
 
 /** Sales and units grouped by the variant snapshot stored on each order item. */
-const getVariantPerformance = async ({ period = '30d', limit = 20, _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getVariantPerformance = async ({ period = '30d', limit = 20, _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
   const rows = await db.sequelize.query(`
     SELECT
       oi.product_id AS product_id,
@@ -263,8 +263,8 @@ const getVariantPerformance = async ({ period = '30d', limit = 20, _dateRange } 
 };
 
 /** Current available inventory compared with units sold in the selected period. */
-const getInventoryPerformance = async ({ period = '30d', limit = 50, _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getInventoryPerformance = async ({ period = '30d', limit = 50, _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
   const days = Math.max(1, (end.getTime() - start.getTime()) / 864e5);
   const rows = await db.sequelize.query(`
     WITH variant_stock AS (
@@ -314,8 +314,8 @@ const getInventoryPerformance = async ({ period = '30d', limit = 50, _dateRange 
 };
 
 /** Historical stockout events and time to the next recorded replenishment. */
-const getStockoutHistory = async ({ period = '12m', limit = 50, _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getStockoutHistory = async ({ period = '12m', limit = 50, _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
   const rows = await db.sequelize.query(`
     WITH stockouts AS (
       SELECT tx.id, tx.product_id, tx.variant_id, tx.created_at,
@@ -390,8 +390,8 @@ const getAovTrend = async ({ period = 'monthly' } = {}) => {
  * Only expired carts are counted as abandoned. Active carts may still belong
  * to shoppers who are browsing, so they are reported separately.
  */
-const getAbandonedCarts = async ({ period = '30d', _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getAbandonedCarts = async ({ period = '30d', _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
   const dateFilter = { createdAt: { [Op.between]: [start, end] } };
 
   // Count carts that have at least one item
@@ -441,8 +441,8 @@ const getAbandonedCarts = async ({ period = '30d', _dateRange } = {}) => {
 /**
  * Revenue breakdown by product category.
  */
-const getRevenueByCategory = async ({ period = '30d', limit = 10, _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getRevenueByCategory = async ({ period = '30d', limit = 10, _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
 
   const rows = await db.sequelize.query(`
     SELECT
@@ -467,8 +467,8 @@ const getRevenueByCategory = async ({ period = '30d', limit = 10, _dateRange } =
 };
 
 /** Order and shipping tax collected by day from recorded order tax fields. */
-const getTaxReport = async ({ period = '30d', _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getTaxReport = async ({ period = '30d', _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
   const rows = await db.sequelize.query(`
     SELECT DATE_TRUNC('day', created_at)::date AS date,
       COUNT(*)::int AS orders,
@@ -494,8 +494,8 @@ const getTaxReport = async ({ period = '30d', _dateRange } = {}) => {
 };
 
 /** Tax components grouped by the destination state recorded on each order. */
-const getTaxByState = async ({ period = '30d', limit = 50, _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getTaxByState = async ({ period = '30d', limit = 50, _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
   const rows = await db.sequelize.query(`
     SELECT COALESCE(NULLIF(BTRIM(tax_breakdown->>'destinationState'), ''),
       NULLIF(BTRIM(shipping_address_snapshot->>'state'), ''), 'Unspecified') AS destination,
@@ -527,8 +527,8 @@ const getTaxByState = async ({ period = '30d', limit = 50, _dateRange } = {}) =>
 };
 
 /** Return request volume by the reason captured on each returned item. */
-const getReturnReasons = async ({ period = '30d', limit = 20, _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getReturnReasons = async ({ period = '30d', limit = 20, _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
   const rows = await db.sequelize.query(`
     SELECT COALESCE(NULLIF(BTRIM(ri.reason), ''), NULLIF(BTRIM(r.reason), ''), 'No reason provided') AS reason,
       COUNT(DISTINCT r.id)::int AS cases,
@@ -538,7 +538,7 @@ const getReturnReasons = async ({ period = '30d', limit = 20, _dateRange } = {})
     LEFT JOIN order_return_items ri ON ri.return_id = r.id
     WHERE r.type = 'return' AND r.deleted_at IS NULL
       AND r.created_at BETWEEN :start AND :end
-    GROUP BY reason
+    GROUP BY 1
     ORDER BY cases DESC, units DESC
     LIMIT :limit
   `, {
@@ -554,8 +554,8 @@ const getReturnReasons = async ({ period = '30d', limit = 20, _dateRange } = {})
 };
 
 /** Order volume and value grouped by workflow and payment outcome. */
-const getOrderStatusReport = async ({ period = '30d', _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getOrderStatusReport = async ({ period = '30d', _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
   const rows = await db.sequelize.query(`
     SELECT o.status AS order_status,
       COALESCE(pay.status, 'no payment record') AS payment_status,
@@ -579,8 +579,8 @@ const getOrderStatusReport = async ({ period = '30d', _dateRange } = {}) => {
 };
 
 /** Sales split by whether the buyer had placed an earlier eligible order. */
-const getCustomerTypeSales = async ({ period = '30d', _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getCustomerTypeSales = async ({ period = '30d', _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
   const rows = await db.sequelize.query(`
     WITH valid_orders AS (
       SELECT id, user_id, guest_session_id, total, created_at,
@@ -616,8 +616,8 @@ const getCustomerTypeSales = async ({ period = '30d', _dateRange } = {}) => {
 };
 
 /** Completed return rates by product, matched to the original order period. */
-const getProductReturnRates = async ({ period = '30d', limit = 20, _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getProductReturnRates = async ({ period = '30d', limit = 20, _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
   const rows = await db.sequelize.query(`
     WITH sales AS (
       SELECT oi.product_id, SUM(oi.quantity)::int AS units_sold
@@ -665,8 +665,8 @@ const getProductReturnRates = async ({ period = '30d', limit = 20, _dateRange } 
 };
 
 /** Shipment status, carrier, and overdue delivery counts for placed orders. */
-const getShippingPerformance = async ({ period = '30d', limit = 50, _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getShippingPerformance = async ({ period = '30d', limit = 50, _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
   const rows = await db.sequelize.query(`
     WITH shipment_metrics AS (
       SELECT s.id, s.order_id, s.courier_name, s.status, s.expected_delivery_date, s.created_at,
@@ -708,8 +708,8 @@ const getShippingPerformance = async ({ period = '30d', limit = 50, _dateRange }
 };
 
 /** Daily order amounts and completed refunds, kept separate for reconciliation. */
-const getSalesReconciliation = async ({ period = '30d', _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getSalesReconciliation = async ({ period = '30d', _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
   const rows = await db.sequelize.query(`
     WITH order_totals AS (
       SELECT o.id, o.created_at, o.subtotal, o.discount_amount, o.tax,
@@ -757,8 +757,8 @@ const getSalesReconciliation = async ({ period = '30d', _dateRange } = {}) => {
 /**
  * Repeat customer rate: users with >1 valid order vs one-time buyers.
  */
-const getRepeatCustomers = async ({ period = '30d', _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getRepeatCustomers = async ({ period = '30d', _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
 
   const rows = await db.sequelize.query(`
     SELECT
@@ -838,8 +838,8 @@ const getRefundRate = async ({ period = 'monthly' } = {}) => {
 /**
  * Geographic sales — revenue by state/city from shipping address snapshot.
  */
-const getGeographicSales = async ({ period = '30d', limit = 20, _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getGeographicSales = async ({ period = '30d', limit = 20, _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
 
   const rows = await db.sequelize.query(`
     SELECT
@@ -865,8 +865,8 @@ const getGeographicSales = async ({ period = '30d', limit = 20, _dateRange } = {
 /**
  * Revenue by payment method.
  */
-const getRevenueByPaymentMethod = async ({ period = '30d', _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getRevenueByPaymentMethod = async ({ period = '30d', _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
 
   const rows = await Order.findAll({
     attributes: [
@@ -893,8 +893,8 @@ const getRevenueByPaymentMethod = async ({ period = '30d', _dateRange } = {}) =>
 /**
  * Customer Lifetime Value — top customers by total spend (all time or period).
  */
-const getCustomerLifetimeValue = async ({ period = '12m', limit = 10, _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getCustomerLifetimeValue = async ({ period = '12m', limit = 10, _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
 
   const rows = await db.sequelize.query(`
     SELECT
@@ -933,8 +933,8 @@ const getCustomerLifetimeValue = async ({ period = '12m', limit = 10, _dateRange
  * returned so the dashboard can distinguish traffic volume from reach.
  * Reads from page_visits table (created by tracking middleware).
  */
-const getConversionRate = async ({ period = '30d', _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getConversionRate = async ({ period = '30d', _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
 
   // Check if page_visits table exists
   const tableExists = await db.sequelize.query(
@@ -966,8 +966,8 @@ const getConversionRate = async ({ period = '30d', _dateRange } = {}) => {
 /**
  * Traffic sources — referrer breakdown from page_visits.
  */
-const getTrafficSources = async ({ period = '30d', limit = 10, _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getTrafficSources = async ({ period = '30d', limit = 10, _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
 
   const tableExists = await db.sequelize.query(
     `SELECT to_regclass('public.page_visits') AS t`,
@@ -1087,8 +1087,8 @@ const getLandingPagePerformance = async ({ period = '30d', limit = 20, _dateRang
 };
 
 /** Visitor and order performance grouped by the recorded browser device class. */
-const getDevicePerformance = async ({ period = '30d', limit = 10, _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getDevicePerformance = async ({ period = '30d', limit = 10, _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
   const tableExists = await db.sequelize.query(
     `SELECT to_regclass('public.page_visits') AS t`,
     { type: db.sequelize.QueryTypes.SELECT }
@@ -1159,8 +1159,8 @@ const getDevicePerformance = async ({ period = '30d', limit = 10, _dateRange } =
 /**
  * Product funnel: views → add to cart → purchase for top products.
  */
-const getProductFunnel = async ({ period = '30d', limit = 10, _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getProductFunnel = async ({ period = '30d', limit = 10, _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
 
   const tableExists = await db.sequelize.query(
     `SELECT to_regclass('public.page_visits') AS t`,
@@ -1283,8 +1283,8 @@ const getCheckoutFunnel = async ({ period = '30d', _dateRange, startDate, endDat
 /**
  * UTM Marketing Attribution — revenue and orders attributed to UTM campaigns.
  */
-const getUtmAttribution = async ({ period = '30d', limit = 20, attribution = 'last', _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getUtmAttribution = async ({ period = '30d', limit = 20, attribution = 'last', _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
   const touchOrder = attribution === 'first' ? 'ASC' : 'DESC';
   const sourceExpr = attribution === 'first' ? 'pv.utm_source' : "COALESCE(NULLIF(o.utm_source, ''), pv.utm_source)";
   const mediumExpr = attribution === 'first' ? 'pv.utm_medium' : "COALESCE(NULLIF(o.utm_medium, ''), pv.utm_medium)";
@@ -1402,8 +1402,8 @@ const saveCampaignSpend = async ({ spendDate, source, medium = '', campaign, amo
 /**
  * Coupon performance — usage, revenue, and avg discount per coupon.
  */
-const getCouponPerformance = async ({ period = '30d', limit = 10, _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getCouponPerformance = async ({ period = '30d', limit = 10, _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
 
   const rows = await db.sequelize.query(`
     WITH order_coupons AS (
@@ -1613,8 +1613,8 @@ const getRfmSegmentation = async ({ period = '12m', _dateRange, startDate, endDa
 /**
  * Order activity heatmap — orders by day-of-week and hour-of-day.
  */
-const getOrderHeatmap = async ({ period = '30d', _dateRange } = {}) => {
-  const { start, end } = getDateRange({ period, _dateRange });
+const getOrderHeatmap = async ({ period = '30d', _dateRange, startDate, endDate } = {}) => {
+  const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
 
   const rows = await db.sequelize.query(`
     SELECT
@@ -1850,6 +1850,7 @@ module.exports = {
   getRfmSegmentation,
   getOrderHeatmap,
   getRevenueForecast,
+  getDrillDown,
   withComparison,
   VALID_STATUSES,
   VALID_STATUSES_SQL,

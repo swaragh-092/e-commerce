@@ -1252,6 +1252,8 @@ const SalesAnalyticsPage = ({ userId }) => {
         filterValue={drillDown.filterValue}
         label={drillDown.label}
         period={period}
+        startDate={qp.startDate}
+        endDate={qp.endDate}
       />
       <Dialog open={saveDialogOpen} onClose={() => setSaveDialogOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>Save analytics view</DialogTitle>

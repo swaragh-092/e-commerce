@@ -19,7 +19,7 @@ import {
   InputAdornment,
 } from '@mui/material';
 import InventoryAlertSettingsPanel from '../../components/admin/settings/InventoryAlertSettingsPanel';
-import { updateSettings, getEmailTemplates, updateEmailTemplate, sendTestEmail as sendTestEmailApi, sendTestReport as sendAnalyticsTestReport } from '../../services/adminService';
+import { updateSettings, sendTestReport as sendAnalyticsTestReport } from '../../services/adminService';
 import { getAllSettings } from '../../services/settingsService';
 import { useNotification } from '../../context/NotificationContext';
 import { SettingsContext } from '../../context/ThemeContext';

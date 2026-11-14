@@ -487,8 +487,8 @@ const getRevenueForecast = async (req, res, next) => {
 
 const getDrillDown = async (req, res, next) => {
   try {
-    const { metric, filterKey, filterValue, period, page, limit } = req.query;
-    const data = await AnalyticsService.getDrillDown({ metric, filterKey, filterValue, period, page, limit });
+    const { metric, filterKey, filterValue, period, startDate, endDate, page, limit } = req.query;
+    const data = await AnalyticsService.getDrillDown({ metric, filterKey, filterValue, period, startDate, endDate, page, limit });
     return success(res, data);
   } catch (err) { next(err); }
 };
