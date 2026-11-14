@@ -286,30 +286,38 @@ const SalesAnalyticsPage = ({ userId }) => {
   }, [period, customRange.startDate, customRange.endDate, trendPeriod, attributionModel, compare, visibleIds]);
 
   return (
-    <Box ref={pageRef}>
+    <Box ref={pageRef} sx={{ "& [id]": { scrollMarginTop: 88 } }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
-        <Typography variant="h5" component="h1" fontWeight={700}>Analytics</Typography>
+        <Box>
+          <Typography variant="h4" component="h1" fontWeight={700}>Analytics</Typography>
+          <Typography variant="body2" color="text.secondary">Sales, customer behavior, and store performance.</Typography>
+        </Box>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
           <AnalyticsCustomizeButton />
-          <Select size="small" displayEmpty value={selectedSavedView} onChange={(event) => loadSavedView(event.target.value)} sx={{ minWidth: 150 }}>
+          <Select size="small" displayEmpty inputProps={{ "aria-label": "Saved views" }} value={selectedSavedView} onChange={(event) => loadSavedView(event.target.value)} sx={{ minWidth: 150 }}>
             <MenuItem value=""><em>Saved views</em></MenuItem>
             {savedViews.map((view) => <MenuItem key={view.id} value={view.id}>{view.name}</MenuItem>)}
           </Select>
           <Button size="small" variant="outlined" onClick={() => setSaveDialogOpen(true)}>Save view</Button>
-          {selectedSavedView && <Tooltip title="Delete saved view"><IconButton size="small" onClick={removeSavedView}><DeleteOutlineIcon fontSize="small" /></IconButton></Tooltip>}
+          {selectedSavedView && <Tooltip title="Delete saved view"><IconButton aria-label="Delete saved view" size="small" onClick={removeSavedView}><DeleteOutlineIcon fontSize="small" /></IconButton></Tooltip>}
+          <Tooltip title="Export as PDF">
+            <span>
+              <IconButton aria-label="Export analytics as PDF" onClick={handleExportPdf} disabled={pdfLoading || loading}>
+                {pdfLoading ? <CircularProgress size={20} /> : <PictureAsPdfIcon />}
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Box>
+      </Box>
+
+      <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2 }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
           <FormControlLabel
             control={<Switch size="small" checked={compare} onChange={(e) => setCompare(e.target.checked)} />}
             label={<Typography variant="body2">Compare</Typography>}
             sx={{ mr: 1 }}
           />
-          <Tooltip title="Export as PDF">
-            <span>
-              <IconButton onClick={handleExportPdf} disabled={pdfLoading || loading}>
-                {pdfLoading ? <CircularProgress size={20} /> : <PictureAsPdfIcon />}
-              </IconButton>
-            </span>
-          </Tooltip>
-          <Select size="small" value={period} onChange={(e) => setPeriod(e.target.value)} sx={{ minWidth: 120 }}>
+          <Select size="small" inputProps={{ "aria-label": "Report date range" }} value={period} onChange={(e) => setPeriod(e.target.value)} sx={{ minWidth: 120 }}>
             {PERIODS.map(p => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
           </Select>
           {period === 'custom' && <>
@@ -320,14 +328,20 @@ const SalesAnalyticsPage = ({ userId }) => {
               onChange={(e) => setCustomRange((range) => ({ ...range, endDate: e.target.value }))}
               slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: customRange.startDate } }} />
           </>}
-          <Select size="small" value={trendPeriod} onChange={(e) => setTrendPeriod(e.target.value)} sx={{ minWidth: 110 }}>
-            {TREND_PERIODS.map(p => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
-          </Select>
-          <Select size="small" value={attributionModel} onChange={(e) => setAttributionModel(e.target.value)} sx={{ minWidth: 145 }}>
-            <MenuItem value="first">First touch</MenuItem>
-            <MenuItem value="last">Last touch</MenuItem>
-          </Select>
         </Box>
+      </Paper>
+
+      <Box component="nav" aria-label="Jump to report" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 3 }}>
+        {[
+          ['checkoutFunnel', 'Checkout'],
+          ['salesReconciliation', 'Sales'],
+          ['productProfitability', 'Profitability'],
+          ['inventoryPerformance', 'Inventory'],
+          ['customerTypeSales', 'Customers'],
+          ['utmAttribution', 'Marketing'],
+        ].filter(([id]) => visible(id)).map(([id, label]) => (
+          <Button key={id} size="small" variant="outlined" href={`#${id}`}>{label}</Button>
+        ))}
       </Box>
 
       {error && <Alert severity="error" sx={{ mb: 2 }} action={<Button color="inherit" size="small" onClick={fetchAll}>Retry</Button>}>{error}</Alert>}
@@ -668,7 +682,7 @@ const SalesAnalyticsPage = ({ userId }) => {
         </AnalyticsWidget>
 
         <AnalyticsWidget metric="customerTypeSales" item xs={12} md={6}>
-          <Paper sx={{ p: 3 }} elevation={0}>
+          <Paper id="customerTypeSales" sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="New vs Returning Customers" metric="customer-type-sales" params={qp} />
             {loading ? <CardSkeleton /> : data.customerTypeSales?.length ? (
               <Table size="small">
@@ -817,6 +831,10 @@ const SalesAnalyticsPage = ({ userId }) => {
         <AnalyticsWidget metric="aovTrend" item xs={12} lg={6}>
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Average Order Value" metric="aov-trend" params={tp} />
+          <Select size="small" inputProps={{ "aria-label": "Trend interval" }} value={trendPeriod} onChange={(e) => setTrendPeriod(e.target.value)} sx={{ minWidth: 110 }}>
+            {TREND_PERIODS.map(p => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
+          </Select>
+
             {loading ? <CardSkeleton /> : (
               data.aovTrend?.length > 0 ? (
                 <ResponsiveContainer width="100%" height={280}>
@@ -836,10 +854,14 @@ const SalesAnalyticsPage = ({ userId }) => {
         </AnalyticsWidget>
 
         {/* UTM Attribution */}
-        <AnalyticsWidget metric="utmAttribution" item xs={12} lg={6}>
-          <Paper sx={{ p: 3 }} elevation={0}>
+        <AnalyticsWidget metric="utmAttribution" item xs={12}>
+          <Paper id="utmAttribution" sx={{ p: 3, overflowX: "auto" }} elevation={0}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
               <SectionHeader title={`Marketing Attribution (${attributionModel} touch)`} metric="utm-attribution" params={{ ...qp, attribution: attributionModel, limit: 20 }} />
+              <Select size="small" inputProps={{ "aria-label": "Attribution model" }} value={attributionModel} onChange={(e) => setAttributionModel(e.target.value)} sx={{ minWidth: 145 }}>
+            <MenuItem value="first">First touch</MenuItem>
+            <MenuItem value="last">Last touch</MenuItem>
+          </Select>
               <Button size="small" variant="outlined" onClick={() => setSpendDialogOpen(true)}>Add ad spend</Button>
             </Box>
             <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
