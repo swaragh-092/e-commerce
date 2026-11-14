@@ -106,6 +106,7 @@ const catalogAddVariantSchema = addVariantSchema.keys({
 });
 
 const updateVariantSchema = Joi.object({
+    costPrice: Joi.number().precision(2).min(0).max(99999999.99).allow(null),
     sku: Joi.string().max(100).allow('', null),
     price: Joi.number().precision(2).min(0),
     stockQty: Joi.number().integer().min(0),

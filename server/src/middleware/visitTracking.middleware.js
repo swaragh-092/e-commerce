@@ -2,6 +2,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const db = require('../modules/index');
+const { getResolvedFeature } = require('./featureGate.middleware');
 const logger = require('../utils/logger');
 
 /**
@@ -47,6 +48,7 @@ const trackVisit = (req, res, next) => {
 
   setImmediate(async () => {
     try {
+      if (!await getResolvedFeature('analytics')) return;
       // Resolve product_id from slug if this is a product page
       let productId = null;
       if (productSlug) {
@@ -58,8 +60,8 @@ const trackVisit = (req, res, next) => {
       }
 
       await db.sequelize.query(
-        `INSERT INTO page_visits (id, path, referrer_source, user_id, session_id, ip, product_id, utm_source, utm_medium, utm_campaign, created_at)
-         VALUES (:id, :path, :source, :userId, :sessionId, :ip, :productId, :utmSource, :utmMedium, :utmCampaign, NOW())`,
+        `INSERT INTO page_visits (id, path, referrer_source, user_id, session_id, user_agent, ip, product_id, utm_source, utm_medium, utm_campaign, created_at)
+         VALUES (:id, :path, :source, :userId, :sessionId, :userAgent, :ip, :productId, :utmSource, :utmMedium, :utmCampaign, NOW())`,
         {
           replacements: {
             id: uuidv4(),
@@ -67,6 +69,7 @@ const trackVisit = (req, res, next) => {
             source: source.substring(0, 255) || null,
             userId: req.user?.id || null,
             sessionId: req.cookies?.sessionId || null,
+            userAgent: req.get('user-agent')?.substring(0, 500) || null,
             ip: req.ip || null,
             productId,
             utmSource: utmSource?.substring(0, 255) || null,

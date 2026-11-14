@@ -125,9 +125,21 @@ const reorderSaleLabels = (labels) => api.put('/settings/sale-labels', { labels 
 // Analytics
 const getCatalogOverview = (params = {}) => api.get(withQueryString(`/${A}/analytics/catalog-overview`, params, { omitEmpty: true }));
 const getTopProducts = (params = {}) => api.get(withQueryString(`/${A}/analytics/top-products`, params, { omitEmpty: true }));
+const getProductProfitability = (params = {}) => api.get(withQueryString(`/${A}/analytics/product-profitability`, params, { omitEmpty: true }));
+const getVariantPerformance = (params = {}) => api.get(withQueryString(`/${A}/analytics/variant-performance`, params, { omitEmpty: true }));
+const getInventoryPerformance = (params = {}) => api.get(withQueryString(`/${A}/analytics/inventory-performance`, params, { omitEmpty: true }));
+const getStockoutHistory = (params = {}) => api.get(withQueryString(`/${A}/analytics/stockout-history`, params, { omitEmpty: true }));
 const getAovTrend = (params = {}) => api.get(withQueryString(`/${A}/analytics/aov-trend`, params, { omitEmpty: true }));
 const getAbandonedCarts = (params = {}) => api.get(withQueryString(`/${A}/analytics/abandoned-carts`, params, { omitEmpty: true }));
 const getRevenueByCategory = (params = {}) => api.get(withQueryString(`/${A}/analytics/revenue-by-category`, params, { omitEmpty: true }));
+const getTaxReport = (params = {}) => api.get(withQueryString(`/${A}/analytics/tax-report`, params, { omitEmpty: true }));
+const getTaxByState = (params = {}) => api.get(withQueryString(`/${A}/analytics/tax-by-state`, params, { omitEmpty: true }));
+const getReturnReasons = (params = {}) => api.get(withQueryString(`/${A}/analytics/return-reasons`, params, { omitEmpty: true }));
+const getOrderStatusReport = (params = {}) => api.get(withQueryString(`/${A}/analytics/order-status`, params, { omitEmpty: true }));
+const getCustomerTypeSales = (params = {}) => api.get(withQueryString(`/${A}/analytics/customer-type-sales`, params, { omitEmpty: true }));
+const getProductReturnRates = (params = {}) => api.get(withQueryString(`/${A}/analytics/product-return-rates`, params, { omitEmpty: true }));
+const getShippingPerformance = (params = {}) => api.get(withQueryString(`/${A}/analytics/shipping-performance`, params, { omitEmpty: true }));
+const getSalesReconciliation = (params = {}) => api.get(withQueryString(`/${A}/analytics/sales-reconciliation`, params, { omitEmpty: true }));
 const getRepeatCustomers = (params = {}) => api.get(withQueryString(`/${A}/analytics/repeat-customers`, params, { omitEmpty: true }));
 const getRefundRate = (params = {}) => api.get(withQueryString(`/${A}/analytics/refund-rate`, params, { omitEmpty: true }));
 const getGeographicSales = (params = {}) => api.get(withQueryString(`/${A}/analytics/geographic-sales`, params, { omitEmpty: true }));
@@ -135,8 +147,12 @@ const getRevenueByPaymentMethod = (params = {}) => api.get(withQueryString(`/${A
 const getCustomerLifetimeValue = (params = {}) => api.get(withQueryString(`/${A}/analytics/customer-lifetime-value`, params, { omitEmpty: true }));
 const getConversionRate = (params = {}) => api.get(withQueryString(`/${A}/analytics/conversion-rate`, params, { omitEmpty: true }));
 const getTrafficSources = (params = {}) => api.get(withQueryString(`/${A}/analytics/traffic-sources`, params, { omitEmpty: true }));
+const getLandingPagePerformance = (params = {}) => api.get(withQueryString(`/${A}/analytics/landing-pages`, params, { omitEmpty: true }));
+const getDevicePerformance = (params = {}) => api.get(withQueryString(`/${A}/analytics/devices`, params, { omitEmpty: true }));
 const getProductFunnel = (params = {}) => api.get(withQueryString(`/${A}/analytics/product-funnel`, params, { omitEmpty: true }));
+const getCheckoutFunnel = (params = {}) => api.get(withQueryString(`/${A}/analytics/checkout-funnel`, params, { omitEmpty: true }));
 const getUtmAttribution = (params = {}) => api.get(withQueryString(`/${A}/analytics/utm-attribution`, params, { omitEmpty: true }));
+const saveCampaignSpend = (data) => api.post(`/${A}/analytics/campaign-spend`, data);
 const getCouponPerformance = (params = {}) => api.get(withQueryString(`/${A}/analytics/coupon-performance`, params, { omitEmpty: true }));
 const getCohortRetention = (params = {}) => api.get(withQueryString(`/${A}/analytics/cohort-retention`, params, { omitEmpty: true }));
 const getRfmSegmentation = (params = {}) => api.get(withQueryString(`/${A}/analytics/rfm-segmentation`, params, { omitEmpty: true }));
@@ -175,8 +191,8 @@ export {
   validateCoupon, getPublicCoupons, getEligibleCoupons,
   getAddresses, createAddress, updateAddress, deleteAddress, setDefaultAddress,
   getSaleLabels, createSaleLabel, updateSaleLabel, deleteSaleLabel, reorderSaleLabels,
-  getTopProducts, getAovTrend, getAbandonedCarts, getRevenueByCategory, getRepeatCustomers, getRefundRate,
+  getTopProducts, getProductProfitability, getVariantPerformance, getInventoryPerformance, getStockoutHistory, getAovTrend, getAbandonedCarts, getRevenueByCategory, getTaxReport, getTaxByState, getReturnReasons, getOrderStatusReport, getCustomerTypeSales, getProductReturnRates, getShippingPerformance, getSalesReconciliation, getRepeatCustomers, getRefundRate,
   getGeographicSales, getRevenueByPaymentMethod, getCustomerLifetimeValue, getConversionRate, getTrafficSources,
-  getProductFunnel, getUtmAttribution, getCouponPerformance, exportAnalyticsCsv,
+  getProductFunnel, getCheckoutFunnel, getLandingPagePerformance, getDevicePerformance, getUtmAttribution, saveCampaignSpend, getCouponPerformance, exportAnalyticsCsv,
   getCohortRetention, getRfmSegmentation, getOrderHeatmap, getRevenueForecast, getDrillDown, sendTestReport,
 };

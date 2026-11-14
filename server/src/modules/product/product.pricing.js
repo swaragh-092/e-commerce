@@ -227,6 +227,7 @@ const serializeVariantPricing = (product, variant, referenceDate = new Date()) =
   if (!variant) return variant;
 
   const plainVariant = typeof variant.toJSON === 'function' ? variant.toJSON() : { ...variant };
+  delete plainVariant.costPrice;
   const pricing = getVariantPricing(product, plainVariant, referenceDate);
 
   return {
@@ -262,6 +263,7 @@ const serializeProductPricing = (product, { adminView = false, features = {} } =
   if (!adminView && plain.type === 'simple') plain.variants = [];
 
   // Strip internal fields that should never appear in API responses
+  if (!adminView) delete plain.costPrice;
   delete plain.searchVector;
   delete plain.search_vector;
   delete plain.relevance;

@@ -46,6 +46,7 @@ export default function buildSettingsPanels(ctx) {
     CURRENCIES, DASHBOARD_ORDER_WIDGETS, DASHBOARD_PROFILES,
     homepageSections,
     enableCGST, enableSGST, enableIGST,
+    onSendAnalyticsReport,
   } = ctx;
 
   return [
@@ -230,6 +231,43 @@ export default function buildSettingsPanels(ctx) {
     buildInvoicePanel(ctx),
     // ─── 9: Advanced ────────────────────────────────────────────────────
     buildAdvancedPanel(ctx),
+    // ─── 10: Notifications is rendered as a dedicated panel in SettingsPage ─
+    [],
+    // ─── 11: Analytics Reports ──────────────────────────────────────────
+    [
+      section(
+        'Scheduled Analytics Email',
+        'Send a concise sales and store performance summary to your team automatically.',
+        <>
+          {toggle('analytics_reports.enabled', 'Enable scheduled analytics reports')}
+          <TextField
+            fullWidth size="small" label="Recipient email addresses"
+            value={form['analytics_reports.recipients'] || ''}
+            onChange={(event) => ctx.set('analytics_reports.recipients', event.target.value)}
+            helperText="Separate multiple email addresses with commas."
+            sx={{ mb: 2 }}
+          />
+          <FormControl fullWidth size="small" sx={{ mb: 2 }} disabled={!form['analytics_reports.enabled']}>
+            <InputLabel>Report frequency</InputLabel>
+            <Select
+              label="Report frequency"
+              value={form['analytics_reports.frequency'] || 'weekly'}
+              onChange={(event) => ctx.set('analytics_reports.frequency', event.target.value)}
+            >
+              <MenuItem value="daily">Daily — previous day</MenuItem>
+              <MenuItem value="weekly">Weekly — previous 7 days</MenuItem>
+            </Select>
+          </FormControl>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Reports run at 8:00 AM using the server timezone. Save settings before sending a test report.
+          </Alert>
+          <Button variant="outlined" onClick={onSendAnalyticsReport} disabled={!form['analytics_reports.enabled']}>
+            Send test report
+          </Button>
+        </>,
+        ['analytics', 'reports', 'email', 'schedule', 'recipient']
+      ),
+    ],
   ].map((sections) => sections.filter((item) => isSettingsSectionVisible(item.requirements, ctx)));
 }
 

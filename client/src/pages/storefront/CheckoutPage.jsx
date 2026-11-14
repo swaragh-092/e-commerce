@@ -23,6 +23,7 @@ import { useNotification } from '../../context/NotificationContext';
 import { useSettings, useCurrency, useFeature, useFeatureVisible, useFeaturesResolved, useComponentStyles } from '../../hooks/useSettings';
 import { useCart } from '../../hooks/useCart';
 import { getSessionId } from '../../services/cartService';
+import api from '../../services/api';
 import { userService } from '../../services/userService';
 import { orderService } from '../../services/orderService';
 import paymentService from '../../services/paymentService';
@@ -336,6 +337,10 @@ const CheckoutPage = () => {
     const [activeSection, setActiveSection] = useState(1);
     const [completedSections, setCompletedSections] = useState([]);
     const [checkoutSessionId] = useState(createCheckoutSessionId);
+
+    useEffect(() => {
+        api.post('/analytics/events/checkout-started', { checkoutSessionId }).catch(() => {});
+    }, [checkoutSessionId]);
 
     useEffect(() => {
         if (!hasPhysicalItems && activeSection === 1) {

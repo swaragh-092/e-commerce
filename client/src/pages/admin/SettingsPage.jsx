@@ -19,7 +19,7 @@ import {
   InputAdornment,
 } from '@mui/material';
 import InventoryAlertSettingsPanel from '../../components/admin/settings/InventoryAlertSettingsPanel';
-import { updateSettings } from '../../services/adminService';
+import { updateSettings, sendTestReport as sendAnalyticsTestReport } from '../../services/adminService';
 import { getAllSettings } from '../../services/settingsService';
 import { useNotification } from '../../context/NotificationContext';
 import { SettingsContext } from '../../context/ThemeContext';
@@ -266,7 +266,18 @@ const SettingsPage = () => {
 
 
 
-  const allTabs = ['Store', 'SEO', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Advanced', 'Notifications', 'Security'];
+  const handleSendAnalyticsReport = async () => {
+    try {
+      const response = await sendAnalyticsTestReport();
+      const payload = response?.data?.data;
+      if (payload?.sent) notify(`Report sent to ${payload.sent} recipient(s).`, 'success');
+      else notify(response?.data?.message || 'No report was sent. Check that reports are enabled and recipients are configured.', 'info');
+    } catch (error) {
+      notify(error?.response?.data?.message || 'Could not send the analytics report.', 'error');
+    }
+  };
+
+  const allTabs = ['Store', 'SEO', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Advanced', 'Notifications', 'Analytics Reports'];
 
   // Current currency symbol — used in shipping adornments
   const currSymbol = getCurrencySymbol(form['general.currency']);
@@ -470,6 +481,7 @@ const SettingsPage = () => {
     updateHomepagePromo, removeHomepagePromo, addHomepagePromo,
     updateValueProp, removeValueProp, addValueProp,
     enableCGST, enableSGST, enableIGST,
+    onSendAnalyticsReport: handleSendAnalyticsReport,
     adminVisibility,
     features: resolvedFeatures,
     hasPermission,
@@ -480,6 +492,7 @@ const SettingsPage = () => {
     if (appMode !== 'ecommerce' && ['Checkout', 'Promotions', 'Invoice'].includes(name)) return false;
     if (name === 'Checkout' && !adminCart && !adminCheckout && !adminPayments && !adminShipping) return false;
     if (name === 'Promotions' && !adminPricing) return false;
+    if (name === 'Analytics Reports' && (!resolvedFeatures?.analytics || !adminOrders)) return false;
     if (name === 'Invoice' && !adminOrders) return false;
     if (name === 'Advanced' && !canManageAdvancedSettings) return false;
     return ['Notifications', 'Security'].includes(name) || panels[index]?.length > 0;

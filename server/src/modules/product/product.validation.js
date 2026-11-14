@@ -59,6 +59,7 @@ const createProductSchema = Joi.object({
   sku: Joi.string().max(100).allow('', null),
   unit: Joi.string().max(50).allow('', null),
   price: Joi.number().precision(2).positive().required(),
+  costPrice: Joi.number().precision(2).min(0).max(99999999.99).allow(null),
   salePrice: Joi.number().precision(2).positive().allow(null).less(Joi.ref('price')),
   saleStartAt: Joi.date().iso().allow(null),
   saleEndAt: Joi.date().iso().allow(null).when('saleStartAt', {
@@ -125,6 +126,7 @@ const updateProductSchema = Joi.object({
   sku: Joi.string().max(100).allow('', null),
   unit: Joi.string().max(50).allow('', null),
   price: Joi.number().precision(2).positive(),
+  costPrice: Joi.number().precision(2).min(0).max(99999999.99).allow(null),
   salePrice: Joi.number().precision(2).positive().allow(null).when('price', {
     is: Joi.exist(),
     then: Joi.number().precision(2).positive().allow(null).less(Joi.ref('price')),

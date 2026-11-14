@@ -1,7 +1,6 @@
 'use strict';
 
 const AnalyticsService = require('./analytics.service');
-const AdminService = require('./admin.service');
 const SettingsService = require('../settings/settings.service');
 const emailChannel = require('../notification/channels/email.channel');
 const logger = require('../../utils/logger');
@@ -85,8 +84,8 @@ const renderReportHtml = (data, period) => {
 };
 
 const getReportData = async (period = '7d') => {
-  const [stats, topProducts, conversionRate, repeatCustomers, abandonedCarts] = await Promise.allSettled([
-    AdminService.getStats(),
+  const [salesRows, topProducts, conversionRate, repeatCustomers, abandonedCarts] = await Promise.allSettled([
+    AnalyticsService.getSalesReconciliation({ period }),
     AnalyticsService.getTopProducts({ period, limit: 5, sortBy: 'revenue' }),
     AnalyticsService.getConversionRate({ period }),
     AnalyticsService.getRepeatCustomers({ period }),
@@ -94,7 +93,10 @@ const getReportData = async (period = '7d') => {
   ]);
 
   return {
-    stats: stats.status === 'fulfilled' ? stats.value : null,
+    stats: salesRows.status === 'fulfilled' ? {
+      totalRevenue: salesRows.value.reduce((total, row) => total + row.netAfterRefunds, 0),
+      totalOrders: salesRows.value.reduce((total, row) => total + row.orders, 0),
+    } : null,
     topProducts: topProducts.status === 'fulfilled' ? topProducts.value : [],
     conversionRate: conversionRate.status === 'fulfilled' ? conversionRate.value : null,
     repeatCustomers: repeatCustomers.status === 'fulfilled' ? repeatCustomers.value : null,
@@ -102,21 +104,29 @@ const getReportData = async (period = '7d') => {
   };
 };
 
-const sendReport = async () => {
+const sendReport = async (schedule = null) => {
   try {
+    const { features } = await SettingsService.getFeatures();
+    if (!features.analytics || !features.orders) return { sent: 0, reason: 'feature-disabled' };
     const reportSettings = await SettingsService.getByGroup('analytics_reports');
-    if (!reportSettings || reportSettings.enabled !== 'true') {
+    if (!reportSettings || !(reportSettings.enabled === true || reportSettings.enabled === 'true')) {
       logger.info('Analytics reports disabled, skipping.');
-      return;
+      return { sent: 0, reason: 'disabled' };
     }
 
-    const recipients = (reportSettings.recipients || '').split(',').map(e => e.trim()).filter(Boolean);
+    const frequency = reportSettings.frequency === 'daily' ? 'daily' : 'weekly';
+    if (schedule && schedule !== frequency) return { sent: 0, reason: 'not-scheduled' };
+
+    const recipients = [...new Set((reportSettings.recipients || '').split(',').map(e => e.trim()).filter(Boolean))];
     if (recipients.length === 0) {
       logger.warn('Analytics report: no recipients configured.');
-      return;
+      return { sent: 0, reason: 'no-recipients' };
+    }
+    if (recipients.some((email) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+      return { sent: 0, reason: 'invalid-recipients' };
     }
 
-    const period = reportSettings.period || '7d';
+    const period = frequency === 'daily' ? '1d' : '7d';
     const data = await getReportData(period);
     const html = renderReportHtml(data, period);
 
@@ -130,8 +140,10 @@ const sendReport = async () => {
     }
 
     logger.info(`Analytics report sent to ${recipients.length} recipient(s).`);
+    return { sent: recipients.length, frequency, period };
   } catch (error) {
     logger.error('Error sending analytics report:', error);
+    throw error;
   }
 };
 

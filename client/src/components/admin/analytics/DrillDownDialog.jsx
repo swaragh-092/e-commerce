@@ -16,7 +16,7 @@ const STATUS_COLORS = {
   cancelled: 'error',
 };
 
-const DrillDownDialog = ({ open, onClose, metric, filterValue, label, period = '30d' }) => {
+const DrillDownDialog = ({ open, onClose, metric, filterValue, label, period = '30d', startDate, endDate }) => {
   const { formatPrice } = useCurrency();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -25,11 +25,11 @@ const DrillDownDialog = ({ open, onClose, metric, filterValue, label, period = '
   useEffect(() => {
     if (!open || !metric) return;
     setLoading(true);
-    getDrillDown({ metric, filterValue, period, page, limit: 15 })
+    getDrillDown({ metric, filterValue, period, startDate, endDate, page, limit: 15 })
       .then((res) => setData(res.data.data))
       .catch(() => setData(null))
       .finally(() => setLoading(false));
-  }, [open, metric, filterValue, period, page]);
+  }, [open, metric, filterValue, period, startDate, endDate, page]);
 
   useEffect(() => {
     if (open) setPage(1);

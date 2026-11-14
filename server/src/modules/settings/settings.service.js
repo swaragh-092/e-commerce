@@ -22,6 +22,8 @@ const path = require('path');
 const logger = require('../../utils/logger');
 const { encrypt, decrypt } = require('../../utils/crypto');
 
+const ANALYTICS_REPORT_DEFAULTS = { enabled: false, recipients: '', frequency: 'weekly' };
+
 const isMaskedSecretPlaceholder = (value) =>
   typeof value === 'string' && value.trim() === '********';
 
@@ -315,6 +317,7 @@ const getAll = async () => {
     ai: { ...defaultSettings.ai },
     ai_credentials: { ...defaultSettings.ai_credentials },
     advanced: { ...defaultSettings.advanced },
+    analytics_reports: { ...ANALYTICS_REPORT_DEFAULTS },
   };
 
   settings.forEach(s => {
@@ -360,14 +363,14 @@ const getPublicGroup = async (groupName) => {
 
 const getByGroup = async (groupName, options = {}) => {
   const { maskSensitive = true } = options;
-  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'visibility', 'payments', 'sales', 'seo', 'general', 'orders', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced'];
+  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'visibility', 'payments', 'sales', 'seo', 'general', 'orders', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced', 'analytics_reports'];
   if (!validGroups.includes(groupName)) {
     throw new AppError('VALIDATION_ERROR', 400, 'Invalid setting group');
   }
 
   const settings = await Setting.findAll({ where: { group: groupName } });
   
-  const result = { ...(defaultSettings[groupName] || {}) };
+  const result = { ...(groupName === 'analytics_reports' ? ANALYTICS_REPORT_DEFAULTS : defaultSettings[groupName] || {}) };
   settings.forEach(s => {
     if (maskSensitive && groupName === 'messaging' && (s.key === 'eventRecipientUserIds' || s.key.startsWith('notificationRules_'))) return;
     let parsedValue = s.value;
@@ -564,7 +567,7 @@ const updateKey = async (key, value, group, actingUserId, actingUser = null) => 
 
 const bulkUpdate = async (settingsInput, actingUserId, actingUser = null, options = {}) => {
   const { transaction: outerTransaction = null } = options;
-  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'visibility', 'payments', 'sales', 'seo', 'general', 'orders', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced'];
+  const validGroups = ['theme', 'componentStyles', 'sectionPresets', 'features', 'visibility', 'payments', 'sales', 'seo', 'general', 'orders', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'blogPage', 'brandsPage', 'cartPage', 'accountPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging_credentials', 'messaging', 'ai', 'ai_credentials', 'advanced', 'analytics_reports'];
   const credentialGroups = ['gateway_credentials', 'messaging_credentials', 'ai_credentials'];
 
     // Normalize input to an array of { key, value, group }
