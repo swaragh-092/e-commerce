@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { Box, Typography, Tooltip } from '@mui/material';
+import { useMemo, useState } from 'react';
+import { Box, Typography, Tooltip, ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -9,8 +9,9 @@ const formatCohortLabel = (dateStr) => {
   return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 };
 
-const CohortHeatmap = ({ data = [] }) => {
+const CohortHeatmap = ({ data = [], formatPrice = (value) => value }) => {
   const theme = useTheme();
+  const [mode, setMode] = useState('retention');
 
   const { months, matrix } = useMemo(() => {
     if (!data.length) return { months: [], matrix: [] };
@@ -52,7 +53,7 @@ const CohortHeatmap = ({ data = [] }) => {
       <Box sx={{ display: 'inline-grid', gridTemplateColumns: `120px repeat(${months.length}, 52px)`, gap: '2px', minWidth: 'fit-content' }}>
         {/* Header row */}
         <Box sx={{ p: 0.5, fontWeight: 600, fontSize: 11, color: 'text.secondary' }}>Cohort</Box>
-        <Box sx={{ p: 0.5, fontWeight: 600, fontSize: 11, color: 'text.secondary', textAlign: 'center' }}>Size</Box>
+          <Box sx={{ p: 0.5, fontWeight: 600, fontSize: 11, color: 'text.secondary', textAlign: 'center' }}>Size</Box>
         {months.map((m, i) => (
           <Box key={m} sx={{ p: 0.5, fontWeight: 600, fontSize: 11, color: 'text.secondary', textAlign: 'center' }}>M{i}</Box>
         ))}
@@ -67,9 +68,9 @@ const CohortHeatmap = ({ data = [] }) => {
               {row.size}
             </Box>
             {months.map((m) => {
-              const val = row[m];
+              const val = mode === 'retention' ? row[m] : row[`revenue${m[0].toUpperCase()}${m.slice(1)}`];
               return (
-                <Tooltip key={`${row.cohort}-${m}`} title={val != null ? `${val}% retained` : 'No data'} arrow>
+                <Tooltip key={`${row.cohort}-${m}`} title={val != null ? (mode === 'retention' ? `${val}% retained` : `${formatPrice(val)} revenue per cohort customer`) : 'No data'} arrow>
                   <Box
                     sx={{
                       p: 0.5,
@@ -85,7 +86,7 @@ const CohortHeatmap = ({ data = [] }) => {
                       cursor: 'default',
                     }}
                   >
-                    {val != null ? `${val}` : '—'}
+                    {val != null ? (mode === 'retention' ? `${val}` : formatPrice(val)) : '—'}
                   </Box>
                 </Tooltip>
               );
@@ -93,6 +94,10 @@ const CohortHeatmap = ({ data = [] }) => {
           </>
         ))}
       </Box>
+      <ToggleButtonGroup size="small" exclusive value={mode} onChange={(_, value) => value && setMode(value)} sx={{ mt: 1 }}>
+        <ToggleButton value="retention">Retention</ToggleButton>
+        <ToggleButton value="revenue">Revenue per customer</ToggleButton>
+      </ToggleButtonGroup>
     </Box>
   );
 };

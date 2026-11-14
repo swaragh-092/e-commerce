@@ -76,9 +76,16 @@ const createStaffUserSchema = Joi.object({
 });
 
 const analyticsQuerySchema = Joi.object({
-  period: Joi.string().pattern(/^\d+(d|m)$/).default('30d'),
+  period: Joi.string().pattern(/^\d+(d|m)$/).allow('custom').default('30d'),
+  startDate: Joi.when('period', {
+    is: 'custom', then: Joi.date().iso().required(), otherwise: Joi.forbidden(),
+  }),
+  endDate: Joi.when('period', {
+    is: 'custom', then: Joi.date().iso().min(Joi.ref('startDate')).required(), otherwise: Joi.forbidden(),
+  }),
   limit: Joi.number().integer().min(1).max(50).default(10),
   sortBy: Joi.string().valid('quantity', 'revenue').default('quantity'),
+  attribution: Joi.string().valid('first', 'last').default('last'),
   compare: Joi.boolean().default(false),
 });
 
@@ -88,6 +95,14 @@ const catalogAnalyticsQuerySchema = Joi.object({
 
 const analyticsTrendSchema = Joi.object({
   period: Joi.string().valid('daily', 'weekly', 'monthly').default('monthly'),
+});
+
+const campaignSpendSchema = Joi.object({
+  spendDate: Joi.date().iso().required(),
+  source: Joi.string().trim().min(1).max(255).required(),
+  medium: Joi.string().trim().max(255).allow('').default(''),
+  campaign: Joi.string().trim().min(1).max(255).required(),
+  amount: Joi.number().precision(2).min(0).max(9999999999.99).required(),
 });
 
 module.exports = {
@@ -103,4 +118,5 @@ module.exports = {
   analyticsQuerySchema,
   catalogAnalyticsQuerySchema,
   analyticsTrendSchema,
+  campaignSpendSchema,
 };

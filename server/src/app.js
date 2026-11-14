@@ -209,6 +209,7 @@ app.use('/api/tags', require('./modules/product/tag.routes'));
 app.use('/api/brands', brandRoutes);
 app.use('/api/media', mediaRoutes);
 app.use('/api/cart', cartRoutes);
+app.use('/api/analytics/events', require('./modules/analytics/analyticsEvent.routes'));
 app.use('/api/coupons', couponRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/payments', paymentRoutes);

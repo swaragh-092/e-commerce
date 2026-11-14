@@ -177,6 +177,13 @@ const getCatalogOverview = async (req, res, next) => {
   catch (err) { next(err); }
 };
 
+const getTopProducts = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getTopProducts', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
 const getProductProfitability = async (req, res, next) => {
   try {
     const data = await analyticsWithCompare('getProductProfitability', req.query);
@@ -184,9 +191,23 @@ const getProductProfitability = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-const getTopProducts = async (req, res, next) => {
+const getVariantPerformance = async (req, res, next) => {
   try {
-    const data = await analyticsWithCompare('getTopProducts', req.query);
+    const data = await analyticsWithCompare('getVariantPerformance', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getInventoryPerformance = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getInventoryPerformance', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getStockoutHistory = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getStockoutHistory', req.query);
     return success(res, data);
   } catch (err) { next(err); }
 };
@@ -208,6 +229,62 @@ const getAbandonedCarts = async (req, res, next) => {
 const getRevenueByCategory = async (req, res, next) => {
   try {
     const data = await analyticsWithCompare('getRevenueByCategory', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getTaxReport = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getTaxReport', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getTaxByState = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getTaxByState', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getReturnReasons = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getReturnReasons', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getOrderStatusReport = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getOrderStatusReport', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getCustomerTypeSales = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getCustomerTypeSales', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getProductReturnRates = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getProductReturnRates', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getShippingPerformance = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getShippingPerformance', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getSalesReconciliation = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getSalesReconciliation', req.query);
     return success(res, data);
   } catch (err) { next(err); }
 };
@@ -261,9 +338,30 @@ const getTrafficSources = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const getLandingPagePerformance = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getLandingPagePerformance', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getDevicePerformance = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getDevicePerformance', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
 const getProductFunnel = async (req, res, next) => {
   try {
     const data = await analyticsWithCompare('getProductFunnel', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getCheckoutFunnel = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getCheckoutFunnel', req.query);
     return success(res, data);
   } catch (err) { next(err); }
 };
@@ -272,6 +370,13 @@ const getUtmAttribution = async (req, res, next) => {
   try {
     const data = await analyticsWithCompare('getUtmAttribution', req.query);
     return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const saveCampaignSpend = async (req, res, next) => {
+  try {
+    const data = await AnalyticsService.saveCampaignSpend(req.validated);
+    return success(res, data, 'Campaign spend saved.');
   } catch (err) { next(err); }
 };
 
@@ -286,11 +391,22 @@ const exportAnalyticsCsv = async (req, res, next) => {
   try {
     const { metric } = req.params;
     const methodMap = {
-      'product-profitability': 'getProductProfitability',
       'top-products': 'getTopProducts',
+      'product-profitability': 'getProductProfitability',
+      'variant-performance': 'getVariantPerformance',
+      'inventory-performance': 'getInventoryPerformance',
+      'stockout-history': 'getStockoutHistory',
       'aov-trend': 'getAovTrend',
       'abandoned-carts': 'getAbandonedCarts',
       'revenue-by-category': 'getRevenueByCategory',
+      'tax-report': 'getTaxReport',
+      'tax-by-state': 'getTaxByState',
+      'return-reasons': 'getReturnReasons',
+      'order-status': 'getOrderStatusReport',
+      'customer-type-sales': 'getCustomerTypeSales',
+      'product-return-rates': 'getProductReturnRates',
+      'shipping-performance': 'getShippingPerformance',
+      'sales-reconciliation': 'getSalesReconciliation',
       'repeat-customers': 'getRepeatCustomers',
       'refund-rate': 'getRefundRate',
       'geographic-sales': 'getGeographicSales',
@@ -298,7 +414,10 @@ const exportAnalyticsCsv = async (req, res, next) => {
       'customer-lifetime-value': 'getCustomerLifetimeValue',
       'conversion-rate': 'getConversionRate',
       'traffic-sources': 'getTrafficSources',
+      'landing-pages': 'getLandingPagePerformance',
+      devices: 'getDevicePerformance',
       'product-funnel': 'getProductFunnel',
+      'checkout-funnel': 'getCheckoutFunnel',
       'utm-attribution': 'getUtmAttribution',
       'coupon-performance': 'getCouponPerformance',
       'cohort-retention': 'getCohortRetention',
@@ -376,8 +495,16 @@ const getDrillDown = async (req, res, next) => {
 
 const sendTestReport = async (req, res, next) => {
   try {
-    await AnalyticsReportService.sendReport();
-    return success(res, null, 'Test report sent successfully');
+    const result = await AnalyticsReportService.sendReport();
+    if (!result.sent) {
+      const messages = {
+        disabled: 'Enable scheduled reports before sending a test report.',
+        'no-recipients': 'Add at least one recipient before sending a test report.',
+        'invalid-recipients': 'Check recipient addresses; one or more email addresses are invalid.',
+      };
+      return success(res, result, messages[result.reason] || 'No report was sent.');
+    }
+    return success(res, result, `Report sent to ${result.sent} recipient(s).`);
   } catch (err) { next(err); }
 };
 
@@ -404,9 +531,20 @@ module.exports = {
   deleteStaffUser,
   getTopProducts,
   getProductProfitability,
+  getVariantPerformance,
+  getInventoryPerformance,
+  getStockoutHistory,
   getAovTrend,
   getAbandonedCarts,
   getRevenueByCategory,
+  getTaxReport,
+  getTaxByState,
+  getReturnReasons,
+  getOrderStatusReport,
+  getCustomerTypeSales,
+  getProductReturnRates,
+  getShippingPerformance,
+  getSalesReconciliation,
   getRepeatCustomers,
   getRefundRate,
   getGeographicSales,
@@ -414,8 +552,12 @@ module.exports = {
   getCustomerLifetimeValue,
   getConversionRate,
   getTrafficSources,
+  getLandingPagePerformance,
+  getDevicePerformance,
   getProductFunnel,
+  getCheckoutFunnel,
   getUtmAttribution,
+  saveCampaignSpend,
   getCouponPerformance,
   exportAnalyticsCsv,
   getCohortRetention,
