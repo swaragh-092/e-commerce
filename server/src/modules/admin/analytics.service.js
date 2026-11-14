@@ -977,20 +977,36 @@ const getProductProfitability = async ({ period = '30d', startDate, endDate, lim
       GROUP BY r.order_id
     ), lines AS (
       SELECT oi.*, SUM(oi.total) OVER (PARTITION BY oi.order_id) AS order_sales,
-        GREATEST(0, COALESCE(o.discount_amount, 0) - COALESCE((
-          SELECT SUM((d->>'shippingDiscount')::numeric)
-          FROM jsonb_array_elements(CASE WHEN jsonb_typeof(o.applied_discounts) = 'array'
-            THEN o.applied_discounts ELSE '[]'::jsonb END) d
-        ), 0)) AS merchandise_discount,
+        COALESCE(coupons.line_discount, 0) AS line_discount,
+        GREATEST(0, COALESCE(o.discount_amount, 0) - COALESCE(coupons.accounted_discount, 0)) AS unallocated_discount,
         COALESCE(r.amount, 0) AS refund_amount
       FROM order_items oi JOIN eligible_orders o ON o.id = oi.order_id
       LEFT JOIN refunds r ON r.order_id = o.id
-    ), allocated AS (
+      LEFT JOIN LATERAL (
+        SELECT SUM(CASE WHEN jsonb_typeof(d->'lineDiscounts') = 'object'
+            AND d->'lineDiscounts' <> '{}'::jsonb
+          THEN COALESCE((d->'lineDiscounts'->>CONCAT_WS(':', oi.product_id, oi.variant_id))::numeric, 0)
+          ELSE 0 END) AS line_discount,
+          SUM(COALESCE((d->>'shippingDiscount')::numeric, 0) +
+            CASE WHEN jsonb_typeof(d->'lineDiscounts') = 'object' AND d->'lineDiscounts' <> '{}'::jsonb
+              THEN COALESCE((d->>'orderDiscount')::numeric, 0) ELSE 0 END) AS accounted_discount
+        FROM jsonb_array_elements(CASE WHEN jsonb_typeof(o.applied_discounts) = 'array'
+          THEN o.applied_discounts
+          WHEN jsonb_typeof(o.applied_discounts) = 'object' THEN jsonb_build_array(o.applied_discounts)
+          ELSE '[]'::jsonb END) d
+      ) coupons ON TRUE
+    ), discounted AS (
       SELECT lines.*,
-        COALESCE(LEAST(order_sales, merchandise_discount) * total / NULLIF(order_sales, 0), 0) AS discount,
-        COALESCE(LEAST(GREATEST(0, order_sales - merchandise_discount), refund_amount)
-          * total / NULLIF(order_sales, 0), 0) AS refund
+        LEAST(total, line_discount + COALESCE(unallocated_discount * total / NULLIF(order_sales, 0), 0)) AS discount
       FROM lines
+    ), refundable AS (
+      SELECT discounted.*, SUM(total - discount) OVER (PARTITION BY order_id) AS refundable_sales
+      FROM discounted
+    ), allocated AS (
+      SELECT refundable.*,
+        COALESCE(LEAST(refundable_sales, refund_amount)
+          * (total - discount) / NULLIF(refundable_sales, 0), 0) AS refund
+      FROM refundable
     )
     SELECT oi.product_id AS product_id,
       COALESCE(oi.snapshot_name, p.name, 'Deleted product') AS product,
