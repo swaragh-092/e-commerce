@@ -97,7 +97,7 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', devi
     return () => inspectorCleanup.current();
   }, [attachInspector]);
   const [localDevice, setLocalDevice] = useState('desktop');
-  const [iframeKey, setIframeKey] = useState(0); // bump to force iframe reload
+  const [iframeKey, setIframeKey] = useState(() => Date.now()); // cache-bust each preview load
   const [ready, setReady]       = useState(false);
   const [loadTimedOut, setLoadTimedOut] = useState(false);
 
@@ -148,8 +148,10 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', devi
   };
 
   const normalizedPath = path && path !== '/home' ? path : '/';
-  const separator = normalizedPath.includes('?') ? '&' : '?';
-  const iframeSrc = `${window.location.origin}${normalizedPath}${separator}previewMode=1`;
+  const previewUrl = new URL(normalizedPath, window.location.origin);
+  previewUrl.searchParams.set('previewMode', '1');
+  previewUrl.searchParams.set('designerPreview', String(iframeKey));
+  const iframeSrc = previewUrl.toString();
 
   // ── Outer container width ─────────────────────────────────────────────────
   const outerWidth   = cfg.width  ? `${cfg.width}px`  : '100%';
