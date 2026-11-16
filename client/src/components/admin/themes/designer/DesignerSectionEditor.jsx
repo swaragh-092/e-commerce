@@ -1,4 +1,4 @@
-import MerchandisingSourceControls from './MerchandisingSourceControls';
+import ComposedHeroEditor from './ComposedHeroEditor';
 import { useState, useEffect } from 'react';
 import {
   Box, Stack, Typography, IconButton, Button, Chip, Divider,
@@ -20,7 +20,9 @@ import TuneIcon from '@mui/icons-material/Tune';
 import StorageIcon from '@mui/icons-material/Storage';
 import { SECTION_VARIANTS, getSectionLabel } from '../../../storefront/sections/sectionRegistry';
 import { SHADOW_PRESETS, WIDTH_PRESETS } from '../../../storefront/sections/SectionFallback';
+import { useFeature } from '../../../../hooks/useSettings';
 import { getSaleLabels } from '../../../../services/adminService';
+import { galleryService } from '../../../../services/galleryService';
 import MediaPicker from '../../../common/MediaPicker';
 import { getMediaUrl } from '../../../../utils/media';
 
@@ -378,6 +380,7 @@ const BlockListEditor = ({
                       <ImageField
                         key={field.key}
                         label={field.label}
+                        type={field.type || 'text'}
                         value={block?.[field.key] || ''}
                         onChange={(value) => updateField(index, field.key, value)}
                         onBlur={onBlur}
@@ -490,6 +493,44 @@ const BlockListEditor = ({
   );
 };
 
+const GalleryAlbumField = ({ slug, onChange, onBlur }) => {
+  const enabled = useFeature('gallery');
+  const [albums, setAlbums] = useState(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let cancelled = false;
+    galleryService.listPublic()
+      .then((data) => { if (!cancelled) setAlbums(data); })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+  }, [enabled]);
+
+  if (!enabled) return <Typography color="text.secondary">Enable Gallery in Features to select an album.</Typography>;
+  if (failed) return <Typography color="error" role="alert">Could not load albums. Reopen this section to retry.</Typography>;
+  if (!albums) return <Typography color="text.secondary" role="status">Loading albums…</Typography>;
+
+  return (
+    <TextField
+      select
+      label="Gallery album"
+      size="small"
+      fullWidth
+      value={slug || ''}
+      onChange={(event) => {
+        onChange('gallerySlug', event.target.value || undefined);
+        onBlur();
+      }}
+      helperText={albums.length ? 'Images follow the order saved in Gallery.' : 'Create and activate an album in Catalog → Gallery.'}
+    >
+      <MenuItem value="">Choose an album</MenuItem>
+      {slug && !albums.some((album) => album.slug === slug) && <MenuItem value={slug} disabled>Unavailable album</MenuItem>}
+      {albums.map((album) => <MenuItem key={album.id} value={album.slug}>{album.title}</MenuItem>)}
+    </TextField>
+  );
+};
+
 const CampaignLabelSelect = ({ value, onChange }) => {
   const [labels, setLabels] = useState(null);
   const [failed, setFailed] = useState(false);
@@ -524,6 +565,7 @@ const CampaignLabelSelect = ({ value, onChange }) => {
 };
 
 const DesignerSectionEditor = ({
+  allowSharedPlacement,
   section,
   inheritedBlocks = [],
   onBack,
@@ -616,6 +658,29 @@ const DesignerSectionEditor = ({
       {/* Scrollable form */}
       <Box sx={{ flex: 1, overflowY: 'auto', p: 1.5 }}>
         <Stack spacing={1.5}>
+
+          {allowSharedPlacement && section.type === 'composed-hero' && (
+            <TextField select size="small" label="Placement" value={section.placement || 'content'}
+              onChange={(event) => {
+                onChange('placement', event.target.value === 'content' ? undefined : event.target.value);
+                onBlur();
+              }}>
+              <MenuItem value="content">Home page</MenuItem>
+              <MenuItem value="header">Shared header</MenuItem>
+              <MenuItem value="footer">Shared footer</MenuItem>
+            </TextField>
+          )}
+
+          {['composed-hero', 'product-info', 'editorial-image-text'].includes(section.type) && (
+            <ComposedHeroEditor
+              blocks={section.heroBlocks}
+              activeId={activeBlockKey === 'heroBlocks' ? activeBlockIndex : null}
+              onChange={(blocks) => onChange('heroBlocks', blocks)}
+              onCommit={onBlur}
+              onFocus={(id) => onBlockFocus?.('heroBlocks', id)}
+              ImageField={ImageField}
+            />
+          )}
 
           {/* ── SYSTEM SECTION INFO + OPTIONS ── */}
           {isSystemSection && (
@@ -760,6 +825,10 @@ const DesignerSectionEditor = ({
                 fullWidth
                 placeholder="Subscribe"
               />
+            )}
+
+            {section.type === 'gallery' && (
+              <GalleryAlbumField slug={section.gallerySlug} onChange={onChange} onBlur={onBlur} />
             )}
 
             {isCountdown && (

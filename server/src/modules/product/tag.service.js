@@ -71,8 +71,9 @@ const getPublicTagBySlug = async (slug) => {
   if (!tag) throw new AppError('NOT_FOUND', 404, 'Tag not found.');
   return tag;
 };
-const getPublicTags = () => Tag.findAll({
-  attributes: ['slug'], where: { [Op.and]: [publicTagPredicate()] }, order: [['slug', 'ASC']],
+const getPublicTags = ({ includeCardData = false } = {}) => Tag.findAll({
+  attributes: includeCardData ? ['slug', 'name'] : ['slug'],
+  ...(includeCardData && { include: [imageInclude] }), where: { [Op.and]: [publicTagPredicate()] }, order: [['slug', 'ASC']],
 });
 const addTag = (name, description = '', imageId) => sequelize.transaction(async (transaction) => {
   await lockTagDictionary(transaction);

@@ -7,6 +7,7 @@ const DESIGN_DRAFT_KEY = 'store';
 const DESIGN_DRAFT_GROUPS = Object.freeze([
   'theme',
   'componentStyles',
+  'sectionPresets',
   'nav',
   'footer',
   'announcement',

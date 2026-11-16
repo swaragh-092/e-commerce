@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { sequelize, ThemePackage, ThemeActivation, Setting, ApiDefinition, Order, Product } = require('../index');
 const SettingsService = require('../settings/settings.service');
+const DesignDraftService = require('../settings/designDraft.service');
 const AuditService = require('../audit/audit.service');
 const { packageSchema } = require('./theme.validation');
 const AppError = require('../../utils/AppError');
@@ -142,9 +143,29 @@ const pushDefinedSetting = (rows, group, key, value) => {
   if (value !== undefined && value !== null) rows.push({ group, key, value });
 };
 
+const PAGE_TEMPLATE_GROUPS = {
+  product: 'productPage',
+  category: 'categoryPage',
+  collection: 'catalog',
+  brand: 'brandsPage',
+  cart: 'cartPage',
+  account: 'accountPage',
+  blog: 'blogPage',
+};
+
+const withoutStoreDataSource = (section) => {
+  const { dataSourceSlug, dataSourceKey, enabled = true, ...portableSection } = section;
+  return { ...portableSection, enabled };
+};
+
 const buildPageTemplateRows = (pkg, scopes) => {
   const rows = [];
   if (!scopes.includes('pageTemplates') || !pkg.pageTemplates) return rows;
+
+  for (const [page, group] of Object.entries(PAGE_TEMPLATE_GROUPS)) {
+    const sections = pkg.pageTemplates[page]?.sections;
+    if (sections) pushDefinedSetting(rows, group, 'sections', sections.map(withoutStoreDataSource));
+  }
 
   const product = pkg.pageTemplates.product;
   if (product) {
@@ -175,6 +196,9 @@ const buildPageTemplateRows = (pkg, scopes) => {
     pushDefinedSetting(rows, 'catalog', 'gridColumns', collection.productsPerRow);
     pushDefinedSetting(rows, 'catalog', 'filterLayout', collection.filterLayout);
     pushDefinedSetting(rows, 'catalog', 'showBreadcrumbs', collection.showBreadcrumbs);
+    pushDefinedSetting(rows, 'catalog', 'showFilters', collection.showFilters);
+    pushDefinedSetting(rows, 'catalog', 'categoryDepth', collection.categoryDepth);
+    pushDefinedSetting(rows, 'catalog', 'showCategoryIcon', collection.showCategoryIcon);
   }
 
   const brand = pkg.pageTemplates.brand;
@@ -393,7 +417,9 @@ const affectedGroups = (scopes, replaceDemoContent) => {
   if (scopes.includes('layoutStyle')) { groups.add('nav'); groups.add('footer'); groups.add('announcement'); }
   if (scopes.includes('homepageSections')) groups.add('homepage');
   if (replaceDemoContent && scopes.includes('demoContent')) { groups.add('announcement'); groups.add('homepage'); }
-  if (scopes.includes('pageTemplates')) { groups.add('productPage'); groups.add('categoryPage'); groups.add('catalog'); groups.add('brandsPage'); groups.add('cartPage'); groups.add('accountPage'); groups.add('blogPage'); }
+  if (scopes.includes('pageTemplates')) {
+    for (const group of Object.values(PAGE_TEMPLATE_GROUPS)) groups.add(group);
+  }
   return [...groups];
 };
 
@@ -722,10 +748,7 @@ const exportCurrent = async (options = {}) => {
   }
 
   if (includeHomepageSections) {
-    pkg.layout.homepageSections = (snapshot.homepage?.sections || []).map((section) => {
-      const { dataSourceKey, dataSourceSlug, ...exportableSection } = section;
-      return exportableSection;
-    });
+    pkg.layout.homepageSections = (snapshot.homepage?.sections || []).map(withoutStoreDataSource);
   }
 
   pkg.pageTemplates = {
@@ -753,6 +776,9 @@ const exportCurrent = async (options = {}) => {
       productsPerRow: snapshot.catalog?.gridColumns,
       filterLayout: snapshot.catalog?.filterLayout || 'sidebar',
       showBreadcrumbs: snapshot.catalog?.showBreadcrumbs,
+      showFilters: snapshot.catalog?.showFilters,
+      categoryDepth: snapshot.catalog?.categoryDepth,
+      showCategoryIcon: snapshot.catalog?.showCategoryIcon,
     },
     brand: {
       layout: snapshot.brandsPage?.cardLayout || 'standard',
@@ -788,6 +814,11 @@ const exportCurrent = async (options = {}) => {
     },
   };
 
+  for (const [page, group] of Object.entries(PAGE_TEMPLATE_GROUPS)) {
+    const sections = snapshot[group]?.sections;
+    if (Array.isArray(sections)) pkg.pageTemplates[page].sections = sections.map(withoutStoreDataSource);
+  }
+
   if (includeDemoContent) {
     pkg.demoContent = {
       announcementText: snapshot.announcement?.text || '',
@@ -798,6 +829,17 @@ const exportCurrent = async (options = {}) => {
   }
 
   return pkg;
+};
+
+const stageDraft = async (packageData, { scopes, replaceDemoContent }, user) => {
+  const pkg = validatePackage(packageData);
+  if (scopes.includes('dataSources')) {
+    throw new AppError('VALIDATION_ERROR', 400, 'API data sources cannot be staged in a design draft.');
+  }
+  const rows = buildSettingsRows(pkg, scopes, replaceDemoContent);
+  if (!rows.length) throw new AppError('VALIDATION_ERROR', 400, 'No design settings to stage for the selected scopes.');
+
+  return DesignDraftService.saveDraft({ settings: rows }, user, { merge: true });
 };
 
 const apply = async (packageData, applyOptions, user) => {
@@ -992,6 +1034,7 @@ module.exports = {
   importToLibrary,
   exportCurrent,
   apply,
+  stageDraft,
   listActivations,
   rollback,
   buildRollbackPlan,

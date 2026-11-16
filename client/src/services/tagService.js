@@ -6,3 +6,5 @@ export const renameTag = async (id, name, description, imageId) => (await api.pa
 export const deleteTag = async (id) => (await api.delete(`/tags/${id}`)).data;
 export const bulkUpdateProductTags = async (data) => (await api.patch('/tags/products', data)).data;
 export const getPublicTag = async (slug) => (await api.get(`/tags/public/${encodeURIComponent(slug)}`)).data;
+
+export const getPublicTags = async () => (await api.get('/tags/public')).data?.data || [];

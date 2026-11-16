@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext, useCallback } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { Box, Typography, Button, Tab, Tabs, Grid, TextField, InputAdornment, CircularProgress, Stack, Chip, Paper, Dialog, DialogTitle, DialogContent, DialogActions, FormControlLabel, Checkbox, Divider, IconButton, Tooltip } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
@@ -105,6 +105,7 @@ const ThemeGalleryPage = () => {
   const [category, setCategory] = useState('all');
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const navigate = useNavigate();
   const [previewPkg, setPreviewPkg] = useState(null);
   const [applyPkg, setApplyPkg] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -135,7 +136,8 @@ const ThemeGalleryPage = () => {
   const [recentSlugs, setRecentSlugs] = useState(loadRecent);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
-  const [compareSlugs, setCompareSlugs] = useState([]);
+  const [compareTemplates, setCompareTemplates] = useState([]);
+  const [comparisonOpen, setComparisonOpen] = useState(false);
 
   // Toggle a theme as favorite
   const toggleFavorite = useCallback((slug) => {
@@ -156,14 +158,26 @@ const ThemeGalleryPage = () => {
     setPreviewPkg(pkg);
   }, []);
 
-  // Toggle compare selection
-  const toggleCompare = useCallback((slug) => {
-    setCompareSlugs((prev) => {
-      if (prev.includes(slug)) return prev.filter((s) => s !== slug);
-      if (prev.length >= 3) return prev; // max 3
-      return [...prev, slug];
-    });
-  }, []);
+  const renderCompareSelection = (template) => {
+    if (!compareMode) return null;
+    const packageData = template.packageData || template;
+    const id = template.id ? `library:${template.id}` : `builtin:${getMeta(template).slug}`;
+    const selected = compareTemplates.some((entry) => entry.id === id);
+    return (
+      <FormControlLabel
+        label={`Compare ${getMeta(template).name}`}
+        control={
+          <Checkbox
+            checked={selected}
+            disabled={!selected && compareTemplates.length === 2}
+            onChange={(_, checked) => setCompareTemplates((current) => checked
+              ? [...current, { id, packageData }]
+              : current.filter((entry) => entry.id !== id))}
+          />
+        }
+      />
+    );
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -218,14 +232,20 @@ const ThemeGalleryPage = () => {
   const handleApply = async (packageData, scopes, replaceDemoContent) => {
     setActionLoading(true);
     try {
-      await themeService.applyTheme(packageData, scopes, replaceDemoContent);
-      notify('Store template installed successfully.', 'success');
+      if (scopes.includes('dataSources')) {
+        await themeService.applyTheme(packageData, scopes, replaceDemoContent);
+        notify('Template and API data sources applied to the live store.', 'success');
+        if (refreshSettings) await refreshSettings();
+        fetchData();
+      } else {
+        await themeService.stageTheme(packageData, scopes, replaceDemoContent);
+        notify('Template staged. Preview it in Store Designer before publishing.', 'success');
+        navigate('/admin/store-designer');
+      }
       setApplyPkg(null);
       setPreviewPkg(null);
-      if (refreshSettings) await refreshSettings();
-      fetchData();
     } catch (e) {
-      notify(e.response?.data?.message || 'Failed to install store template', 'error');
+      notify(e.response?.data?.error?.message || e.response?.data?.message || 'Failed to prepare store template', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -505,13 +525,23 @@ const ThemeGalleryPage = () => {
           />
           <Chip
             icon={<CompareArrowsIcon />}
-            label={compareMode ? `Compare (${compareSlugs.length})` : 'Compare'}
+            label={compareMode ? `Compare (${compareTemplates.length})` : 'Compare'}
             size="small"
             clickable
             color={compareMode ? 'primary' : 'default'}
             variant={compareMode ? 'filled' : 'outlined'}
-            onClick={() => { setCompareMode((v) => !v); if (compareMode) setCompareSlugs([]); }}
+            onClick={() => { setCompareMode((v) => !v); if (compareMode) setCompareTemplates([]); }}
           />
+        </Stack>
+      )}
+
+      {compareMode && (tab === 0 || tab === 1) && (
+        <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
+          <Typography variant="body2">Select two templates to compare.</Typography>
+          <Button variant="outlined" disabled={compareTemplates.length !== 2} onClick={() => setComparisonOpen(true)}>
+            Compare selected
+          </Button>
+          <Button onClick={() => setCompareTemplates([])}>Clear selection</Button>
         </Stack>
       )}
 
@@ -519,6 +549,7 @@ const ThemeGalleryPage = () => {
         <Grid container spacing={2.5}>
           {sortedBuiltin.map((template) => (
             <Grid item xs={12} sm={6} md={4} key={template.meta?.slug}>
+              {renderCompareSelection(template)}
               <ThemeCard theme={template} onPreview={setPreviewPkg} onApply={onApplyTemplate} onDetail={setDetailPkg} isActive={activeTemplateSlug === (getMeta(template).name)} />
             </Grid>
           ))}
@@ -534,6 +565,7 @@ const ThemeGalleryPage = () => {
         <Grid container spacing={2.5}>
           {sortedLibrary.map((template) => (
             <Grid item xs={12} sm={6} md={4} key={template.id}>
+              {renderCompareSelection(template)}
               <ThemeCard theme={template} onPreview={(pkg) => setPreviewPkg(pkg || template.packageData)} onApply={canManageTemplates ? (pkg) => setApplyPkg(pkg || template.packageData) : undefined} onDetail={(pkg) => setDetailPkg(pkg || template.packageData)} isActive={activeTemplateSlug === (getMeta(template).name)} />
             </Grid>
           ))}
@@ -710,6 +742,14 @@ const ThemeGalleryPage = () => {
         </Box>
       )}
 
+      {comparisonOpen && compareTemplates.length === 2 && (
+        <ThemePreviewModal
+          open
+          onClose={() => setComparisonOpen(false)}
+          packageData={compareTemplates[0].packageData}
+          comparisonPackage={compareTemplates[1].packageData}
+        />
+      )}
       <ThemePreviewModal open={!!previewPkg} onClose={() => setPreviewPkg(null)} packageData={previewPkg} onApply={onApplyTemplate} />
       <ThemeApplyDialog open={!!applyPkg} onClose={() => setApplyPkg(null)} packageData={applyPkg} onConfirm={handleApply} loading={actionLoading} />
       <ThemeImportDialog open={importOpen} onClose={() => setImportOpen(false)} onImport={handleImport} onPreview={(pkg) => { setImportOpen(false); setPreviewPkg(pkg); }} loading={actionLoading} />

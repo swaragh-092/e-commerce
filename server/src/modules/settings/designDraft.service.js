@@ -144,13 +144,15 @@ const getArchivedDrafts = async ({ limit = 30 } = {}) => {
   return { archives: archives.map(serializeArchive) };
 };
 
-const saveDraft = async ({ settings, expectedRevision }, user) => {
-  const payload = normalizePayload(settings);
-  assertDraftPermissions(payload, user);
+const saveDraft = async ({ settings, expectedRevision }, user, { merge = false } = {}) => {
+  const writes = normalizePayload(settings);
 
   return sequelize.transaction(async (t) => {
     const draft = await findDraft(t, { lock: true });
-    if (draft?.status === 'draft') assertRevision(draft, expectedRevision);
+    if (draft?.status === 'draft' && !merge) assertRevision(draft, expectedRevision);
+
+    const payload = merge && draft?.status === 'draft' ? normalizePayload([...draft.payload, ...writes]) : writes;
+    assertDraftPermissions(payload, user);
 
     const baseSnapshot = draft?.status === 'draft'
       ? draft.baseSnapshot

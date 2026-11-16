@@ -10,6 +10,10 @@ const { idParamSchema } = require('../../utils/common.validation');
 const { PERMISSIONS } = require('../../config/permissions');
 const { success, paginated } = require('../../utils/response');
 
+router.get('/public', async (req, res, next) => {
+  try { return success(res, await service.getPublicTags({ includeCardData: true })); }
+  catch (err) { next(err); }
+});
 router.get('/public/:slug', validate(tagSlugSchema, 'params'), async (req, res, next) => {
   try { return success(res, await service.getPublicTagBySlug(req.params.slug)); }
   catch (err) { next(err); }

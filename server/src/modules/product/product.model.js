@@ -102,6 +102,7 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: true,
             defaultValue: null,
         },
+        storefrontLayout: { type: DataTypes.STRING(50), allowNull: true },
         status: {
             type: DataTypes.STRING(20),
             defaultValue: 'draft',

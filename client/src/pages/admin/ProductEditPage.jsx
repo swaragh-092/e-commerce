@@ -1,3 +1,4 @@
+import { getDesignPageControlSchema } from '../../utils/designRegistry';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
@@ -267,6 +268,7 @@ const ProductEditPage = () => {
     saleLabel: '',
     quantity: '',
     status: 'draft',
+    storefrontLayout: null,
     type: 'simple',
     isEnabled: true,
     categoryIds: [],
@@ -356,6 +358,7 @@ const ProductEditPage = () => {
               saleLabel: p.saleLabel || '',
               quantity: p.type === 'variable' ? nextVariantStockTotal : (p.quantity || 0),
               status: p.status || 'draft',
+              storefrontLayout: p.storefrontLayout ?? null,
               type: p.type || 'simple',
               isEnabled: p.isEnabled ?? true,
               categoryIds: p.categories?.map((c) => c.id) || [],
@@ -1318,6 +1321,21 @@ const ProductEditPage = () => {
                 disableCloseOnSelect
                 sx={{ mt: 1 }}
               />
+
+              <FormControl fullWidth margin="normal">
+                <InputLabel id="storefront-layout-label">Storefront layout</InputLabel>
+                <Select
+                  labelId="storefront-layout-label"
+                  label="Storefront layout"
+                  value={formData.storefrontLayout || ''}
+                  onChange={(event) => setField('storefrontLayout', event.target.value || null)}
+                >
+                  <MenuItem value="">Use store default</MenuItem>
+                  {getDesignPageControlSchema('product').groups[0].fields[0].options.map(({ value, label }) => (
+                    <MenuItem key={value} value={value}>{label}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
 
               {tagsEnabled && canReadTags && <ProductTagsInput value={formData.tags} onChange={(tags) => setField('tags', tags)} disabled={!canSaveProduct || !canManageTags} error={errors.tags} />}
 

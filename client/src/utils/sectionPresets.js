@@ -15,8 +15,7 @@ export const SECTION_PRESET_GOALS = Object.freeze([
 ]);
 
 const SECTION_PRESET_META = Object.freeze({
-  [SECTION_TYPES.TAG_SHOWCASE]: { goal: 'merchandising', description: 'Link shoppers to curated product tags.' },
-  [SECTION_TYPES.GALLERY_GRID]: { goal: 'content', description: 'Display images from a published gallery.' },
+  [SECTION_TYPES.COMPOSED_HERO]: { goal: 'hero', description: 'Build a hero with grouped text, links, and responsive media.' },
   [SECTION_TYPES.HERO_CAROUSEL]: { goal: 'hero', description: 'A high-impact first screen for launches, brand stories, or campaigns.' },
   [SECTION_TYPES.PRODUCT_ROW]: { goal: 'merchandising', description: 'Feature products, new arrivals, offers, or recommended items.' },
   [SECTION_TYPES.CATEGORY_SHORTCUTS]: { goal: 'merchandising', description: 'Give shoppers fast visual routes into important categories.' },
@@ -31,12 +30,14 @@ const SECTION_PRESET_META = Object.freeze({
   [SECTION_TYPES.COUNTDOWN_SALE]: { goal: 'campaign', description: 'Create urgency around sales and limited-time campaigns.' },
   [SECTION_TYPES.PROMO_BANNERS]: { goal: 'campaign', description: 'Highlight offers, bundles, shipping promos, or seasonal pushes.' },
   [SECTION_TYPES.EDITORIAL_IMAGE_TEXT]: { goal: 'content', description: 'Add story-led content, brand education, or product context.' },
+  [SECTION_TYPES.GALLERY]: { goal: 'content', description: 'Display photos from an active Gallery album.' },
   [SECTION_TYPES.LOGO_CLOUD]: { goal: 'content', description: 'Show partners, press, brands, or trusted labels.' },
 });
 
 const SECTION_PRESETS = Object.freeze({
-  [SECTION_TYPES.TAG_SHOWCASE]: { title: 'Shop by Tag', tagSlugs: [], count: 8 },
-  [SECTION_TYPES.GALLERY_GRID]: { title: 'Gallery', gallerySlug: '', count: 8 },
+  [SECTION_TYPES.COMPOSED_HERO]: {
+    heroBlocks: [{ id: 'heading', type: 'heading', text: 'Welcome to our store' }],
+  },
   [SECTION_TYPES.HERO_CAROUSEL]: {
     title: 'Build your dream store',
     subtitle: 'Curated collections, sharp deals, and a smoother shopping experience.',
@@ -105,10 +106,7 @@ const SECTION_PRESETS = Object.freeze({
     title: 'Loved by Customers',
     subtitle: 'Use social proof to make the store feel alive.',
     variant: 'cards',
-    items: [
-      { title: 'Great experience', text: 'The store was easy to browse and checkout was smooth.', author: 'Happy customer' },
-      { title: 'Fast service', text: 'The product arrived quickly and matched the description.', author: 'Verified buyer' },
-    ],
+    items: [],
   },
   [SECTION_TYPES.LOGO_CLOUD]: {
     title: 'Featured Brands',
@@ -119,6 +117,7 @@ const SECTION_PRESETS = Object.freeze({
     subtitle: 'Let shoppers discover products by brand.',
     count: 8,
   },
+  [SECTION_TYPES.GALLERY]: { title: 'Gallery', count: 8 },
   [SECTION_TYPES.NEWSLETTER_SIGNUP]: {
     title: 'Get updates and offers',
     subtitle: 'Send new arrivals, promotions, and store updates to subscribers.',

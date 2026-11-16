@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Box, Skeleton } from '@mui/material';
 import { SECTION_TYPES, getSectionType, isKnownSectionType } from './sectionRegistry';
 import { SectionFrame, UnsupportedSection } from './SectionFallback';
+import ComposedHero from './ComposedHero';
 import HeroSection from './HeroSection';
 import TrustSection from './TrustSection';
 import PromoBannerSection from './PromoBannerSection';
@@ -9,6 +10,7 @@ import EditorialSection from './EditorialSection';
 import ContentGridSection from './ContentGridSection';
 import CategorySection from './CategorySection';
 import ProductRowSection from './ProductRowSection';
+import GallerySection from './GallerySection';
 import NewsletterSection from './NewsletterSection';
 import CountdownSection from './CountdownSection';
 import RecentlyViewedSection from './RecentlyViewedSection';
@@ -87,14 +89,26 @@ const SectionRenderer = ({
     return <SectionFrame section={section} index={index} preview={preview}><UnsupportedSection section={section} mode={mode} /></SectionFrame>;
   }
 
+  const lazyEnabled = Boolean(lazy) && !selected && index >= eagerCount;
+  const frameProps = { section, index, preview, selected, onSelect, ...editorProps };
+
+  if (type === SECTION_TYPES.GALLERY) {
+    return (
+      <LazySectionGate enabled={lazyEnabled} minHeight={sectionMinHeight(section, preview)} rootMargin={lazyRootMargin}>
+        <GallerySection frameProps={frameProps} />
+      </LazySectionGate>
+    );
+  }
+
+  if (!preview && [SECTION_TYPES.FAQ, SECTION_TYPES.TESTIMONIALS, SECTION_TYPES.LOGO_CLOUD].includes(type) && !section.items?.length) {
+    return null;
+  }
+
   let content = null;
 
   switch (type) {
-    case SECTION_TYPES.TAG_SHOWCASE:
-      content = <TagShowcaseSection section={section} mode={mode} />;
-      break;
-    case SECTION_TYPES.GALLERY_GRID:
-      content = <GalleryGridSection section={section} mode={mode} />;
+    case SECTION_TYPES.COMPOSED_HERO:
+      content = <ComposedHero section={section} product={data.product} onInlineBlockFocus={preview ? onInlineBlockFocus : undefined} />;
       break;
     case SECTION_TYPES.HERO_CAROUSEL:
       content = <HeroSection section={section} slides={data.slides || data.heroSlides || []} mode={mode} onSelectComponent={onSelectComponent} {...editorProps} />;
@@ -150,7 +164,14 @@ const SectionRenderer = ({
       );
       break;
     case SECTION_TYPES.EDITORIAL_IMAGE_TEXT:
-      content = <EditorialSection section={section} mode={mode} onSelectComponent={onSelectComponent} {...editorProps} />;
+      content = (
+        <>
+          <EditorialSection section={section} mode={mode} onSelectComponent={onSelectComponent} {...editorProps} />
+          {section.heroBlocks?.length > 0 && (
+            <ComposedHero section={section} product={data.product} onInlineBlockFocus={preview ? onInlineBlockFocus : undefined} />
+          )}
+        </>
+      );
       break;
     case SECTION_TYPES.TESTIMONIALS:
       content = <ContentGridSection section={section} fallbackTitle="Customer Story" mode={mode} {...editorProps} />;
@@ -188,19 +209,8 @@ const SectionRenderer = ({
       content = <UnsupportedSection section={section} mode={mode} />;
   }
 
-  const lazyEnabled = Boolean(lazy) && !selected && index >= eagerCount;
-
   return (
-    <SectionFrame
-      section={section}
-      index={index}
-      preview={preview}
-      selected={selected}
-      onSelect={onSelect}
-      onInlineFieldChange={onInlineFieldChange}
-      onInlineFieldCommit={onInlineFieldCommit}
-      onInlineBlockFocus={onInlineBlockFocus}
-    >
+    <SectionFrame {...frameProps}>
       <LazySectionGate enabled={lazyEnabled} minHeight={sectionMinHeight(section, preview)} rootMargin={lazyRootMargin}>
         {content}
       </LazySectionGate>

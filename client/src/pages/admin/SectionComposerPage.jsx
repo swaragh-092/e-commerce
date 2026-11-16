@@ -1,3 +1,4 @@
+import { getPageSections } from '../../utils/designerSections';
 import { useState, useEffect, useCallback, useContext, useMemo, useRef } from 'react';
 import {
   Box, Button, Card, Container, Divider, IconButton, Stack, Switch,
@@ -169,7 +170,10 @@ const SectionComposerPage = () => {
   const [archivesOpen, setArchivesOpen] = useState(false);
   const [usingLive, setUsingLive] = useState(false);
   const [draftDeletes, setDraftDeletes] = useState([]);
+  const [publishConflict, setPublishConflict] = useState(null);
   const [publishOpen, setPublishOpen] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [designVersions, setDesignVersions] = useState([]);
@@ -224,6 +228,47 @@ const SectionComposerPage = () => {
   const { hasPermission } = useAuth();
   const canManageAdvancedSettings = hasPermission(PERMISSIONS.SETTINGS_ADVANCED);
   const { settings, refreshSettings } = useContext(SettingsContext) || {};
+  const liveSettingsRef = useRef(settings);
+  liveSettingsRef.current = settings;
+
+  const getInheritedBlocksForSection = useCallback((sec) => {
+    if (!sec) return [];
+    if (sec.type === 'hero-carousel') {
+      const slides = settings?.homepage?.heroSlides?.length ? settings.homepage.heroSlides : null;
+      return Array.isArray(slides) && slides.length ? slides : [
+        {
+          eyebrow: 'Fresh drops, sharper prices',
+          title: 'Shop the Latest',
+          subtitle: 'Discover thousands of products at great prices.',
+          buttonText: 'Shop Now',
+          buttonLink: '/products',
+          image: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1800&q=80',
+          color: '#ffffff',
+        },
+      ];
+    }
+    if (sec.type === 'value-props' || sec.type === 'trust-badges') {
+      const items = settings?.homepage?.valueProps?.length ? settings.homepage.valueProps : null;
+      return Array.isArray(items) && items.length ? items : [
+        { icon: 'shipping', title: 'Fast Delivery', text: 'Reliable shipping on every order' },
+        { icon: 'offers', title: 'Daily Offers', text: 'Fresh deals across top categories' },
+        { icon: 'secure', title: 'Secure Payments', text: 'Protected checkout experience' },
+        { icon: 'support', title: 'Easy Support', text: 'Help when shoppers need it' },
+      ];
+    }
+    if (sec.type === 'promo-banners') {
+      const items = settings?.homepage?.promoBanners?.length ? settings.homepage.promoBanners : null;
+      return Array.isArray(items) && items.length ? items : [
+        { title: 'Limited Offer', subtitle: 'Fresh deals and curated picks.', ctaText: 'Shop Now', link: '/products', color: '#fff7ed', accentColor: '#f97316' },
+        { title: 'New Arrivals', subtitle: 'Browse what just landed.', ctaText: 'Explore', link: '/products?sort=newest', color: '#ecfeff', accentColor: '#0891b2' },
+        { title: 'Featured Edit', subtitle: 'Handpicked products for your shoppers.', ctaText: 'View Edit', link: '/products?featured=true', color: '#f0fdf4', accentColor: '#16a34a' },
+      ];
+    }
+    if (sec.type === 'category-shortcuts') {
+      return settings?.homepage?.categoryTiles?.length ? settings.homepage.categoryTiles : [];
+    }
+    return [];
+  }, [settings]);
 
   const getInheritedBlocksForSection = useCallback((sec) => {
     if (!sec) return [];
@@ -290,8 +335,10 @@ const SectionComposerPage = () => {
   };
 
   // Derived properties from active FSM state
+  const productSections = getPageSections({ productPage: pageSettings.product }, 'product');
+  const editableSections = activePage === 'product' ? productSections : sections;
   const editSection = panelView.mode === 'section-editor'
-    ? sections.find((s) => s.id === panelView.sectionId) || null
+    ? editableSections.find((s) => s.id === panelView.sectionId) || null
     : null;
 
   const activeComponent = panelView.mode === 'theme-settings' ? panelView.componentKey : null;
@@ -400,20 +447,19 @@ const SectionComposerPage = () => {
       const [homepage, draftState, designState] = await Promise.all([
         getSettingsGroup('homepage'),
         getDesignDraft(),
-        getDesignState(),
+        getDesignState().catch(() => ({ groups: {}, sources: {}, defaults: {} })),
       ]);
       setDesignSources(designState?.sources || {});
       setDesignDefaults(designState?.defaults || {});
       const existingDraft = draftState?.draft || null;
-      setDraftConflicts(draftState?.conflicts || []);
-      const draftResult = applyDraftPayload(existingDraft?.payload || [], designState?.groups || {}, designState?.defaults || {});
+      const baseGroups = { ...liveSettingsRef.current, ...designState?.groups, homepage };
+      const draftResult = applyDraftPayload(existingDraft?.payload || [], baseGroups, designState?.defaults || {});
       const initialSections = draftResult?.groups?.homepage?.sections || homepage?.sections || [];
       if (existingDraft) {
         draftHydratedRef.current = true;
         setDraft(existingDraft);
         setDraftDeletes(draftResult?.resetTargets || []);
       } else {
-        draftHydratedRef.current = true;
         setDraft(null);
         setDraftDeletes([]);
       }
@@ -455,6 +501,16 @@ const SectionComposerPage = () => {
       target.group !== group || (key !== null && target.key !== null && target.key !== key)
     )));
   };
+
+  const stagedHomepage = useMemo(() => Object.fromEntries((draft?.payload || [])
+    .filter(({ group, key, operation }) => group === 'homepage' && key !== 'sections' && operation !== 'delete')
+    .map(({ key, value }) => [key, value])), [draft]);
+  const sectionPresets = useMemo(() => ({
+    ...settings?.sectionPresets,
+    ...Object.fromEntries((draft?.payload || [])
+      .filter(({ group, operation }) => group === 'sectionPresets' && operation !== 'delete')
+      .map(({ key, value }) => [key, value])),
+  }), [draft, settings?.sectionPresets]);
 
   const buildDraftPayload = (basePayload) => {
     const groupResets = new Set(draftDeletes.filter((target) => target.key === null).map((target) => target.group));
@@ -501,6 +557,7 @@ const SectionComposerPage = () => {
         Object.entries(vals || {}).map(([key, value]) => ({ key, value, group: DESIGNER_PAGE_GROUP_MAP[pg] || pg }))
       );
       const payload = buildDraftPayload([
+        ...(draft?.payload || []).filter(({ group, operation }) => operation !== 'delete' && (group !== 'advanced' || canManageAdvancedSettings)),
         { key: 'sections', value: sectionsToSave, group: 'homepage' },
         ...Object.entries(themeSettings || {}).map(([key, value]) => ({ key, value, group: 'theme' })),
         ...Object.entries(componentStyles || {}).map(([key, value]) => ({ key, value, group: 'componentStyles' })),
@@ -564,7 +621,7 @@ const SectionComposerPage = () => {
       }));
       const draftResult = applyDraftPayload(
         restored?.draft?.payload || [],
-        designState?.groups || {},
+        { ...settings, ...designState?.groups },
         designState?.defaults || {},
       );
       setDesignSources(designState?.sources || {});
@@ -585,6 +642,23 @@ const SectionComposerPage = () => {
     }
   };
 
+  const handleDiscard = async () => {
+    setDiscarding(true);
+    try {
+      await discardDesignDraft(draft.revision);
+      draftHydratedRef.current = false;
+      setDraft(null);
+      setDirty(false);
+      setDiscardOpen(false);
+      notify('Design draft discarded.', 'success');
+      await fetchSections();
+    } catch (error) {
+      notify(error.response?.data?.error?.message || 'Failed to discard the design draft.', 'error');
+    } finally {
+      setDiscarding(false);
+    }
+  };
+
   const handlePublish = async () => {
     if (loadError) {
       notify('Cannot publish: store sections failed to load. Please retry loading first.', 'error');
@@ -593,7 +667,7 @@ const SectionComposerPage = () => {
     if (!draft || dirty) return;
     setPublishing(true);
     try {
-      await publishDesignDraft(draft.revision);
+      await publishDesignDraft(draft.revision, publishConflict?.conflictToken);
       draftHydratedRef.current = false;
       setDraft(null);
       setDraftDeletes([]);
@@ -604,9 +678,10 @@ const SectionComposerPage = () => {
       notify('Design draft published to the storefront.', 'success');
       setPublishOpen(false);
     } catch (error) {
-      if (error.response?.data?.error?.details?.conflicts) {
-        setDraftConflicts(error.response.data.error.details.conflicts);
-        setPublishOpen(false);
+      const apiError = error.response?.data?.error;
+      if (apiError?.code === 'DRAFT_CONFLICT' && apiError.details?.conflictToken) {
+        setPublishConflict(apiError.details);
+        return;
       }
       notify(error.response?.data?.error?.message || error?.message || 'Publish failed. Review the latest design changes and try again.', 'error');
     } finally {
@@ -760,6 +835,11 @@ const SectionComposerPage = () => {
   const livePreviewRef = useRef({ value: null, timer: null });
   const handleInlineFieldChange = (key, value) => {
     if (!panelView.sectionId) return;
+    if (activePage === 'product') {
+      handlePageSettingChange('product', { ...pageSettings.product, sections: productSections.map((section) =>
+        section.id === panelView.sectionId ? updateSectionField(section, key, value) : section) });
+      return;
+    }
     const next = sectionsRef.current.map((section) =>
       section.id === panelView.sectionId ? updateSectionField(section, key, value) : section
     );
@@ -767,15 +847,16 @@ const SectionComposerPage = () => {
   };
 
   const handleInlineFieldBlur = () => {
+    if (activePage === 'product') return;
     // Commit the current state to the undo/redo history on input blur
-    const latestSections = sectionsRef.current;
+    const currentSections = sectionsRef.current;
     const currentHead = history[historyIndex];
     const currentHeadSections = Array.isArray(currentHead) ? currentHead : currentHead?.sections;
-    if (currentHead && JSON.stringify(currentHeadSections) === JSON.stringify(latestSections)) {
+    if (currentHead && JSON.stringify(currentHeadSections) === JSON.stringify(currentSections)) {
       return;
     }
     const nextHistory = history.slice(0, historyIndex + 1);
-    setHistory([...nextHistory, latestSections]);
+    setHistory([...nextHistory, currentSections]);
     setHistoryIndex(nextHistory.length);
   };
 
@@ -872,7 +953,7 @@ const SectionComposerPage = () => {
         id: editSection.id,
         variant: editSection.variant,
         title: editSection.title,
-        sectionPresets: settings?.sectionPresets || {},
+        sectionPresets,
       }),
       enabled: editSection.enabled !== false,
     };
@@ -933,13 +1014,13 @@ const SectionComposerPage = () => {
       },
       demoContent: {
         announcementText: announcementSettings?.text || '',
-        heroSlides: extractLiveItems('hero-carousel', 'slides') || settings.homepage?.heroSlides || [],
-        valueProps: extractLiveItems('value-props', 'items') || settings.homepage?.valueProps || [],
-        promoBanners: extractLiveItems('promo-banners', 'items') || settings.homepage?.promoBanners || [],
+        heroSlides: extractLiveItems('hero-carousel', 'slides') || stagedHomepage.heroSlides || settings.homepage?.heroSlides || [],
+        valueProps: extractLiveItems('value-props', 'items') || stagedHomepage.valueProps || settings.homepage?.valueProps || [],
+        promoBanners: extractLiveItems('promo-banners', 'items') || stagedHomepage.promoBanners || settings.homepage?.promoBanners || [],
         categoryTiles: extractLiveItems('category-shortcuts', 'items') || settings.homepage?.categoryTiles || [],
       },
       componentStyles: componentStyles || settings.componentStyles || {},
-      sectionPresets: settings.sectionPresets || {},
+      sectionPresets,
       productPage: pageSettings.product || {},
       categoryPage: pageSettings.category || {},
       catalog: pageSettings.collection || {},
@@ -953,7 +1034,7 @@ const SectionComposerPage = () => {
       notFoundPage: pageSettings['not-found'] || {},
       ordersPage: pageSettings.orders || {},
     };
-  }, [settings, sections, themeSettings, componentStyles, navSettings, footerSettings, announcementSettings, pageSettings]);
+  }, [settings, sections, themeSettings, componentStyles, navSettings, footerSettings, announcementSettings, pageSettings, sectionPresets, stagedHomepage]);
 
   // Debounced live-preview derivation. The editor's local state updates
   // synchronously on every keystroke / color-picker pixel, but the
@@ -971,7 +1052,7 @@ const SectionComposerPage = () => {
     return {
       ...settings,
       theme: themeSettings || settings.theme || {},
-      homepage: { ...(settings.homepage || {}), sections },
+      homepage: { ...(settings.homepage || {}), ...stagedHomepage, sections },
       componentStyles: componentStyles || settings.componentStyles || {},
       nav: navSettings || {},
       footer: footerSettings || {},
@@ -992,7 +1073,7 @@ const SectionComposerPage = () => {
     };
   // Depend on `livePreviewTick` so the memo re-runs only after the 200ms debounce.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings, sections, themeSettings, componentStyles, navSettings, footerSettings, announcementSettings, pageSettings, advancedSettings, canManageAdvancedSettings, livePreviewTick]);
+  }, [settings, sections, themeSettings, componentStyles, navSettings, footerSettings, announcementSettings, pageSettings, advancedSettings, canManageAdvancedSettings, stagedHomepage, livePreviewTick]);
 
   if (loading) {
     return (
@@ -1159,20 +1240,16 @@ const SectionComposerPage = () => {
               <MenuItem onClick={() => { setActionsAnchor(null); openAddSection(sections.length, 'template'); }}><AddIcon fontSize="small" sx={{ mr: 1.5 }} />Add section</MenuItem>
               <MenuItem onClick={() => { setActionsAnchor(null); setSaveTemplateOpen(true); }}><SaveIcon fontSize="small" sx={{ mr: 1.5 }} />Save as template</MenuItem>
               <MenuItem onClick={() => { setActionsAnchor(null); openVersionHistory(); }} disabled={saving || publishing}><HistoryIcon fontSize="small" sx={{ mr: 1.5 }} />Version history</MenuItem>
-              <MenuItem onClick={() => { setActionsAnchor(null); setArchivesOpen(true); }} disabled={saving || publishing}>Archived drafts</MenuItem>
-              <MenuItem onClick={() => { setActionsAnchor(null); setReviewDraftOpen(true); }} disabled={!draft || saving || publishing}>Review saved draft</MenuItem>
+              {draft && <MenuItem onClick={() => { setActionsAnchor(null); setDiscardOpen(true); }} disabled={saving || publishing || discarding}>Discard draft</MenuItem>}
               {isMobile && <MenuItem onClick={() => { setActionsAnchor(null); handleUndo(); }} disabled={historyIndex <= 0}><UndoIcon fontSize="small" sx={{ mr: 1.5 }} />Undo section change</MenuItem>}
               {isMobile && <MenuItem onClick={() => { setActionsAnchor(null); handleRedo(); }} disabled={historyIndex >= history.length - 1}><RedoIcon fontSize="small" sx={{ mr: 1.5 }} />Redo section change</MenuItem>}
             </Menu>
             <Button size="small" variant="outlined" color="inherit" startIcon={isMobile ? undefined : <SaveIcon />} onClick={handleSave} disabled={Boolean(loadError) || !dirty || saving || publishing}>
               {saving ? 'Saving...' : 'Save draft'}
             </Button>
-            <Stack spacing={0.25} alignItems="flex-start">
-              <Tooltip title={publishDisabledReason || 'Publish your saved draft to the store'}>
-                <span><Button size="small" variant="contained" onClick={() => setPublishOpen(true)} disabled={Boolean(loadError) || !draft || draftConflicts.length > 0 || dirty || saving || publishing}>Publish</Button></span>
-              </Tooltip>
-              {publishDisabledReason && <Typography variant="caption" color="text.secondary" role="status">{publishDisabledReason}</Typography>}
-            </Stack>
+            <Tooltip title={dirty ? 'Save your draft before publishing' : !draft ? 'Save a draft to publish changes' : 'Publish your saved draft to the store'}>
+              <span><Button size="small" variant="contained" onClick={() => { setPublishConflict(null); setPublishOpen(true); }} disabled={Boolean(loadError) || !draft || dirty || saving || publishing}>Publish</Button></span>
+            </Tooltip>
           </Stack>
         </Box>
       </Paper>
@@ -1248,14 +1325,15 @@ const SectionComposerPage = () => {
 
           {editSection ? (
             <DesignerSectionEditor
+              allowSharedPlacement={activePage === 'home'}
               section={editSection}
               inheritedBlocks={getInheritedBlocksForSection(editSection)}
               onBack={backToTree}
               onChange={handleInlineFieldChange}
               onBlur={handleInlineFieldBlur}
-              onApplyPreset={applySmartPreset}
-              onDuplicate={duplicateSection}
-              onDelete={removeSectionById}
+              onApplyPreset={activePage === 'home' ? applySmartPreset : undefined}
+              onDuplicate={activePage === 'home' ? duplicateSection : undefined}
+              onDelete={activePage === 'home' ? removeSectionById : undefined}
               onComponentEdit={openComponentEditor}
               activeBlockKey={panelView.blockKey}
               activeBlockIndex={panelView.blockIndex}
@@ -1307,7 +1385,7 @@ const SectionComposerPage = () => {
             />
           ) : (
             <DesignerTreePanel
-              sections={sections}
+              sections={editableSections}
               loadError={loadError}
               onRetryLoad={fetchSections}
               activePage={activePage}
@@ -1347,13 +1425,13 @@ const SectionComposerPage = () => {
                 Storefront Preview
               </Typography>
               <ToggleButtonGroup
-                value={devicePreview ? 'live' : previewRenderMode}
+                value={activePage === 'home' && !devicePreview ? previewRenderMode : 'live'}
                 exclusive
                 onChange={(_, v) => v && setPreviewRenderMode(v)}
                 size="small"
               >
-                <ToggleButton value="mock" disabled={devicePreview} aria-label="Interactive editor preview">Edit design</ToggleButton>
-                <ToggleButton value="live" aria-label="Read-only live storefront preview">Test storefront</ToggleButton>
+                <ToggleButton value="mock" disabled={activePage !== 'home' || devicePreview} aria-label="Interactive editor preview">Edit design</ToggleButton>
+                <ToggleButton value="live" aria-label="Interactive preview of the current design">Test design</ToggleButton>
               </ToggleButtonGroup>
             </Stack>
             <ToggleButtonGroup
@@ -1369,15 +1447,7 @@ const SectionComposerPage = () => {
           </Box>
 
           <Box sx={{ px: 1.5, py: 0.75, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
-            {activePage !== 'home' && previewRenderMode === 'mock' && !devicePreview ? (
-              <Alert
-                severity="info"
-                variant="outlined"
-                sx={{ py: 0, alignItems: 'center', '& .MuiAlert-message': { py: 0.5, fontSize: '0.78rem' } }}
-              >
-                Previewing the <strong>{activePageLabel}</strong> draft with sample content. Switch to Test storefront to check the live page.
-              </Alert>
-            ) : activePage !== 'home' ? (
+            {activePage !== 'home' ? (
               <Alert
                 severity="info"
                 variant="outlined"
@@ -1421,7 +1491,7 @@ const SectionComposerPage = () => {
                 variant="standard"
                 sx={{ py: 0, alignItems: 'center', '& .MuiAlert-message': { py: 0.5, fontSize: '0.78rem' } }}
               >
-                Real storefront rendering and data. Click a section to edit it in the sidebar. Save draft, then Publish to update your store.
+                Click any section to edit it. Save draft to keep your changes, then Publish to update your store.
               </Alert>
             )}
           </Box>
@@ -1451,7 +1521,7 @@ const SectionComposerPage = () => {
               }}
             >
               <Box sx={{ width: '100%', flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
-                {activePage !== 'home' && livePreview ? (
+                {activePage !== 'home' ? (
                   previewTarget.error ? (
                     <Box sx={{ p: 4, textAlign: 'center' }}>
                       <Alert severity="info" variant="outlined" sx={{ maxWidth: 480, mx: 'auto' }}>
@@ -1466,12 +1536,13 @@ const SectionComposerPage = () => {
                     <LiveStorefrontPreview
                       settings={livePreviewSettings}
                       path={previewTarget.path || '/'}
+                      reloadOnSettingsChange
                       device={viewportMode}
                       showToolbar={false}
                       frameHeight="100%"
                     />
                   )
-                ) : activePage === 'home' && loadError ? (
+                ) : loadError ? (
                   <Box sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                     <Alert severity="error" sx={{ maxWidth: 500 }}>
                       {loadError}
@@ -1538,7 +1609,7 @@ const SectionComposerPage = () => {
         onAdd={handleAdd}
         existingIds={sections.map((s) => s.id)}
         insertLabel={addTarget.area === 'footer' ? 'Footer' : 'this template'}
-        sectionPresets={settings?.sectionPresets || {}}
+        sectionPresets={sectionPresets}
       />
 
       <SaveAsTemplateDialog
@@ -1576,21 +1647,12 @@ const SectionComposerPage = () => {
         </DialogActions>
       </Dialog>
 
-      <DraftReviewDialog open={reviewDraftOpen} onClose={() => setReviewDraftOpen(false)} draft={draft} conflicts={draftConflicts} />
-      <DraftArchivesDialog open={archivesOpen} onClose={() => setArchivesOpen(false)} draft={draft} dirty={dirty} onRestored={async () => {
-        setDirty(false);
-        setPanelView({ mode: 'tree', sectionId: null, componentKey: null, blockKey: null, blockIndex: null });
-        await fetchSections();
-      }} />
-
-      <Dialog open={useLiveOpen} onClose={() => !usingLive && setUseLiveOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Replace draft with live storefront?</DialogTitle>
-        <DialogContent>
-          <Typography>This archives the saved draft for recovery, then loads the currently installed live design. Unsaved editor changes are not archived: save them first if you want to keep them. Your live storefront will not change. Cancel to keep editing.</Typography>
-        </DialogContent>
+      <Dialog open={discardOpen} onClose={() => !discarding && setDiscardOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Discard design draft?</DialogTitle>
+        <DialogContent>Discard the saved draft and any unsaved editor changes. Your published store stays as it is.</DialogContent>
         <DialogActions>
-          <Button onClick={() => setUseLiveOpen(false)} disabled={usingLive}>Cancel</Button>
-          <Button variant="contained" onClick={handleUseLive} disabled={dirty || usingLive}>{usingLive ? 'Loading...' : 'Archive draft and load live'}</Button>
+          <Button onClick={() => setDiscardOpen(false)} disabled={discarding}>Cancel</Button>
+          <Button color="error" onClick={handleDiscard} disabled={discarding}>{discarding ? 'Discarding…' : 'Discard draft'}</Button>
         </DialogActions>
       </Dialog>
 
@@ -1598,13 +1660,22 @@ const SectionComposerPage = () => {
         <DialogTitle>Publish design draft?</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary">
-            This will make the saved draft live across the storefront. The server will stop the publish if the live design changed since this draft was started.
+            {publishConflict
+              ? 'These live settings changed since this draft was started. Keeping the draft changes replaces the live values listed below.'
+              : 'This will make the saved draft live across the storefront.'}
           </Typography>
+          {publishConflict && (
+            <Box component="ul" sx={{ pl: 3, maxHeight: 220, overflow: 'auto' }}>
+              {publishConflict.conflicts.map(({ group, key }) => (
+                <li key={`${group}.${key}`}>{group} / {key}</li>
+              ))}
+            </Box>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPublishOpen(false)} disabled={publishing}>Cancel</Button>
           <Button variant="contained" onClick={handlePublish} disabled={publishing}>
-            {publishing ? 'Publishing...' : 'Publish design'}
+            {publishing ? 'Publishing...' : publishConflict ? 'Keep draft changes and publish' : 'Publish design'}
           </Button>
         </DialogActions>
       </Dialog>

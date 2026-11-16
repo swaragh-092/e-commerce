@@ -43,7 +43,7 @@ const generateId = (type, existingIds) => {
 const AddSectionDialog = ({ open, onClose, onAdd, existingIds = [], sectionPresets = {}, insertLabel = 'last section' }) => {
   const typeLabelId = useId();
   const variantLabelId = useId();
-  const [selection, setSelection] = useState('');
+  const [type, setType] = useState('');
   const [variant, setVariant] = useState('');
   const [title, setTitle] = useState('');
   const [goal, setGoal] = useState('all');
@@ -142,9 +142,9 @@ const AddSectionDialog = ({ open, onClose, onAdd, existingIds = [], sectionPrese
 
           <FormControl size="small" fullWidth>
             <InputLabel id={typeLabelId}>Section Type</InputLabel>
-            <Select labelId={typeLabelId} value={selection} label="Section Type" onChange={(e) => { setSelection(e.target.value); setVariant(''); }}>
-              {[...productChoices, ...sectionOptions].map((opt) => (
-                <MenuItem key={opt.key || opt.type} value={opt.key || opt.type}>
+            <Select labelId={typeLabelId} value={type} label="Section Type" onChange={(e) => { setType(e.target.value); setVariant(''); }}>
+              {sectionOptions.map((opt) => (
+                <MenuItem key={opt.type} value={opt.type}>
                   <Stack direction="row" alignItems="center" spacing={1}>
                     <span>{opt.label}</span>
                     <Chip label={opt.family} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.7rem' }} />
