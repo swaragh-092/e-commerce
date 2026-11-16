@@ -6,7 +6,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { mediaService } from '../../../services/mediaService';
 import { ThemeContrastPanel } from '../settings/ContrastBadge';
 import { getDesignComponentControlSchema } from '../../../utils/designRegistry';
-import { DesignSchemaFields } from './designer/DesignSchemaFields';
+import { DesignSchemaFields, HexColorField } from './designer/DesignSchemaFields';
 import { DesignTokensContext } from '../../../context/ThemeContext';
 import { buildStorefrontTheme } from '../../../utils/theme';
 import { BUTTON_APPEARANCES, BUTTON_ROLES, BUTTON_STATES, resolveDesignTokens } from '../../../utils/designTokens';
@@ -617,16 +617,16 @@ export const DesignTokensEditor = ({ value = {}, onChange }) => {
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Leave a field empty to use your global style. Switch to the mobile preview to review changes.</Typography>
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6}>
-          <Field label="Mobile Primary" placeholder="Uses primary color" value={mobile.primaryColor || ''} onChange={(next) => patchNested('mobileOverrides', 'primaryColor', next)} />
+          <HexColorField allowEmpty label="Mobile Primary" placeholder="Uses primary color" value={mobile.primaryColor || ''} onChange={(next) => patchNested('mobileOverrides', 'primaryColor', next)} />
         </Grid>
         <Grid item xs={12} sm={6}>
-          <Field label="Mobile Background" placeholder="Uses background color" value={mobile.backgroundColor || ''} onChange={(next) => patchNested('mobileOverrides', 'backgroundColor', next)} />
+          <HexColorField allowEmpty label="Mobile Background" placeholder="Uses background color" value={mobile.backgroundColor || ''} onChange={(next) => patchNested('mobileOverrides', 'backgroundColor', next)} />
         </Grid>
         <Grid item xs={12} sm={6}>
-          <Field label="Mobile Surface" placeholder="Uses surface color" value={mobile.surfaceColor || ''} onChange={(next) => patchNested('mobileOverrides', 'surfaceColor', next)} />
+          <HexColorField allowEmpty label="Mobile Surface" placeholder="Uses surface color" value={mobile.surfaceColor || ''} onChange={(next) => patchNested('mobileOverrides', 'surfaceColor', next)} />
         </Grid>
         <Grid item xs={12} sm={6}>
-          <Field label="Mobile Text" placeholder="Uses text color" value={mobile.textColor || ''} onChange={(next) => patchNested('mobileOverrides', 'textColor', next)} />
+          <HexColorField allowEmpty label="Mobile Text" placeholder="Uses text color" value={mobile.textColor || ''} onChange={(next) => patchNested('mobileOverrides', 'textColor', next)} />
         </Grid>
         <Grid item xs={12} sm={6}>
           <Field label="Mobile Body Size" value={mobile.bodyFontSize || ''} placeholder="0.95rem" onChange={(next) => patchNested('mobileOverrides', 'bodyFontSize', next)} />

@@ -11,12 +11,8 @@ export const getRecentlyViewed = () => {
   try {
     const history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
     const now = Date.now();
-    const recent = history.filter((entry) => entry?.id && (!entry.viewedAt || entry.viewedAt >= now - HISTORY_AGE))
+    return history.filter((entry) => entry?.id && (!entry.viewedAt || entry.viewedAt >= now - HISTORY_AGE))
       .slice(0, MAX_ITEMS).map(({ id, viewedAt }) => ({ id, viewedAt: viewedAt || now }));
-    if (history.some((entry) => entry?.id && !entry.viewedAt)) {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(recent)); } catch { /* Storage unavailable. */ }
-    }
-    return recent;
   } catch {
     return [];
   }

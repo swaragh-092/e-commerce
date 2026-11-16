@@ -254,7 +254,7 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', devi
             key={iframeKey}
             ref={iframeRef}
             src={iframeSrc}
-            title="Live storefront preview"
+            title="Storefront design preview"
             onLoad={handleLoad}
             style={{
               width: '100%',

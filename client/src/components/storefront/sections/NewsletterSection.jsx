@@ -8,6 +8,8 @@ import { CanvasEditableText } from './SectionFallback';
 
 const NewsletterSection = ({ section = {}, mode = 'live', onSelectComponent, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
   const preview = mode === 'preview';
+  const previewFrame = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('previewMode') === '1';
+  const readOnly = preview || previewFrame;
   const newsletterEnabled = useFeature('newsletter');
   const variant = section.variant || 'banner';
   const inline = variant === 'inline-form';
@@ -22,7 +24,7 @@ const NewsletterSection = ({ section = {}, mode = 'live', onSelectComponent, onI
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!email.trim() || preview || !newsletterEnabled) return;
+    if (!email.trim() || readOnly || !newsletterEnabled) return;
     setLoading(true);
     setStatus(null);
     setErrorMessage('');
@@ -48,8 +50,8 @@ const NewsletterSection = ({ section = {}, mode = 'live', onSelectComponent, onI
 
   const form = (
     <Stack
-      component={preview ? 'div' : 'form'}
-      onSubmit={preview ? undefined : handleSubmit}
+      component={readOnly ? 'div' : 'form'}
+      onSubmit={readOnly ? undefined : handleSubmit}
       direction={{ xs: 'column', sm: 'row' }}
       spacing={1.25}
       justifyContent={inline ? (align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start') : 'center'}
@@ -61,7 +63,7 @@ const NewsletterSection = ({ section = {}, mode = 'live', onSelectComponent, onI
         placeholder="Enter your email"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        disabled={preview || loading}
+        disabled={readOnly || loading}
         required
         size={inputSize}
         variant={formControlStyle.variant === 'filled' ? 'filled' : 'outlined'}
@@ -69,9 +71,9 @@ const NewsletterSection = ({ section = {}, mode = 'live', onSelectComponent, onI
         inputProps={{ 'aria-label': 'Email address' }}
       />
       <Button
-        type={preview ? 'button' : 'submit'}
+        type={readOnly ? 'button' : 'submit'}
         variant="contained"
-        disabled={preview || loading}
+        disabled={readOnly || loading}
         sx={inline ? { fontWeight: 800 } : { bgcolor: 'background.paper', color: 'text.primary', fontWeight: 700, '&:hover': { bgcolor: 'background.default' } }}
       >
         {loading ? '...' : (section.ctaText || 'Subscribe')}

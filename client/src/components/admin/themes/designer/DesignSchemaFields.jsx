@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import {
   Box,
   FormControl,
@@ -24,11 +24,44 @@ const getFieldValue = (value, field) => {
   return rawValue;
 };
 
+export const HexColorField = ({ label, value, onChange, placeholder, allowEmpty = false }) => {
+  const [invalidInput, setInvalidInput] = useState(null);
+  const isValid = (color) => /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(color)
+    || (allowEmpty && color === '');
+  const text = invalidInput ?? value;
+  const invalid = !isValid(text);
+
+  return (
+    <TextField
+      fullWidth
+      size="small"
+      label={label}
+      value={text}
+      placeholder={placeholder}
+      error={invalid}
+      helperText={invalid ? 'Enter a hex color such as #1a7a3a.' : undefined}
+      onChange={(event) => {
+        const next = event.target.value;
+        if (isValid(next)) {
+          setInvalidInput(null);
+          onChange(next);
+        } else {
+          setInvalidInput(next);
+        }
+      }}
+    />
+  );
+};
+
 const SchemaField = ({ field, value, onChange }) => {
   const labelId = useId();
   if (!isDesignControlVisible(field, value)) return null;
 
   const currentValue = getFieldValue(value, field);
+
+  if (field.type === 'color') {
+    return <HexColorField label={field.label} value={currentValue} onChange={(next) => onChange(field.key, next)} />;
+  }
 
   if (field.type === 'boolean') {
     return (
@@ -87,7 +120,6 @@ const SchemaField = ({ field, value, onChange }) => {
         ...(field.type === 'number' ? { min: field.min, max: field.max } : {}),
         ...(field.maxLength ? { maxLength: field.maxLength } : {}),
       }}
-      InputLabelProps={field.type === 'color' ? { shrink: true } : undefined}
     />
   );
 };

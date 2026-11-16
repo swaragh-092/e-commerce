@@ -1,5 +1,6 @@
 'use strict';
 
+const { createHash } = require('node:crypto');
 const { isDeepStrictEqual } = require('node:util');
 const { sequelize, Setting, DesignDraft, DesignDraftVersion, DesignDraftArchive } = require('../index');
 const SettingsService = require('./settings.service');
@@ -144,13 +145,15 @@ const getArchivedDrafts = async ({ limit = 30 } = {}) => {
   return { archives: archives.map(serializeArchive) };
 };
 
-const saveDraft = async ({ settings, expectedRevision }, user) => {
-  const payload = normalizePayload(settings);
-  assertDraftPermissions(payload, user);
+const saveDraft = async ({ settings, expectedRevision }, user, { merge = false } = {}) => {
+  const writes = normalizePayload(settings);
 
   return sequelize.transaction(async (t) => {
     const draft = await findDraft(t, { lock: true });
-    if (draft?.status === 'draft') assertRevision(draft, expectedRevision);
+    if (draft?.status === 'draft' && !merge) assertRevision(draft, expectedRevision);
+
+    const payload = merge && draft?.status === 'draft' ? normalizePayload([...draft.payload, ...writes]) : writes;
+    assertDraftPermissions(payload, user);
 
     const baseSnapshot = draft?.status === 'draft'
       ? draft.baseSnapshot
@@ -209,7 +212,7 @@ const findPublishConflicts = (baseSnapshot, currentSnapshot, payload) => {
   return conflicts;
 };
 
-const publishDraft = async ({ expectedRevision }, user) => sequelize.transaction(async (t) => {
+const publishDraft = async ({ expectedRevision, conflictToken }, user) => sequelize.transaction(async (t) => {
   const draft = await findDraft(t, { lock: true });
   if (!draft || draft.status !== 'draft') {
     throw new AppError('NOT_FOUND', 404, 'No saved design draft is available to publish.');
@@ -219,12 +222,18 @@ const publishDraft = async ({ expectedRevision }, user) => sequelize.transaction
 
   const currentSnapshot = await readLiveSnapshot(t, { lock: true });
   const conflicts = findPublishConflicts(draft.baseSnapshot || {}, currentSnapshot, draft.payload || []);
-  if (conflicts.length) {
+  const reviewedToken = conflicts.length
+    ? createHash('sha256').update(JSON.stringify([
+      draft.revision,
+      conflicts.map(({ group, key }) => [group, key, currentSnapshot[group]?.[key]]),
+    ])).digest('hex')
+    : null;
+  if (conflicts.length && conflictToken !== reviewedToken) {
     throw new AppError(
       'DRAFT_CONFLICT',
       409,
       'The live design changed after this draft was started. Review the conflicting settings before publishing.',
-      { conflicts, currentRevision: draft.revision, draft: serializeDraft(draft) },
+      { conflicts, conflictToken: reviewedToken, currentRevision: draft.revision, draft: serializeDraft(draft) },
     );
   }
 

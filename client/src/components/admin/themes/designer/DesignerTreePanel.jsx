@@ -406,7 +406,15 @@ const DesignerTreePanel = ({
             ))}{provided.placeholder}</Box>}</Droppable>
           )}
         </Stack>
-        </> : <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 2, fontSize: '0.8rem' }}>
+        </> : activePage === 'product' ? (
+          <Stack sx={{ px: 1, py: 1 }}>
+            {sections.filter((section) => section.type === 'product-info').map((section) => (
+              <AddSectionButton key={section.id} onClick={() => onSectionClick(section)}>
+                Edit Product Information blocks
+              </AddSectionButton>
+            ))}
+          </Stack>
+        ) : <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 2, fontSize: '0.8rem' }}>
           This page uses a fixed layout.{PageEditor ? ' Use Page Settings above to change its appearance.' : ''}
         </Typography>}
 

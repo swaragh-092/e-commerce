@@ -114,7 +114,7 @@ const legacySections = (hp = {}) => [
 const resolveHomepage = (settings = {}) => {
   const hp = settings.homepage || {};
   const hero = settings.hero || {};
-  const sections = arr(hp.sections).length ? hp.sections : legacySections(hp);
+  const sections = Array.isArray(hp.sections) ? hp.sections : legacySections(hp);
   const heroSlides = arr(hp.heroSlides).length
     ? hp.heroSlides
     : [{
@@ -209,16 +209,28 @@ const fetchSectionData = async (section) => {
 
 const HomeExperience = () => {
   const { settings } = useSettings();
+  const designerPreview = new URLSearchParams(window.location.search).get('previewMode') === '1';
   const { brands: contextBrands, loading: brandsLoading } = useBrands();
   const pricingEnabled = useFeatureVisible('pricing', 'storefront');
   const ordersEnabled = useFeature('orders');
   const brandsEnabled = useFeature('brands');
+  const galleryEnabled = useFeature('gallery');
+  const newsletterEnabled = useFeature('newsletter');
   const config = useMemo(() => resolveHomepage(settings), [settings]);
-  const visibleSections = useMemo(() => arr(config.sections).filter(
-    (section) => bool(section.enabled, true)
-      && (ordersEnabled || section.source !== 'bestSellers')
-      && (brandsEnabled || section.type !== 'brand-showcase'),
-  ), [brandsEnabled, ordersEnabled, config.sections]);
+  const visibleSections = useMemo(() => {
+    const sections = arr(config.sections).filter(
+      (section) => !(section.type === 'composed-hero' && ['header', 'footer'].includes(section.placement))
+        && bool(section.enabled, true)
+        && (ordersEnabled || section.source !== 'bestSellers')
+        && (brandsEnabled || section.type !== 'brand-showcase')
+        && (galleryEnabled || section.type !== 'gallery')
+        && (newsletterEnabled || section.type !== 'newsletter-signup')
+    );
+    return [
+      ...sections.filter((section) => section.placement !== 'footer'),
+      ...sections.filter((section) => section.placement === 'footer'),
+    ];
+  }, [brandsEnabled, galleryEnabled, newsletterEnabled, ordersEnabled, config.sections]);
   const visiblePromoBanners = useMemo(
     () => arr(config.promoBanners).filter(
       (promo) => brandsEnabled || !String(promo?.link || '').startsWith('/brands')
@@ -261,9 +273,8 @@ const HomeExperience = () => {
   }, [needsCategories, productSections]);
 
   const buildSectionData = (section) => buildSectionRendererData({
-    section: needsCategoryData(section) && Array.isArray(section.items)
-      ? { ...section, items: filterCategoryTiles(section.items, data.categories) } : section,
-    homepage: { ...config, categoryTiles: filterCategoryTiles(config.categoryTiles, data.categories), promoBanners: visiblePromoBanners },
+    section,
+    homepage: { ...config, promoBanners: visiblePromoBanners },
     resolvedData: {
       ...data,
       products: {
@@ -289,10 +300,11 @@ const HomeExperience = () => {
           ? PRODUCT_SOURCE_PARAMS[section.source].sort : null;
         const available = data.products[section.id]?.length || 0;
         const campaignLabel = section.type === 'product-row' && section.source === 'sale' ? section.saleLabel : null;
-        if (campaignLabel && !pricingEnabled) return null;
+        if (campaignLabel && !pricingEnabled && !designerPreview) return null;
         const sparse = !loading && ((discoverySort && available < (discoverySort === 'arrivals' ? 1 : 4))
           || (campaignLabel && !available));
-        if (sparse) return null;
+        if (sparse && !designerPreview) return null;
+        const previewSection = designerPreview && (sparse || section.type === 'recently-viewed');
         const renderedSection = campaignLabel
           ? { ...section, viewAllLink: `/products?saleLabel=${encodeURIComponent(campaignLabel)}` }
           : discoverySort && (!section.viewAllLink || section.viewAllLink === '/products?sort=newest')
@@ -308,7 +320,7 @@ const HomeExperience = () => {
           <Box key={section.id || index} data-store-section={section.id} sx={{ display }}>
             <SectionRenderer
               section={renderedSection}
-              mode="live"
+              mode={previewSection ? 'preview' : 'live'}
               data={buildSectionData(section)}
               index={frameIndex}
             />

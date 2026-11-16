@@ -39,6 +39,7 @@ const saveDesignDraftSchema = Joi.object({
 }).unknown(false);
 
 const publishDesignDraftSchema = Joi.object({
+  conflictToken: Joi.string().hex().length(64).optional(),
   expectedRevision: Joi.number().integer().min(1).optional(),
 }).unknown(false);
 

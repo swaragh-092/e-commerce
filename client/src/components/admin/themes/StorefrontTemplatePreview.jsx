@@ -1,7 +1,7 @@
 import { useContext, useEffect, useMemo, useState } from 'react';
 import {
   Box, Typography, Button, Grid, Stack, Badge, IconButton,
-  AppBar, Toolbar, ThemeProvider, CssBaseline, createTheme,
+  AppBar, Toolbar, ThemeProvider, createTheme, Alert,
 } from '@mui/material';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import SearchIcon from '@mui/icons-material/Search';
@@ -47,6 +47,13 @@ const useMockRenderers = () => {
 };
 
 const PREVIEW_WIDTHS = { desktop: '100%', tablet: 768, mobile: 375 };
+const createPreviewTheme = (design) => {
+  const theme = createTheme(buildStorefrontTheme(design));
+  const viewportUp = theme.breakpoints.up;
+  theme.breakpoints.up = (key) => viewportUp(key).replace('@media', '@container store-preview');
+  return theme;
+};
+
 const API_BUILDER_TIMEOUT_MS = 5000;
 
 const PRODUCT_SOURCE_PARAMS = {
@@ -263,7 +270,10 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
   const parentSettingsContext = useContext(SettingsContext) || {};
   const mockRenderers = useMockRenderers();
   const sections = useMemo(() => {
-    return getPageSections(currentSettings || parentSettingsContext.settings, activePage, layout.homepageSections);
+    if (activePage === 'home' && Array.isArray(layout.homepageSections)) {
+      return layout.homepageSections;
+    }
+    return getPageSections(currentSettings || parentSettingsContext.settings, activePage);
   }, [layout.homepageSections, activePage, currentSettings, parentSettingsContext.settings]);
   const { brands: contextBrands = [], loading: brandsLoading = false } = useBrands();
   const [resolvedData, setResolvedData] = useState({ categories: [], products: {} });
@@ -271,7 +281,7 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
   const [dataLoading, setDataLoading] = useState(false);
   const [dragState, setDragState] = useState(null);
 
-  const previewTheme = useMemo(() => createTheme(buildStorefrontTheme(design)), [design]);
+  const previewTheme = useMemo(() => createPreviewTheme(design), [design]);
 
   const width = PREVIEW_WIDTHS[mode] || '100%';
   const isSectionVisible = (section, productPage) => {
@@ -406,8 +416,8 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
     const announcementText = announcementSettings.text || demoData.announcementText;
     const showAnnouncement = announcementText && announcementSettings.enabled !== false && announcementSettings.enabled !== 'false';
     const sectionRows = sectionList.map((section, originalIndex) => ({ section, originalIndex }));
-    const templateSectionRows = sectionRows.filter(({ section }) => isSectionVisible(section, scopedSettings.productPage) && section.placement !== 'footer');
-    const footerSectionRows = sectionRows.filter(({ section }) => isSectionVisible(section, scopedSettings.productPage) && section.placement === 'footer');
+    const templateSectionRows = sectionRows.filter(({ section }) => section.enabled !== false && !['footer', 'header'].includes(section.placement));
+    const footerSectionRows = sectionRows.filter(({ section }) => section.enabled !== false && section.placement === 'footer');
     const firstFooterIndex = sectionList.findIndex((section) => section.placement === 'footer');
     const footerStartIndex = firstFooterIndex === -1 ? sectionList.length : firstFooterIndex;
     const canvasDragEnabled = Boolean(onReorderSection) && !compareMode;
@@ -451,8 +461,8 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
     <DesignTokensContext.Provider value={scopedDesignTokens}>
     <SettingsContext.Provider value={scopedContext}>
       <ThemeProvider theme={themeObj}>
-        <CssBaseline enableColorScheme />
-        <Box style={cssVariables} sx={{ bgcolor: 'background.default', minHeight: 400, overflow: 'hidden' }}>
+
+        <Box style={cssVariables} sx={{ containerType: 'inline-size', containerName: 'store-preview', bgcolor: 'background.default', minHeight: 400, overflow: 'hidden' }}>
         {/* Announcement Bar */}
         {showAnnouncement && (
           <Box
@@ -557,6 +567,11 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
             </Box>
           )}
         </AppBar>
+        {sectionRows.filter(({ section }) => section.placement === 'header' && section.enabled !== false).map(({ section }) => (
+          <SectionRenderer key={section.id} section={section} lazy={false}
+            mode={onSelectSection ? 'preview' : 'live'} onSelect={() => onSelectSection?.(section)}
+            onInlineBlockFocus={onInlineBlockFocus} />
+        ))}
         
         {/* Page Content */}
         {onAddSectionAt && (
@@ -578,6 +593,10 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
             onDrop={handleCanvasDrop}
             onDragEnd={handleCanvasDragEnd}
           >
+            {onSelectSection && section.type === 'product-row' && !dataLoading
+              && resolvedData.products[section.id]?.length === 0 && (
+                <Alert severity="warning">No products were returned for this section. Check the selected product source.</Alert>
+              )}
             <SectionRenderer
               section={section}
               mode={onSelectSection ? 'preview' : 'live'}
@@ -698,8 +717,8 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
   };
 
   if (compareMode && currentSettings) {
-    const currentTheme = createTheme(buildStorefrontTheme(currentSettings.theme || {}));
-    const currentSections = getPageSections(currentSettings, activePage, sections);
+    const currentTheme = createPreviewTheme(currentSettings.theme || {});
+    const currentSections = getPageSections(currentSettings, activePage);
     const currentDemo = {
       announcementText: currentSettings.announcement?.text || '',
       heroSlides: currentSettings.homepage?.heroSlides || [],
@@ -712,12 +731,12 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
     };
 
     return (
-      <Box sx={{ display: 'flex', gap: 1, overflow: 'auto' }}>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
+      <Box sx={{ display: 'flex', gap: 1, overflow: 'auto', justifyContent: 'safe center' }}>
+        <Box sx={{ flex: mode === 'desktop' ? 1 : '0 0 auto', width, minWidth: 0 }}>
           <Typography variant="caption" fontWeight={700} sx={{ display: 'block', textAlign: 'center', py: 0.5, bgcolor: 'action.hover' }}>Current</Typography>
           {previewContent(currentTheme, currentSections, currentDemo, 'Current', currentLayout, currentSettings)}
         </Box>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box sx={{ flex: mode === 'desktop' ? 1 : '0 0 auto', width, minWidth: 0 }}>
           <Typography variant="caption" fontWeight={700} sx={{ display: 'block', textAlign: 'center', py: 0.5, bgcolor: 'action.hover' }}>Template</Typography>
           {previewContent(previewTheme, sections, demo, 'Template', layout, templateSettings)}
         </Box>

@@ -60,6 +60,15 @@ const exportTheme = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const stageTheme = async (req, res, next) => {
+  try {
+    const { error, value } = applyRequestSchema.validate(req.body);
+    if (error) return res.status(400).json({ success: false, message: error.details[0].message });
+    const draft = await ThemeService.stageDraft(value.packageData, value, req.user);
+    return success(res, draft, 'Template staged in the Store Designer');
+  } catch (err) { next(err); }
+};
+
 const applyTheme = async (req, res, next) => {
   try {
     const { error, value } = applyRequestSchema.validate(req.body);
@@ -94,4 +103,4 @@ const getStoreStatus = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getBuiltin, getLibrary, getActivations, validate, preview, importTheme, exportTheme, applyTheme, rollbackActivation, removeLibrary, getStoreStatus };
+module.exports = { getBuiltin, getLibrary, getActivations, validate, preview, importTheme, exportTheme, stageTheme, applyTheme, rollbackActivation, removeLibrary, getStoreStatus };

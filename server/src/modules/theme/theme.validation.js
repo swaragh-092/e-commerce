@@ -28,7 +28,7 @@ const BUTTON_STYLES = ['solid', 'soft', 'outline', 'pill'];
 const CARD_STYLES = ['elevated', 'outlined', 'flat'];
 const BG_STYLES = ['softGradient', 'solid'];
 const FONT_WEIGHTS = ['300', '400', '500', '600', '700', '800', '900'];
-const SECTION_TYPES = ['tag-showcase', 'gallery-grid', 'hero-carousel', 'value-props', 'category-shortcuts', 'promo-banners', 'product-row', 'brand-showcase', 'editorial-image-text', 'testimonials', 'logo-cloud', 'newsletter-signup', 'countdown-sale', 'featured-collection-grid', 'faq', 'trust-badges', 'recently-viewed'];
+const SECTION_TYPES = ['tag-showcase', 'gallery-grid', 'composed-hero', 'hero-carousel', 'value-props', 'category-shortcuts', 'promo-banners', 'product-row', 'brand-showcase', 'editorial-image-text', 'testimonials', 'logo-cloud', 'newsletter-signup', 'countdown-sale', 'featured-collection-grid', 'faq', 'trust-badges', 'recently-viewed', 'gallery'];
 const PRODUCT_SOURCES = ['featured', 'sale', 'bestSellers', 'mostViewed', 'newest', 'recommended'];
 const DATA_SOURCE_TYPES = ['apiBuilder'];
 const API_BUILDER_RESOURCES = ['products', 'categories', 'brands', 'productImages', 'tags', 'media', 'pages'];
@@ -79,10 +79,10 @@ const typographyScaleSchema = Joi.object({
 }).unknown(false);
 
 const mobileOverridesSchema = Joi.object({
-  primaryColor: hexColor,
-  backgroundColor: hexColor,
-  surfaceColor: hexColor,
-  textColor: hexColor,
+  primaryColor: hexColor.allow(''),
+  backgroundColor: hexColor.allow(''),
+  surfaceColor: hexColor.allow(''),
+  textColor: hexColor.allow(''),
   bodyFontSize: Joi.string().max(30).allow('', null),
   headingScale: Joi.string().max(20).allow('', null),
   sectionPadding: Joi.string().max(30).allow('', null),
@@ -166,14 +166,81 @@ const navSchema = Joi.object({
 }).unknown(false);
 
 const footerStyleSchema = Joi.object({
-  bgColor: hexColor,
-  fgColor: hexColor,
+  bgColor: hexColor.allow(''),
+  fgColor: hexColor.allow(''),
 }).unknown(false);
 
 const announcementStyleSchema = Joi.object({
-  bgColor: hexColor,
-  fgColor: hexColor,
+  bgColor: hexColor.allow(''),
+  fgColor: hexColor.allow(''),
   dismissible: Joi.boolean(),
+}).unknown(false);
+
+const imageFocus = Joi.string().valid('left', 'center', 'right', 'top', 'bottom');
+const heroSlideSchema = Joi.object({
+  eyebrow: safeText,
+  title: safeText,
+  subtitle: Joi.string().max(1000).allow('', null),
+  buttonText: safeText,
+  buttonLink: linkUrl,
+  secondaryButtonText: safeText,
+  secondaryButtonLink: linkUrl,
+  image: sectionImageUrl,
+  position: imageFocus.allow('', null),
+  color: hexColor.allow('', null),
+}).unknown(false);
+
+const padding = Joi.number().integer().min(0).max(240);
+const margin = Joi.number().integer().min(-240).max(240);
+
+const heroBlockSchema = (depth = 0) => Joi.object({
+  id: Joi.string().max(50).required(),
+  type: Joi.string().valid('group', 'heading', 'text', 'button', 'media', 'collection', 'brand', 'tag', 'product', 'product-attribute', 'product-rating', 'availability', 'fulfillment', 'enquiry', 'newsletter', 'blog', 'page', 'gallery').required(),
+  text: Joi.string().max(1500).allow(''),
+  href: linkUrl,
+  url: sectionImageUrl,
+  mobileUrl: sectionImageUrl,
+  mediaType: Joi.string().valid('image', 'video'),
+  mobileMediaType: Joi.string().valid('image', 'video'),
+  alt: safeText,
+  direction: Joi.string().valid('row', 'column'),
+  categorySlug: Joi.when('type', {
+    is: 'collection',
+    then: Joi.string().max(255).pattern(/^[^/\\?#\s]+$/u).allow(''),
+    otherwise: Joi.forbidden(),
+  }),
+  brandSlug: Joi.when('type', {
+    is: 'brand',
+    then: Joi.string().max(255).pattern(/^[^/\\?#\s]+$/u).allow(''),
+    otherwise: Joi.forbidden(),
+  }),
+  attributeName: Joi.when('type', {
+    is: 'product-attribute',
+    then: safeText,
+    otherwise: Joi.forbidden(),
+  }),
+  prefix: Joi.when('type', { is: 'product-attribute', then: Joi.string().max(100).allow(''), otherwise: Joi.forbidden() }),
+  suffix: Joi.when('type', { is: 'product-attribute', then: Joi.string().max(100).allow(''), otherwise: Joi.forbidden() }),
+  pageSlug: Joi.when('type', { is: 'page', then: Joi.string().max(255).pattern(/^[^/\\?#\s]+$/u).allow(''), otherwise: Joi.forbidden() }),
+  gallerySlug: Joi.when('type', { is: 'gallery', then: Joi.string().max(255).pattern(/^[^/\\?#\s]+$/u).allow(''), otherwise: Joi.forbidden() }),
+  blogSlug: Joi.when('type', {
+    is: 'blog',
+    then: Joi.string().max(255).pattern(/^[^/\\?#\s]+$/u).allow(''),
+    otherwise: Joi.forbidden(),
+  }),
+  productSlug: Joi.when('type', {
+    is: 'product',
+    then: Joi.string().max(255).pattern(/^[^/\\?#\s]+$/u).allow(''),
+    otherwise: Joi.forbidden(),
+  }),
+  tagSlug: Joi.when('type', {
+    is: 'tag',
+    then: Joi.string().max(255).pattern(/^[^/\\?#\s]+$/u).allow(''),
+    otherwise: Joi.forbidden(),
+  }),
+  children: depth < 3
+    ? Joi.when('type', { is: 'group', then: Joi.array().items(heroBlockSchema(depth + 1)).max(12).unique('id'), otherwise: Joi.forbidden() })
+    : Joi.forbidden(),
 }).unknown(false);
 
 const homepageSectionSchema = Joi.object({
@@ -182,6 +249,7 @@ const homepageSectionSchema = Joi.object({
   id: Joi.string().max(50).required(),
   type: Joi.string().valid(...SECTION_TYPES).required(),
   enabled: Joi.boolean().required(),
+  heroBlocks: Joi.when('type', { is: Joi.valid('composed-hero', 'product-info', 'editorial-image-text'), then: Joi.array().items(heroBlockSchema()).max(12).unique('id'), otherwise: Joi.forbidden() }),
   title: safeText,
   subtitle: safeText,
   source: Joi.string().valid(...PRODUCT_SOURCES),
@@ -196,32 +264,59 @@ const homepageSectionSchema = Joi.object({
   interval: Joi.number().integer().min(1000).max(30000),
   dynamic: Joi.boolean(),
   variant: Joi.string().max(50),
-  image: safeUrl,
+  image: sectionImageUrl,
+  imageFocus,
   imagePosition: Joi.string().valid('left', 'right', 'top', 'background'),
+  eyebrow: safeText,
   ctaText: safeText,
   ctaLink: linkUrl,
+  endDate: Joi.string().isoDate().allow('', null),
+  placement: Joi.string().valid('header', 'footer'),
+  textAlign: Joi.string().valid('left', 'center', 'right'),
+  verticalAlign: Joi.string().valid('top', 'center', 'bottom'),
+  widthMode: Joi.string().valid('container', 'narrow', 'full', 'custom'),
+  customMaxWidth: Joi.number().integer().min(320).max(3840),
+  minHeight: Joi.number().integer().min(0).max(1200),
+  paddingTop: padding,
+  paddingBottom: padding,
+  paddingLeft: padding,
+  paddingRight: padding,
+  marginTop: margin,
+  marginBottom: margin,
+  marginLeft: margin,
+  marginRight: margin,
+  backgroundColor: hexColor,
+  backgroundImage: sectionImageUrl,
+  backgroundSize: Joi.string().valid('cover', 'contain', 'auto', '100% 100%'),
+  backgroundPosition: Joi.string().valid('center', 'top', 'bottom', 'left', 'right', 'top left', 'top right', 'bottom left', 'bottom right'),
+  backgroundRepeat: Joi.string().valid('no-repeat', 'repeat', 'repeat-x', 'repeat-y'),
+  backgroundAttachment: Joi.string().valid('scroll', 'fixed', 'local'),
+  borderStyle: Joi.string().valid('none', 'solid', 'dashed', 'dotted', 'double'),
+  borderWidth: Joi.number().integer().min(0).max(24),
+  borderColor: hexColor,
+  borderRadius: Joi.number().integer().min(0).max(96),
+  boxShadow: Joi.string().valid('none', 'sm', 'md', 'lg', 'xl', '2xl', 'inner'),
+  hideOnMobile: Joi.boolean(),
+  hideOnDesktop: Joi.boolean(),
+  anchorId: Joi.string().max(100),
+  customClassName: Joi.string().max(200),
   mobileLayout: Joi.string().valid('stack', 'carousel', 'compact'),
+  slides: Joi.array().items(heroSlideSchema).max(12),
   items: Joi.array().items(Joi.object({
     title: safeText,
+    subtitle: Joi.string().max(1000).allow('', null),
     text: Joi.string().max(1000).allow('', null),
     author: safeText,
     role: safeText,
-    image: safeUrl,
+    image: sectionImageUrl,
     link: linkUrl,
+    kicker: safeText,
+    ctaText: safeText,
+    icon: Joi.string().max(50).allow('', null),
+    color: hexColor.allow('', null),
+    backgroundColor: hexColor.allow('', null),
+    accentColor: hexColor.allow('', null),
   }).unknown(false)).max(12),
-}).unknown(false);
-
-const heroSlideSchema = Joi.object({
-  eyebrow: safeText,
-  title: safeText,
-  subtitle: Joi.string().max(1000).allow('', null),
-  buttonText: safeText,
-  buttonLink: linkUrl,
-  secondaryButtonText: safeText,
-  secondaryButtonLink: linkUrl,
-  image: safeUrl.label('image'),
-  position: Joi.string().valid('left', 'center', 'right').allow('', null),
-  color: hexColor.allow('', null),
 }).unknown(false);
 
 const valuePropSchema = Joi.object({
@@ -231,6 +326,8 @@ const valuePropSchema = Joi.object({
 }).unknown(false);
 
 const promoBannerSchema = Joi.object({
+  id: Joi.string().max(100),
+  image: sectionImageUrl,
   kicker: safeText,
   title: safeText,
   subtitle: safeText,
@@ -255,6 +352,10 @@ const metaSchema = Joi.object({
   platformCompatibility: Joi.string().max(20).allow('', null),
 }).unknown(false);
 
+const pageSectionsSchema = (systemTypes) => Joi.array().items(
+  homepageSectionSchema.keys({ type: Joi.string().valid(...SECTION_TYPES, ...systemTypes).required() }),
+).max(20);
+
 const pageTemplateSchema = Joi.object({
   layout: Joi.string().max(80).required(),
   imageAlignment: Joi.string().valid('horizontal', 'vertical'),
@@ -273,12 +374,14 @@ const pageTemplateSchema = Joi.object({
 }).unknown(false);
 
 const categoryPageTemplateSchema = Joi.object({
+  sections: pageSectionsSchema(['category-header', 'category-products']),
   heroTitle: safeText,
   headerLayout: Joi.string().valid('standard', 'cover', 'split'),
   showSubcategories: Joi.boolean(),
 }).unknown(false);
 
 const brandPageTemplateSchema = Joi.object({
+  sections: pageSectionsSchema(['brands-header', 'brands-list']),
   layout: Joi.string().valid('standard', 'overlay', 'minimal').required(),
   title: safeText,
   subtitle: safeText,
@@ -295,6 +398,7 @@ const brandPageTemplateSchema = Joi.object({
 }).unknown(false);
 
 const cartPageTemplateSchema = Joi.object({
+  sections: pageSectionsSchema(['cart-main']),
   layout: Joi.string().valid('standard', 'compact').required(),
   showCrossSells: Joi.boolean(),
   showTrustBadges: Joi.boolean(),
@@ -302,12 +406,14 @@ const cartPageTemplateSchema = Joi.object({
 }).unknown(false);
 
 const accountPageTemplateSchema = Joi.object({
+  sections: pageSectionsSchema(['account-main']),
   layout: Joi.string().valid('tabs', 'sidebar').required(),
   orderCardStyle: Joi.string().valid('detailed', 'compact'),
   showSupportInfo: Joi.boolean(),
 }).unknown(false);
 
 const blogPageTemplateSchema = Joi.object({
+  sections: pageSectionsSchema(['blog-header', 'blog-posts']),
   listLayout: Joi.string().valid('grid', 'list', 'masonry').required(),
   articleLayout: Joi.string().valid('standard', 'cover'),
   showAuthor: Joi.boolean(),
@@ -317,11 +423,26 @@ const blogPageTemplateSchema = Joi.object({
 const componentStyleSchema = Joi.object({
   variant: Joi.string().max(80).allow('', null),
   imageRatio: Joi.string().valid('1/1', '4/5', '4/3', '3/4', '16/9').allow('', null),
+  contentAlign: Joi.string().valid('left', 'center', 'right'),
+  imagePadding: Joi.string().valid('none', 'comfortable', 'spacious'),
+  titleLines: Joi.number().integer().min(1).max(4),
+  wishlistPosition: Joi.string().valid('top-left', 'top-right', 'bottom-left', 'bottom-right'),
+  actionPlacement: Joi.string().valid('footer', 'image-overlay'),
+  headerStyle: Joi.string().valid('stripe', 'plain', 'accent'),
+  fill: Joi.string().valid('paper', 'muted', 'transparent'),
+  focusStyle: Joi.string().valid('brand', 'glow', 'underline'),
+  labelStyle: Joi.string().valid('floating', 'placeholder'),
+  size: Joi.string().valid('small', 'medium'),
+  weight: Joi.string().valid('regular', 'bold', 'black'),
+  textTransform: Joi.string().valid('uppercase', 'none'),
+  letterSpacing: Joi.string().max(20).allow('', null),
   imageFit: Joi.string().valid('cover', 'contain').allow('', null),
   showBrand: Joi.boolean(),
   showCategory: Joi.boolean(),
   showRating: Joi.boolean(),
   showWishlist: Joi.boolean(),
+  showShare: Joi.boolean(),
+  showVariantPill: Joi.boolean(),
   showSaleCountdown: Joi.boolean(),
   showSubtitle: Joi.boolean(),
   showProductCount: Joi.boolean(),
@@ -333,7 +454,7 @@ const componentStyleSchema = Joi.object({
   radius: Joi.string().valid('none', 'small', 'medium', 'large', 'pill').allow('', null),
   shadow: Joi.string().valid('none', 'soft', 'medium', 'strong').allow('', null),
   density: Joi.string().valid('compact', 'comfortable', 'spacious').allow('', null),
-  ctaStyle: Joi.string().valid('button', 'text-link', 'hidden').allow('', null),
+  ctaStyle: Joi.string().valid('button', 'text-link', 'hidden', 'solid', 'soft', 'outline').allow('', null),
   imagePlacement: Joi.string().valid('left', 'right', 'top', 'background').allow('', null),
   titleSize: Joi.string().valid('small', 'medium', 'large').allow('', null),
 }).unknown(false);
@@ -346,6 +467,10 @@ const componentStylesSchema = Joi.object({
   trustCard: componentStyleSchema,
   reviewCard: componentStyleSchema,
   contentCard: componentStyleSchema,
+  cartItem: componentStyleSchema,
+  checkoutBlock: componentStyleSchema,
+  formControl: componentStyleSchema,
+  badgeChip: componentStyleSchema,
 }).unknown(false);
 
 const sectionPresetsSchema = Joi.object().pattern(
@@ -437,9 +562,14 @@ const packageSchema = Joi.object({
   }).unknown(false),
   dataSources: Joi.array().items(dataSourceSchema).max(12),
   pageTemplates: Joi.object({
-    product: pageTemplateSchema,
+    product: pageTemplateSchema.keys({ sections: pageSectionsSchema(['product-info', 'product-reviews']) }),
     category: categoryPageTemplateSchema,
-    collection: pageTemplateSchema,
+    collection: pageTemplateSchema.keys({
+      sections: pageSectionsSchema(['catalog-header', 'catalog-products']),
+      showFilters: Joi.boolean(),
+      categoryDepth: Joi.number().integer().min(1).max(5),
+      showCategoryIcon: Joi.boolean(),
+    }),
     brand: brandPageTemplateSchema,
     cart: cartPageTemplateSchema,
     account: accountPageTemplateSchema,

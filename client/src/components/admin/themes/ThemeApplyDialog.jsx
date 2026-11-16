@@ -18,52 +18,44 @@ const ThemeApplyDialog = ({ open, onClose, packageData, onConfirm, loading }) =>
   const sectionPresetCount = Object.keys(packageData?.sectionPresets || {}).filter(Boolean).length;
 
   useEffect(() => {
-    if (!open) return;
-    themeService.getStoreStatus()
-      .then(s => setIsEmpty(s.isEmpty))
-      .catch((err) => {
-        console.error('[ThemeApplyDialog] Failed to fetch store status:', err);
-      });
-  }, [open]);
-
-  useEffect(() => {
     if (!open || !packageData) return;
-    if (isEmpty) {
-      const all = ['design', 'layoutStyle', 'homepageSections'];
-      if (componentStyleCount) all.push('componentStyles');
-      if (sectionPresetCount) all.push('sectionPresets');
-      if (pageTemplateCount) all.push('pageTemplates');
-      if (dataSourceCount) all.push('dataSources');
-      setScopes(all);
-      setReplaceDemoContent(true);
-    } else {
-      const nextScopes = ['design', 'layoutStyle', 'homepageSections'];
-      if (componentStyleCount) nextScopes.push('componentStyles');
-      if (sectionPresetCount) nextScopes.push('sectionPresets');
-      if (pageTemplateCount) nextScopes.push('pageTemplates');
-      if (dataSourceCount) nextScopes.push('dataSources');
-      setScopes(nextScopes);
-      setReplaceDemoContent(false);
-    }
-  }, [open, packageData, dataSourceCount, pageTemplateCount, componentStyleCount, sectionPresetCount, isEmpty]);
+    let cancelled = false;
+    setIsEmpty(false);
+    themeService.getStoreStatus()
+      .then((status) => { if (!cancelled) setIsEmpty(status.isEmpty); })
+      .catch((err) => { if (!cancelled) console.error('[ThemeApplyDialog] Failed to fetch store status:', err); });
+
+    const nextScopes = ['design', 'layoutStyle'];
+    if (homepageSectionCount) nextScopes.push('homepageSections');
+    if (componentStyleCount) nextScopes.push('componentStyles');
+    if (sectionPresetCount) nextScopes.push('sectionPresets');
+    if (pageTemplateCount) nextScopes.push('pageTemplates');
+    setScopes(nextScopes);
+    setReplaceDemoContent(false);
+    return () => { cancelled = true; };
+  }, [open, packageData, homepageSectionCount, pageTemplateCount, componentStyleCount, sectionPresetCount]);
 
   // Fetch impact diff when scopes change
   useEffect(() => {
-    if (!open || !packageData) { setImpactDiff(null); setPreviewError(null); return; }
+    if (!open || !packageData) { setImpactDiff(null); setPreviewError(null); setDiffLoading(false); return; }
     const previewScopes = [...scopes];
     if (replaceDemoContent && !previewScopes.includes('demoContent')) previewScopes.push('demoContent');
-    if (previewScopes.length === 0) { setImpactDiff(null); setPreviewError(null); return; }
+    if (previewScopes.length === 0) { setImpactDiff(null); setPreviewError(null); setDiffLoading(false); return; }
+
+    let cancelled = false;
 
     setDiffLoading(true);
     setPreviewError(null);
     themeService.previewTheme(packageData, previewScopes)
-      .then(result => setImpactDiff(result))
+      .then(result => { if (!cancelled) setImpactDiff(result); })
       .catch((err) => {
+        if (cancelled) return;
         console.error('[ThemeApplyDialog] Failed to preview theme impact:', err);
         setPreviewError(err);
         setImpactDiff(null);
       })
-      .finally(() => setDiffLoading(false));
+      .finally(() => { if (!cancelled) setDiffLoading(false); });
+    return () => { cancelled = true; };
   }, [open, packageData, scopes, replaceDemoContent]);
 
   const toggleScope = (scope) => {
@@ -88,12 +80,12 @@ const ThemeApplyDialog = ({ open, onClose, packageData, onConfirm, loading }) =>
   };
 
   const handleStartFresh = () => {
-    const all = ['design', 'layoutStyle', 'homepageSections', 'demoContent'];
+    const all = ['design', 'layoutStyle', 'homepageSections'];
     if (componentStyleCount) all.push('componentStyles');
     if (sectionPresetCount) all.push('sectionPresets');
     if (pageTemplateCount) all.push('pageTemplates');
-    if (dataSourceCount) all.push('dataSources');
-    onConfirm(packageData, all, true);
+    setScopes(all);
+    setReplaceDemoContent(true);
   };
 
   if (!packageData) return null;
@@ -109,17 +101,24 @@ const ThemeApplyDialog = ({ open, onClose, packageData, onConfirm, loading }) =>
   })();
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={loading ? undefined : onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Install Template: {packageData.meta?.name}</DialogTitle>
       <DialogContent>
         {isEmpty && (
           <Alert severity="success" icon={<RocketLaunchIcon />} sx={{ mb: 2 }}>
-            Your store is empty — we recommend a full install for a launch-ready homepage.
+            Your store is empty. Use Start Fresh to review the template with its sample content.
           </Alert>
         )}
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Choose how much of this store template to apply:
+          {scopes.includes('dataSources')
+            ? 'Selected settings and API data sources will be applied directly to the live store.'
+            : 'Choose what to include. Selected settings replace matching settings in the current design draft.'}
         </Typography>
+        {scopes.includes('dataSources') && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            If a saved design draft includes any settings changed by this install, publishing that draft can be blocked by conflicts.
+          </Alert>
+        )}
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           <FormControlLabel
             control={<Checkbox checked={scopes.includes('design')} onChange={() => toggleScope('design')} />}
@@ -165,7 +164,7 @@ const ThemeApplyDialog = ({ open, onClose, packageData, onConfirm, loading }) =>
         {!diffLoading && diffSummary && (
           <Box sx={{ mt: 2, p: 1.5, borderRadius: 2, bgcolor: 'action.hover' }}>
             <Typography variant="body2" fontWeight={700} sx={{ mb: 0.75 }}>
-              Install impact: {diffSummary.total} setting{diffSummary.total !== 1 ? 's' : ''} will change
+              Changes compared with the live store: {diffSummary.total} setting{diffSummary.total !== 1 ? 's' : ''} will change
             </Typography>
             <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
               {Object.entries(diffSummary.groups).map(([group, count]) => (
@@ -179,18 +178,18 @@ const ThemeApplyDialog = ({ open, onClose, packageData, onConfirm, loading }) =>
         )}
         {!diffLoading && previewError && (
           <Alert severity="warning" sx={{ mt: 2 }}>
-            Could not calculate the install impact. You can still install, but the change summary is unavailable.
+            Could not calculate the template impact. Change the selection to retry.
           </Alert>
         )}
 
         {scopes.includes('dataSources') && dataSourceCount > 0 && (
-          <Alert severity="info" sx={{ mt: 2 }}>
-            This will create safe API Builder storefront endpoints used by this template's dynamic sections.
+          <Alert severity="warning" sx={{ mt: 2 }}>
+            Creating template API endpoints applies the selected changes directly to the live store.
           </Alert>
         )}
         {replaceDemoContent && (
           <Alert severity="warning" sx={{ mt: 2 }}>
-            This will overwrite current hero slides, promo banners, value props, and announcement text. Previous content is saved in activation history and can be restored.
+            This selection replaces the current hero slides, promo banners, value props, and announcement text.
           </Alert>
         )}
       </DialogContent>
@@ -199,9 +198,9 @@ const ThemeApplyDialog = ({ open, onClose, packageData, onConfirm, loading }) =>
           Start Fresh
         </Button>
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button color="error" onClick={onClose}>Cancel</Button>
-          <Button variant="contained" onClick={handleConfirm} disabled={loading || (scopes.length === 0 && !replaceDemoContent) || Boolean(previewError)}>
-            {loading ? 'Installing...' : 'Install Template'}
+          <Button color="error" onClick={onClose} disabled={loading}>Cancel</Button>
+          <Button variant="contained" onClick={handleConfirm} disabled={loading || diffLoading || (scopes.length === 0 && !replaceDemoContent) || Boolean(previewError)}>
+            {loading ? 'Preparing…' : scopes.includes('dataSources') ? 'Apply live with data sources' : 'Try in Designer'}
           </Button>
         </Box>
       </DialogActions>

@@ -53,8 +53,8 @@ export const saveDesignDraft = async (settings, expectedRevision = undefined) =>
   return response.data.data;
 };
 
-export const publishDesignDraft = async (expectedRevision = undefined) => {
-  const response = await api.post('/settings/design-draft/publish', expectedRevision == null ? {} : { expectedRevision });
+export const publishDesignDraft = async (expectedRevision = undefined, conflictToken = undefined) => {
+  const response = await api.post('/settings/design-draft/publish', { expectedRevision, conflictToken });
   return response.data.data;
 };
 

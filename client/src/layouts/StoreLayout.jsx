@@ -1,3 +1,4 @@
+import SectionRenderer from '../components/storefront/sections/SectionRenderer';
 import { useState, useEffect } from 'react';
 import { Box, AppBar, Toolbar, Typography, Button, IconButton, Badge, Menu, MenuItem, Divider, Avatar, Alert } from '@mui/material';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
@@ -618,10 +619,16 @@ const StoreLayout = () => {
         </Alert>
       )}
 
+      {!isAuthPage && (settings?.homepage?.sections || []).filter((section) =>
+        section.type === 'composed-hero' && section.placement === 'header'
+      ).map((section) => <SectionRenderer key={section.id} section={section} lazy={false} />)}
       <Box component="main" id="main" tabIndex={-1} sx={{ flexGrow: 1 }}>
         <Outlet />
       </Box>
 
+      {!isAuthPage && (settings?.homepage?.sections || []).filter((section) =>
+        section.type === 'composed-hero' && section.placement === 'footer'
+      ).map((section) => <SectionRenderer key={section.id} section={section} lazy={false} />)}
       {!isAuthPage && <Box data-store-component="footer"><StorefrontFooter /></Box>}
       {/* Resolved entity metadata and URL overrides take precedence over page fallbacks. */}
       <SEO />

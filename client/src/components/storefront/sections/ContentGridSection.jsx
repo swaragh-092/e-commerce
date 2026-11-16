@@ -10,11 +10,11 @@ import { CanvasEditableText, CanvasEditableImage } from './SectionFallback';
 
 const imageUrl = (image) => getOptimizedMediaUrl(image || '', { width: 360, quality: 78 }) || '';
 
-const buildFallbackItems = (fallbackTitle, count, preview) => {
-  const max = Math.min(Number.parseInt(count || 3, 10) || 3, preview ? 6 : 8);
+const buildFallbackItems = (fallbackTitle, count) => {
+  const max = Math.min(Number.parseInt(count || 3, 10) || 3, 6);
   return Array.from({ length: max }).map((_, index) => ({
     title: `${fallbackTitle} ${index + 1}`,
-    text: preview ? 'Template-ready content block.' : 'Template-ready storefront content.',
+    text: 'Template-ready content block.',
   }));
 };
 
@@ -54,21 +54,19 @@ const ContentGridSection = ({ section = {}, fallbackTitle = 'Content', kind = 'c
   const isFaq = section.type === 'faq' || kind === 'faq';
   const isTestimonial = section.type === 'testimonials';
   const variant = isTestimonial && ['quote-wall', 'carousel'].includes(section.variant) ? section.variant : 'cards';
-  const items = Array.isArray(section.items) && section.items.length
-    ? section.items
-    : (preview || isFaq) ? buildFallbackItems(fallbackTitle, section.count, preview) : [];
+  const items = Array.isArray(section.items) && section.items.length ? section.items : preview ? buildFallbackItems(fallbackTitle, section.count) : [];
 
   if (!items.length) return null;
 
   const limit = logo ? (preview ? 6 : 8) : 6;
   const align = section.textAlign || 'left';
   const seedPatch = { items };
-  const scrollCarousel = (direction) => carouselRef.current?.scrollBy({ left: direction * carouselRef.current.clientWidth, behavior: 'smooth' });
+  const scrollCarousel = (direction) => carouselRef.current?.scrollBy({ left: direction * carouselRef.current.clientWidth * 0.8, behavior: 'smooth' });
 
   const renderItem = (item, index) => {
     const link = typeof item.link === 'string' ? item.link.trim() : '';
     const external = isExternalUrl(link) || link.startsWith('//');
-    const internal = !/[\\\s]/.test(link) && /^(\/(?!\/)|\?|#|\.\/|\.\.\/)/.test(link);
+    const internal = /^(\/(?!\/)|\?|#|\.\/|\.\.\/)/.test(link);
     const linkProps = logo && !preview && link && (external || internal)
       ? external
         ? { component: 'a', href: link.startsWith('//') ? `https:${link}` : link, ...(/^https?:\/\//i.test(link) || link.startsWith('//') ? { target: '_blank', rel: 'noopener noreferrer' } : {}) }
@@ -101,13 +99,7 @@ const ContentGridSection = ({ section = {}, fallbackTitle = 'Content', kind = 'c
           {quoteWall && <Typography aria-hidden="true" component="span" sx={{ display: 'block', fontSize: '2.5rem', lineHeight: 1, color: 'primary.main', fontFamily: 'Georgia, serif' }}>“</Typography>}
           <CanvasEditableText section={section} field={`items.${index}.title`} {...editProps} variant={preview ? 'body2' : 'subtitle2'} sx={{ fontWeight: preview ? 800 : 900 }}>{item.title}</CanvasEditableText>
           {(item.text || preview) && (quoteWall
-            ? (
-              <Box component="blockquote" sx={{ m: 0, mt: 1 }}>
-                <CanvasEditableText section={section} field={`items.${index}.text`} {...editProps} variant="body1" color="text.secondary" sx={{ lineHeight: 1.7 }}>
-                  {item.text || 'Add testimonial text'}
-                </CanvasEditableText>
-              </Box>
-            )
+            ? <Typography component="blockquote" variant="body1" sx={{ m: 0, mt: 1, color: 'text.secondary', lineHeight: 1.7 }}>{item.text || 'Add testimonial text'}</Typography>
             : <CanvasEditableText section={section} field={`items.${index}.text`} {...editProps} variant={preview ? 'caption' : 'body2'} color="text.secondary" sx={{ mt: 1, display: 'block' }}>{item.text || 'Add item text'}</CanvasEditableText>)}
           {(item.author || preview) && <CanvasEditableText section={section} field={`items.${index}.author`} {...editProps} variant="caption" sx={{ display: 'block', mt: 1.5, fontWeight: 800 }}>{preview ? `- ${item.author || 'Author'}` : quoteWall ? `— ${item.author}` : item.author}</CanvasEditableText>}
           {(item.role || preview) && <CanvasEditableText section={section} field={`items.${index}.role`} {...editProps} variant="caption" color="text.secondary">{item.role || 'Role'}</CanvasEditableText>}
@@ -124,13 +116,13 @@ const ContentGridSection = ({ section = {}, fallbackTitle = 'Content', kind = 'c
         <FaqAccordion section={section} items={items.slice(0, 12)} preview={preview} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} seedPatch={seedPatch} />
       ) : isTestimonial && variant === 'carousel' ? (
         <Box>
-          <Box ref={carouselRef} role="region" aria-label="Customer testimonials" tabIndex={0} sx={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', scrollBehavior: 'smooth', pb: 1, scrollbarWidth: 'thin' }}>
-            {items.slice(0, limit).map((item, index) => <Box key={item.title || index} sx={{ flex: '0 0 100%', minWidth: 0, scrollSnapAlign: 'start' }}>{renderItem(item, index)}</Box>)}
+          <Box ref={carouselRef} role="region" aria-label="Customer testimonials" tabIndex={0} sx={{ display: 'flex', gap: 2, overflowX: 'auto', scrollSnapType: 'x mandatory', scrollBehavior: 'smooth', pb: 1, scrollbarWidth: 'thin' }}>
+            {items.slice(0, limit).map((item, index) => <Box key={item.title || index} sx={{ flex: '0 0 88%', maxWidth: { sm: 'calc(50% - 8px)', md: 'calc(33.333% - 11px)' }, scrollSnapAlign: 'start' }}>{renderItem(item, index)}</Box>)}
           </Box>
-          {items.length > 1 && <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 1 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 1 }}>
             <IconButton aria-label="Previous testimonials" size="small" onClick={() => scrollCarousel(-1)}><ArrowBackIosNewIcon fontSize="inherit" /></IconButton>
             <IconButton aria-label="Next testimonials" size="small" onClick={() => scrollCarousel(1)}><ArrowForwardIosIcon fontSize="inherit" /></IconButton>
-          </Box>}
+          </Box>
         </Box>
       ) : isTestimonial && variant === 'quote-wall' ? (
         <Box role="region" aria-label="Customer quotes" sx={{ columnCount: { xs: 1, sm: 2, md: 3 }, columnGap: 2 }}>{items.slice(0, limit).map(renderItem)}</Box>
