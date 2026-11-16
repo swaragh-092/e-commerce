@@ -1,3 +1,4 @@
+import StaffPicksEditor from './StaffPicksEditor';
 import ComposedHeroEditor from './ComposedHeroEditor';
 import { useState, useEffect } from 'react';
 import {
@@ -30,6 +31,8 @@ const PRODUCT_SOURCES = [
   { value: 'featured', label: 'Featured' },
   { value: 'sale', label: 'On Sale' },
   { value: 'bestSellers', label: 'Best Sellers' },
+  { value: 'staffPicks', label: 'Staff Picks' },
+  { value: 'trending', label: 'Trending This Week' },
   { value: 'mostViewed', label: 'Most Viewed' },
   { value: 'newest', label: 'Newest' },
   { value: 'recommended', label: 'Recommended' },
@@ -1327,7 +1330,17 @@ const DesignerSectionEditor = ({
                     <Select
                       value={section.source || 'featured'}
                       label="Product Source"
-                      onChange={(e) => { onChange('source', e.target.value); onBlur(); }}
+                      onChange={(event) => {
+                        const source = event.target.value;
+                        onChange('source', source);
+                        if (source === 'staffPicks' && section.viewAllLink?.startsWith('/products?')) {
+                          onChange('viewAllLink', '');
+                        }
+                        if (source === 'trending' && section.viewAllLink === '/products?featured=true') {
+                          onChange('viewAllLink', '/products?sort=trending');
+                        }
+                        onBlur();
+                      }}
                     >
                       {PRODUCT_SOURCES.map((s) => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
                     </Select>
@@ -1338,10 +1351,17 @@ const DesignerSectionEditor = ({
                       onBlur();
                     }} />
                   )}
+                  {isProductRow && section.source === 'staffPicks' && (
+                    <StaffPicksEditor ids={section.productIds || []} onChange={(ids) => {
+                      onChange('productIds', ids);
+                      onBlur();
+                    }} />
+                  )}
                   <TextField
                     label="Count"
                     type="number"
-                    value={section.count || 8}
+                    disabled={section.source === 'staffPicks'}
+                    value={section.source === 'staffPicks' ? section.productIds?.length || 0 : section.count || 8}
                     onChange={(e) => onChange('count', Math.min(isRecentlyViewed ? 12 : 24, Math.max(1, parseInt(e.target.value) || 8)))}
                     onBlur={onBlur}
                     size="small"

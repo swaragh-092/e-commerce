@@ -1,3 +1,4 @@
+import { fetchStaffPicks, PRODUCT_SOURCE_PARAMS, usesProductRowSource } from '../../utils/productRowSources';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Box } from '@mui/material';
 import api from '../../services/api';
@@ -25,7 +26,7 @@ const DEFAULT_HOMEPAGE = {
     { id: 'value-props', type: 'value-props', enabled: true },
     { id: 'categories', type: 'category-shortcuts', enabled: true, title: 'Shop by Category', count: 10 },
     { id: 'promo', type: 'promo-banners', enabled: true },
-    { id: 'trending', type: 'product-row', enabled: true, title: 'Trending Now', source: 'featured', count: 8, layout: 'carousel', viewAllLink: '/products?featured=true' },
+    { id: 'trending', type: 'product-row', enabled: true, title: 'Featured Products', source: 'featured', count: 8, layout: 'carousel', viewAllLink: '/products?featured=true' },
     { id: 'deals', type: 'product-row', enabled: true, title: 'Deals of the Day', source: 'sale', count: 8, layout: 'grid', viewAllLink: '/products?onSale=true' },
     { id: 'brands', type: 'brand-showcase', enabled: true, title: 'Featured Brands', count: 12 },
     { id: 'new-arrivals', type: 'product-row', enabled: true, title: 'New Arrivals', source: 'newest', count: 8, layout: 'carousel', viewAllLink: '/products?sort=newest' },
@@ -57,14 +58,6 @@ const DEFAULT_HOMEPAGE = {
   ],
 };
 
-const PRODUCT_SOURCE_PARAMS = {
-  newest: { sort: 'arrivals', discoveryRow: true },
-  featured: { featured: true },
-  bestSellers: { sort: 'best-selling', discoveryRow: true },
-  mostViewed: { sort: 'most-viewed', discoveryRow: true },
-  sale: { sale: true },
-  recommended: { sort: 'recommended' },
-};
 
 const bool = (val, fallback = true) => (val === undefined || val === null ? fallback : val !== false && val !== 'false');
 const num = (val, fallback = 8) => {
@@ -150,7 +143,8 @@ const getProductParams = (section) => ({
 const circuitBreakerState = {};
 
 const fetchSectionData = async (section) => {
-  if (!section.dataSourceSlug || (section.source === 'sale' && section.saleLabel)) {
+  if (section.source === 'staffPicks') return fetchStaffPicks(section, getProducts);
+  if (usesProductRowSource(section)) {
     return getProducts(getProductParams(section));
   }
 
@@ -259,9 +253,9 @@ const HomeExperience = () => {
         const products = {};
 
         productSections.forEach((section, index) => {
-          products[section.id] = section.dataSourceSlug && !(section.source === 'sale' && section.saleLabel)
+          products[section.id] = !usesProductRowSource(section)
             ? extractDataSourceArray(productResults[index], section, num(section.count, 8))
-            : extractArray(productResults[index], getProductParams(section).limit);
+            : extractArray(productResults[index], section.source === 'staffPicks' ? undefined : getProductParams(section).limit);
         });
 
         setData({ products, categories: extractArray(categoryResult) });
@@ -279,7 +273,7 @@ const HomeExperience = () => {
       ...data,
       products: {
         ...data.products,
-        [section.id]: data.products[section.id]?.slice(0, num(section.count, 8)),
+        [section.id]: data.products[section.id]?.slice(0, section.source === 'staffPicks' ? undefined : num(section.count, 8)),
       },
     },
     brands: contextBrands,
@@ -296,13 +290,13 @@ const HomeExperience = () => {
       />
 
       {visibleSections.map((section, index) => {
-        const discoverySort = !section.dataSourceSlug && PRODUCT_SOURCE_PARAMS[section.source]?.discoveryRow
+        const discoverySort = usesProductRowSource(section) && PRODUCT_SOURCE_PARAMS[section.source]?.discoveryRow
           ? PRODUCT_SOURCE_PARAMS[section.source].sort : null;
         const available = data.products[section.id]?.length || 0;
         const campaignLabel = section.type === 'product-row' && section.source === 'sale' ? section.saleLabel : null;
         if (campaignLabel && !pricingEnabled && !designerPreview) return null;
-        const sparse = !loading && ((discoverySort && available < (discoverySort === 'arrivals' ? 1 : 4))
-          || (campaignLabel && !available));
+        const sparse = !loading && ((discoverySort && available < (['arrivals', 'trending'].includes(discoverySort) ? 1 : 4))
+          || ((campaignLabel || section.source === 'staffPicks') && !available));
         if (sparse && !designerPreview) return null;
         const previewSection = designerPreview && (sparse || section.type === 'recently-viewed');
         const renderedSection = campaignLabel

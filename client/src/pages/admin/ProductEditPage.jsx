@@ -271,6 +271,7 @@ const ProductEditPage = () => {
     storefrontLayout: null,
     type: 'simple',
     isEnabled: true,
+    isFeatured: false,
     categoryIds: [],
     brandId: '',
     tags: [],
@@ -361,6 +362,7 @@ const ProductEditPage = () => {
               storefrontLayout: p.storefrontLayout ?? null,
               type: p.type || 'simple',
               isEnabled: p.isEnabled ?? true,
+              isFeatured: p.isFeatured ?? false,
               categoryIds: p.categories?.map((c) => c.id) || [],
               brandId: p.brandId || '',
               tags: p.tags?.map((tag) => tag.name) || [],
@@ -1230,6 +1232,11 @@ const ProductEditPage = () => {
                 </Select>
                 <FormHelperText>{getProductStorefrontStateHelp(getProductStorefrontState(formData))}</FormHelperText>
               </FormControl>
+              <FormControlLabel
+                control={<Switch checked={formData.isFeatured} onChange={(event) => setField('isFeatured', event.target.checked)} />}
+                disabled={!canSaveProduct}
+                label="Featured product"
+              />
 
               <FormControl fullWidth margin="normal" error={Boolean(errors.type)}>
                 <InputLabel id="product-type-label">Product Type</InputLabel>

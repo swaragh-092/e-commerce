@@ -21,6 +21,16 @@ describe('page product rows', () => {
     await waitFor(() => expect(getProducts).toHaveBeenCalledWith(expect.objectContaining(filter)));
   });
 
+  it('sends the category filter for Trending and keeps storewide rows unfiltered', async () => {
+    render(<MemoryRouter><PageProductRows category="shoes" rows={[
+      { id: 'scoped', type: 'product-row', source: 'trending' },
+      { id: 'storewide', type: 'product-row', source: 'trending', productScope: 'store' },
+    ]} /></MemoryRouter>);
+
+    await waitFor(() => expect(getProducts).toHaveBeenCalledTimes(2));
+    expect(getProducts.mock.calls.map(([params]) => params.category)).toEqual(['shoes', undefined]);
+  });
+
   it('requests the configured most-viewed products with the discovery ranking', async () => {
     render(<MemoryRouter><PageProductRows rows={[{
       id: 'trending',

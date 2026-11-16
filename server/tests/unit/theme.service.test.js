@@ -259,6 +259,26 @@ describe('Theme package schema validation', () => {
     }
   });
 
+  it('preserves page row placement, scope and ordered picks through theme export and preview', async () => {
+    const { Setting } = require('../../src/modules');
+    const ThemeService = require('../../src/modules/theme/theme.service');
+    const rows = [
+      { id: 'trending', type: 'product-row', enabled: true, source: 'trending', pagePosition: 'above', productScope: 'category' },
+      { id: 'picks', type: 'product-row', enabled: true, source: 'staffPicks', pagePosition: 'below',
+        productIds: ['d0c29777-e701-4e40-ab97-bd600e1dddfd', '093643c4-aec2-4b45-a494-3cfcacc37ee0'] },
+    ];
+    const readSettings = vi.spyOn(Setting, 'findAll')
+      .mockResolvedValueOnce([{ group: 'categoryPage', key: 'productRows', value: rows }])
+      .mockResolvedValueOnce([]);
+    try {
+      const pkg = await ThemeService.exportCurrent();
+      const { mergedSettings } = await ThemeService.preview(JSON.parse(JSON.stringify(pkg)), ['pageTemplates']);
+      expect(mergedSettings.categoryPage.productRows).toEqual(rows);
+    } finally {
+      readSettings.mockRestore();
+    }
+  });
+
   it('previews exported navigation, commerce styles, and album references', async () => {
     const { Setting } = require('../../src/modules');
     const ThemeService = require('../../src/modules/theme/theme.service');

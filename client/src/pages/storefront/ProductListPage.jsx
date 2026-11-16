@@ -4,7 +4,6 @@ import { FilterList as FilterIcon, Sort as SortIcon } from '@mui/icons-material'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { getMediaUrl, onImageError } from '../../utils/media';
 import ProductGrid from '../../components/product/ProductGrid';
-import PageProductRows from '../../components/storefront/sections/PageProductRows';
 import ProductFilters from '../../components/product/ProductFilters';
 import StorefrontSidebarMenu from '../../components/layout/StorefrontSidebarMenu';
 import { getProducts } from '../../services/productService';
@@ -215,6 +214,7 @@ const ProductListPage = ({ tag = null }) => {
                             <MenuItem value="newest">Newest Added</MenuItem>
                             <MenuItem value="arrivals">New Arrivals</MenuItem>
                             {ordersEnabled && <MenuItem value="best-selling">Best Sellers</MenuItem>}
+                            <MenuItem value="trending">Trending This Week</MenuItem>
                             <MenuItem value="most-viewed">Most Viewed</MenuItem>
                             {pricingEnabled && showPrice && <MenuItem value="price_asc">Price: Low to High</MenuItem>}
                             {pricingEnabled && showPrice && <MenuItem value="price_desc">Price: High to Low</MenuItem>}
@@ -262,7 +262,6 @@ const ProductListPage = ({ tag = null }) => {
                     )}
                 </Grid>
             </Grid>
-            {!tag && <PageProductRows rows={settings?.catalog?.productRows} />}
 
             <Drawer anchor="left" open={showFilters && useFilterDrawer && mobileFilterOpen} onClose={() => setMobileFilterOpen(false)}>
                 <Box sx={{ width: { xs: '85vw', sm: 320 }, maxWidth: 380, p: 3 }}>

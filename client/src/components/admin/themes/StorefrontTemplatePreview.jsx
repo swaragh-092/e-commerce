@@ -1,3 +1,4 @@
+import { fetchStaffPicks, PRODUCT_SOURCE_PARAMS, usesProductRowSource } from '../../../utils/productRowSources';
 import { useContext, useEffect, useMemo, useState } from 'react';
 import {
   Box, Typography, Button, Grid, Stack, Badge, IconButton,
@@ -14,7 +15,7 @@ import { DesignTokensContext, SettingsContext } from '../../../context/ThemeCont
 import { buildStorefrontCssVariables, buildStorefrontTheme } from '../../../utils/theme';
 import { resolveDesignTokens } from '../../../utils/designTokens';
 import { getStoreName } from '../../../utils/store';
-import { getPageSections } from '../../../utils/designerSections';
+import { getPageSections, getPageProductRows, PAGE_SETTINGS_GROUPS } from '../../../utils/designerSections';
 import SectionRenderer from '../../storefront/sections/SectionRenderer';
 import StorefrontFooter from '../../layout/StorefrontFooter';
 import api from '../../../services/api';
@@ -56,14 +57,6 @@ const createPreviewTheme = (design) => {
 
 const API_BUILDER_TIMEOUT_MS = 5000;
 
-const PRODUCT_SOURCE_PARAMS = {
-  newest: { sort: 'arrivals', discoveryRow: true },
-  featured: { featured: true },
-  bestSellers: { sort: 'best-selling', discoveryRow: true },
-  mostViewed: { sort: 'most-viewed', discoveryRow: true },
-  sale: { sale: true },
-  recommended: { sort: 'recommended' },
-};
 
 const num = (value, fallback = 8) => {
   const parsed = Number.parseInt(value, 10);
@@ -246,11 +239,12 @@ const extractDataSourceArray = (res, section, count) => {
   return count ? rows.slice(0, count) : rows;
 };
 
-const fetchPreviewProducts = (section) => {
-  if (section.dataSourceSlug && !(section.source === 'sale' && section.saleLabel)) {
+const fetchPreviewProducts = (section, category) => {
+  if (section.source === 'staffPicks') return fetchStaffPicks(section, getProducts);
+  if (!usesProductRowSource(section)) {
     return api.get('/api-builder/public/' + section.dataSourceSlug, { timeout: API_BUILDER_TIMEOUT_MS });
   }
-  return getProducts(getProductParams(section));
+  return getProducts({ ...getProductParams(section), ...(category && { category }) });
 };
 
 const getProductParams = (section) => ({
@@ -263,6 +257,15 @@ const getProductParams = (section) => ({
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 
+const getTemplatePreviewSections = (settings, page) => {
+  const rows = getPageProductRows(settings, page).map((row) => ({ ...row, pageProductRow: true }));
+  return [
+    ...rows.filter(({ pagePosition }) => pagePosition === 'above'),
+    ...getPageSections(settings, page),
+    ...rows.filter(({ pagePosition }) => pagePosition !== 'above'),
+  ];
+};
+
 const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSettings, componentStyles: liveComponentStyles, selectedSectionId, onSelectSection, onSelectComponent, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus, onAddSectionAt, onReorderSection, activePage = "home", compareMode = false }) => {
   const design = packageData?.design?.theme || {};
   const layout = packageData?.layout || {};
@@ -273,13 +276,19 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
     if (activePage === 'home' && Array.isArray(layout.homepageSections)) {
       return layout.homepageSections;
     }
-    return getPageSections(currentSettings || parentSettingsContext.settings, activePage);
-  }, [layout.homepageSections, activePage, currentSettings, parentSettingsContext.settings]);
+    const pageGroup = PAGE_SETTINGS_GROUPS[activePage];
+    const templatePage = packageData?.pageTemplates?.[activePage];
+    const settings = templatePage ? { [pageGroup]: templatePage } : currentSettings || parentSettingsContext.settings;
+    return getTemplatePreviewSections(settings, activePage);
+  }, [layout.homepageSections, packageData?.pageTemplates, activePage, currentSettings, parentSettingsContext.settings]);
   const { brands: contextBrands = [], loading: brandsLoading = false } = useBrands();
   const [resolvedData, setResolvedData] = useState({ categories: [], products: {} });
   const [navigationData, setNavigationData] = useState({ headerMenu: null, topLinks: [], categories: [] });
   const [dataLoading, setDataLoading] = useState(false);
   const [dragState, setDragState] = useState(null);
+  const previewCategory = activePage === 'category'
+    ? navigationData.categories.find(({ slug }) => slug)?.slug
+    : undefined;
 
   const previewTheme = useMemo(() => createPreviewTheme(design), [design]);
 
@@ -327,7 +336,9 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
         return;
       }
       setDataLoading(true);
-      const productFetches = productSections.map((section) => fetchPreviewProducts(section));
+      const productFetches = productSections.map((section) => fetchPreviewProducts(
+        section, section.productScope !== 'store' ? previewCategory : undefined,
+      ));
       const categoryFetch = needsCategories ? getCategories() : Promise.resolve(null);
       const results = await Promise.allSettled([...productFetches, categoryFetch]);
       if (cancelled) return;
@@ -335,9 +346,9 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
       const categoryResult = results[productFetches.length];
       const products = {};
       productSections.forEach((section, index) => {
-        products[section.id] = section.dataSourceSlug && !(section.source === 'sale' && section.saleLabel)
+        products[section.id] = !usesProductRowSource(section)
           ? extractDataSourceArray(productResults[index], section, num(section.count, 8))
-          : extractArray(productResults[index], num(section.count, 8));
+          : extractArray(productResults[index], section.source === 'staffPicks' ? undefined : num(section.count, 8));
       });
       setResolvedData({ products, categories: extractArray(categoryResult) });
       setDataLoading(false);
@@ -349,7 +360,7 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
       }
     });
     return () => { cancelled = true; };
-  }, [needsCategories, productSections]);
+  }, [needsCategories, previewCategory, productSections]);
 
   const buildSectionData = (section, demoData, settingsSnapshot = null) => {
     const baseData = buildSectionRendererData({
@@ -702,7 +713,7 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
       valueProps: demo.valueProps || [],
       promoBanners: demo.promoBanners || [],
     },
-    productPage: packageData?.productPage || {},
+    productPage: packageData?.pageTemplates?.product || packageData?.productPage || {},
     categoryPage: packageData?.categoryPage || {},
     catalog: packageData?.catalog || {},
     blogPage: packageData?.blogPage || {},
@@ -718,7 +729,7 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
 
   if (compareMode && currentSettings) {
     const currentTheme = createPreviewTheme(currentSettings.theme || {});
-    const currentSections = getPageSections(currentSettings, activePage);
+    const currentSections = getTemplatePreviewSections(currentSettings, activePage);
     const currentDemo = {
       announcementText: currentSettings.announcement?.text || '',
       heroSlides: currentSettings.homepage?.heroSlides || [],

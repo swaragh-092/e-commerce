@@ -151,6 +151,12 @@ const PAGE_TEMPLATE_GROUPS = {
   cart: 'cartPage',
   account: 'accountPage',
   blog: 'blogPage',
+  'checkout': 'checkoutPage',
+  'wishlist': 'wishlistPage',
+  'search': 'searchPage',
+  'not-found': 'notFoundPage',
+  'orders': 'ordersPage',
+
 };
 
 const withoutStoreDataSource = (section) => {
@@ -163,6 +169,8 @@ const buildPageTemplateRows = (pkg, scopes) => {
   if (!scopes.includes('pageTemplates') || !pkg.pageTemplates) return rows;
 
   for (const [page, group] of Object.entries(PAGE_TEMPLATE_GROUPS)) {
+    const productRows = pkg.pageTemplates[page]?.productRows;
+    if (productRows) pushDefinedSetting(rows, group, 'productRows', productRows.map(withoutStoreDataSource));
     const sections = pkg.pageTemplates[page]?.sections;
     if (sections) pushDefinedSetting(rows, group, 'sections', sections.map(withoutStoreDataSource));
   }
@@ -815,8 +823,12 @@ const exportCurrent = async (options = {}) => {
   };
 
   for (const [page, group] of Object.entries(PAGE_TEMPLATE_GROUPS)) {
+    const productRows = snapshot[group]?.productRows;
+    if (Array.isArray(productRows)) {
+      pkg.pageTemplates[page] = { ...pkg.pageTemplates[page], productRows: productRows.map(withoutStoreDataSource) };
+    }
     const sections = snapshot[group]?.sections;
-    if (Array.isArray(sections)) pkg.pageTemplates[page].sections = sections.map(withoutStoreDataSource);
+    if (Array.isArray(sections) && pkg.pageTemplates[page]) pkg.pageTemplates[page].sections = sections.map(withoutStoreDataSource);
   }
 
   if (includeDemoContent) {
