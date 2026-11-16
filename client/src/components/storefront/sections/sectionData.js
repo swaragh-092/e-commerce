@@ -45,7 +45,7 @@ export const buildSectionRendererData = ({
     products: productsBySection[section.id] || resolvedData.productsList || [],
     brands: arr(brands),
     loading: sectionLoading,
-    count: num(section.count, 8),
+    count: section.source === 'staffPicks' ? section.productIds?.length || 0 : num(section.count, 8),
     pricingEnabled,
   };
 };

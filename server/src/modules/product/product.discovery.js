@@ -10,6 +10,11 @@ const scoreFor = (source) => `(
 const bestSellers = scoreFor('best-selling');
 const mostViewed = scoreFor('most-viewed');
 
+const trending = `(
+  SELECT score FROM storefront_product_trending
+  WHERE product_id = "Product"."id"
+)`;
+
 const refreshRankings = () => sequelize.transaction(async (transaction) => {
   const [[{ acquired }]] = await sequelize.query(
     "SELECT pg_try_advisory_xact_lock(hashtext('storefront_product_rankings')) AS acquired",
@@ -17,6 +22,7 @@ const refreshRankings = () => sequelize.transaction(async (transaction) => {
   );
   if (acquired) {
     await sequelize.query('REFRESH MATERIALIZED VIEW CONCURRENTLY storefront_product_rankings', { transaction });
+    await sequelize.query('REFRESH MATERIALIZED VIEW CONCURRENTLY storefront_product_trending', { transaction });
   }
 });
 
@@ -29,4 +35,4 @@ const recordView = (productId, browserId) => sequelize.query(`
   ON CONFLICT DO NOTHING
 `, { replacements: { productId, browserId } });
 
-module.exports = { bestSellers, mostViewed, arrival, recordView, refreshRankings };
+module.exports = { bestSellers, mostViewed, trending, arrival, recordView, refreshRankings };

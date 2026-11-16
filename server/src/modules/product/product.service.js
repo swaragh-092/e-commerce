@@ -580,9 +580,10 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
 
   const SORTABLE_FIELDS = { price: 'price', quantity: 'quantity', name: 'name', createdAt: 'createdAt' };
   const ranking = filters.sort === 'best-selling' ? discovery.bestSellers
-    : filters.sort === 'most-viewed' ? discovery.mostViewed : null;
+    : filters.sort === 'most-viewed' ? discovery.mostViewed
+    : filters.sort === 'trending' ? discovery.trending : null;
   if (ranking) {
-    const minimum = filters.discoveryRow ? (filters.sort === 'best-selling' ? 2 : 5) : 1;
+    const minimum = filters.sort !== 'trending' && filters.discoveryRow ? (filters.sort === 'best-selling' ? 2 : 5) : 1;
     const condition = filters.sort === 'best-selling' && !features.orders ? 'FALSE' : `${ranking} >= ${minimum}`;
     where[Op.and] = [...(where[Op.and] || []), Sequelize.literal(condition)];
     if (filters.sort === 'most-viewed') {

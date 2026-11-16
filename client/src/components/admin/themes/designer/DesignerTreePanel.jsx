@@ -302,7 +302,7 @@ const DesignerTreePanel = ({
         )}
 
         {/* Page-specific settings accordion (shown for non-home pages) */}
-        {!isHomePage && (pageEditorConfig || pageInfoText) && (
+        {!isHomePage && (
           <Accordion
             expanded={pageSettingsOpen}
             onChange={(_, v) => setPageSettingsOpen(v)}
@@ -337,8 +337,9 @@ const DesignerTreePanel = ({
                   {pageInfoText}
                 </Typography>
               )}
-              {['category', 'collection', 'search', 'cart', 'product'].includes(activePage) && (
+              {!isHomePage && (
                 <PageProductRowsEditor
+                  page={activePage}
                   rows={currentPageSettings.productRows || []}
                   onChange={(productRows) => onPageSettingChange(activePage, { ...currentPageSettings, productRows })}
                 />

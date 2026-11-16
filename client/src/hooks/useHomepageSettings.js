@@ -6,7 +6,7 @@ const DEFAULT_HOMEPAGE_SECTIONS = [
   { id: 'value-props', type: 'value-props', enabled: true },
   { id: 'categories', type: 'category-shortcuts', enabled: true, title: 'Shop by Category', count: 10 },
   { id: 'promo', type: 'promo-banners', enabled: true, title: 'Offers You Shouldn\'t Miss' },
-  { id: 'trending', type: 'product-row', enabled: true, title: 'Trending Now', source: 'featured', count: 8, layout: 'carousel', viewAllLabel: 'View All', viewAllLink: '/products?featured=true' },
+  { id: 'trending', type: 'product-row', enabled: true, title: 'Featured Products', source: 'featured', count: 8, layout: 'carousel', viewAllLabel: 'View All', viewAllLink: '/products?featured=true' },
   { id: 'deals', type: 'product-row', enabled: true, title: 'Deals of the Day', source: 'sale', count: 8, layout: 'grid', viewAllLabel: 'All Deals', viewAllLink: '/products?onSale=true' },
   { id: 'brands', type: 'brand-showcase', enabled: true, title: 'Featured Brands', count: 12 },
   { id: 'new-arrivals', type: 'product-row', enabled: true, title: 'New Arrivals', source: 'newest', count: 8, layout: 'grid', viewAllLabel: 'New In', viewAllLink: '/products?sort=newest' },

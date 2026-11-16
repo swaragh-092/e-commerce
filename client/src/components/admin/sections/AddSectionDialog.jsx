@@ -8,7 +8,8 @@ import { createDefaultSection, getSectionPresetGallery, SECTION_PRESET_GOALS } f
 
 const productChoices = [
   { key: 'products-most-viewed', label: 'Most Viewed', source: 'mostViewed', link: '/products?sort=most-viewed' },
-  { key: 'products-trending', label: 'Trending Products', source: 'featured', link: '/products?featured=true' },
+  { key: 'products-trending', label: 'Trending This Week', source: 'trending', link: '/products?sort=trending' },
+  { key: 'products-staff-picks', label: 'Staff Picks', source: 'staffPicks', link: '' },
   { key: 'products-best-sellers', label: 'Best Sellers', source: 'bestSellers', link: '/products?sort=best-selling' },
   { key: 'products-featured', label: 'Featured Products', source: 'featured', link: '/products?featured=true' },
   { key: 'products-newest', label: 'New Arrivals', source: 'newest', link: '/products?sort=newest' },
@@ -21,7 +22,8 @@ const productChoices = [
   variant: 'carousel',
   description: choice.source === 'featured'
     ? 'Show hand-picked featured products.'
-    : `Show ${choice.label.toLowerCase()} products in a carousel or grid.`,
+    : choice.source === 'staffPicks' ? 'Choose and order the products in this row.'
+      : `Show ${choice.label.toLowerCase()} products in a carousel or grid.`,
 }));
 
 const sectionOptions = Object.entries(SECTION_DEFINITIONS)

@@ -1,3 +1,18 @@
+export const PAGE_SETTINGS_GROUPS = {
+  'product': 'productPage',
+  'category': 'categoryPage',
+  'collection': 'catalog',
+  'brand': 'brandsPage',
+  'blog': 'blogPage',
+  'account': 'accountPage',
+  'cart': 'cartPage',
+  'checkout': 'checkoutPage',
+  'wishlist': 'wishlistPage',
+  'search': 'searchPage',
+  'not-found': 'notFoundPage',
+  'orders': 'ordersPage',
+};
+
 // Shared by the designer section list and its storefront preview.
 export const getPageSections = (settingsObj, activePg, defaultLayoutSections) => {
   if (activePg === 'home') {
@@ -75,4 +90,9 @@ export const getPageSections = (settingsObj, activePg, defaultLayoutSections) =>
     ];
   }
   return [];
+};
+
+export const getPageProductRows = (settings, page) => {
+  const rows = settings?.[PAGE_SETTINGS_GROUPS[page]]?.productRows;
+  return Array.isArray(rows) ? rows : [];
 };

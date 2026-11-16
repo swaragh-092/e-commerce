@@ -8,7 +8,7 @@ const hasProductAdminView = (user) => getPermissionsForUser(user).includes(PERMI
 exports.list = async (req, res, next) => {
   try {
     const { page, limit, search, brand, category, categoryId, minPrice, maxPrice, status, saleStatus, saleLabel, sale, onSale, featured, sort, sortBy, sortOrder, tags, maxQty, include, hasVariants, ids, discoveryRow } = req.query;
-    const publicDiscovery = ids || saleLabel || discoveryRow || ['arrivals', 'best-selling', 'most-viewed'].includes(sort);
+    const publicDiscovery = ids || featured === true || featured === 'true' || saleLabel || discoveryRow || ['arrivals', 'best-selling', 'most-viewed', 'trending'].includes(sort);
     const isAdmin = !publicDiscovery && hasProductAdminView(req.user);
     
     let sanitizedInclude = undefined;
