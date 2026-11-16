@@ -181,6 +181,7 @@ const CategoryPage = () => {
 
     // ── URL-driven filter state ───────────────────────────────────────────────
     const filters = {
+        category: categorySlug || '',
         page:     parseInt(searchParams.get('page'))     || 1,
         sort:     searchParams.get('sort')               || defaultSort,
         minPrice: searchParams.get('minPrice')           || '',
@@ -223,8 +224,21 @@ const CategoryPage = () => {
 
     // ── Handlers ──────────────────────────────────────────────────────────────
     const handleFilterChange = (newFilters) => {
+        const { category: nextCategory = '', ...queryFilters } = newFilters;
         const params = new URLSearchParams();
-        Object.entries(newFilters).forEach(([k, v]) => { if (v) params.set(k, String(v)); });
+        Object.entries(queryFilters).forEach(([k, v]) => { if (v) params.set(k, String(v)); });
+        const query = params.toString();
+
+        if (nextCategory && nextCategory !== categorySlug) {
+            navigate(`/category/${encodeURIComponent(nextCategory)}${query ? `?${query}` : ''}`);
+            return;
+        }
+
+        if (!nextCategory && categorySlug) {
+            navigate(`/products${query ? `?${query}` : ''}`);
+            return;
+        }
+
         setSearchParams(params);
     };
 
