@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## [1.5.2.1] - 2026-11-16
+
+### Changed
+- Use a solid cream background on the admin sign-in page.
+
 ## [1.5.2.0] - 2026-11-16
 
 ### Added
