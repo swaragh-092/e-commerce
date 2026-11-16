@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## [1.5.2.0] - 2026-11-16
+
+### Added
+- Let merchants mark Featured products and build ordered Staff Picks rows in Store Design.
+- Rank Trending This Week by growth in recent product views and keep it separate from Most Viewed.
+- Place product rows above or below supported storefront pages and preserve their configuration in theme templates.
+
 ## [1.5.1.0] - 2026-11-09
 
 ### Fixed
