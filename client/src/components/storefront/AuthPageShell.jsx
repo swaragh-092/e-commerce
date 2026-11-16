@@ -6,7 +6,6 @@ import { useSettings } from '../../hooks/useSettings';
 import { getMediaUrl } from '../../utils/media';
 
 const DEFAULT_AUTH_IMAGE = 'https://images.unsplash.com/photo-1603252109303-2751441dd157?auto=format&fit=crop&w=1400&q=80';
-const DEFAULT_ADMIN_IMAGE = '/assets/admin-login-plants.webp';
 
 const defaults = {
   login: {
@@ -34,9 +33,7 @@ const AuthPageShell = ({ type = 'login', fullHeight = false, children }) => {
   const { settings } = useSettings();
   const authSettings = settings?.auth || {};
   const copy = defaults[type] || defaults.login;
-  const image = type === 'admin'
-    ? authSettings.adminImage || DEFAULT_ADMIN_IMAGE
-    : authSettings.image || DEFAULT_AUTH_IMAGE;
+  const image = type === 'admin' ? null : authSettings.image || DEFAULT_AUTH_IMAGE;
   const accent = theme.palette.primary.main;
   const headingColor = authSettings[`${type}HeadingColor`] || authSettings.headingColor || theme.palette.primary.main;
   const descriptionColor = authSettings[`${type}DescriptionColor`] || authSettings.descriptionColor || theme.palette.primary.main;
@@ -58,12 +55,12 @@ const AuthPageShell = ({ type = 'login', fullHeight = false, children }) => {
         display: 'flex',
         alignItems: 'center',
         bgcolor: '#fffaf2',
-        backgroundImage: `linear-gradient(90deg, rgba(255,250,242,0.68) 0%, rgba(255,250,242,0.56) 36%, rgba(255,250,242,0.38) 58%, rgba(255,250,242,0.7) 100%), url(${getMediaUrl(image)})`,
-        backgroundSize: 'cover',
-        backgroundPosition: type === 'admin'
-          ? authSettings.adminImagePosition || 'center'
-          : authSettings.imagePosition || 'center',
-        backgroundRepeat: 'no-repeat',
+        ...(image && {
+          backgroundImage: `linear-gradient(90deg, rgba(255,250,242,0.68) 0%, rgba(255,250,242,0.56) 36%, rgba(255,250,242,0.38) 58%, rgba(255,250,242,0.7) 100%), url(${getMediaUrl(image)})`,
+          backgroundSize: 'cover',
+          backgroundPosition: authSettings.imagePosition || 'center',
+          backgroundRepeat: 'no-repeat',
+        }),
         overflow: 'hidden',
         px: { xs: 2.5, sm: 4, lg: 7 },
         py: { xs: 5, md: 7 },
