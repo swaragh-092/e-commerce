@@ -1,13 +1,13 @@
 'use strict';
 
-const { Category, Product, ProductCategory, ProductImage, ProductVariant, Media, Sequelize, sequelize } = require('../index');
+const { Category, Product, ProductCategory, ProductImage, ProductVariant, Media, Brand, Sequelize, sequelize } = require('../index');
 const { Op } = Sequelize;
 const { generateSlug } = require('../../utils/slugify');
 const AppError = require('../../utils/AppError');
 const SettingsService = require('../settings/settings.service');
 const { getSaleLabels } = require('../settings/saleLabel.service');
 const { serializeProductPricing } = require('../product/product.pricing');
-const { isBrandVisible, stripBrandFields } = require('../../utils/brandVisibility');
+const { isBrandVisible, stripBrandFields, assertBrandFilterAllowed } = require('../../utils/brandVisibility');
 const { getPopulatedCategoryIds } = require('./category.visibility');
 
 // ProductVariant has no salePrice column. Product-level sale rules are
@@ -98,6 +98,7 @@ exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20,
     let sort = 'newest';
     let minPrice;
     let maxPrice;
+    let brand;
 
     let includeSubcategories = true;
 
@@ -107,6 +108,7 @@ exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20,
         sort = pageOrOptions.sort ?? 'newest';
         minPrice = pageOrOptions.minPrice;
         maxPrice = pageOrOptions.maxPrice;
+        brand = pageOrOptions.brand;
         if (pageOrOptions.includeSubcategories !== undefined) {
             const raw = pageOrOptions.includeSubcategories;
             if (typeof raw === 'boolean') {
@@ -160,6 +162,8 @@ exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20,
     const { getSqlEffectivePriceExpr } = require('../product/product.service');
     const labelPresets = await getLabelPresets();
     const { features } = await SettingsService.getFeatures();
+    const brandVisible = isBrandVisible(features);
+    if (brand && !brandVisible) assertBrandFilterAllowed(features);
 
     const now = new Date();
     const effectivePriceCol = getSqlEffectivePriceExpr(labelPresets, now, '"Product"');
@@ -221,6 +225,7 @@ exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20,
     const { count, rows: products } = await Product.findAndCountAll({
         where: productWhere,
         include: [
+            ...(brand && brandVisible ? [{ model: Brand, as: 'brand', where: { slug: brand }, required: true }] : []),
             {
                 model: ProductImage,
                 as: 'images',
@@ -241,7 +246,6 @@ exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20,
         order: [...productOrder, ['id', 'ASC']],
     });
 
-    const brandVisible = isBrandVisible(features);
     const serializedProducts = products.map((p) => {
         const product = serializeProductPricing(p, { adminView: false, features }, labelPresets);
         return brandVisible ? product : stripBrandFields(product);

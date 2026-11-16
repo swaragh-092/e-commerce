@@ -14,13 +14,14 @@ exports.getTree = async (req, res, next) => {
 
 exports.getBySlug = async (req, res, next) => {
     try {
-        const { page = 1, limit = 20, sort = 'newest', minPrice, maxPrice, includeSubcategories, hideEmpty } = req.query;
+        const { page = 1, limit = 20, sort = 'newest', minPrice, maxPrice, brand, includeSubcategories, hideEmpty } = req.query;
         const result = await categoryService.getCategoryWithProducts(req.params.slug, {
             page: parseInt(page, 10) || 1,
             limit: parseInt(limit, 10) || 20,
             sort,
             minPrice,
             maxPrice,
+            brand,
             includeSubcategories,
             hideEmpty,
         });
