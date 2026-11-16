@@ -73,11 +73,18 @@ shipping and tax continue to be calculated by commerce services.
 
 ## Product rows on other storefront pages
 
-The Store Designer can add up to six product rows on Product, Category, Collection,
-Search, and Cart pages. Each row supports Best Sellers, Trending / Most Viewed, Featured,
-New Arrivals, or On Sale sources, with a configurable title, product count, and carousel
-or grid layout. Rows are saved with that page's settings and appended after its primary
-page content; existing product grids and cart controls remain intact.
+In Store Design, choose a page and open **Page Settings → Product sections** to add
+up to six product rows. Set each row's title, layout, and position above or below
+the page content. The homepage uses **Add Section**.
+
+Staff Picks lets you select and order up to 12 products per row. Featured Products
+uses the Featured flag from the product editor. Trending This Week ranks growth
+across the last two completed weeks, while Most Viewed ranks total views.
+Category rows can use **This category** or **Entire store** for automatic sources.
+
+Apply the server database migration before deploying the updated API. Include
+**Page Templates** when applying a template with product rows on non-home pages.
+
 
 ## Nested category filters
 
