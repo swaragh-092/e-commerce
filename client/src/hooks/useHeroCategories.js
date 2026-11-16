@@ -20,7 +20,7 @@ const getRecords = {
     const pages = response?.data?.data || response?.data || [];
     return Array.isArray(pages) ? pages.map((page) => ({ ...page, label: page.title })) : [];
   }),
-  gallery: () => galleryService.listPublic().then((albums) =>
+  gallery: () => galleryService.listPublic().then(({ data: albums }) =>
     Array.isArray(albums) ? albums.map((album) => ({ ...album, label: album.name, image: album.coverImage?.url || album.items?.[0]?.media?.url || '' })) : []
   ),
   blog: () => BlogService.getPublicPosts({ limit: 100 }).then((response) => {

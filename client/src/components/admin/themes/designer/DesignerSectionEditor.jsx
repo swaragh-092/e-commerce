@@ -502,7 +502,7 @@ const GalleryAlbumField = ({ slug, onChange, onBlur }) => {
     if (!enabled) return undefined;
     let cancelled = false;
     galleryService.listPublic()
-      .then((data) => { if (!cancelled) setAlbums(data); })
+      .then(({ data }) => { if (!cancelled) setAlbums(data); })
       .catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; };
   }, [enabled]);

@@ -378,10 +378,11 @@ const StoreLayout = () => {
               alignItems: 'center',
               textDecoration: 'none',
               color: 'inherit',
-              flexShrink: 0,
+              flexShrink: 1,
+              [theme.breakpoints.up('md')]: { flexShrink: 0 },
               minWidth: 0,
               maxWidth: { xs: showStoreName && headerLogoUrl ? '50vw' : '42vw', sm: 'none' },
-            }}
+            })}
           >
             <StoreHeaderLogo src={headerLogoUrl} name={headerStoreName} maxWidth={nav.logoMaxWidth} showName={showStoreName} />
           </Box>
@@ -621,15 +622,14 @@ const StoreLayout = () => {
       {!isAuthPage && (settings?.homepage?.sections || []).filter((section) =>
         section.type === 'composed-hero' && section.placement === 'header'
       ).map((section) => <SectionRenderer key={section.id} section={section} lazy={false} />)}
-
       <Box component="main" id="main" tabIndex={-1} sx={{ flexGrow: 1 }}>
         <Outlet />
       </Box>
 
-      {!isAuthPage && settings?.homepage?.sections?.filter((section) =>
+      {!isAuthPage && (settings?.homepage?.sections || []).filter((section) =>
         section.type === 'composed-hero' && section.placement === 'footer'
       ).map((section) => <SectionRenderer key={section.id} section={section} lazy={false} />)}
-      {!isAuthPage && <StorefrontFooter />}
+      {!isAuthPage && <Box data-store-component="footer"><StorefrontFooter /></Box>}
       {/* Resolved entity metadata and URL overrides take precedence over page fallbacks. */}
       <SEO />
     </Box>

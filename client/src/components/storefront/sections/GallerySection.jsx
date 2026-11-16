@@ -17,7 +17,7 @@ const GallerySection = ({ frameProps }) => {
     if (!enabled || !slug) return undefined;
     let cancelled = false;
     galleryService.getPublic(slug, { limit: count })
-      .then(({ items }) => {
+      .then(({ data: { items } }) => {
         if (!cancelled) setResult({ slug, count, items: items.filter(({ media }) => media?.url) });
       })
       .catch(() => {

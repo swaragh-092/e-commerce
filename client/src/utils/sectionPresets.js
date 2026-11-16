@@ -35,6 +35,8 @@ const SECTION_PRESET_META = Object.freeze({
 });
 
 const SECTION_PRESETS = Object.freeze({
+  [SECTION_TYPES.TAG_SHOWCASE]: { title: "Shop by Tag", tagSlugs: [], count: 8 },
+  [SECTION_TYPES.GALLERY_GRID]: { title: "Gallery", gallerySlug: "", count: 8 },
   [SECTION_TYPES.COMPOSED_HERO]: {
     heroBlocks: [{ id: 'heading', type: 'heading', text: 'Welcome to our store' }],
   },

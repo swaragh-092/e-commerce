@@ -270,45 +270,6 @@ const SectionComposerPage = () => {
     return [];
   }, [settings]);
 
-  const getInheritedBlocksForSection = useCallback((sec) => {
-    if (!sec) return [];
-    if (sec.type === 'hero-carousel') {
-      const slides = settings?.homepage?.heroSlides?.length ? settings.homepage.heroSlides : null;
-      return Array.isArray(slides) && slides.length ? slides : [
-        {
-          eyebrow: 'Fresh drops, sharper prices',
-          title: 'Shop the Latest',
-          subtitle: 'Discover thousands of products at great prices.',
-          buttonText: 'Shop Now',
-          buttonLink: '/products',
-          image: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1800&q=80',
-          color: '#ffffff',
-        },
-      ];
-    }
-    if (sec.type === 'value-props' || sec.type === 'trust-badges') {
-      const items = settings?.homepage?.valueProps?.length ? settings.homepage.valueProps : null;
-      return Array.isArray(items) && items.length ? items : [
-        { icon: 'shipping', title: 'Fast Delivery', text: 'Reliable shipping on every order' },
-        { icon: 'offers', title: 'Daily Offers', text: 'Fresh deals across top categories' },
-        { icon: 'secure', title: 'Secure Payments', text: 'Protected checkout experience' },
-        { icon: 'support', title: 'Easy Support', text: 'Help when shoppers need it' },
-      ];
-    }
-    if (sec.type === 'promo-banners') {
-      const items = settings?.homepage?.promoBanners?.length ? settings.homepage.promoBanners : null;
-      return Array.isArray(items) && items.length ? items : [
-        { title: 'Limited Offer', subtitle: 'Fresh deals and curated picks.', ctaText: 'Shop Now', link: '/products', color: '#fff7ed', accentColor: '#f97316' },
-        { title: 'New Arrivals', subtitle: 'Browse what just landed.', ctaText: 'Explore', link: '/products?sort=newest', color: '#ecfeff', accentColor: '#0891b2' },
-        { title: 'Featured Edit', subtitle: 'Handpicked products for your shoppers.', ctaText: 'View Edit', link: '/products?featured=true', color: '#f0fdf4', accentColor: '#16a34a' },
-      ];
-    }
-    if (sec.type === 'category-shortcuts') {
-      return settings?.homepage?.categoryTiles?.length ? settings.homepage.categoryTiles : [];
-    }
-    return [];
-  }, [settings]);
-
   // FSM helper transitions
   const selectSection = (section) => {
     setPanelView({ mode: 'section-editor', sectionId: section?.id || null, componentKey: null, blockKey: null, blockIndex: null });

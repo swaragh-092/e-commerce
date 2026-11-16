@@ -1,3 +1,4 @@
+import PageProductRows from '../../components/storefront/sections/PageProductRows';
 import ComposedHero from '../../components/storefront/sections/ComposedHero';
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useLocation, useNavigate, Link as RouterLink } from 'react-router-dom';
@@ -1030,6 +1031,7 @@ const ProductDetailPage = () => {
                 </Grid>
             </Grid>
 
+            <PageProductRows rows={settings?.productPage?.productRows} />
             {showProductRelated && <RelatedProducts productId={product.id} />}
             {getPageSections(settings, 'product')
                 .filter((section) => section.enabled !== false && (

@@ -43,7 +43,7 @@ const generateId = (type, existingIds) => {
 const AddSectionDialog = ({ open, onClose, onAdd, existingIds = [], sectionPresets = {}, insertLabel = 'last section' }) => {
   const typeLabelId = useId();
   const variantLabelId = useId();
-  const [type, setType] = useState('');
+  const [selection, setSelection] = useState('');
   const [variant, setVariant] = useState('');
   const [title, setTitle] = useState('');
   const [goal, setGoal] = useState('all');
@@ -142,7 +142,7 @@ const AddSectionDialog = ({ open, onClose, onAdd, existingIds = [], sectionPrese
 
           <FormControl size="small" fullWidth>
             <InputLabel id={typeLabelId}>Section Type</InputLabel>
-            <Select labelId={typeLabelId} value={type} label="Section Type" onChange={(e) => { setType(e.target.value); setVariant(''); }}>
+            <Select labelId={typeLabelId} value={type} label="Section Type" onChange={(e) => { setSelection(e.target.value); setVariant(''); }}>
               {sectionOptions.map((opt) => (
                 <MenuItem key={opt.type} value={opt.type}>
                   <Stack direction="row" alignItems="center" spacing={1}>
