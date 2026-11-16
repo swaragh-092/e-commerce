@@ -11,6 +11,7 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material';
+import { getVariantOptionLabel } from '../../utils/variantOptions';
 import api from '../../services/api';
 import { getCampaignAttribution } from '../../utils/campaignAttribution';
 
@@ -26,6 +27,7 @@ const EnquiryModal = ({ open, onClose, product, cartItems }) => {
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const timerRef = useRef(null);
+  const variantLabel = getVariantOptionLabel(product?.selectedVariant);
 
   useEffect(() => {
     return () => {
@@ -77,6 +79,7 @@ const EnquiryModal = ({ open, onClose, product, cartItems }) => {
         {cartItems ? 'Enquire About Cart' : product ? `Enquire About ${product.name}` : 'General Enquiry'}
       </DialogTitle>
       <DialogContent dividers>
+        {variantLabel && <Typography sx={{ mb: 2 }}>Selected variant: {variantLabel}</Typography>}
         {successMsg && <Alert severity="success" sx={{ mb: 2 }}>{successMsg}</Alert>}
         {errorMsg && <Alert severity="error" sx={{ mb: 2 }}>{errorMsg}</Alert>}
         
