@@ -359,6 +359,11 @@ const EnquiriesPage = () => {
                   <Typography variant="body2" sx={{ mt: 0.5 }}>Quantity: {selectedEnquiry.quantity || 1}</Typography>
                   {selectedEnquiry.variant && <Typography variant="body2" color="text.secondary">
                     {getVariantOptionLabel(selectedEnquiry.variant) || selectedEnquiry.variant.sku || 'Selected variant'}
+                    {(selectedEnquiry.variantId || selectedEnquiry.variant.id) && (
+                      <Typography component="span" variant="caption" sx={{ display: 'block' }}>
+                        Variant ID: {selectedEnquiry.variantId || selectedEnquiry.variant.id}
+                      </Typography>
+                    )}
                     {selectedEnquiry.variant.sku ? ` · SKU: ${selectedEnquiry.variant.sku}` : ''}
                   </Typography>}
                 </Box>
@@ -370,6 +375,11 @@ const EnquiriesPage = () => {
                       <Typography component="li" key={item.id || index} variant="body2" sx={{ py: 0.5 }}>
                         {item.product?.id || item.productId ? <Link component={RouterLink} to={`/admin/products/${item.product?.id || item.productId}/edit`}>{item.product?.name || 'View product'}</Link> : <strong>{item.product?.name || 'Unknown Product'}</strong>}
                         {item.variant ? ` (${item.variant.optionLabel || item.variant.sku || 'Variant'})` : ''}
+                        {(item.variantId || item.variant?.id) && (
+                          <Typography component="span" variant="caption" sx={{ display: 'block' }}>
+                            Variant ID: {item.variantId || item.variant.id}
+                          </Typography>
+                        )}
                         <Typography component="span" display="block" variant="body2">Quantity: {item.quantity}</Typography>
                       </Typography>
                     ))}
