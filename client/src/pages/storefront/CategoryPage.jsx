@@ -181,6 +181,8 @@ const CategoryPage = () => {
 
     // ── URL-driven filter state ───────────────────────────────────────────────
     const filters = {
+        category: categorySlug || '',
+        brand:    searchParams.get('brand') || '',
         page:     parseInt(searchParams.get('page'))     || 1,
         sort:     searchParams.get('sort')               || defaultSort,
         minPrice: searchParams.get('minPrice')           || '',
@@ -200,6 +202,7 @@ const CategoryPage = () => {
             page: filters.page,
             limit: filters.limit,
             sort: filters.sort,
+            brand: filters.brand,
             minPrice: filters.minPrice,
             maxPrice: filters.maxPrice,
         })
@@ -223,8 +226,21 @@ const CategoryPage = () => {
 
     // ── Handlers ──────────────────────────────────────────────────────────────
     const handleFilterChange = (newFilters) => {
+        const { category: nextCategory = '', ...queryFilters } = newFilters;
         const params = new URLSearchParams();
-        Object.entries(newFilters).forEach(([k, v]) => { if (v) params.set(k, String(v)); });
+        Object.entries(queryFilters).forEach(([k, v]) => { if (v) params.set(k, String(v)); });
+        const query = params.toString();
+
+        if (nextCategory && nextCategory !== categorySlug) {
+            navigate(`/category/${encodeURIComponent(nextCategory)}${query ? `?${query}` : ''}`);
+            return;
+        }
+
+        if (!nextCategory && categorySlug) {
+            navigate(`/products${query ? `?${query}` : ''}`);
+            return;
+        }
+
         setSearchParams(params);
     };
 
@@ -272,7 +288,7 @@ const CategoryPage = () => {
     // Map subcategories → tiles expected by CategorySection
     const subcategoryTiles = normalizeSubs(subcategories);
 
-    const hasActiveFilters = Boolean(filters.minPrice || filters.maxPrice);
+    const hasActiveFilters = Boolean(filters.brand || filters.minPrice || filters.maxPrice);
 
     return (
         <Container maxWidth={isCompact ? 'lg' : 'xl'} sx={{ py: 4 }}>
