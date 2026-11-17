@@ -324,6 +324,11 @@ const getCustomerLifetimeValue = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const getSessionAnalytics = async (req, res, next) => {
+  try { return success(res, await AnalyticsService.getSessionAnalytics(req.query)); }
+  catch (error) { return next(error); }
+};
+
 const getConversionRate = async (req, res, next) => {
   try {
     const data = await analyticsWithCompare('getConversionRate', req.query);
@@ -412,6 +417,7 @@ const exportAnalyticsCsv = async (req, res, next) => {
       'geographic-sales': 'getGeographicSales',
       'revenue-by-payment': 'getRevenueByPaymentMethod',
       'customer-lifetime-value': 'getCustomerLifetimeValue',
+      sessions: 'getSessionAnalytics',
       'conversion-rate': 'getConversionRate',
       'traffic-sources': 'getTrafficSources',
       'landing-pages': 'getLandingPagePerformance',
@@ -558,6 +564,7 @@ module.exports = {
   getRevenueByPaymentMethod,
   getCustomerLifetimeValue,
   getConversionRate,
+  getSessionAnalytics,
   getTrafficSources,
   getLandingPagePerformance,
   getDevicePerformance,

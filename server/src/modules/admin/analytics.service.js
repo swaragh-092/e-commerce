@@ -3,6 +3,7 @@
 const { Op, fn, col, literal } = require('sequelize');
 const { randomUUID } = require('crypto');
 const db = require('../index');
+const AppError = require('../../utils/AppError');
 const { Order, OrderItem, Cart, CartItem, Product, Category, OrderRefund, User } = db;
 
 const VALID_STATUSES = ['confirmed', 'processing', 'ready_for_shipment', 'closed', 'on_hold'];
@@ -945,20 +946,69 @@ const getConversionRate = async ({ period = '30d', _dateRange, startDate, endDat
 
   const [visitRows, orderCount] = await Promise.all([
     db.sequelize.query(
-      `SELECT
-         COUNT(*)::int AS visits,
-         COUNT(DISTINCT COALESCE(user_id::text, NULLIF(session_id, '')))::int AS visitors
-       FROM page_visits
-       WHERE created_at BETWEEN :start AND :end`,
+      `WITH visits AS (
+         SELECT created_at, COALESCE(user_id::text, NULLIF(session_id, '')) AS visitor
+         FROM page_visits
+         WHERE created_at BETWEEN CAST(:start AS timestamptz) - INTERVAL '30 minutes' AND :end
+       ), ordered AS (
+         SELECT *, LAG(created_at) OVER (PARTITION BY visitor ORDER BY created_at) AS previous_visit
+         FROM visits
+       )
+       SELECT COUNT(*)::int AS visits, COUNT(DISTINCT visitor)::int AS visitors,
+         COUNT(*) FILTER (WHERE visitor IS NOT NULL AND
+           (previous_visit IS NULL OR created_at - previous_visit >= INTERVAL '30 minutes'))::int AS sessions
+       FROM ordered WHERE created_at >= :start`,
       { replacements: { start, end }, type: db.sequelize.QueryTypes.SELECT }
     ),
     Order.count({ where: { status: { [Op.in]: VALID_STATUSES }, createdAt: { [Op.between]: [start, end] } } }),
   ]);
 
-  const { visits, visitors } = visitRows[0] || {};
+  const { visits, visitors, sessions } = visitRows[0] || {};
   const visitorCount = Number(visitors || 0);
   const rate = visitorCount > 0 ? parseFloat(((orderCount / visitorCount) * 100).toFixed(2)) : 0;
-  return { visits: Number(visits || 0), visitors: visitorCount, orders: orderCount, rate };
+  return { visits: Number(visits || 0), visitors: visitorCount, sessions: Number(sessions || 0), orders: orderCount, rate };
+};
+
+const getSessionAnalytics = async (params = {}) => {
+  const { start, end } = getDateRange(params);
+  if (!Number.isFinite(end - start) || end < start || end - start > 367 * 864e5) {
+    throw new AppError('INVALID_DATE_RANGE', 400, 'Choose a session report range of up to 12 months.');
+  }
+  const [table] = await db.sequelize.query("SELECT to_regclass('public.page_visits') AS name", {
+    type: db.sequelize.QueryTypes.SELECT,
+  });
+  if (!table?.name) return [];
+  return db.sequelize.query(`
+    WITH visits AS (
+      SELECT created_at, referrer_source, user_agent,
+        COALESCE(user_id::text, NULLIF(session_id, '')) AS visitor
+      FROM page_visits
+      WHERE created_at BETWEEN CAST(:start AS timestamptz) - INTERVAL '30 minutes' AND :end
+    ), ordered AS (
+      SELECT *, LAG(created_at) OVER (PARTITION BY visitor ORDER BY created_at) AS previous
+      FROM visits WHERE visitor IS NOT NULL
+    ), starts AS (
+      SELECT (created_at AT TIME ZONE 'UTC')::date AS day,
+        COALESCE(NULLIF(referrer_source, ''), 'Direct') AS source,
+        CASE WHEN user_agent ~* 'ipad|tablet|kindle|silk' THEN 'Tablet'
+          WHEN user_agent ~* 'mobile|android|iphone|ipod' THEN 'Mobile'
+          WHEN NULLIF(user_agent, '') IS NULL THEN 'Unknown' ELSE 'Desktop' END AS device
+      FROM ordered WHERE created_at >= :start
+        AND (previous IS NULL OR created_at - previous >= INTERVAL '30 minutes')
+    ), daily AS (
+      SELECT day, COUNT(*)::int AS sessions FROM starts GROUP BY day
+    )
+    SELECT 'Day (UTC)' AS breakdown, dates.day::date::text AS value,
+      COALESCE(daily.sessions, 0)::int AS sessions
+    FROM generate_series(
+      (CAST(:start AS timestamptz) AT TIME ZONE 'UTC')::date,
+      (CAST(:end AS timestamptz) AT TIME ZONE 'UTC')::date,
+      INTERVAL '1 day'
+    ) AS dates(day) LEFT JOIN daily ON daily.day = dates.day::date
+    UNION ALL SELECT 'Source', source, COUNT(*)::int FROM starts GROUP BY source
+    UNION ALL SELECT 'Device', device, COUNT(*)::int FROM starts GROUP BY device
+    ORDER BY breakdown, value
+  `, { replacements: { start, end }, type: db.sequelize.QueryTypes.SELECT });
 };
 
 /**
@@ -1836,6 +1886,7 @@ module.exports = {
   getRevenueByPaymentMethod,
   getCustomerLifetimeValue,
   getConversionRate,
+  getSessionAnalytics,
   getTrafficSources,
   getLandingPagePerformance,
   getDevicePerformance,
