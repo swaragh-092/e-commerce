@@ -59,7 +59,8 @@ export default function ReportTable({ rows, fields, metric, renderRow, children:
       <Table {...props}>
         {cloneElement(head, {}, cloneElement(headerRow, {}, headers.map((header, index) => {
           const { field, label, visible } = columns[index];
-          if (!field || !visible) return header;
+          if (!visible) return null;
+          if (!field) return header;
           const active = field === sort?.field;
           return cloneElement(header, { sortDirection: active ? sort.direction : false },
             <TableSortLabel active={active} direction={active ? sort.direction : 'asc'} onClick={() => {

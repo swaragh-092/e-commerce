@@ -42,7 +42,8 @@ const trackVisit = async (req, res, next) => {
     logger.debug('Visit tracking feature lookup failed:', err.message);
     return next();
   }
-  const existingId = [req.cookies?.sessionId, req.cookies?.analytics_visitor].find(isUuid);
+  // Keep the ID recorded on the initial request when the storefront later sets its cart cookie.
+  const existingId = [req.cookies?.analytics_visitor, req.cookies?.sessionId].find(isUuid);
   const sessionId = existingId || uuidv4();
   if (!existingId) {
     res.cookie('analytics_visitor', sessionId, {
