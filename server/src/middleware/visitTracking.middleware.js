@@ -1,6 +1,6 @@
 'use strict';
 
-const { v4: uuidv4 } = require('uuid');
+const { v4: uuidv4, validate: isUuid } = require('uuid');
 const db = require('../modules/index');
 const { getResolvedFeature } = require('./featureGate.middleware');
 const logger = require('../utils/logger');
@@ -30,14 +30,26 @@ const extractProductSlug = (path) => {
 /**
  * Lightweight page visit tracking middleware.
  * Tracks GET requests to storefront pages. Captures UTM params and product page visits.
- * Fires asynchronously — never blocks the response.
+ * Writes visits asynchronously after assigning the storefront visitor cookie.
  */
-const trackVisit = (req, res, next) => {
-  next();
-
-  if (req.method !== 'GET') return;
+const trackVisit = async (req, res, next) => {
+  if (req.method !== 'GET' || !req.accepts('html')) return next();
   const p = req.path;
-  if (p.startsWith('/api') || p.startsWith('/uploads') || p.startsWith('/health') || p.includes('.')) return;
+  if (/^\/(api|admin|uploads|health)(\/|$)/.test(p) || p.includes('.')) return next();
+  try {
+    if (!await getResolvedFeature('analytics')) return next();
+  } catch (err) {
+    logger.debug('Visit tracking feature lookup failed:', err.message);
+    return next();
+  }
+  const existingId = [req.cookies?.sessionId, req.cookies?.analytics_visitor].find(isUuid);
+  const sessionId = existingId || uuidv4();
+  if (!existingId) {
+    res.cookie('analytics_visitor', sessionId, {
+      httpOnly: true, secure: req.secure, sameSite: 'lax', maxAge: 30 * 864e5,
+    });
+  }
+  next();
 
   const source = extractSource(req.get('referer'), req.get('host'));
   const query = req.query || {};
@@ -48,7 +60,6 @@ const trackVisit = (req, res, next) => {
 
   setImmediate(async () => {
     try {
-      if (!await getResolvedFeature('analytics')) return;
       // Resolve product_id from slug if this is a product page
       let productId = null;
       if (productSlug) {
@@ -68,7 +79,7 @@ const trackVisit = (req, res, next) => {
             path: p.substring(0, 500),
             source: source.substring(0, 255) || null,
             userId: req.user?.id || null,
-            sessionId: req.cookies?.sessionId || null,
+            sessionId,
             userAgent: req.get('user-agent')?.substring(0, 500) || null,
             ip: req.ip || null,
             productId,

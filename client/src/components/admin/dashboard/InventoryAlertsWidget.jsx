@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   Alert, Box, Button, Chip, Paper, Stack, Table, TableBody, TableCell,
-  TableHead, TablePagination, TableRow, TextField, Typography,
+  TableHead, TablePagination, TableRow, TableSortLabel, TextField, Typography,
 } from '@mui/material';
 import WarningIcon from '@mui/icons-material/Warning';
 import { useNavigate } from 'react-router-dom';
@@ -51,12 +51,15 @@ const InventoryAlertActions = ({ alert, canUpdate, onUpdated, draft, onDraftChan
 
 const InventoryAlertsWidget = ({ lowStock = [], inventoryAlerts, loading, spacing, stats, hasAnyPermission, onInventoryAlertUpdated }) => {
   const navigate = useNavigate();
+  const [direction, setDirection] = useState(null);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [followUpDrafts, setFollowUpDrafts] = useState({});
   const rows = inventoryAlerts?.rows || lowStock;
   const currentPage = Math.min(page, Math.max(0, Math.ceil(rows.length / rowsPerPage) - 1));
-  const visibleRows = rows.slice(currentPage * rowsPerPage, (currentPage + 1) * rowsPerPage);
+  const sortedRows = direction ? [...rows].sort((a, b) =>
+    (Number(a.quantity ?? 0) - Number(b.quantity ?? 0)) * (direction === "asc" ? 1 : -1)) : rows;
+  const visibleRows = sortedRows.slice(currentPage * rowsPerPage, (currentPage + 1) * rowsPerPage);
   const totalAtRisk = Number(inventoryAlerts?.totalCount ?? stats?.inventory?.totalAtRisk ?? stats?.lowStockCount ?? rows.length);
   const outOfStockCount = Number(inventoryAlerts?.outOfStockCount ?? stats?.inventory?.outOfStockCount ?? stats?.outOfStockCount ?? rows.filter((item) => item.availableQty <= 0).length);
   const canUpdate = typeof hasAnyPermission === 'function' && hasAnyPermission([PERMISSIONS.PRODUCTS_UPDATE]);
@@ -77,7 +80,12 @@ const InventoryAlertsWidget = ({ lowStock = [], inventoryAlerts, loading, spacin
       <Box sx={{ overflowX: 'auto' }}>
         <Table size="small" aria-label="Inventory alerts" sx={{ minWidth: inventoryAlerts ? 820 : 400 }}>
           <TableHead><TableRow>
-            <TableCell>Product / SKU</TableCell><TableCell align="right">On hand</TableCell>
+            <TableCell>Product / SKU</TableCell><TableCell align="right" sortDirection={direction || false}>
+              <TableSortLabel active={Boolean(direction)} direction={direction || 'asc'} onClick={() => {
+                setDirection(direction === 'asc' ? 'desc' : 'asc');
+                setPage(0);
+              }}>On hand</TableSortLabel>
+            </TableCell>
             <TableCell align="right">Reserved</TableCell><TableCell align="right">Available / Threshold</TableCell>
             {inventoryAlerts && <TableCell>Follow-up</TableCell>}
           </TableRow></TableHead>
