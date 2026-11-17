@@ -78,21 +78,30 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
   const { formatPrice } = useCurrency();
   const pageRef = useRef(null);
   const requestRef = useRef(0);
-  const { widgets, visible } = useAnalyticsDisplay();
+  const { widgets, visible, preferences, update } = useAnalyticsDisplay();
   const visibleIds = widgets.filter(({ id }) => report.ids.includes(id) && visible(id)).map(({ id }) => id).join(',');
   const insightSources = report.key === 'overview' && visible('insights')
     ? ['salesReconciliation', 'abandonedCarts', 'inventoryPerformance', 'productProfitability', 'conversionRate']
       .filter((id) => visible(id)).join(',')
     : '';
   const [filters, setFilters] = useSearchParams();
-  const period = PERIODS.find(({ value }) => value === filters.get('period'))?.value ?? '30d';
-  const compare = filters.get('compare') === '1';
+  const rangeKey = (key) => report.key === 'overview' ? key : `${report.key}.${key}`;
+  const hasReportRange = report.key !== 'overview' && filters.has(rangeKey('period'));
+  const rangeValue = (key) => filters.get(hasReportRange ? rangeKey(key) : key);
+  const period = PERIODS.find(({ value }) => value === rangeValue('period'))?.value ?? '30d';
+  const compare = rangeValue('compare') === '1';
   const updateFilters = (changes) => setFilters((current) => {
     const next = new URLSearchParams(current);
-    Object.entries(changes).forEach(([key, value]) => {
-      if (value) next.set(key, value);
-      else next.delete(key);
+    const range = { period, compare: compare ? '1' : null, startDate, endDate, ...changes };
+    Object.entries(range).forEach(([key, value]) => {
+      if (value) next.set(rangeKey(key), value);
+      else next.delete(rangeKey(key));
     });
+    return next;
+  }, { preventScrollReset: true });
+  const resetReportRange = () => setFilters((current) => {
+    const next = new URLSearchParams(current);
+    ['period', 'compare', 'startDate', 'endDate'].forEach((key) => next.delete(rangeKey(key)));
     return next;
   }, { preventScrollReset: true });
   const savedViewsKey = `analytics-saved-views:${userId || 'staff'}`;
@@ -110,8 +119,8 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
   const validDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value ?? '')
     && Number.isFinite(Date.parse(value))
     && new Date(value).toISOString().slice(0, 10) === value;
-  const startDate = filters.get('startDate');
-  const endDate = filters.get('endDate');
+  const startDate = rangeValue('startDate');
+  const endDate = rangeValue('endDate');
   const customRange = validDate(startDate) && validDate(endDate) && startDate <= endDate
     ? { startDate, endDate } : defaultRange;
   const [trendPeriod, setTrendPeriod] = useState('monthly');
@@ -132,11 +141,20 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
   const [directoryOpen, setDirectoryOpen] = useState(false);
   const [reportQuery, setReportQuery] = useState('');
   const pendingReport = useRef(null);
-  const directory = widgets.filter(({ id }) => id !== 'insights' && visible(id)).flatMap((widget) => {
+  const pinned = Array.isArray(preferences.pinnedReports) ? preferences.pinnedReports : [];
+  const togglePin = (id) => update({
+    ...preferences,
+    pinnedReports: pinned.includes(id) ? pinned.filter((item) => item !== id) : [...pinned, id],
+  });
+  const availableReports = widgets.filter(({ id }) => id !== 'insights' && visible(id)).flatMap((widget) => {
     const group = groups.find(({ key, ids }) => key !== 'overview' && ids.includes(widget.id));
-    if (!group || !`${widget.label} ${group.label}`.toLowerCase().includes(reportQuery.trim().toLowerCase())) return [];
+    if (!group) return [];
     return [{ ...widget, group }];
   });
+
+  const directory = availableReports.filter(({ label, group }) =>
+    `${label} ${group.label}`.toLowerCase().includes(reportQuery.trim().toLowerCase()));
+  const pinnedCards = availableReports.filter(({ id }) => pinned.includes(id));
 
   useEffect(() => {
     if (loading || pendingReport.current?.group !== report.key) return;
@@ -438,12 +456,15 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
           <FormControlLabel
             control={<Switch size="small" checked={compare} onChange={(e) => updateFilters({ compare: e.target.checked ? '1' : null })} />}
-            label={<Typography variant="body2">Compare</Typography>}
+            label={<Typography variant="body2">Compare to previous period</Typography>}
             sx={{ mr: 1 }}
           />
           <Select size="small" inputProps={{ "aria-label": "Report date range" }} value={period} onChange={(e) => updateFilters({ period: e.target.value, ...(e.target.value === 'custom' ? customRange : {}) })} sx={{ minWidth: 120 }}>
             {PERIODS.map(p => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
           </Select>
+          {report.key !== 'overview' && (hasReportRange
+            ? <Button size="small" onClick={resetReportRange}>Use overview range</Button>
+            : <Typography variant="caption" color="text.secondary">Using overview range</Typography>)}
           {period === 'custom' && <>
             <TextField size="small" type="date" label="From" value={customRange.startDate}
               onChange={(e) => { if (validDate(e.target.value) && e.target.value <= customRange.endDate) updateFilters({ ...customRange, startDate: e.target.value }); }}
@@ -500,6 +521,24 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
         </AnalyticsWidget>
       )}
 
+      {report.key === 'overview' && pinnedCards.length > 0 && (
+        <Box component="section" aria-label="Pinned reports" sx={{ mb: 3 }}>
+          <Typography variant="h6" component="h2" sx={{ mb: 1 }}>Pinned reports</Typography>
+          <Grid container spacing={2}>
+            {pinnedCards.map(({ id, label, group }) => (
+              <Grid item xs={12} sm={6} md={4} key={id}>
+                <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
+                  <Typography variant="caption" color="text.secondary">{group.label}</Typography>
+                  <Typography fontWeight={600}>{label}</Typography>
+                  <Button size="small" onClick={() => openReport(group.key, id)}>Open report</Button>
+                  <Button size="small" aria-label={`Unpin ${label}`} onClick={() => togglePin(id)}>Unpin</Button>
+                </Paper>
+              </Grid>
+            ))}
+          </Grid>
+        </Box>
+      )}
+
       <Dialog open={directoryOpen} onClose={() => setDirectoryOpen(false)} fullWidth maxWidth="sm"
         aria-labelledby="analytics-report-directory">
         <DialogTitle id="analytics-report-directory">Find a report</DialogTitle>
@@ -507,7 +546,8 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
           <TextField autoFocus fullWidth size="small" label="Search by report or category"
             value={reportQuery} onChange={(event) => setReportQuery(event.target.value)} sx={{ mb: 2 }} />
           {directory.length ? directory.map(({ id, label, group }) => (
-            <Button key={id} fullWidth onClick={() => {
+            <Box key={id} sx={{ display: "flex", alignItems: "center" }}>
+            <Button fullWidth onClick={() => {
               pendingReport.current = { id, group: group.key };
               selectReport(group.key);
               setDirectoryOpen(false);
@@ -515,6 +555,9 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
               {label}
               <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 2 }}>{group.label}</Typography>
             </Button>
+            <Button size="small" aria-label={`${pinned.includes(id) ? 'Unpin' : 'Pin'} ${label}`}
+              onClick={() => togglePin(id)}>{pinned.includes(id) ? 'Unpin' : 'Pin'}</Button>
+            </Box>
           )) : <Typography color="text.secondary">No visible reports match your search.</Typography>}
         </DialogContent>
         <DialogActions><Button onClick={() => setDirectoryOpen(false)}>Close</Button></DialogActions>
