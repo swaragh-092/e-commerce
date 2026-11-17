@@ -284,7 +284,7 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
   };
 
   const reportRequests = () => [
-      ['topProducts', () => getTopProducts({ ...qp, limit: 10, sortBy: 'revenue' })],
+      ['topProducts', () => getTopProducts({ ...qp, limit: 50, sortBy: 'revenue' })],
       ['productProfitability', () => getProductProfitability({ ...qp, limit: 50 })],
       ['variantPerformance', () => getVariantPerformance({ ...qp, limit: 20 })],
       ['inventoryPerformance', () => getInventoryPerformance({ ...qp, limit: 50 })],
@@ -697,7 +697,7 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
         {/* Top Products */}
         <AnalyticsWidget metric="topProducts" item xs={12} lg={6}>
           <Paper sx={{ p: 3 }} elevation={0}>
-            <SectionHeader title="Top Selling Products" metric="top-products" params={{ ...qp, sortBy: 'revenue' }} />
+            <SectionHeader title="Top Selling Products" metric="top-products" params={{ ...qp, limit: 50, sortBy: 'revenue' }} />
             {loading ? <CardSkeleton /> : (
               data.topProducts?.length > 0 ? (
                 <>
@@ -711,10 +711,10 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
                     </BarChart>
                   </ResponsiveContainer>
                   <Table size="small" sx={{ mt: 1 }}>
-                    <TableHead><TableRow><AnalyticsField name="0">#</AnalyticsField><AnalyticsField name="1">Product</AnalyticsField><AnalyticsField name="2" align="right">Revenue</AnalyticsField></TableRow></TableHead>
+                    <TableHead><TableRow><AnalyticsField name="0">#</AnalyticsField><AnalyticsField name="1">Product</AnalyticsField><AnalyticsField name="2" align="right">Revenue</AnalyticsField><AnalyticsField name="3" align="right">Units sold</AnalyticsField><AnalyticsField name="4" align="right">Orders</AnalyticsField></TableRow></TableHead>
                     <TableBody>
                       {data.topProducts.map((p, i) => (
-                        <TableRow key={p.productId || i} hover sx={{ cursor: 'pointer' }} onClick={() => setDrillDown({ open: true, metric: 'product', filterValue: p.productId, label: p.name })}><AnalyticsField name="0">{i + 1}</AnalyticsField><AnalyticsField name="1">{p.name}</AnalyticsField><AnalyticsField name="2" align="right">{formatPrice(p.revenue)}</AnalyticsField></TableRow>
+                        <TableRow key={p.productId || i} hover sx={{ cursor: 'pointer' }} onClick={() => setDrillDown({ open: true, metric: 'product', filterValue: p.productId, label: p.name })}><AnalyticsField name="0">{i + 1}</AnalyticsField><AnalyticsField name="1">{p.name}</AnalyticsField><AnalyticsField name="2" align="right">{formatPrice(p.revenue)}</AnalyticsField><AnalyticsField name="3" align="right">{p.quantity}</AnalyticsField><AnalyticsField name="4" align="right">{p.orders}</AnalyticsField></TableRow>
                       ))}
                     </TableBody>
                   </Table>

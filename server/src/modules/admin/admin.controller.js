@@ -446,9 +446,15 @@ const exportAnalyticsCsv = async (req, res, next) => {
     if (rows.length === 0) return res.status(200).send('');
 
     const headers = Object.keys(rows[0]);
+    const encodeCell = (value) => {
+      if (typeof value === 'number') return String(value);
+      const text = value == null ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value);
+      const safe = /^\s*[=+@-]|^[\t\r\n]/.test(text) ? "'" + text : text;
+      return '"' + safe.replace(/"/g, '""') + '"';
+    };
     const csv = [
       headers.join(','),
-      ...rows.map(r => headers.map(h => JSON.stringify(r[h] ?? '')).join(','))
+      ...rows.map(r => headers.map(h => encodeCell(r[h])).join(','))
     ].join('\n');
 
     res.setHeader('Content-Type', 'text/csv');

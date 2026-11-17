@@ -167,8 +167,10 @@ const exportAnalyticsCsv = (metric, params = {}) => {
     const a = document.createElement('a');
     a.href = url;
     a.download = `${metric}-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
     a.click();
-    window.URL.revokeObjectURL(url);
+    a.remove();
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
   });
 };
 

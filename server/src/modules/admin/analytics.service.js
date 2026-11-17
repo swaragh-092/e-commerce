@@ -93,15 +93,13 @@ const withComparison = async (fn, params) => {
 const getTopProducts = async ({ period = '30d', limit = 10, sortBy = 'quantity', _dateRange, startDate, endDate } = {}) => {
   const { start, end } = getDateRange({ period, startDate, endDate, _dateRange });
 
-  const orderAttr = sortBy === 'revenue'
-    ? [[fn('COALESCE', fn('SUM', col('"OrderItem".total')), 0), 'totalRevenue']]
-    : [[fn('COALESCE', fn('SUM', col('"OrderItem".quantity')), 0), 'totalQuantity']];
-
   const rows = await OrderItem.findAll({
     attributes: [
       'productId',
       [col('"OrderItem".snapshot_name'), 'name'],
-      ...orderAttr,
+      [fn('SUM', col('"OrderItem".total')), 'totalRevenue'],
+      [fn('SUM', col('"OrderItem".quantity')), 'totalQuantity'],
+      [fn('COUNT', fn('DISTINCT', col('"OrderItem".order_id'))), 'orders'],
     ],
     include: [{
       model: Order,
@@ -118,9 +116,9 @@ const getTopProducts = async ({ period = '30d', limit = 10, sortBy = 'quantity',
   return rows.map((r) => ({
     productId: r.productId,
     name: r.name,
-    ...(sortBy === 'revenue'
-      ? { revenue: parseFloat(r.totalRevenue) }
-      : { quantity: parseInt(r.totalQuantity, 10) }),
+    revenue: Number(r.totalRevenue),
+    quantity: Number(r.totalQuantity),
+    orders: Number(r.orders),
   }));
 };
 
