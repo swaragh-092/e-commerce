@@ -12,10 +12,11 @@ export const CATALOG_ANALYTICS_WIDGETS = [
 
 export const SALES_ANALYTICS_WIDGETS = [
   widget('insights', 'Analytics insights'),
+  widget('sessionAnalytics', 'Sessions'),
   widget('conversionRate', 'Conversion summary'),
   widget('checkoutFunnel', 'Checkout funnel', ['Stage', 'Visitors', 'Conversion from previous']),
   widget('productFunnel', 'Product funnel', ['Product', 'Views', 'Add to cart', 'Orders', 'Units sold', 'View to cart', 'Cart to order']),
-  widget('topProducts', 'Top selling products', ['Rank', 'Product', 'Revenue']),
+  widget('topProducts', 'Top selling products', ['Rank', 'Product', 'Revenue', 'Units sold', 'Orders']),
   widget('productProfitability', 'Product profitability', ['Product', 'SKU', 'Units sold', 'Net sales', 'Cost of goods', 'Gross profit', 'Gross margin', 'Cost coverage']),
   widget('variantPerformance', 'Variant sales', ['Product', 'SKU', 'Orders', 'Units sold', 'Revenue']),
   widget('inventoryPerformance', 'Inventory performance', ['Product', 'SKU', 'Available', 'Units sold', 'Days of cover']),

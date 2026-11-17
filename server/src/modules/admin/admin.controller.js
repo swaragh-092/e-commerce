@@ -324,6 +324,11 @@ const getCustomerLifetimeValue = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const getSessionAnalytics = async (req, res, next) => {
+  try { return success(res, await AnalyticsService.getSessionAnalytics(req.query)); }
+  catch (error) { return next(error); }
+};
+
 const getConversionRate = async (req, res, next) => {
   try {
     const data = await analyticsWithCompare('getConversionRate', req.query);
@@ -412,6 +417,7 @@ const exportAnalyticsCsv = async (req, res, next) => {
       'geographic-sales': 'getGeographicSales',
       'revenue-by-payment': 'getRevenueByPaymentMethod',
       'customer-lifetime-value': 'getCustomerLifetimeValue',
+      sessions: 'getSessionAnalytics',
       'conversion-rate': 'getConversionRate',
       'traffic-sources': 'getTrafficSources',
       'landing-pages': 'getLandingPagePerformance',
@@ -446,9 +452,15 @@ const exportAnalyticsCsv = async (req, res, next) => {
     if (rows.length === 0) return res.status(200).send('');
 
     const headers = Object.keys(rows[0]);
+    const encodeCell = (value) => {
+      if (typeof value === 'number') return String(value);
+      const text = value == null ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value);
+      const safe = /^\s*[=+@-]|^[\t\r\n]/.test(text) ? "'" + text : text;
+      return '"' + safe.replace(/"/g, '""') + '"';
+    };
     const csv = [
       headers.join(','),
-      ...rows.map(r => headers.map(h => JSON.stringify(r[h] ?? '')).join(','))
+      ...rows.map(r => headers.map(h => encodeCell(r[h])).join(','))
     ].join('\n');
 
     res.setHeader('Content-Type', 'text/csv');
@@ -552,6 +564,7 @@ module.exports = {
   getRevenueByPaymentMethod,
   getCustomerLifetimeValue,
   getConversionRate,
+  getSessionAnalytics,
   getTrafficSources,
   getLandingPagePerformance,
   getDevicePerformance,

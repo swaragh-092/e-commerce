@@ -145,6 +145,7 @@ const getRefundRate = (params = {}) => api.get(withQueryString(`/${A}/analytics/
 const getGeographicSales = (params = {}) => api.get(withQueryString(`/${A}/analytics/geographic-sales`, params, { omitEmpty: true }));
 const getRevenueByPaymentMethod = (params = {}) => api.get(withQueryString(`/${A}/analytics/revenue-by-payment`, params, { omitEmpty: true }));
 const getCustomerLifetimeValue = (params = {}) => api.get(withQueryString(`/${A}/analytics/customer-lifetime-value`, params, { omitEmpty: true }));
+export const getSessionAnalytics = (params) => api.get(withQueryString(`/${A}/analytics/sessions`, params, { omitEmpty: true }));
 const getConversionRate = (params = {}) => api.get(withQueryString(`/${A}/analytics/conversion-rate`, params, { omitEmpty: true }));
 const getTrafficSources = (params = {}) => api.get(withQueryString(`/${A}/analytics/traffic-sources`, params, { omitEmpty: true }));
 const getLandingPagePerformance = (params = {}) => api.get(withQueryString(`/${A}/analytics/landing-pages`, params, { omitEmpty: true }));
@@ -163,12 +164,16 @@ const sendTestReport = () => api.post(`/${A}/analytics/send-test-report`);
 const exportAnalyticsCsv = (metric, params = {}) => {
   const query = buildQueryString(params, { omitEmpty: true });
   return api.get(`/${A}/analytics/export/${metric}?${query}`, { responseType: 'blob' }).then((res) => {
-    const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/csv' }));
+    if (!res.data.size) return false;
+    const url = window.URL.createObjectURL(res.data);
     const a = document.createElement('a');
     a.href = url;
     a.download = `${metric}-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
     a.click();
-    window.URL.revokeObjectURL(url);
+    a.remove();
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+    return true;
   });
 };
 

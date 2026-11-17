@@ -1,3 +1,4 @@
+import ReportTable from '../../components/admin/analytics/ReportTable';
 import { useSearchParams } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import {
@@ -23,7 +24,7 @@ import {
   getTopProducts, getProductProfitability, getVariantPerformance, getInventoryPerformance, getStockoutHistory, getAovTrend, getAbandonedCarts,
   getRevenueByCategory, getTaxReport, getTaxByState, getReturnReasons, getOrderStatusReport, getCustomerTypeSales, getProductReturnRates, getShippingPerformance, getSalesReconciliation, getRepeatCustomers, getRefundRate,
   getGeographicSales, getRevenueByPaymentMethod, getCustomerLifetimeValue,
-  getConversionRate, getTrafficSources, getProductFunnel, getCheckoutFunnel, getLandingPagePerformance, getDevicePerformance, getUtmAttribution,
+  getSessionAnalytics, getConversionRate, getTrafficSources, getProductFunnel, getCheckoutFunnel, getLandingPagePerformance, getDevicePerformance, getUtmAttribution,
   getCouponPerformance, saveCampaignSpend, exportAnalyticsCsv,
   getCohortRetention, getRfmSegmentation, getOrderHeatmap, getRevenueForecast,
 } from '../../services/adminService';
@@ -48,13 +49,29 @@ const PIE_COLORS = ['#2196f3', '#4caf50', '#ff9800', '#f44336', '#9c27b0', '#00b
 const fmt = (d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 const CardSkeleton = () => <Skeleton variant="rectangular" height={280} sx={{ borderRadius: 2 }} />;
 
-const ExportBtn = ({ metric, params }) => (
-  <Tooltip title="Export CSV">
-    <IconButton size="small" onClick={() => exportAnalyticsCsv(metric, params)}>
-      <DownloadIcon fontSize="small" />
-    </IconButton>
-  </Tooltip>
-);
+const ExportBtn = ({ metric, params }) => {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const download = async () => {
+    setBusy(true);
+    setMessage('');
+    try {
+      if (!await exportAnalyticsCsv(metric, params)) setMessage('No rows to export.');
+    } catch {
+      setMessage('CSV export failed. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <Box>
+    <Tooltip title="Export CSV"><span>
+      <IconButton size="small" aria-label="Export CSV" disabled={busy} onClick={download}>
+        {busy ? <CircularProgress size={16} /> : <DownloadIcon fontSize="small" />}
+      </IconButton>
+    </span></Tooltip>
+    {message && <Typography variant="caption" role="status">{message}</Typography>}
+  </Box>;
+};
 
 const SectionHeader = ({ title, metric, params }) => (
   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -68,7 +85,7 @@ const REPORT_GROUPS = [
   { key: 'sales', label: 'Sales', ids: ['salesReconciliation', 'orderStatus', 'aovTrend', 'paymentMethods', 'revenueByCategory', 'geographicSales', 'orderHeatmap', 'revenueForecast'] },
   { key: 'products', label: 'Products & stock', ids: ['productProfitability', 'topProducts', 'variantPerformance', 'inventoryPerformance', 'stockoutHistory'] },
   { key: 'customers', label: 'Customers', ids: ['customerTypeSales', 'repeatCustomers', 'clv', 'cohortRetention', 'rfmSegmentation'] },
-  { key: 'marketing', label: 'Marketing & traffic', ids: ['utmAttribution', 'couponPerformance', 'trafficSources', 'landingPages', 'devicePerformance'] },
+  { key: 'marketing', label: 'Marketing & traffic', ids: ['utmAttribution', 'couponPerformance', 'trafficSources', 'landingPages', 'devicePerformance', 'sessionAnalytics'] },
   { key: 'conversion', label: 'Conversion', ids: ['conversionRate', 'checkoutFunnel', 'productFunnel', 'abandonedCarts'] },
   { key: 'operations', label: 'Tax & fulfillment', ids: ['taxReport', 'taxByState', 'shippingPerformance', 'returnReasons', 'productReturnRates', 'refundRate'] },
 ];
@@ -78,21 +95,30 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
   const { formatPrice } = useCurrency();
   const pageRef = useRef(null);
   const requestRef = useRef(0);
-  const { widgets, visible } = useAnalyticsDisplay();
+  const { widgets, visible, preferences, update } = useAnalyticsDisplay();
   const visibleIds = widgets.filter(({ id }) => report.ids.includes(id) && visible(id)).map(({ id }) => id).join(',');
   const insightSources = report.key === 'overview' && visible('insights')
     ? ['salesReconciliation', 'abandonedCarts', 'inventoryPerformance', 'productProfitability', 'conversionRate']
       .filter((id) => visible(id)).join(',')
     : '';
   const [filters, setFilters] = useSearchParams();
-  const period = PERIODS.find(({ value }) => value === filters.get('period'))?.value ?? '30d';
-  const compare = filters.get('compare') === '1';
+  const rangeKey = (key) => report.key === 'overview' ? key : `${report.key}.${key}`;
+  const hasReportRange = report.key !== 'overview' && filters.has(rangeKey('period'));
+  const rangeValue = (key) => filters.get(hasReportRange ? rangeKey(key) : key);
+  const period = PERIODS.find(({ value }) => value === rangeValue('period'))?.value ?? '30d';
+  const compare = rangeValue('compare') === '1';
   const updateFilters = (changes) => setFilters((current) => {
     const next = new URLSearchParams(current);
-    Object.entries(changes).forEach(([key, value]) => {
-      if (value) next.set(key, value);
-      else next.delete(key);
+    const range = { period, compare: compare ? '1' : null, startDate, endDate, ...changes };
+    Object.entries(range).forEach(([key, value]) => {
+      if (value) next.set(rangeKey(key), value);
+      else next.delete(rangeKey(key));
     });
+    return next;
+  }, { preventScrollReset: true });
+  const resetReportRange = () => setFilters((current) => {
+    const next = new URLSearchParams(current);
+    ['period', 'compare', 'startDate', 'endDate'].forEach((key) => next.delete(rangeKey(key)));
     return next;
   }, { preventScrollReset: true });
   const savedViewsKey = `analytics-saved-views:${userId || 'staff'}`;
@@ -110,8 +136,8 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
   const validDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value ?? '')
     && Number.isFinite(Date.parse(value))
     && new Date(value).toISOString().slice(0, 10) === value;
-  const startDate = filters.get('startDate');
-  const endDate = filters.get('endDate');
+  const startDate = rangeValue('startDate');
+  const endDate = rangeValue('endDate');
   const customRange = validDate(startDate) && validDate(endDate) && startDate <= endDate
     ? { startDate, endDate } : defaultRange;
   const [trendPeriod, setTrendPeriod] = useState('monthly');
@@ -122,6 +148,7 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
     spendDate: new Date().toISOString().slice(0, 10), source: '', medium: '', campaign: '', amount: '',
   });
   const [loading, setLoading] = useState(true);
+  const [pdfError, setPdfError] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [retryingReports, setRetryingReports] = useState(() => new Set());
   const [failedReports, setFailedReports] = useState(() => new Set());
@@ -132,11 +159,20 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
   const [directoryOpen, setDirectoryOpen] = useState(false);
   const [reportQuery, setReportQuery] = useState('');
   const pendingReport = useRef(null);
-  const directory = widgets.filter(({ id }) => id !== 'insights' && visible(id)).flatMap((widget) => {
+  const pinned = Array.isArray(preferences.pinnedReports) ? preferences.pinnedReports : [];
+  const togglePin = (id) => update({
+    ...preferences,
+    pinnedReports: pinned.includes(id) ? pinned.filter((item) => item !== id) : [...pinned, id],
+  });
+  const availableReports = widgets.filter(({ id }) => id !== 'insights' && visible(id)).flatMap((widget) => {
     const group = groups.find(({ key, ids }) => key !== 'overview' && ids.includes(widget.id));
-    if (!group || !`${widget.label} ${group.label}`.toLowerCase().includes(reportQuery.trim().toLowerCase())) return [];
+    if (!group) return [];
     return [{ ...widget, group }];
   });
+
+  const directory = availableReports.filter(({ label, group }) =>
+    `${label} ${group.label}`.toLowerCase().includes(reportQuery.trim().toLowerCase()));
+  const pinnedCards = availableReports.filter(({ id }) => pinned.includes(id));
 
   useEffect(() => {
     if (loading || pendingReport.current?.group !== report.key) return;
@@ -195,6 +231,7 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
 
   const handleExportPdf = async () => {
     if (!pageRef.current) return;
+    setPdfError(false);
     setPdfLoading(true);
     try {
       const html2canvas = (await import('html2canvas')).default;
@@ -223,8 +260,8 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
       }
 
       pdf.save(`analytics-${period}-${new Date().toISOString().slice(0, 10)}.pdf`);
-    } catch (err) {
-      console.error('PDF export failed:', err);
+    } catch {
+      setPdfError(true);
     } finally {
       setPdfLoading(false);
     }
@@ -266,7 +303,7 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
   };
 
   const reportRequests = () => [
-      ['topProducts', () => getTopProducts({ ...qp, limit: 10, sortBy: 'revenue' })],
+      ['topProducts', () => getTopProducts({ ...qp, limit: 50, sortBy: 'revenue' })],
       ['productProfitability', () => getProductProfitability({ ...qp, limit: 50 })],
       ['variantPerformance', () => getVariantPerformance({ ...qp, limit: 20 })],
       ['inventoryPerformance', () => getInventoryPerformance({ ...qp, limit: 50 })],
@@ -287,11 +324,12 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
       ['geographicSales', () => getGeographicSales({ ...qp, limit: 20 })],
       ['paymentMethods', () => getRevenueByPaymentMethod(qp)],
       ['clv', () => getCustomerLifetimeValue({ ...qp, limit: 10 })],
+      ['sessionAnalytics', () => getSessionAnalytics(qp)],
       ['conversionRate', () => getConversionRate(qp)],
       ['trafficSources', () => getTrafficSources({ ...qp, limit: 10 })],
       ['landingPages', () => getLandingPagePerformance({ ...qp, limit: 20 })],
       ['devicePerformance', () => getDevicePerformance(qp)],
-      ['productFunnel', () => getProductFunnel({ ...qp, limit: 10 })],
+      ['productFunnel', () => getProductFunnel({ ...qp, limit: 50 })],
       ['checkoutFunnel', () => getCheckoutFunnel(qp)],
       ['utmAttribution', () => getUtmAttribution({ ...qp, limit: 20, attribution: attributionModel })],
       ['couponPerformance', () => getCouponPerformance({ ...qp, limit: 10 })],
@@ -424,7 +462,7 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
           </Select>
           <Button size="small" variant="outlined" onClick={() => setSaveDialogOpen(true)}>Save view</Button>
           {selectedSavedView && <Tooltip title="Delete saved view"><IconButton aria-label="Delete saved view" size="small" onClick={removeSavedView}><DeleteOutlineIcon fontSize="small" /></IconButton></Tooltip>}
-          <Tooltip title="Export as PDF">
+          <Tooltip title={loading ? "Available after reports load" : pdfLoading ? "Preparing PDF" : "Export as PDF"}>
             <span>
               <IconButton aria-label="Export current analytics view as PDF" onClick={handleExportPdf} disabled={pdfLoading || loading}>
                 {pdfLoading ? <CircularProgress size={20} /> : <PictureAsPdfIcon />}
@@ -434,16 +472,20 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
         </Box>
       </Box>
 
+      {pdfError && <Alert severity="error" sx={{ mb: 2 }}>PDF export failed. Try again.</Alert>}
       <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2 }}>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
           <FormControlLabel
             control={<Switch size="small" checked={compare} onChange={(e) => updateFilters({ compare: e.target.checked ? '1' : null })} />}
-            label={<Typography variant="body2">Compare</Typography>}
+            label={<Typography variant="body2">Compare to previous period</Typography>}
             sx={{ mr: 1 }}
           />
           <Select size="small" inputProps={{ "aria-label": "Report date range" }} value={period} onChange={(e) => updateFilters({ period: e.target.value, ...(e.target.value === 'custom' ? customRange : {}) })} sx={{ minWidth: 120 }}>
             {PERIODS.map(p => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
           </Select>
+          {report.key !== 'overview' && (hasReportRange
+            ? <Button size="small" onClick={resetReportRange}>Use overview range</Button>
+            : <Typography variant="caption" color="text.secondary">Using overview range</Typography>)}
           {period === 'custom' && <>
             <TextField size="small" type="date" label="From" value={customRange.startDate}
               onChange={(e) => { if (validDate(e.target.value) && e.target.value <= customRange.endDate) updateFilters({ ...customRange, startDate: e.target.value }); }}
@@ -500,6 +542,24 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
         </AnalyticsWidget>
       )}
 
+      {report.key === 'overview' && pinnedCards.length > 0 && (
+        <Box component="section" aria-label="Pinned reports" sx={{ mb: 3 }}>
+          <Typography variant="h6" component="h2" sx={{ mb: 1 }}>Pinned reports</Typography>
+          <Grid container spacing={2}>
+            {pinnedCards.map(({ id, label, group }) => (
+              <Grid item xs={12} sm={6} md={4} key={id}>
+                <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
+                  <Typography variant="caption" color="text.secondary">{group.label}</Typography>
+                  <Typography fontWeight={600}>{label}</Typography>
+                  <Button size="small" onClick={() => openReport(group.key, id)}>Open report</Button>
+                  <Button size="small" aria-label={`Unpin ${label}`} onClick={() => togglePin(id)}>Unpin</Button>
+                </Paper>
+              </Grid>
+            ))}
+          </Grid>
+        </Box>
+      )}
+
       <Dialog open={directoryOpen} onClose={() => setDirectoryOpen(false)} fullWidth maxWidth="sm"
         aria-labelledby="analytics-report-directory">
         <DialogTitle id="analytics-report-directory">Find a report</DialogTitle>
@@ -507,7 +567,8 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
           <TextField autoFocus fullWidth size="small" label="Search by report or category"
             value={reportQuery} onChange={(event) => setReportQuery(event.target.value)} sx={{ mb: 2 }} />
           {directory.length ? directory.map(({ id, label, group }) => (
-            <Button key={id} fullWidth onClick={() => {
+            <Box key={id} sx={{ display: "flex", alignItems: "center" }}>
+            <Button fullWidth onClick={() => {
               pendingReport.current = { id, group: group.key };
               selectReport(group.key);
               setDirectoryOpen(false);
@@ -515,6 +576,9 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
               {label}
               <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 2 }}>{group.label}</Typography>
             </Button>
+            <Button size="small" aria-label={`${pinned.includes(id) ? 'Unpin' : 'Pin'} ${label}`}
+              onClick={() => togglePin(id)}>{pinned.includes(id) ? 'Unpin' : 'Pin'}</Button>
+            </Box>
           )) : <Typography color="text.secondary">No visible reports match your search.</Typography>}
         </DialogContent>
         <DialogActions><Button onClick={() => setDirectoryOpen(false)}>Close</Button></DialogActions>
@@ -525,7 +589,7 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
 
       {/* Conversion Rate Banner */}
       {!loading && (data.conversionRate || failedReports.has('conversionRate')) && (
-        <AnalyticsWidget metric="conversionRate" component={Box}><Paper id="conversionRate" sx={{ p: { xs: 2, md: 3 }, mb: 3, display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' }, gap: 2, border: 1, borderColor: 'divider' }} elevation={0}>
+        <AnalyticsWidget metric="conversionRate" component={Box}><Paper id="conversionRate" sx={{ p: { xs: 2, md: 3 }, mb: 3, display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(5, minmax(0, 1fr))' }, gap: 2, border: 1, borderColor: 'divider' }} elevation={0}>
           <Box>
             <Button size="small" disabled={!visible('trafficSources')} onClick={() => openReport('marketing', 'trafficSources')} sx={{ p: 0, minHeight: 44, textTransform: 'none' }}>Page views ↗</Button>
             <Typography variant="h5" fontWeight={700}>{data.conversionRate?.visits?.toLocaleString()}
@@ -536,6 +600,12 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
             <Button size="small" disabled={!visible('trafficSources')} onClick={() => openReport('marketing', 'trafficSources')} sx={{ p: 0, minHeight: 44, textTransform: 'none' }}>Unique visitors ↗</Button>
             <Typography variant="h5" fontWeight={700}>{data.conversionRate?.visitors?.toLocaleString()}
               {compare && comparison.conversionRate?.changes?.visitors != null && <ComparisonIndicator change={comparison.conversionRate.changes.visitors} />}
+            </Typography>
+          </Box>
+          <Box>
+            <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', minHeight: 44 }}>Sessions</Typography>
+            <Typography variant="h5" fontWeight={700}>{data.conversionRate?.sessions?.toLocaleString() ?? '—'}
+              {compare && comparison.conversionRate?.changes?.sessions != null && <ComparisonIndicator change={comparison.conversionRate.changes.sessions} />}
             </Typography>
           </Box>
           <Box>
@@ -617,10 +687,21 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
         {/* Product Funnel */}
         <AnalyticsWidget metric="productFunnel" item xs={12}>
           <Paper sx={{ p: 3 }} elevation={0}>
-            <SectionHeader title="Product Funnel (Views → Cart → Purchase)" metric="product-funnel" params={qp} />
+            <SectionHeader title="Product Funnel (Views → Cart → Purchase)" metric="product-funnel" params={{ ...qp, limit: 50 }} />
             {loading ? <CardSkeleton /> : (
               data.productFunnel?.length > 0 ? (
-                <Table size="small">
+                <ReportTable size="small" metric="productFunnel" rows={data.productFunnel} fields={["name", "views", "addToCart", "orders", "purchased", "viewToCartRate", "cartToBuyRate"]}
+                  renderRow={(r) => (
+                      <TableRow key={r.productId}>
+                        <AnalyticsField name="0">{r.name}</AnalyticsField>
+                        <AnalyticsField name="1" align="right">{r.views}</AnalyticsField>
+                        <AnalyticsField name="2" align="right">{r.addToCart}</AnalyticsField>
+                        <AnalyticsField name="3" align="right">{r.orders}</AnalyticsField>
+                        <AnalyticsField name="4" align="right">{r.purchased}</AnalyticsField>
+                        <AnalyticsField name="5" align="right"><Chip size="small" label={`${r.viewToCartRate}%`} color={r.viewToCartRate > 10 ? 'success' : 'default'} /></AnalyticsField>
+                        <AnalyticsField name="6" align="right"><Chip size="small" label={`${r.cartToBuyRate}%`} color={r.cartToBuyRate > 30 ? 'success' : 'default'} /></AnalyticsField>
+                      </TableRow>
+                    )}>
                   <TableHead>
                     <TableRow>
                       <AnalyticsField name="0">Product</AnalyticsField>
@@ -632,20 +713,7 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
                       <AnalyticsField name="6" align="right">Cart→Order</AnalyticsField>
                     </TableRow>
                   </TableHead>
-                  <TableBody>
-                    {data.productFunnel.map((r) => (
-                      <TableRow key={r.productId}>
-                        <AnalyticsField name="0">{r.name}</AnalyticsField>
-                        <AnalyticsField name="1" align="right">{r.views}</AnalyticsField>
-                        <AnalyticsField name="2" align="right">{r.addToCart}</AnalyticsField>
-                        <AnalyticsField name="3" align="right">{r.orders}</AnalyticsField>
-                        <AnalyticsField name="4" align="right">{r.purchased}</AnalyticsField>
-                        <AnalyticsField name="5" align="right"><Chip size="small" label={`${r.viewToCartRate}%`} color={r.viewToCartRate > 10 ? 'success' : 'default'} /></AnalyticsField>
-                        <AnalyticsField name="6" align="right"><Chip size="small" label={`${r.cartToBuyRate}%`} color={r.cartToBuyRate > 30 ? 'success' : 'default'} /></AnalyticsField>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                </ReportTable>
               ) : <Typography color="text.secondary">No funnel data yet. Appears after product page visits are tracked.</Typography>
             )}
           </Paper>
@@ -654,7 +722,7 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
         {/* Top Products */}
         <AnalyticsWidget metric="topProducts" item xs={12} lg={6}>
           <Paper sx={{ p: 3 }} elevation={0}>
-            <SectionHeader title="Top Selling Products" metric="top-products" params={{ ...qp, sortBy: 'revenue' }} />
+            <SectionHeader title="Top Selling Products" metric="top-products" params={{ ...qp, limit: 50, sortBy: 'revenue' }} />
             {loading ? <CardSkeleton /> : (
               data.topProducts?.length > 0 ? (
                 <>
@@ -667,14 +735,12 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
                       <Bar dataKey="revenue" fill={theme.palette.primary.main} radius={[0, 4, 4, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
-                  <Table size="small" sx={{ mt: 1 }}>
-                    <TableHead><TableRow><AnalyticsField name="0">#</AnalyticsField><AnalyticsField name="1">Product</AnalyticsField><AnalyticsField name="2" align="right">Revenue</AnalyticsField></TableRow></TableHead>
-                    <TableBody>
-                      {data.topProducts.map((p, i) => (
-                        <TableRow key={p.productId || i} hover sx={{ cursor: 'pointer' }} onClick={() => setDrillDown({ open: true, metric: 'product', filterValue: p.productId, label: p.name })}><AnalyticsField name="0">{i + 1}</AnalyticsField><AnalyticsField name="1">{p.name}</AnalyticsField><AnalyticsField name="2" align="right">{formatPrice(p.revenue)}</AnalyticsField></TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                  <ReportTable size="small" sx={{ mt: 1 }} metric="topProducts" rows={data.topProducts} fields={[null, "name", "revenue", "quantity", "orders"]}
+                  renderRow={(p, i) => (
+                        <TableRow key={p.productId || i} hover sx={{ cursor: 'pointer' }} onClick={() => setDrillDown({ open: true, metric: 'product', filterValue: p.productId, label: p.name })}><AnalyticsField name="0">{i + 1}</AnalyticsField><AnalyticsField name="1">{p.name}</AnalyticsField><AnalyticsField name="2" align="right">{formatPrice(p.revenue)}</AnalyticsField><AnalyticsField name="3" align="right">{p.quantity}</AnalyticsField><AnalyticsField name="4" align="right">{p.orders}</AnalyticsField></TableRow>
+                      )}>
+                  <TableHead><TableRow><AnalyticsField name="0">#</AnalyticsField><AnalyticsField name="1">Product</AnalyticsField><AnalyticsField name="2" align="right">Revenue</AnalyticsField><AnalyticsField name="3" align="right">Units sold</AnalyticsField><AnalyticsField name="4" align="right">Orders</AnalyticsField></TableRow></TableHead>
+                </ReportTable>
                 </>
               ) : <Typography color="text.secondary">No sales data.</Typography>
             )}
@@ -688,18 +754,8 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
               Net sales deduct allocated merchandise discounts and completed refunds. Refunds are spread by line sales and capped at merchandise sales after discounts. Recorded profit uses order-time costs and keeps the original cost of goods. Estimated profit also uses current costs where snapshots are missing.
             </Typography>
             {loading ? <CardSkeleton /> : data.productProfitability?.length ? (
-              <Table size="small" sx={{ minWidth: 1050 }}>
-                <TableHead><TableRow>
-                  <AnalyticsField name="0">Product</AnalyticsField>
-                  <AnalyticsField name="1">SKU</AnalyticsField>
-                  <AnalyticsField name="2" align="right">Units sold</AnalyticsField>
-                  <AnalyticsField name="3" align="right">Net sales</AnalyticsField>
-                  <AnalyticsField name="4" align="right">Cost of goods</AnalyticsField>
-                  <AnalyticsField name="5" align="right">Gross profit</AnalyticsField>
-                  <AnalyticsField name="6" align="right">Gross margin</AnalyticsField>
-                  <AnalyticsField name="7" align="right">Cost coverage</AnalyticsField>
-                </TableRow></TableHead>
-                <TableBody>{data.productProfitability.map((row, index) => (
+              <ReportTable size="small" sx={{ minWidth: 1050 }} metric="productProfitability" rows={data.productProfitability} fields={["product", "sku", "unitsSold", "netSales", "costOfGoods", "grossProfit", "grossMargin", "costCoverage"]}
+                  renderRow={(row, index) => (
                   <TableRow key={`${row.productId || row.sku}-${index}`}>
                     <AnalyticsField name="0">{row.product}</AnalyticsField>
                     <AnalyticsField name="1">{row.sku}</AnalyticsField>
@@ -710,8 +766,18 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
                     <AnalyticsField name="6" align="right">{row.grossMargin == null ? 'Add unit cost' : `${row.grossMargin}%`}</AnalyticsField>
                     <AnalyticsField name="7" align="right">{row.costCoverage}%{row.estimatedUnits > 0 && <Typography variant="caption" display="block">Estimated profit {formatPrice(row.estimatedGrossProfit)} ({row.estimatedUnits} units use current costs)</Typography>}</AnalyticsField>
                   </TableRow>
-                ))}</TableBody>
-              </Table>
+                )}>
+                  <TableHead><TableRow>
+                  <AnalyticsField name="0">Product</AnalyticsField>
+                  <AnalyticsField name="1">SKU</AnalyticsField>
+                  <AnalyticsField name="2" align="right">Units sold</AnalyticsField>
+                  <AnalyticsField name="3" align="right">Net sales</AnalyticsField>
+                  <AnalyticsField name="4" align="right">Cost of goods</AnalyticsField>
+                  <AnalyticsField name="5" align="right">Gross profit</AnalyticsField>
+                  <AnalyticsField name="6" align="right">Gross margin</AnalyticsField>
+                  <AnalyticsField name="7" align="right">Cost coverage</AnalyticsField>
+                </TableRow></TableHead>
+                </ReportTable>
             ) : <Typography color="text.secondary">No product sales in this period.</Typography>}
           </Paper>
         </AnalyticsWidget>
@@ -720,16 +786,8 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
           <Paper sx={{ p: 3, overflowX: 'auto' }} elevation={0}>
             <SectionHeader title="Stockout History" metric="stockout-history" params={{ ...qp, limit: 50 }} />
             {loading ? <CardSkeleton /> : data.stockoutHistory?.length ? (
-              <Table size="small" sx={{ minWidth: 700 }}>
-                <TableHead><TableRow>
-                  <AnalyticsField name="0">Product</AnalyticsField>
-                  <AnalyticsField name="1">SKU</AnalyticsField>
-                  <AnalyticsField name="2" align="right">Events</AnalyticsField>
-                  <AnalyticsField name="3" align="right">Open stockouts</AnalyticsField>
-                  <AnalyticsField name="4">Last stockout</AnalyticsField>
-                  <AnalyticsField name="5" align="right">Avg. days to restock</AnalyticsField>
-                </TableRow></TableHead>
-                <TableBody>{data.stockoutHistory.map((row) => (
+              <ReportTable size="small" sx={{ minWidth: 700 }} metric="stockoutHistory" rows={data.stockoutHistory} fields={["product", "sku", "stockoutEvents", "stillOutOfStock", "lastStockout", "avgDaysToRestock"]}
+                  renderRow={(row) => (
                   <TableRow key={row.productId}>
                     <AnalyticsField name="0">{row.product}</AnalyticsField>
                     <AnalyticsField name="1">{row.sku}</AnalyticsField>
@@ -738,8 +796,16 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
                     <AnalyticsField name="4">{fmt(row.lastStockout)}</AnalyticsField>
                     <AnalyticsField name="5" align="right">{row.avgDaysToRestock ?? '—'}</AnalyticsField>
                   </TableRow>
-                ))}</TableBody>
-              </Table>
+                )}>
+                  <TableHead><TableRow>
+                  <AnalyticsField name="0">Product</AnalyticsField>
+                  <AnalyticsField name="1">SKU</AnalyticsField>
+                  <AnalyticsField name="2" align="right">Events</AnalyticsField>
+                  <AnalyticsField name="3" align="right">Open stockouts</AnalyticsField>
+                  <AnalyticsField name="4">Last stockout</AnalyticsField>
+                  <AnalyticsField name="5" align="right">Avg. days to restock</AnalyticsField>
+                </TableRow></TableHead>
+                </ReportTable>
             ) : <Typography color="text.secondary">No stockout transactions recorded in this period.</Typography>}
           </Paper>
         </AnalyticsWidget>
@@ -748,15 +814,8 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Sales by Variant" metric="variant-performance" params={{ ...qp, limit: 20 }} />
             {loading ? <CardSkeleton /> : data.variantPerformance?.length ? (
-              <Table size="small">
-                <TableHead><TableRow>
-                  <AnalyticsField name="0">Product</AnalyticsField>
-                  <AnalyticsField name="1">SKU</AnalyticsField>
-                  <AnalyticsField name="2" align="right">Orders</AnalyticsField>
-                  <AnalyticsField name="3" align="right">Units sold</AnalyticsField>
-                  <AnalyticsField name="4" align="right">Revenue</AnalyticsField>
-                </TableRow></TableHead>
-                <TableBody>{data.variantPerformance.map((row, index) => (
+              <ReportTable size="small" metric="variantPerformance" rows={data.variantPerformance} fields={["product", "sku", "orders", "unitsSold", "revenue"]}
+                  renderRow={(row, index) => (
                   <TableRow key={`${row.variantId || row.productId}-${index}`}>
                     <AnalyticsField name="0">{row.product}</AnalyticsField>
                     <AnalyticsField name="1">{row.sku}</AnalyticsField>
@@ -764,8 +823,15 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
                     <AnalyticsField name="3" align="right">{row.unitsSold}</AnalyticsField>
                     <AnalyticsField name="4" align="right">{formatPrice(row.revenue)}</AnalyticsField>
                   </TableRow>
-                ))}</TableBody>
-              </Table>
+                )}>
+                  <TableHead><TableRow>
+                  <AnalyticsField name="0">Product</AnalyticsField>
+                  <AnalyticsField name="1">SKU</AnalyticsField>
+                  <AnalyticsField name="2" align="right">Orders</AnalyticsField>
+                  <AnalyticsField name="3" align="right">Units sold</AnalyticsField>
+                  <AnalyticsField name="4" align="right">Revenue</AnalyticsField>
+                </TableRow></TableHead>
+                </ReportTable>
             ) : <Typography color="text.secondary">No variant sales in this period.</Typography>}
           </Paper>
         </AnalyticsWidget>
@@ -775,16 +841,8 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
             <SectionHeader title="Inventory Performance" metric="inventory-performance" params={{ ...qp, limit: 50 }} />
             {loading ? <CardSkeleton /> : data.inventoryPerformance?.length ? (
               <Box role="region" aria-label="Inventory performance results" tabIndex={0} sx={{ maxHeight: 420, overflow: "auto" }}>
-              <Table stickyHeader size="small" sx={{ minWidth: 560 }}>
-                <TableHead><TableRow>
-                  <AnalyticsField name="0">Product</AnalyticsField>
-                  <AnalyticsField name="1">SKU</AnalyticsField>
-                  <AnalyticsField name="2" align="right">Available</AnalyticsField>
-                  <AnalyticsField name="3" align="right">Units sold</AnalyticsField>
-                  <AnalyticsField name="4" align="right">Days of cover</AnalyticsField>
-                  <AnalyticsField name="5" align="right">Revenue</AnalyticsField>
-                </TableRow></TableHead>
-                <TableBody>{data.inventoryPerformance.map((row) => (
+              <ReportTable stickyHeader size="small" sx={{ minWidth: 560 }} metric="inventoryPerformance" rows={data.inventoryPerformance} fields={["product", "sku", "availableStock", "unitsSold", "daysOfCover", "revenue"]}
+                  renderRow={(row) => (
                   <TableRow key={row.productId}>
                     <AnalyticsField name="0">{row.product}</AnalyticsField>
                     <AnalyticsField name="1">{row.sku}</AnalyticsField>
@@ -793,8 +851,16 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
                     <AnalyticsField name="4" align="right">{row.daysOfCover == null ? 'No recent sales' : `${row.daysOfCover} days`}</AnalyticsField>
                     <AnalyticsField name="5" align="right">{formatPrice(row.revenue)}</AnalyticsField>
                   </TableRow>
-                ))}</TableBody>
-              </Table>
+                )}>
+                  <TableHead><TableRow>
+                  <AnalyticsField name="0">Product</AnalyticsField>
+                  <AnalyticsField name="1">SKU</AnalyticsField>
+                  <AnalyticsField name="2" align="right">Available</AnalyticsField>
+                  <AnalyticsField name="3" align="right">Units sold</AnalyticsField>
+                  <AnalyticsField name="4" align="right">Days of cover</AnalyticsField>
+                  <AnalyticsField name="5" align="right">Revenue</AnalyticsField>
+                </TableRow></TableHead>
+                </ReportTable>
               </Box>
             ) : <Typography color="text.secondary">No inventory data for this period.</Typography>}
           </Paper>
@@ -823,22 +889,22 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Returns by Reason" metric="return-reasons" params={{ ...qp, limit: 20 }} />
             {loading ? <CardSkeleton /> : data.returnReasons?.length ? (
-              <Table size="small">
-                <TableHead><TableRow>
-                  <AnalyticsField name="0">Reason</AnalyticsField>
-                  <AnalyticsField name="1" align="right">Cases</AnalyticsField>
-                  <AnalyticsField name="2" align="right">Units</AnalyticsField>
-                  <AnalyticsField name="3" align="right">Completed</AnalyticsField>
-                </TableRow></TableHead>
-                <TableBody>{data.returnReasons.map((row) => (
+              <ReportTable size="small" metric="returnReasons" rows={data.returnReasons} fields={["reason", "cases", "units", "completed"]}
+                  renderRow={(row) => (
                   <TableRow key={row.reason}>
                     <AnalyticsField name="0">{row.reason}</AnalyticsField>
                     <AnalyticsField name="1" align="right">{row.cases}</AnalyticsField>
                     <AnalyticsField name="2" align="right">{row.units}</AnalyticsField>
                     <AnalyticsField name="3" align="right">{row.completed}</AnalyticsField>
                   </TableRow>
-                ))}</TableBody>
-              </Table>
+                )}>
+                  <TableHead><TableRow>
+                  <AnalyticsField name="0">Reason</AnalyticsField>
+                  <AnalyticsField name="1" align="right">Cases</AnalyticsField>
+                  <AnalyticsField name="2" align="right">Units</AnalyticsField>
+                  <AnalyticsField name="3" align="right">Completed</AnalyticsField>
+                </TableRow></TableHead>
+                </ReportTable>
             ) : <Typography color="text.secondary">No return requests for this period.</Typography>}
           </Paper>
         </AnalyticsWidget>
@@ -847,22 +913,22 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Orders by Status" metric="order-status" params={qp} />
             {loading ? <CardSkeleton /> : data.orderStatus?.length ? (
-              <Table size="small">
-                <TableHead><TableRow>
-                  <AnalyticsField name="0">Order status</AnalyticsField>
-                  <AnalyticsField name="1">Payment status</AnalyticsField>
-                  <AnalyticsField name="2" align="right">Orders</AnalyticsField>
-                  <AnalyticsField name="3" align="right">Order value</AnalyticsField>
-                </TableRow></TableHead>
-                <TableBody>{data.orderStatus.map((row) => (
+              <ReportTable size="small" metric="orderStatus" rows={data.orderStatus} fields={["orderStatus", "paymentStatus", "orders", "orderValue"]}
+                  renderRow={(row) => (
                   <TableRow key={`${row.orderStatus}-${row.paymentStatus}`}>
                     <AnalyticsField name="0">{row.orderStatus}</AnalyticsField>
                     <AnalyticsField name="1">{row.paymentStatus}</AnalyticsField>
                     <AnalyticsField name="2" align="right">{row.orders}</AnalyticsField>
                     <AnalyticsField name="3" align="right">{formatPrice(row.orderValue)}</AnalyticsField>
                   </TableRow>
-                ))}</TableBody>
-              </Table>
+                )}>
+                  <TableHead><TableRow>
+                  <AnalyticsField name="0">Order status</AnalyticsField>
+                  <AnalyticsField name="1">Payment status</AnalyticsField>
+                  <AnalyticsField name="2" align="right">Orders</AnalyticsField>
+                  <AnalyticsField name="3" align="right">Order value</AnalyticsField>
+                </TableRow></TableHead>
+                </ReportTable>
             ) : <Typography color="text.secondary">No orders in this period.</Typography>}
           </Paper>
         </AnalyticsWidget>
@@ -871,22 +937,22 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
           <Paper id="customerTypeSales" sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="New vs Returning Customers" metric="customer-type-sales" params={qp} />
             {loading ? <CardSkeleton /> : data.customerTypeSales?.length ? (
-              <Table size="small">
-                <TableHead><TableRow>
-                  <AnalyticsField name="0">Customer type</AnalyticsField>
-                  <AnalyticsField name="1" align="right">Customers</AnalyticsField>
-                  <AnalyticsField name="2" align="right">Orders</AnalyticsField>
-                  <AnalyticsField name="3" align="right">Order value</AnalyticsField>
-                </TableRow></TableHead>
-                <TableBody>{data.customerTypeSales.map((row) => (
+              <ReportTable size="small" metric="customerTypeSales" rows={data.customerTypeSales} fields={["customerType", "customers", "orders", "orderValue"]}
+                  renderRow={(row) => (
                   <TableRow key={row.customerType}>
                     <AnalyticsField name="0">{row.customerType}</AnalyticsField>
                     <AnalyticsField name="1" align="right">{row.customers}</AnalyticsField>
                     <AnalyticsField name="2" align="right">{row.orders}</AnalyticsField>
                     <AnalyticsField name="3" align="right">{formatPrice(row.orderValue)}</AnalyticsField>
                   </TableRow>
-                ))}</TableBody>
-              </Table>
+                )}>
+                  <TableHead><TableRow>
+                  <AnalyticsField name="0">Customer type</AnalyticsField>
+                  <AnalyticsField name="1" align="right">Customers</AnalyticsField>
+                  <AnalyticsField name="2" align="right">Orders</AnalyticsField>
+                  <AnalyticsField name="3" align="right">Order value</AnalyticsField>
+                </TableRow></TableHead>
+                </ReportTable>
             ) : <Typography color="text.secondary">No customer sales data for this period.</Typography>}
           </Paper>
         </AnalyticsWidget>
@@ -895,16 +961,8 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Product Return Rates" metric="product-return-rates" params={{ ...qp, limit: 20 }} />
             {loading ? <CardSkeleton /> : data.productReturnRates?.length ? (
-              <Table size="small">
-                <TableHead><TableRow>
-                  <AnalyticsField name="0">Product</AnalyticsField>
-                  <AnalyticsField name="1">SKU</AnalyticsField>
-                  <AnalyticsField name="2" align="right">Units sold</AnalyticsField>
-                  <AnalyticsField name="3" align="right">Returned</AnalyticsField>
-                  <AnalyticsField name="4" align="right">Return rate</AnalyticsField>
-                  <AnalyticsField name="5" align="right">Returned value</AnalyticsField>
-                </TableRow></TableHead>
-                <TableBody>{data.productReturnRates.map((row) => (
+              <ReportTable size="small" metric="productReturnRates" rows={data.productReturnRates} fields={["product", "sku", "unitsSold", "unitsReturned", "returnRate", "returnedValue"]}
+                  renderRow={(row) => (
                   <TableRow key={row.productId}>
                     <AnalyticsField name="0">{row.product}</AnalyticsField>
                     <AnalyticsField name="1">{row.sku}</AnalyticsField>
@@ -913,8 +971,16 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
                     <AnalyticsField name="4" align="right">{row.returnRate}%</AnalyticsField>
                     <AnalyticsField name="5" align="right">{formatPrice(row.returnedValue)}</AnalyticsField>
                   </TableRow>
-                ))}</TableBody>
-              </Table>
+                )}>
+                  <TableHead><TableRow>
+                  <AnalyticsField name="0">Product</AnalyticsField>
+                  <AnalyticsField name="1">SKU</AnalyticsField>
+                  <AnalyticsField name="2" align="right">Units sold</AnalyticsField>
+                  <AnalyticsField name="3" align="right">Returned</AnalyticsField>
+                  <AnalyticsField name="4" align="right">Return rate</AnalyticsField>
+                  <AnalyticsField name="5" align="right">Returned value</AnalyticsField>
+                </TableRow></TableHead>
+                </ReportTable>
             ) : <Typography color="text.secondary">No completed product returns for this period.</Typography>}
           </Paper>
         </AnalyticsWidget>
@@ -923,17 +989,8 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Shipping Performance" metric="shipping-performance" params={{ ...qp, limit: 50 }} />
             {loading ? <CardSkeleton /> : data.shippingPerformance?.length ? (
-              <Table size="small">
-                <TableHead><TableRow>
-                  <AnalyticsField name="0">Carrier</AnalyticsField>
-                  <AnalyticsField name="1">Status</AnalyticsField>
-                  <AnalyticsField name="2" align="right">Shipments</AnalyticsField>
-                  <AnalyticsField name="3" align="right">Orders</AnalyticsField>
-                  <AnalyticsField name="4" align="right">Overdue</AnalyticsField>
-                  <AnalyticsField name="5" align="right">Avg delivery days</AnalyticsField>
-                  <AnalyticsField name="6" align="right">Delivered late</AnalyticsField>
-                </TableRow></TableHead>
-                <TableBody>{data.shippingPerformance.map((row) => (
+              <ReportTable size="small" metric="shippingPerformance" rows={data.shippingPerformance} fields={["carrier", "shipmentStatus", "shipments", "orders", "overdue", "avgDeliveryDays", "deliveredLate"]}
+                  renderRow={(row) => (
                   <TableRow key={`${row.carrier}-${row.shipmentStatus}`}>
                     <AnalyticsField name="0">{row.carrier}</AnalyticsField>
                     <AnalyticsField name="1">{row.shipmentStatus}</AnalyticsField>
@@ -943,8 +1000,17 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
                     <AnalyticsField name="5" align="right">{row.avgDeliveryDays == null ? '—' : row.avgDeliveryDays}</AnalyticsField>
                     <AnalyticsField name="6" align="right">{row.deliveredLate}</AnalyticsField>
                   </TableRow>
-                ))}</TableBody>
-              </Table>
+                )}>
+                  <TableHead><TableRow>
+                  <AnalyticsField name="0">Carrier</AnalyticsField>
+                  <AnalyticsField name="1">Status</AnalyticsField>
+                  <AnalyticsField name="2" align="right">Shipments</AnalyticsField>
+                  <AnalyticsField name="3" align="right">Orders</AnalyticsField>
+                  <AnalyticsField name="4" align="right">Overdue</AnalyticsField>
+                  <AnalyticsField name="5" align="right">Avg delivery days</AnalyticsField>
+                  <AnalyticsField name="6" align="right">Delivered late</AnalyticsField>
+                </TableRow></TableHead>
+                </ReportTable>
             ) : <Typography color="text.secondary">No shipments for this period.</Typography>}
           </Paper>
         </AnalyticsWidget>
@@ -953,19 +1019,8 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
           <Paper id="salesReconciliation" sx={{ p: 3, overflowX: 'auto' }} elevation={0}>
             <SectionHeader title="Sales Reconciliation" metric="sales-reconciliation" params={qp} />
             {loading ? <CardSkeleton /> : data.salesReconciliation?.length ? (
-              <Table size="small" sx={{ minWidth: 950 }}>
-                <TableHead><TableRow>
-                  <AnalyticsField name="0">Date</AnalyticsField>
-                  <AnalyticsField name="1" align="right">Orders</AnalyticsField>
-                  <AnalyticsField name="2" align="right">Subtotal</AnalyticsField>
-                  <AnalyticsField name="3" align="right">Discounts</AnalyticsField>
-                  <AnalyticsField name="4" align="right">Tax</AnalyticsField>
-                  <AnalyticsField name="5" align="right">Shipping</AnalyticsField>
-                  <AnalyticsField name="6" align="right">Order total</AnalyticsField>
-                  <AnalyticsField name="7" align="right">Refunds</AnalyticsField>
-                  <AnalyticsField name="8" align="right">Net after refunds</AnalyticsField>
-                </TableRow></TableHead>
-                <TableBody>{data.salesReconciliation.map((row) => (
+              <ReportTable size="small" sx={{ minWidth: 950 }} metric="salesReconciliation" rows={data.salesReconciliation} fields={["date", "orders", "subtotal", "discounts", "tax", "shipping", "orderTotal", "refunds", "netAfterRefunds"]}
+                  renderRow={(row) => (
                   <TableRow key={row.date}>
                     <AnalyticsField name="0">{fmt(row.date)}</AnalyticsField>
                     <AnalyticsField name="1" align="right">{row.orders}</AnalyticsField>
@@ -977,8 +1032,19 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
                     <AnalyticsField name="7" align="right">{formatPrice(row.refunds)}</AnalyticsField>
                     <AnalyticsField name="8" align="right">{formatPrice(row.netAfterRefunds)}</AnalyticsField>
                   </TableRow>
-                ))}</TableBody>
-              </Table>
+                )}>
+                  <TableHead><TableRow>
+                  <AnalyticsField name="0">Date</AnalyticsField>
+                  <AnalyticsField name="1" align="right">Orders</AnalyticsField>
+                  <AnalyticsField name="2" align="right">Subtotal</AnalyticsField>
+                  <AnalyticsField name="3" align="right">Discounts</AnalyticsField>
+                  <AnalyticsField name="4" align="right">Tax</AnalyticsField>
+                  <AnalyticsField name="5" align="right">Shipping</AnalyticsField>
+                  <AnalyticsField name="6" align="right">Order total</AnalyticsField>
+                  <AnalyticsField name="7" align="right">Refunds</AnalyticsField>
+                  <AnalyticsField name="8" align="right">Net after refunds</AnalyticsField>
+                </TableRow></TableHead>
+                </ReportTable>
             ) : <Typography color="text.secondary">No sales data for this period.</Typography>}
           </Paper>
         </AnalyticsWidget>}
@@ -987,17 +1053,8 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
           <Paper sx={{ p: 3, overflowX: 'auto' }} elevation={0}>
             <SectionHeader title="Tax by Destination" metric="tax-by-state" params={{ ...qp, limit: 50 }} />
             {loading ? <CardSkeleton /> : data.taxByState?.length ? (
-              <Table size="small" sx={{ minWidth: 700 }}>
-                <TableHead><TableRow>
-                  <AnalyticsField name="0">Destination</AnalyticsField>
-                  <AnalyticsField name="1" align="right">Orders</AnalyticsField>
-                  <AnalyticsField name="2" align="right">CGST</AnalyticsField>
-                  <AnalyticsField name="3" align="right">SGST</AnalyticsField>
-                  <AnalyticsField name="4" align="right">IGST</AnalyticsField>
-                  <AnalyticsField name="5" align="right">Other tax</AnalyticsField>
-                  <AnalyticsField name="6" align="right">Total tax</AnalyticsField>
-                </TableRow></TableHead>
-                <TableBody>{data.taxByState.map((row) => (
+              <ReportTable size="small" sx={{ minWidth: 700 }} metric="taxByState" rows={data.taxByState} fields={["destination", "orders", "cgst", "sgst", "igst", "flatTax", "totalTax"]}
+                  renderRow={(row) => (
                   <TableRow key={row.destination}>
                     <AnalyticsField name="0">{row.destination}</AnalyticsField>
                     <AnalyticsField name="1" align="right">{row.orders}</AnalyticsField>
@@ -1007,8 +1064,17 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
                     <AnalyticsField name="5" align="right">{formatPrice(row.flatTax)}</AnalyticsField>
                     <AnalyticsField name="6" align="right">{formatPrice(row.totalTax)}</AnalyticsField>
                   </TableRow>
-                ))}</TableBody>
-              </Table>
+                )}>
+                  <TableHead><TableRow>
+                  <AnalyticsField name="0">Destination</AnalyticsField>
+                  <AnalyticsField name="1" align="right">Orders</AnalyticsField>
+                  <AnalyticsField name="2" align="right">CGST</AnalyticsField>
+                  <AnalyticsField name="3" align="right">SGST</AnalyticsField>
+                  <AnalyticsField name="4" align="right">IGST</AnalyticsField>
+                  <AnalyticsField name="5" align="right">Other tax</AnalyticsField>
+                  <AnalyticsField name="6" align="right">Total tax</AnalyticsField>
+                </TableRow></TableHead>
+                </ReportTable>
             ) : <Typography color="text.secondary">No destination tax data for this period.</Typography>}
           </Paper>
         </AnalyticsWidget>
@@ -1055,14 +1121,12 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
             </Typography>
             {loading ? <CardSkeleton /> : (
               data.utmAttribution?.length > 0 ? (
-                <Table size="small" sx={{ minWidth: 1000 }}>
-                  <TableHead><TableRow><AnalyticsField name="0">Source</AnalyticsField><AnalyticsField name="1">Medium</AnalyticsField><AnalyticsField name="2">Campaign</AnalyticsField><AnalyticsField name="3" align="right">Customers</AnalyticsField><AnalyticsField name="4" align="right">New customers</AnalyticsField><AnalyticsField name="5" align="right">Orders</AnalyticsField><AnalyticsField name="6" align="right">Revenue</AnalyticsField><AnalyticsField name="7" align="right">Spend</AnalyticsField><AnalyticsField name="8" align="right">CAC</AnalyticsField><AnalyticsField name="9" align="right">ROAS</AnalyticsField></TableRow></TableHead>
-                  <TableBody>
-                    {data.utmAttribution.map((r, i) => (
+                <ReportTable size="small" sx={{ minWidth: 1000 }} metric="utmAttribution" rows={data.utmAttribution} fields={["source", "medium", "campaign", "customers", "newCustomers", "orders", "revenue", "spend", "cac", "roas"]}
+                  renderRow={(r, i) => (
                       <TableRow key={i}><AnalyticsField name="0">{r.source}</AnalyticsField><AnalyticsField name="1">{r.medium || '—'}</AnalyticsField><AnalyticsField name="2">{r.campaign || '—'}</AnalyticsField><AnalyticsField name="3" align="right">{r.customers}</AnalyticsField><AnalyticsField name="4" align="right">{r.newCustomers}</AnalyticsField><AnalyticsField name="5" align="right">{r.orders}</AnalyticsField><AnalyticsField name="6" align="right">{formatPrice(r.revenue)}</AnalyticsField><AnalyticsField name="7" align="right">{formatPrice(r.spend || 0)}</AnalyticsField><AnalyticsField name="8" align="right">{r.cac == null ? '—' : formatPrice(r.cac)}</AnalyticsField><AnalyticsField name="9" align="right">{r.roas == null ? '—' : `${r.roas}×`}</AnalyticsField></TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    )}>
+                  <TableHead><TableRow><AnalyticsField name="0">Source</AnalyticsField><AnalyticsField name="1">Medium</AnalyticsField><AnalyticsField name="2">Campaign</AnalyticsField><AnalyticsField name="3" align="right">Customers</AnalyticsField><AnalyticsField name="4" align="right">New customers</AnalyticsField><AnalyticsField name="5" align="right">Orders</AnalyticsField><AnalyticsField name="6" align="right">Revenue</AnalyticsField><AnalyticsField name="7" align="right">Spend</AnalyticsField><AnalyticsField name="8" align="right">CAC</AnalyticsField><AnalyticsField name="9" align="right">ROAS</AnalyticsField></TableRow></TableHead>
+                </ReportTable>
               ) : <Typography color="text.secondary">No UTM data yet. Share links with ?utm_source=... to track campaigns.</Typography>
             )}
           </Paper>
@@ -1092,14 +1156,12 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
             <SectionHeader title="Coupon Performance" metric="coupon-performance" params={qp} />
             {loading ? <CardSkeleton /> : (
               data.couponPerformance?.length > 0 ? (
-                <Table size="small">
-                  <TableHead><TableRow><AnalyticsField name="0">Code</AnalyticsField><AnalyticsField name="1" align="right">Used</AnalyticsField><AnalyticsField name="2" align="right">Revenue</AnalyticsField><AnalyticsField name="3" align="right">Discount Given</AnalyticsField><AnalyticsField name="4" align="right">Avg Discount</AnalyticsField></TableRow></TableHead>
-                  <TableBody>
-                    {data.couponPerformance.map((c) => (
+                <ReportTable size="small" metric="couponPerformance" rows={data.couponPerformance} fields={["code", "timesUsed", "revenueGenerated", "totalDiscountGiven", "avgDiscount"]}
+                  renderRow={(c) => (
                       <TableRow key={c.couponId}><AnalyticsField name="0"><Chip label={c.code} size="small" /></AnalyticsField><AnalyticsField name="1" align="right">{c.timesUsed}</AnalyticsField><AnalyticsField name="2" align="right">{formatPrice(c.revenueGenerated)}</AnalyticsField><AnalyticsField name="3" align="right">{formatPrice(c.totalDiscountGiven)}</AnalyticsField><AnalyticsField name="4" align="right">{formatPrice(c.avgDiscount)}</AnalyticsField></TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    )}>
+                  <TableHead><TableRow><AnalyticsField name="0">Code</AnalyticsField><AnalyticsField name="1" align="right">Used</AnalyticsField><AnalyticsField name="2" align="right">Revenue</AnalyticsField><AnalyticsField name="3" align="right">Discount Given</AnalyticsField><AnalyticsField name="4" align="right">Avg Discount</AnalyticsField></TableRow></TableHead>
+                </ReportTable>
               ) : <Typography color="text.secondary">No coupon usage data.</Typography>
             )}
           </Paper>
@@ -1198,6 +1260,32 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
         </AnalyticsWidget>
 
         {/* Traffic Sources */}
+        <AnalyticsWidget metric="sessionAnalytics" item xs={12}>
+          <Paper variant="outlined" sx={{ p: 3 }}>
+            <SectionHeader title="Sessions" metric="sessions" params={qp} />
+            {loading ? <CardSkeleton /> : data.sessionAnalytics?.length ? (
+              <>
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={data.sessionAnalytics.filter((row) => row.breakdown === 'Day (UTC)')}>
+                    <XAxis dataKey="value" minTickGap={30} />
+                    <YAxis allowDecimals={false} />
+                    <RTooltip />
+                    <Line dataKey="sessions" stroke={theme.palette.primary.main} />
+                  </LineChart>
+                </ResponsiveContainer>
+                <Table size="small" aria-label="Sessions by source and device">
+                  <TableHead><TableRow><TableCell>Breakdown</TableCell><TableCell>Value</TableCell><TableCell align="right">Sessions</TableCell></TableRow></TableHead>
+                  <TableBody>{data.sessionAnalytics.filter((row) => row.breakdown !== 'Day (UTC)').map((row) => (
+                    <TableRow key={`${row.breakdown}:${row.value}`}>
+                      <TableCell>{row.breakdown}</TableCell><TableCell>{row.value}</TableCell><TableCell align="right">{row.sessions}</TableCell>
+                    </TableRow>
+                  ))}</TableBody>
+                </Table>
+              </>
+            ) : <Typography color="text.secondary">Session tracking is unavailable.</Typography>}
+          </Paper>
+        </AnalyticsWidget>
+
         <AnalyticsWidget metric="trafficSources" item xs={12} md={6}>
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Traffic Sources" metric="traffic-sources" params={qp} />
@@ -1213,15 +1301,8 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
                     <Bar dataKey="visits" fill={theme.palette.info.main} radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
-                <Table size="small">
-                  <TableHead><TableRow>
-                    <AnalyticsField name="0">Source</AnalyticsField>
-                    <AnalyticsField name="1" align="right">Visitors</AnalyticsField>
-                    <AnalyticsField name="2" align="right">Orders</AnalyticsField>
-                    <AnalyticsField name="3" align="right">Conversion</AnalyticsField>
-                    <AnalyticsField name="4" align="right">Revenue</AnalyticsField>
-                  </TableRow></TableHead>
-                  <TableBody>{data.trafficSources.map((row) => (
+                <ReportTable size="small" metric="trafficSources" rows={data.trafficSources} fields={["source", "visitors", "orders", "conversionRate", "revenue"]}
+                  renderRow={(row) => (
                     <TableRow key={row.source}>
                       <AnalyticsField name="0">{row.source}</AnalyticsField>
                       <AnalyticsField name="1" align="right">{row.visitors}</AnalyticsField>
@@ -1229,8 +1310,16 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
                       <AnalyticsField name="3" align="right">{row.conversionRate}%</AnalyticsField>
                       <AnalyticsField name="4" align="right">{formatPrice(row.revenue)}</AnalyticsField>
                     </TableRow>
-                  ))}</TableBody>
-                </Table>
+                  )}>
+
+                  <TableHead><TableRow>
+                    <AnalyticsField name="0">Source</AnalyticsField>
+                    <AnalyticsField name="1" align="right">Visitors</AnalyticsField>
+                    <AnalyticsField name="2" align="right">Orders</AnalyticsField>
+                    <AnalyticsField name="3" align="right">Conversion</AnalyticsField>
+                    <AnalyticsField name="4" align="right">Revenue</AnalyticsField>
+                  </TableRow></TableHead>
+                </ReportTable>
                 </>
               ) : <Typography color="text.secondary">No traffic data yet.</Typography>
             )}
@@ -1241,15 +1330,8 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
           <Paper sx={{ p: 3, overflowX: 'auto' }} elevation={0}>
             <SectionHeader title="Landing Page Performance" metric="landing-pages" params={{ ...qp, limit: 20 }} />
             {loading ? <CardSkeleton /> : data.landingPages?.length ? (
-              <Table size="small" sx={{ minWidth: 650 }}>
-                <TableHead><TableRow>
-                  <AnalyticsField name="0">Landing page</AnalyticsField>
-                  <AnalyticsField name="1" align="right">Visitors</AnalyticsField>
-                  <AnalyticsField name="2" align="right">Orders</AnalyticsField>
-                  <AnalyticsField name="3" align="right">Conversion</AnalyticsField>
-                  <AnalyticsField name="4" align="right">Revenue</AnalyticsField>
-                </TableRow></TableHead>
-                <TableBody>{data.landingPages.map((row) => (
+              <ReportTable size="small" sx={{ minWidth: 650 }} metric="landingPages" rows={data.landingPages} fields={["path", "visitors", "orders", "conversionRate", "revenue"]}
+                  renderRow={(row) => (
                   <TableRow key={row.path}>
                     <AnalyticsField name="0">{row.path}</AnalyticsField>
                     <AnalyticsField name="1" align="right">{row.visitors}</AnalyticsField>
@@ -1257,8 +1339,15 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
                     <AnalyticsField name="3" align="right">{row.conversionRate}%</AnalyticsField>
                     <AnalyticsField name="4" align="right">{formatPrice(row.revenue)}</AnalyticsField>
                   </TableRow>
-                ))}</TableBody>
-              </Table>
+                )}>
+                  <TableHead><TableRow>
+                  <AnalyticsField name="0">Landing page</AnalyticsField>
+                  <AnalyticsField name="1" align="right">Visitors</AnalyticsField>
+                  <AnalyticsField name="2" align="right">Orders</AnalyticsField>
+                  <AnalyticsField name="3" align="right">Conversion</AnalyticsField>
+                  <AnalyticsField name="4" align="right">Revenue</AnalyticsField>
+                </TableRow></TableHead>
+                </ReportTable>
             ) : <Typography color="text.secondary">No landing page data for this period.</Typography>}
           </Paper>
         </AnalyticsWidget>
@@ -1267,16 +1356,8 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
           <Paper sx={{ p: 3 }} elevation={0}>
             <SectionHeader title="Device Performance" metric="devices" params={{ ...qp, limit: 10 }} />
             {loading ? <CardSkeleton /> : data.devicePerformance?.length ? (
-              <Table size="small">
-                <TableHead><TableRow>
-                  <AnalyticsField name="0">Device</AnalyticsField>
-                  <AnalyticsField name="1" align="right">Page views</AnalyticsField>
-                  <AnalyticsField name="2" align="right">Visitors</AnalyticsField>
-                  <AnalyticsField name="3" align="right">Orders</AnalyticsField>
-                  <AnalyticsField name="4" align="right">Conversion</AnalyticsField>
-                  <AnalyticsField name="5" align="right">Revenue</AnalyticsField>
-                </TableRow></TableHead>
-                <TableBody>{data.devicePerformance.map((row) => (
+              <ReportTable size="small" metric="devicePerformance" rows={data.devicePerformance} fields={["device", "pageViews", "visitors", "orders", "conversionRate", "revenue"]}
+                  renderRow={(row) => (
                   <TableRow key={row.device}>
                     <AnalyticsField name="0">{row.device}</AnalyticsField>
                     <AnalyticsField name="1" align="right">{row.pageViews}</AnalyticsField>
@@ -1285,8 +1366,16 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
                     <AnalyticsField name="4" align="right">{row.conversionRate}%</AnalyticsField>
                     <AnalyticsField name="5" align="right">{formatPrice(row.revenue)}</AnalyticsField>
                   </TableRow>
-                ))}</TableBody>
-              </Table>
+                )}>
+                  <TableHead><TableRow>
+                  <AnalyticsField name="0">Device</AnalyticsField>
+                  <AnalyticsField name="1" align="right">Page views</AnalyticsField>
+                  <AnalyticsField name="2" align="right">Visitors</AnalyticsField>
+                  <AnalyticsField name="3" align="right">Orders</AnalyticsField>
+                  <AnalyticsField name="4" align="right">Conversion</AnalyticsField>
+                  <AnalyticsField name="5" align="right">Revenue</AnalyticsField>
+                </TableRow></TableHead>
+                </ReportTable>
             ) : <Typography color="text.secondary">No device data for this period.</Typography>}
           </Paper>
         </AnalyticsWidget>
@@ -1297,14 +1386,12 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
             <SectionHeader title="Geographic Sales" metric="geographic-sales" params={qp} />
             {loading ? <CardSkeleton /> : (
               data.geographicSales?.length > 0 ? (
-                <Table size="small">
-                  <TableHead><TableRow><AnalyticsField name="0">State</AnalyticsField><AnalyticsField name="1">City</AnalyticsField><AnalyticsField name="2" align="right">Orders</AnalyticsField><AnalyticsField name="3" align="right">Revenue</AnalyticsField></TableRow></TableHead>
-                  <TableBody>
-                    {data.geographicSales.map((r, i) => (
+                <ReportTable size="small" metric="geographicSales" rows={data.geographicSales} fields={["state", "city", "orders", "revenue"]}
+                  renderRow={(r, i) => (
                       <TableRow key={i} hover sx={{ cursor: 'pointer' }} onClick={() => setDrillDown({ open: true, metric: 'geographic-sales', filterValue: r.state, label: `${r.state} — ${r.city}` })}><AnalyticsField name="0">{r.state}</AnalyticsField><AnalyticsField name="1">{r.city}</AnalyticsField><AnalyticsField name="2" align="right">{r.orders}</AnalyticsField><AnalyticsField name="3" align="right">{formatPrice(r.revenue)}</AnalyticsField></TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    )}>
+                  <TableHead><TableRow><AnalyticsField name="0">State</AnalyticsField><AnalyticsField name="1">City</AnalyticsField><AnalyticsField name="2" align="right">Orders</AnalyticsField><AnalyticsField name="3" align="right">Revenue</AnalyticsField></TableRow></TableHead>
+                </ReportTable>
               ) : <Typography color="text.secondary">No geographic data.</Typography>
             )}
           </Paper>
@@ -1316,14 +1403,12 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
             <SectionHeader title="Customer Lifetime Value (Top 10)" metric="customer-lifetime-value" params={qp} />
             {loading ? <CardSkeleton /> : (
               data.clv?.length > 0 ? (
-                <Table size="small">
-                  <TableHead><TableRow><AnalyticsField name="0">Customer</AnalyticsField><AnalyticsField name="1" align="right">Orders</AnalyticsField><AnalyticsField name="2" align="right">LTV</AnalyticsField></TableRow></TableHead>
-                  <TableBody>
-                    {data.clv.map((c) => (
+                <ReportTable size="small" metric="clv" rows={data.clv} fields={["name", "orders", "lifetimeValue"]}
+                  renderRow={(c) => (
                       <TableRow key={c.id}><AnalyticsField name="0"><Typography variant="body2" fontWeight={500}>{c.name}</Typography><Typography variant="caption" color="text.secondary">{c.email}</Typography></AnalyticsField><AnalyticsField name="1" align="right">{c.orders}</AnalyticsField><AnalyticsField name="2" align="right">{formatPrice(c.lifetimeValue)}</AnalyticsField></TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    )}>
+                  <TableHead><TableRow><AnalyticsField name="0">Customer</AnalyticsField><AnalyticsField name="1" align="right">Orders</AnalyticsField><AnalyticsField name="2" align="right">LTV</AnalyticsField></TableRow></TableHead>
+                </ReportTable>
               ) : <Typography color="text.secondary">No data.</Typography>
             )}
           </Paper>
@@ -1383,8 +1468,17 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
                       <Bar dataKey="customers" fill={theme.palette.primary.main} radius={[0, 4, 4, 0]} name="Customers" />
                     </BarChart>
                   </ResponsiveContainer>
-                  <Table size="small" sx={{ mt: 1 }}>
-                    <TableHead>
+                  <ReportTable size="small" sx={{ mt: 1 }} metric="rfmSegmentation" rows={data.rfmSegmentation} fields={["segment", "customers", "avgRecencyDays", "avgFrequency", "avgMonetary"]}
+                  renderRow={(r) => (
+                        <TableRow key={r.segment}>
+                          <AnalyticsField name="0"><Chip label={r.segment} size="small" /></AnalyticsField>
+                          <AnalyticsField name="1" align="right">{r.customers}</AnalyticsField>
+                          <AnalyticsField name="2" align="right">{r.avgRecencyDays}</AnalyticsField>
+                          <AnalyticsField name="3" align="right">{r.avgFrequency}</AnalyticsField>
+                          <AnalyticsField name="4" align="right">{formatPrice(r.avgMonetary)}</AnalyticsField>
+                        </TableRow>
+                      )}>
+                  <TableHead>
                       <TableRow>
                         <AnalyticsField name="0">Segment</AnalyticsField>
                         <AnalyticsField name="1" align="right">Customers</AnalyticsField>
@@ -1393,18 +1487,7 @@ const SalesAnalyticsPage = ({ userId, report, groups, selectReport }) => {
                         <AnalyticsField name="4" align="right">Avg Monetary</AnalyticsField>
                       </TableRow>
                     </TableHead>
-                    <TableBody>
-                      {data.rfmSegmentation.map((r) => (
-                        <TableRow key={r.segment}>
-                          <AnalyticsField name="0"><Chip label={r.segment} size="small" /></AnalyticsField>
-                          <AnalyticsField name="1" align="right">{r.customers}</AnalyticsField>
-                          <AnalyticsField name="2" align="right">{r.avgRecencyDays}</AnalyticsField>
-                          <AnalyticsField name="3" align="right">{r.avgFrequency}</AnalyticsField>
-                          <AnalyticsField name="4" align="right">{formatPrice(r.avgMonetary)}</AnalyticsField>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                </ReportTable>
                 </>
               ) : <Typography color="text.secondary">No segmentation data yet.</Typography>
             )}

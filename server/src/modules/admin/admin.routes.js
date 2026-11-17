@@ -118,6 +118,7 @@ router.get('/analytics/refund-rate', ...analyticsOnly, ordersFeature, validate(a
 router.get('/analytics/geographic-sales', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getGeographicSales);
 router.get('/analytics/revenue-by-payment', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getRevenueByPaymentMethod);
 router.get('/analytics/customer-lifetime-value', ...customerAnalyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getCustomerLifetimeValue);
+router.get('/analytics/sessions', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getSessionAnalytics);
 router.get('/analytics/conversion-rate', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getConversionRate);
 router.get('/analytics/traffic-sources', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getTrafficSources);
 router.get('/analytics/landing-pages', ...analyticsOnly, ordersFeature, validate(analyticsQuerySchema, 'query'), adminController.getLandingPagePerformance);
@@ -141,7 +142,11 @@ const exportMetricFeatureGate = (req, res, next) => {
 	next();
 };
 
-router.get('/analytics/export/:metric', ...customerAnalyticsOnly, ordersFeature, exportMetricFeatureGate, adminController.exportAnalyticsCsv);
+router.get('/analytics/export/:metric', ...analyticsOnly, ordersFeature, (req, res, next) => {
+  if (req.params.metric === 'customer-lifetime-value') return authorizePermissions(PERMISSIONS.CUSTOMERS_READ)(req, res, next);
+  if (req.params.metric === 'sessions') return validate(analyticsQuerySchema, 'query')(req, res, next);
+  return next();
+}, exportMetricFeatureGate, adminController.exportAnalyticsCsv);
 
 
 module.exports = router;
