@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import {
   Box, Typography, Paper, Grid, Select, MenuItem, Skeleton, Alert, Button,
-  Table, TableBody, TableHead, TableRow, Chip, IconButton, Tooltip,
+  Table, TableBody, TableCell, TableHead, TableRow, Chip, IconButton, Tooltip,
   Switch, FormControlLabel, CircularProgress, TextField, Dialog, DialogTitle, DialogContent, DialogActions,
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
