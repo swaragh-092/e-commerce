@@ -62,7 +62,7 @@ const ProductDetailPage = () => {
     const [visibleReviews, setVisibleReviews] = useState([]);
     const { addItem } = useCart();
     const { formatPrice, currency } = useCurrency();
-    const { settings } = useSettings();
+    const { settings, productTemplateId } = useSettings();
     const storeName = getStoreName(settings);
     const cartEnabled    = useFeatureVisible('cart', 'storefront');
     const pricingEnabled = useFeatureVisible('pricing', 'storefront');
@@ -83,7 +83,7 @@ const ProductDetailPage = () => {
     const buyNowLabel = pp.buyNowLabel || 'Buy Now';
     const showBuyNowButton = pp.showBuyNowButton !== false;
     const imageAlignment = pp.imageAlignment === 'vertical' ? 'vertical' : 'horizontal';
-    const productTemplateLayout = (designerPreview ? null : product?.storefrontLayout) || pp.templateLayout || 'media-left-details-right';
+    const productTemplateLayout = (designerPreview || productTemplateId ? null : product?.storefrontLayout) || pp.templateLayout || 'media-left-details-right';
     const isGalleryTopLayout = productTemplateLayout === 'gallery-top-details-below';
     const isStickyPanelLayout = productTemplateLayout === 'sticky-purchase-panel';
     const isEditorialProductLayout = ['gallery-top-details-below', 'luxury-editorial', 'editorial'].includes(productTemplateLayout);

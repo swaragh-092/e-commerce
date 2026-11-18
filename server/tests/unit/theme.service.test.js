@@ -283,6 +283,63 @@ describe('Theme package schema validation', () => {
     }
   });
 
+  it('round-trips and applies named Product and Category templates with their assignments and section order', async () => {
+    const { sequelize, Setting, ThemePackage, ThemeActivation } = require('../../src/modules');
+    const ThemeService = require('../../src/modules/theme/theme.service');
+    const SettingsService = require('../../src/modules/settings/settings.service');
+    const AuditService = require('../../src/modules/audit/audit.service');
+    const productRows = [
+      { id: 'featured', type: 'product-row', source: 'featured', enabled: true },
+      { id: 'care', type: 'faq', enabled: true, items: [{ title: 'How deep should I sow?', text: 'Just below the surface.' }] },
+    ];
+    const product = {
+      id: 'd0c29777-e701-4e40-ab97-bd600e1dddfd', name: 'Seeds', productSlugs: ['basil-seeds'],
+      settings: { templateLayout: 'sticky-purchase-panel', productRows },
+    };
+    const category = {
+      id: '093643c4-aec2-4b45-a494-3cfcacc37ee0', name: 'Herbs', categorySlugs: ['herbs'],
+      settings: { gridColumns: 4, productRows },
+    };
+    const transaction = { LOCK: { UPDATE: 'UPDATE' } };
+    const readSettings = vi.spyOn(Setting, 'findAll').mockResolvedValueOnce([
+        { group: 'productPage', key: 'alternateTemplates', value: [product] },
+        { group: 'categoryPage', key: 'alternateTemplates', value: [category] },
+      ]).mockResolvedValue([]);
+    const writeSettings = vi.spyOn(SettingsService, 'bulkUpdate').mockResolvedValue(undefined);
+    const mocks = [
+      readSettings,
+      writeSettings,
+      vi.spyOn(sequelize, 'transaction').mockImplementation((callback) => callback(transaction)),
+      vi.spyOn(ThemePackage, 'findOne').mockResolvedValue(null),
+      vi.spyOn(ThemeActivation, 'create').mockResolvedValue({ id: 'activation' }),
+      vi.spyOn(AuditService, 'log').mockResolvedValue(undefined),
+    ];
+    try {
+      const pkg = JSON.parse(JSON.stringify(await ThemeService.exportCurrent()));
+      const { mergedSettings } = await ThemeService.preview(pkg, ['pageTemplates']);
+      expect(mergedSettings.productPage.alternateTemplates).toEqual([product]);
+      expect(mergedSettings.categoryPage.alternateTemplates).toEqual([category]);
+
+      const scopes = ['pageTemplates'];
+      const user = { id: 'manager' };
+      await ThemeService.apply(pkg, { scopes }, user);
+      expect(writeSettings).toHaveBeenLastCalledWith(expect.arrayContaining([
+        { group: 'productPage', key: 'alternateTemplates', value: [product] },
+        { group: 'categoryPage', key: 'alternateTemplates', value: [category] },
+      ]), user.id, user, { transaction });
+
+      pkg.pageTemplates.category.alternateTemplates.push({ ...category, id: product.id, name: 'Duplicate assignment' });
+      await expect(ThemeService.preview(pkg, ['pageTemplates'])).rejects.toThrow(/only be assigned to one template/);
+
+      delete pkg.pageTemplates.product.alternateTemplates;
+      delete pkg.pageTemplates.category.alternateTemplates;
+      await ThemeService.apply(pkg, { scopes }, user);
+      expect(writeSettings.mock.lastCall[0].some(({ key }) => key === 'alternateTemplates')).toBe(false);
+    } finally {
+      mocks.forEach((mock) => mock.mockRestore());
+    }
+  });
+
   it('previews exported navigation, commerce styles, and album references', async () => {
     const { Setting } = require('../../src/modules');
     const ThemeService = require('../../src/modules/theme/theme.service');

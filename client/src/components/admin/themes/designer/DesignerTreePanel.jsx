@@ -242,6 +242,7 @@ const DesignerTreePanel = ({
   onToggleSection,
   onDeleteSection,
   onChangePageSections,
+  pageTemplateControls,
   onPageSettingChange,
   onHeaderClick,
   onHeaderPartClick,
@@ -301,6 +302,8 @@ const DesignerTreePanel = ({
             </Alert>
           </Box>
         )}
+
+        {pageTemplateControls}
 
         {/* Page-specific settings accordion (shown for non-home pages) */}
         {!isHomePage && (
