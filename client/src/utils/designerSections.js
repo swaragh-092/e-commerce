@@ -1,3 +1,9 @@
+const PRODUCT_ROW_ONLY = ['product-row'];
+const CONTENT_PAGE_SECTIONS = [...PRODUCT_ROW_ONLY, 'editorial-image-text', 'faq', 'promo-banners'];
+
+export const getPageSectionTypes = (page) =>
+  ['product', 'category', 'collection', 'blog'].includes(page) ? CONTENT_PAGE_SECTIONS : PRODUCT_ROW_ONLY;
+
 export const PAGE_SETTINGS_GROUPS = {
   'product': 'productPage',
   'category': 'categoryPage',

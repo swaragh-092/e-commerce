@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getPageSections } from '../../utils/designerSections';
+import { getPageProductRows, getPageSections, getPageSectionTypes } from '../../utils/designerSections';
 
 describe('getPageSections', () => {
   const pageKeys = {
@@ -31,14 +31,20 @@ describe('getPageSections', () => {
     ]);
   });
 
-  it('appends configured product rows to the matching non-home page only', () => {
+  it('reads configured merchandising rows from the matching page settings', () => {
     const productRows = [{ id: 'trending', type: 'product-row', source: 'mostViewed' }];
     const settings = { categoryPage: { productRows }, searchPage: { productRows } };
 
-    expect(getPageSections(settings, 'category').at(-1)).toMatchObject({ ...productRows[0], pageProductRow: true });
-    expect(getPageSections(settings, 'search').at(-1)).toMatchObject({ ...productRows[0], pageProductRow: true });
-    expect(getPageSections(settings, 'home')).toEqual([]);
-    expect(getPageSections(settings, 'cart')).toHaveLength(2);
+    expect(getPageProductRows(settings, 'category')).toBe(productRows);
+    expect(getPageProductRows(settings, 'search')).toBe(productRows);
+    expect(getPageProductRows(settings, 'home')).toEqual([]);
+    expect(getPageProductRows(settings, 'cart')).toEqual([]);
+  });
+
+  it('offers content sections only for templates that support them', () => {
+    expect(getPageSectionTypes('product')).toEqual(['product-row', 'editorial-image-text', 'faq', 'promo-banners']);
+    expect(getPageSectionTypes('category')).toEqual(getPageSectionTypes('product'));
+    expect(getPageSectionTypes('cart')).toEqual(['product-row']);
   });
 
   it('returns independent defaults so editing one draft cannot alter another', () => {

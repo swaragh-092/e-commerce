@@ -19,7 +19,6 @@ import StorefrontIcon from '@mui/icons-material/Storefront';
 import MenuIcon from '@mui/icons-material/Menu';
 import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
 import { getSectionLabel } from '../../../storefront/sections/sectionRegistry';
-import PageProductRowsEditor from './PageProductRowsEditor';
 import {
   ProductPageStyleEditor,
   CategoryPageStyleEditor,
@@ -120,7 +119,7 @@ const SectionRow = ({ section, index, total, isSelected, onSelect, onMove, onTog
       },
     }}
   >
-    <Box {...dragHandleProps} aria-label={`Reorder ${getSectionLabel(section)}`} sx={{ display: 'flex', color: 'text.secondary', cursor: 'grab' }}><DragIndicatorIcon sx={{ fontSize: 18 }} /></Box>
+    {dragHandleProps && <Box {...dragHandleProps} aria-label={`Reorder ${getSectionLabel(section)}`} sx={{ display: 'flex', color: 'text.secondary', cursor: 'grab' }}><DragIndicatorIcon sx={{ fontSize: 18 }} /></Box>}
     <Box component="button" type="button" onClick={(event) => { event.stopPropagation(); onSelect(section); }} aria-label={`Edit ${getSectionLabel(section)}`} sx={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', p: 0, color: 'inherit', cursor: 'pointer' }}>
       <Typography variant="body2" fontWeight={isSelected ? 800 : 600} noWrap sx={{ fontSize: '0.85rem' }}>
         {section.title || getSectionLabel(section)}
@@ -242,6 +241,7 @@ const DesignerTreePanel = ({
   onReorderSection,
   onToggleSection,
   onDeleteSection,
+  onChangePageSections,
   onPageSettingChange,
   onHeaderClick,
   onHeaderPartClick,
@@ -254,6 +254,7 @@ const DesignerTreePanel = ({
   const PageEditor = pageEditorConfig?.Editor;
   const pageInfoText = PAGE_INFO[activePage];
   const currentPageSettings = pageSettings[activePage] || {};
+  const pageSections = currentPageSettings.productRows || [];
   const isHomePage = activePage === 'home';
   const templateSectionRows = sections
     .map((section, originalIndex) => ({ section, originalIndex }))
@@ -337,13 +338,6 @@ const DesignerTreePanel = ({
                   {pageInfoText}
                 </Typography>
               )}
-              {!isHomePage && (
-                <PageProductRowsEditor
-                  page={activePage}
-                  rows={currentPageSettings.productRows || []}
-                  onChange={(productRows) => onPageSettingChange(activePage, { ...currentPageSettings, productRows })}
-                />
-              )}
             </AccordionDetails>
           </Accordion>
         )}
@@ -407,17 +401,43 @@ const DesignerTreePanel = ({
             ))}{provided.placeholder}</Box>}</Droppable>
           )}
         </Stack>
-        </> : activePage === 'product' ? (
-          <Stack sx={{ px: 1, py: 1 }}>
-            {sections.filter((section) => section.type === 'product-info').map((section) => (
-              <AddSectionButton key={section.id} onClick={() => onSectionClick(section)}>
-                Edit Product Information blocks
-              </AddSectionButton>
-            ))}
+        </> : (
+          <Stack spacing={0.5} sx={{ px: 1, py: 1 }}>
+            <Typography variant="caption" color="text.secondary">Page layout</Typography>
+            {['above', 'below'].map((position) => {
+              const rows = pageSections
+                .map((section, originalIndex) => ({ section, originalIndex }))
+                .filter(({ section }) => (section.pagePosition || 'below') === position);
+              const mainSection = activePage === 'product' && sections.find((section) => section.type === 'product-info');
+
+              return <Stack key={position} spacing={0.35}>
+                {position === 'below' && (mainSection ? (
+                  <FixedNode icon={<StorefrontIcon fontSize="small" />} label="Product Information"
+                    description="Edit blocks" onClick={() => onSectionClick(mainSection)} />
+                ) : <Typography variant="body2" fontWeight={700} sx={{ px: 1, py: 1 }}>Page content</Typography>)}
+                {rows.map(({ section, originalIndex }, index) => (
+                  <SectionRow key={section.id} section={section} index={index} total={rows.length}
+                    isSelected={selectedSectionId === section.id} onSelect={onSectionClick}
+                    onMove={(_, direction) => {
+                      const targetIndex = rows[index + direction].originalIndex;
+                      const next = [...pageSections];
+                      [next[originalIndex], next[targetIndex]] = [next[targetIndex], next[originalIndex]];
+                      onChangePageSections(next);
+                    }}
+                    onToggle={() => onChangePageSections(pageSections.map((item) =>
+                      item.id === section.id ? { ...item, enabled: item.enabled === false } : item))}
+                    onDelete={() => onChangePageSections(pageSections.filter((item) => item.id !== section.id))}
+                  />
+                ))}
+                {activePage !== 'checkout' && pageSections.length < 6 && (
+                  <AddSectionButton onClick={() => onAddSection(pageSections.length, position)}>
+                    Add section {position} page content
+                  </AddSectionButton>
+                )}
+              </Stack>;
+            })}
           </Stack>
-        ) : <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 2, fontSize: '0.8rem' }}>
-          This page uses a fixed layout.{PageEditor ? ' Use Page Settings above to change its appearance.' : ''}
-        </Typography>}
+        )}
 
         <Divider sx={{ mx: 1, my: 0.75 }} />
 

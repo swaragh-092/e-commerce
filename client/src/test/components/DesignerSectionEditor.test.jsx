@@ -10,6 +10,19 @@ vi.mock('../../services/adminService', () => ({
 vi.mock('../../components/common/MediaPicker', () => ({ default: () => <div data-testid="media-picker" /> }));
 
 describe('DesignerSectionEditor BlockListEditor', () => {
+  it('shows only the section actions provided by the layout', () => {
+    const section = { id: 'faq', type: 'faq' };
+    const onDelete = vi.fn();
+    const { rerender } = render(<DesignerSectionEditor section={section} onDelete={onDelete} />);
+
+    expect(screen.queryByTitle('Duplicate')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTitle('Delete'));
+    expect(onDelete).toHaveBeenCalledWith(section);
+
+    rerender(<DesignerSectionEditor section={section} />);
+    expect(screen.queryByTitle('Delete')).not.toBeInTheDocument();
+  });
+
   it('offers "Customize existing content" and copies inherited blocks when section is uncustomized', () => {
     const section = { id: 'hero-1', type: 'hero-carousel', title: 'Main Hero' };
     const inheritedBlocks = [

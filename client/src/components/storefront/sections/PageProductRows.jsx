@@ -1,10 +1,11 @@
 import { useParams } from 'react-router-dom';
 import { Container } from '@mui/material';
 import { useFeatureVisible, useSettings } from '../../../hooks/useSettings';
-import { getPageProductRows } from '../../../utils/designerSections';
+import { getPageProductRows, getPageSectionTypes } from '../../../utils/designerSections';
 import { fetchStaffPicks, PRODUCT_SOURCE_PARAMS } from '../../../utils/productRowSources';
 import React, { useEffect, useState } from 'react';
 import { getProducts } from '../../../services/productService';
+import SectionRenderer from './SectionRenderer';
 import ProductRow from '../../product/ProductRow';
 
 const DiscoveryRow = ({ row, category }) => {
@@ -18,6 +19,7 @@ const DiscoveryRow = ({ row, category }) => {
     const request = source === 'staffPicks' ? fetchStaffPicks(row, getProducts) : getProducts({
       ...(PRODUCT_SOURCE_PARAMS[source] || PRODUCT_SOURCE_PARAMS.featured),
       ...(category && { category }),
+      ...(source === 'sale' && row.saleLabel && { saleLabel: row.saleLabel }),
       limit,
       status: 'published',
     });
@@ -42,7 +44,8 @@ const DiscoveryRow = ({ row, category }) => {
     ? `${defaultLink}&category=${encodeURIComponent(category)}`
     : defaultLink;
   const viewAllLink = row.viewAllLink || scopedLink;
-  return <ProductRow title={row.title || 'Recommended products'} viewAllLink={viewAllLink} products={products} loading={loading} count={count} layout={row.layout || 'carousel'} compact={row.layout === 'grid-compact'} />;
+  const layout = row.variant || row.layout || 'carousel';
+  return <ProductRow title={row.title || 'Recommended products'} viewAllLink={viewAllLink} products={products} loading={loading} count={count} layout={layout} compact={layout === 'grid-compact'} />;
 };
 
 export default function PageProductRows({ rows = [], category }) {
@@ -54,14 +57,20 @@ export function RoutedProductRows({ page, children }) {
   const { settings } = useSettings();
   const pricingEnabled = useFeatureVisible('pricing', 'storefront');
   const { categorySlug } = useParams();
+  const allowedTypes = getPageSectionTypes(page);
   const rows = getPageProductRows(settings, page)
-    .filter((row) => row?.type === 'product-row' && row.enabled !== false && (row.source !== 'sale' || pricingEnabled));
+    .filter((row) => allowedTypes.includes(row?.type) && row.enabled !== false && (row.source !== 'sale' || pricingEnabled));
   const category = page === 'category' ? categorySlug : undefined;
   const above = rows.filter(({ pagePosition }) => pagePosition === 'above');
   const below = rows.filter(({ pagePosition }) => pagePosition !== 'above');
-  return <>
-    {above.length > 0 && <Container maxWidth="lg"><PageProductRows rows={above} category={category} /></Container>}
-    {children}
-    {below.length > 0 && <Container maxWidth="lg"><PageProductRows rows={below} category={category} /></Container>}
-  </>;
+  const renderSections = (sections) => sections.map((section) => section.type === 'product-row'
+    ? <Container key={section.id} maxWidth="lg" sx={{ display: {
+        xs: section.hideOnMobile ? 'none' : 'block',
+        md: section.hideOnDesktop ? 'none' : 'block',
+      } }}>
+        <PageProductRows rows={[section]} category={category} />
+      </Container>
+    : <SectionRenderer key={section.id} section={section} />);
+
+  return <>{renderSections(above)}{children}{renderSections(below)}</>;
 }

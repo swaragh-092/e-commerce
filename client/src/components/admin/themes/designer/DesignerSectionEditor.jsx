@@ -569,6 +569,8 @@ const CampaignLabelSelect = ({ value, onChange }) => {
 
 const DesignerSectionEditor = ({
   allowSharedPlacement,
+  pageSection,
+  categoryPage,
   section,
   inheritedBlocks = [],
   onBack,
@@ -621,12 +623,16 @@ const DesignerSectionEditor = ({
           <Chip label={getSectionLabel(section)} size="small" variant="outlined"
             sx={{ height: 17, fontSize: '0.66rem', fontWeight: 700, letterSpacing: 0.2, mt: 0.25 }} />
         </Box>
-        <IconButton size="small" title="Duplicate" onClick={() => onDuplicate(section)}>
-          <ContentCopyIcon sx={{ fontSize: 15 }} />
-        </IconButton>
-        <IconButton size="small" color="error" title="Delete" onClick={() => onDelete(section)}>
-          <DeleteIcon sx={{ fontSize: 15 }} />
-        </IconButton>
+        {onDuplicate && (
+          <IconButton size="small" title="Duplicate" onClick={() => onDuplicate(section)}>
+            <ContentCopyIcon sx={{ fontSize: 15 }} />
+          </IconButton>
+        )}
+        {onDelete && (
+          <IconButton size="small" color="error" title="Delete" onClick={() => onDelete(section)}>
+            <DeleteIcon sx={{ fontSize: 15 }} />
+          </IconButton>
+        )}
       </Box>
 
       {/* Quick actions */}
@@ -662,6 +668,20 @@ const DesignerSectionEditor = ({
       <Box sx={{ flex: 1, overflowY: 'auto', p: 1.5 }}>
         <Stack spacing={1.5}>
 
+          {pageSection && (
+            <TextField select size="small" label="Position on page" value={section.pagePosition || 'below'}
+              onChange={(event) => onChange('pagePosition', event.target.value)}>
+              <MenuItem value="above">Above page content</MenuItem>
+              <MenuItem value="below">Below page content</MenuItem>
+            </TextField>
+          )}
+          {pageSection && categoryPage && isProductRow && section.source !== 'staffPicks' && (
+            <TextField select size="small" label="Product scope" value={section.productScope || 'category'}
+              onChange={(event) => onChange('productScope', event.target.value)}>
+              <MenuItem value="category">This category</MenuItem>
+              <MenuItem value="store">Entire store</MenuItem>
+            </TextField>
+          )}
           {allowSharedPlacement && section.type === 'composed-hero' && (
             <TextField select size="small" label="Placement" value={section.placement || 'content'}
               onChange={(event) => {

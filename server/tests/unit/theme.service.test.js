@@ -259,13 +259,17 @@ describe('Theme package schema validation', () => {
     }
   });
 
-  it('preserves page row placement, scope and ordered picks through theme export and preview', async () => {
+  it('preserves mixed page section order and settings through theme export and preview', async () => {
     const { Setting } = require('../../src/modules');
     const ThemeService = require('../../src/modules/theme/theme.service');
     const rows = [
       { id: 'trending', type: 'product-row', enabled: true, source: 'trending', pagePosition: 'above', productScope: 'category' },
-      { id: 'picks', type: 'product-row', enabled: true, source: 'staffPicks', pagePosition: 'below',
+      { id: 'picks', type: 'product-row', enabled: true, source: 'staffPicks', pagePosition: 'below', layout: 'grid-compact',
         productIds: ['d0c29777-e701-4e40-ab97-bd600e1dddfd', '093643c4-aec2-4b45-a494-3cfcacc37ee0'] },
+      { id: 'faq', type: 'faq', enabled: true, pagePosition: 'below', items: [
+        { title: 'When will it ship?', text: 'Within two business days.' },
+        { title: 'Can I collect it?', text: 'Yes, at the store.' },
+      ] },
     ];
     const readSettings = vi.spyOn(Setting, 'findAll')
       .mockResolvedValueOnce([{ group: 'categoryPage', key: 'productRows', value: rows }])
