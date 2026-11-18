@@ -623,12 +623,16 @@ const DesignerSectionEditor = ({
           <Chip label={getSectionLabel(section)} size="small" variant="outlined"
             sx={{ height: 17, fontSize: '0.66rem', fontWeight: 700, letterSpacing: 0.2, mt: 0.25 }} />
         </Box>
-        <IconButton size="small" title="Duplicate" onClick={() => onDuplicate(section)}>
-          <ContentCopyIcon sx={{ fontSize: 15 }} />
-        </IconButton>
-        <IconButton size="small" color="error" title="Delete" onClick={() => onDelete(section)}>
-          <DeleteIcon sx={{ fontSize: 15 }} />
-        </IconButton>
+        {onDuplicate && (
+          <IconButton size="small" title="Duplicate" onClick={() => onDuplicate(section)}>
+            <ContentCopyIcon sx={{ fontSize: 15 }} />
+          </IconButton>
+        )}
+        {onDelete && (
+          <IconButton size="small" color="error" title="Delete" onClick={() => onDelete(section)}>
+            <DeleteIcon sx={{ fontSize: 15 }} />
+          </IconButton>
+        )}
       </Box>
 
       {/* Quick actions */}
