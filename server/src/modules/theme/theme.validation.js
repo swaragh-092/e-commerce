@@ -355,16 +355,22 @@ const metaSchema = Joi.object({
   platformCompatibility: Joi.string().max(20).allow('', null),
 }).unknown(false);
 
-const pageProductRowsSchema = Joi.array().items(
-  homepageSectionSchema.keys({ type: Joi.string().valid('product-row').required() }),
+const pageLayoutSectionsSchema = (...types) => Joi.array().items(
+  homepageSectionSchema.keys({
+    type: Joi.string().valid('product-row', ...types).required(),
+    layout: Joi.string().valid('grid', 'grid-compact', 'carousel'),
+  }),
 ).max(6);
+
+const pageProductRowsSchema = pageLayoutSectionsSchema();
+const contentPageLayoutSchema = pageLayoutSectionsSchema('editorial-image-text', 'faq', 'promo-banners');
 
 const pageSectionsSchema = (systemTypes) => Joi.array().items(
   homepageSectionSchema.keys({ type: Joi.string().valid(...SECTION_TYPES, ...systemTypes).required() }),
 ).max(20);
 
 const pageTemplateSchema = Joi.object({
-  productRows: pageProductRowsSchema,
+  productRows: contentPageLayoutSchema,
   layout: Joi.string().max(80).required(),
   imageAlignment: Joi.string().valid('horizontal', 'vertical'),
   showSKU: Joi.boolean(),
@@ -382,7 +388,7 @@ const pageTemplateSchema = Joi.object({
 }).unknown(false);
 
 const categoryPageTemplateSchema = Joi.object({
-  productRows: pageProductRowsSchema,
+  productRows: contentPageLayoutSchema,
   sections: pageSectionsSchema(['category-header', 'category-products']),
   heroTitle: safeText,
   headerLayout: Joi.string().valid('standard', 'cover', 'split'),
@@ -425,7 +431,7 @@ const accountPageTemplateSchema = Joi.object({
 }).unknown(false);
 
 const blogPageTemplateSchema = Joi.object({
-  productRows: pageProductRowsSchema,
+  productRows: contentPageLayoutSchema,
   sections: pageSectionsSchema(['blog-header', 'blog-posts']),
   listLayout: Joi.string().valid('grid', 'list', 'masonry').required(),
   articleLayout: Joi.string().valid('standard', 'cover'),

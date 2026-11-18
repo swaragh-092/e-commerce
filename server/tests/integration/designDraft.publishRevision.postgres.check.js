@@ -60,6 +60,27 @@ async function main() {
     assert.ok(archivesAfterPublishedRestore.some(row => row.revision === beforePublishedRestore.revision && JSON.stringify(row.payload) === JSON.stringify(beforePublishedRestore.payload)));
     const metadata = await service.getArchivedDrafts();
     assert.ok(metadata.archives.every(row => !('payload' in row) && !('baseSnapshot' in row)));
+
+    const productRows = [
+      { id: 'picks', type: 'product-row', source: 'staffPicks', pagePosition: 'below',
+        productIds: [randomUUID(), randomUUID()] },
+      { id: 'faq', type: 'faq', pagePosition: 'below', items: [
+        { title: 'When will it ship?', text: 'Within two business days.' },
+        { title: 'Can I collect it?', text: 'Yes, at the store.' },
+      ] },
+    ];
+    const sectionSetting = { group: 'productPage', key: 'productRows' };
+    const savedLayout = await service.saveDraft({
+      settings: [{ ...sectionSetting, value: productRows }],
+      expectedRevision: (await service.getDraft()).draft.revision,
+    }, user);
+    const { draft: reopened } = await service.getDraft();
+    assert.equal(reopened.revision, savedLayout.revision);
+    assert.deepEqual(reopened.payload, [{ ...sectionSetting, operation: 'upsert', value: productRows }]);
+    assert.equal(await db.Setting.findOne({ where: sectionSetting }), null);
+    await service.publishDraft({ expectedRevision: reopened.revision }, user);
+    assert.deepEqual((await db.Setting.findOne({ where: sectionSetting })).value, productRows);
+    console.log('PASS: reopening and publishing preserves Staff Picks and both FAQ items in order.');
     console.log('PASS: published history, draft archives and restores preserve replaced drafts without publishing restored payload.');
   } finally {
     AuditService.log = originalAudit;

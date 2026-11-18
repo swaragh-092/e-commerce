@@ -569,6 +569,8 @@ const CampaignLabelSelect = ({ value, onChange }) => {
 
 const DesignerSectionEditor = ({
   allowSharedPlacement,
+  pageSection,
+  categoryPage,
   section,
   inheritedBlocks = [],
   onBack,
@@ -662,6 +664,20 @@ const DesignerSectionEditor = ({
       <Box sx={{ flex: 1, overflowY: 'auto', p: 1.5 }}>
         <Stack spacing={1.5}>
 
+          {pageSection && (
+            <TextField select size="small" label="Position on page" value={section.pagePosition || 'below'}
+              onChange={(event) => onChange('pagePosition', event.target.value)}>
+              <MenuItem value="above">Above page content</MenuItem>
+              <MenuItem value="below">Below page content</MenuItem>
+            </TextField>
+          )}
+          {pageSection && categoryPage && isProductRow && section.source !== 'staffPicks' && (
+            <TextField select size="small" label="Product scope" value={section.productScope || 'category'}
+              onChange={(event) => onChange('productScope', event.target.value)}>
+              <MenuItem value="category">This category</MenuItem>
+              <MenuItem value="store">Entire store</MenuItem>
+            </TextField>
+          )}
           {allowSharedPlacement && section.type === 'composed-hero' && (
             <TextField select size="small" label="Placement" value={section.placement || 'content'}
               onChange={(event) => {

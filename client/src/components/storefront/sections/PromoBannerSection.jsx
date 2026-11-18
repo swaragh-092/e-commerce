@@ -35,6 +35,7 @@ const SectionHeader = ({ section, title, subtitle, align = 'left', preview, onIn
 };
 
 const PromoBannerSection = ({ section = {}, banners = DEFAULT_BANNERS, mode = 'live', onSelectComponent, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
+  const promoCardStyle = useComponentStyles('promoCard');
   const preview = mode === 'preview';
   const hasCustomItems = Array.isArray(section?.items) || Array.isArray(section?.banners);
   const customItems = Array.isArray(section?.items) ? section.items : section?.banners;
@@ -54,7 +55,6 @@ const PromoBannerSection = ({ section = {}, banners = DEFAULT_BANNERS, mode = 'l
     }
     return null;
   }
-  const promoCardStyle = useComponentStyles('promoCard');
   const variant = section.variant || promoCardStyle.variant || 'cards';
   const cardRadius = resolveRadius(promoCardStyle.radius, resolveRadius('large'));
   const cardShadow = resolveShadow(promoCardStyle.shadow, resolveShadow('soft'));

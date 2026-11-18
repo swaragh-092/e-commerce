@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { getProducts } from '../../../services/productService';
-import PageProductRows from '../../../components/storefront/sections/PageProductRows';
+import { SettingsContext } from '../../../context/ThemeContext';
+import PageProductRows, { RoutedProductRows } from '../../../components/storefront/sections/PageProductRows';
 
 vi.mock('../../../services/productService', () => ({ getProducts: vi.fn() }));
 
@@ -10,6 +11,32 @@ describe('page product rows', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getProducts.mockResolvedValue({ data: [] });
+  });
+
+  it('renders enabled content sections around the main product content in saved order', () => {
+    const rows = [
+      { id: 'shipping', type: 'faq', title: 'Shipping', pagePosition: 'below',
+        items: [{ title: 'When does it ship?', text: 'Within two business days.' }] },
+      { id: 'ordering', type: 'faq', title: 'Ordering', pagePosition: 'above',
+        items: [{ title: 'Can I order online?', text: 'Yes.' }] },
+      { id: 'hidden', type: 'faq', title: 'Hidden FAQ', enabled: false,
+        items: [{ title: 'Hidden question', text: 'Hidden answer' }] },
+      { id: 'returns', type: 'faq', title: 'Returns', pagePosition: 'below',
+        items: [{ title: 'Can I return it?', text: 'Yes.' }] },
+    ];
+    render(
+      <SettingsContext.Provider value={{ settings: { productPage: { productRows: rows } } }}>
+        <MemoryRouter>
+          <RoutedProductRows page="product"><h1>Product Information</h1></RoutedProductRows>
+        </MemoryRouter>
+      </SettingsContext.Provider>,
+    );
+
+    expect(screen.getAllByRole('heading').map(({ textContent }) => textContent)).toEqual([
+      'Ordering', 'Can I order online?', 'Product Information',
+      'Shipping', 'When does it ship?', 'Returns', 'Can I return it?',
+    ]);
+    expect(screen.queryByText('Hidden question')).not.toBeInTheDocument();
   });
 
   it.each([

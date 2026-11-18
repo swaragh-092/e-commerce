@@ -42,7 +42,7 @@ const generateId = (type, existingIds) => {
   return id;
 };
 
-const AddSectionDialog = ({ open, onClose, onAdd, existingIds = [], sectionPresets = {}, insertLabel = 'last section' }) => {
+const AddSectionDialog = ({ open, onClose, onAdd, existingIds = [], sectionPresets = {}, allowedTypes, insertLabel = 'last section' }) => {
   const typeLabelId = useId();
   const variantLabelId = useId();
   const [selection, setSelection] = useState('');
@@ -53,11 +53,12 @@ const AddSectionDialog = ({ open, onClose, onAdd, existingIds = [], sectionPrese
   const productChoice = productChoices.find((choice) => choice.key === selection);
   const type = productChoice?.type || selection;
   const variants = type ? (SECTION_VARIANTS[type] || []) : [];
-  const presetCards = [...productChoices, ...getSectionPresetGallery(sectionPresets)].filter((preset) => goal === 'all' || preset.goal === goal);
+  const allowed = (type) => !allowedTypes || allowedTypes.includes(type);
+  const presetCards = [...productChoices, ...getSectionPresetGallery(sectionPresets)].filter((preset) => allowed(preset.type) && (goal === 'all' || preset.goal === goal));
   const selectedPreset = productChoice || presetCards.find((preset) => preset.type === type) || getSectionPresetGallery(sectionPresets).find((preset) => preset.type === type);
 
   const handleAdd = () => {
-    if (!type) return;
+    if (!type || !allowed(type)) return;
     const section = createDefaultSection(type, {
       id: generateId(type, existingIds),
       variant,
@@ -145,7 +146,7 @@ const AddSectionDialog = ({ open, onClose, onAdd, existingIds = [], sectionPrese
           <FormControl size="small" fullWidth>
             <InputLabel id={typeLabelId}>Section Type</InputLabel>
             <Select labelId={typeLabelId} value={type} label="Section Type" onChange={(e) => { setSelection(e.target.value); setVariant(''); }}>
-              {sectionOptions.map((opt) => (
+              {sectionOptions.filter((option) => allowed(option.type)).map((opt) => (
                 <MenuItem key={opt.type} value={opt.type}>
                   <Stack direction="row" alignItems="center" spacing={1}>
                     <span>{opt.label}</span>
