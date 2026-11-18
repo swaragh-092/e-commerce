@@ -9,7 +9,12 @@ const AppError = require('../../utils/AppError');
 const { getPermissionsForUser, PERMISSIONS } = require('../../config/permissions');
 const { DESIGN_DRAFT_KEY, DESIGN_DRAFT_GROUPS, isDesignDraftTarget } = require('./designDraft');
 
+const { TEMPLATE_ASSIGNMENT_KEYS, buildAlternateTemplatesSchema } = require('./alternateTemplates');
+
 const valuesEqual = isDeepStrictEqual;
+
+const alternateTemplateSchemas = Object.fromEntries(Object.entries(TEMPLATE_ASSIGNMENT_KEYS)
+  .map(([group, assignmentKey]) => [group, buildAlternateTemplatesSchema(assignmentKey).required()]));
 
 const serializeDraft = (draft) => {
   if (!draft) return null;
@@ -77,6 +82,11 @@ const normalizePayload = (settings) => {
     const operation = entry.operation === 'delete' ? 'delete' : 'upsert';
     if (operation === 'upsert' && !Object.prototype.hasOwnProperty.call(entry, 'value')) {
       throw new AppError('VALIDATION_ERROR', 400, `Design draft setting '${group}.${key}' is missing a value.`);
+    }
+    const templateSchema = alternateTemplateSchemas[group];
+    if (operation === 'upsert' && key === 'alternateTemplates' && templateSchema) {
+      const { error } = templateSchema.validate(entry.value, { convert: false });
+      if (error) throw new AppError('VALIDATION_ERROR', 400, error.details[0].message);
     }
     return operation === 'delete'
       ? { group, key, operation }

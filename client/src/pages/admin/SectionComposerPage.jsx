@@ -1,4 +1,4 @@
-import { getPageSections, getPageSectionTypes } from '../../utils/designerSections';
+import { getPageSections, getPageSectionTypes, PAGE_TEMPLATE_ASSIGNMENT_KEYS } from '../../utils/designerSections';
 import { useState, useEffect, useCallback, useContext, useMemo, useRef } from 'react';
 import {
   Box, Button, Card, Container, Divider, IconButton, Stack, Switch,
@@ -50,6 +50,7 @@ import DraftReviewDialog from '../../components/admin/themes/DraftReviewDialog';
 import DraftArchivesDialog from '../../components/admin/themes/DraftArchivesDialog';
 import DesignVersionHistoryDialog from '../../components/admin/themes/DesignVersionHistoryDialog';
 import StorefrontTemplatePreview from '../../components/admin/themes/StorefrontTemplatePreview';
+import PageTemplateControls from '../../components/admin/themes/designer/PageTemplateControls';
 import DesignerTreePanel from '../../components/admin/themes/designer/DesignerTreePanel';
 import DesignerSectionEditor from '../../components/admin/themes/designer/DesignerSectionEditor';
 import DesignerThemePanel from '../../components/admin/themes/designer/DesignerThemePanel';
@@ -200,6 +201,7 @@ const SectionComposerPage = () => {
   
   // Unified page style settings state
   const [pageSettings, setPageSettings] = useState({});
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState({});
 
   // History state for Undo/Redo
   const [history, setHistory] = useState([]);
@@ -297,8 +299,20 @@ const SectionComposerPage = () => {
   };
 
   // Derived properties from active FSM state
-  const productSections = getPageSections({ productPage: pageSettings.product }, 'product');
-  const pageSections = pageSettings[activePage]?.productRows || [];
+  const assignmentKey = PAGE_TEMPLATE_ASSIGNMENT_KEYS[activePage];
+  const pageGroup = DESIGNER_PAGE_GROUP_MAP[activePage];
+  const currentPageSettings = pageSettings[activePage];
+  const { templates: alternateTemplates, defaults: defaultTemplate } = useMemo(() => {
+    const { alternateTemplates: templates, ...defaults } = currentPageSettings || {};
+    return { templates: Array.isArray(templates) ? templates : [], defaults };
+  }, [currentPageSettings]);
+  const selectedTemplate = alternateTemplates.find(({ id }) => id === selectedTemplateIds[activePage]);
+  const assignedPreviewSlug = assignmentKey && selectedTemplate?.[assignmentKey]?.[0];
+  const editablePageSettings = assignmentKey
+    ? selectedTemplate?.settings || defaultTemplate
+    : currentPageSettings;
+  const productSections = getPageSections({ productPage: editablePageSettings }, 'product');
+  const pageSections = editablePageSettings?.productRows || [];
   const editableSections = activePage === 'home' ? sections
     : activePage === 'product' ? [...productSections, ...pageSections] : pageSections;
   const editSection = panelView.mode === 'section-editor'
@@ -783,15 +797,33 @@ const SectionComposerPage = () => {
 
   const handlePageSettingChange = (page, value) => {
     clearDraftDelete(DESIGNER_PAGE_GROUP_MAP[page] || page);
-    setPageSettings((current) => ({
-      ...current,
-      [page]: value,
-    }));
+    setPageSettings((current) => {
+      const previous = current[page] || {};
+      const apply = (settings) => typeof value === 'function' ? value(settings) : value;
+      if (!PAGE_TEMPLATE_ASSIGNMENT_KEYS[page]) return { ...current, [page]: apply(previous) };
+
+      const { alternateTemplates: templates, ...defaults } = previous;
+      const selectedId = selectedTemplateIds[page];
+      const next = Array.isArray(templates) && templates.some(({ id }) => id === selectedId)
+        ? { ...previous, alternateTemplates: templates.map((template) => template.id === selectedId
+          ? { ...template, settings: apply(template.settings) } : template) }
+        : { ...apply(defaults), ...(Array.isArray(templates) && { alternateTemplates: templates }) };
+      return { ...current, [page]: next };
+    });
     setDirty(true);
   };
 
   const changePageSections = (productRows) => {
-    handlePageSettingChange(activePage, { ...pageSettings[activePage], productRows });
+    handlePageSettingChange(activePage, (current) => ({ ...current, productRows }));
+  };
+
+  const updatePageTemplates = (templates) => {
+    clearDraftDelete(pageGroup);
+    setPageSettings((current) => ({
+      ...current,
+      [activePage]: { ...current[activePage], alternateTemplates: templates },
+    }));
+    setDirty(true);
   };
 
   const removePageSection = () => {
@@ -818,21 +850,16 @@ const SectionComposerPage = () => {
   const handleInlineFieldChange = (key, value) => {
     if (!panelView.sectionId) return;
     if (pageSections.some((section) => section.id === panelView.sectionId)) {
-      clearDraftDelete(DESIGNER_PAGE_GROUP_MAP[activePage] || activePage);
-      setPageSettings((current) => ({
+      handlePageSettingChange(activePage, (current) => ({
         ...current,
-        [activePage]: {
-          ...current[activePage],
-          productRows: current[activePage].productRows.map((section) =>
-            section.id === panelView.sectionId ? updateSectionField(section, key, value) : section),
-        },
+        productRows: current.productRows.map((section) =>
+          section.id === panelView.sectionId ? updateSectionField(section, key, value) : section),
       }));
-      setDirty(true);
       return;
     }
     if (activePage === 'product') {
-      handlePageSettingChange('product', { ...pageSettings.product, sections: productSections.map((section) =>
-        section.id === panelView.sectionId ? updateSectionField(section, key, value) : section) });
+      handlePageSettingChange('product', (current) => ({ ...current, sections: getPageSections({ productPage: current }, 'product').map((section) =>
+        section.id === panelView.sectionId ? updateSectionField(section, key, value) : section) }));
       return;
     }
     const next = sectionsRef.current.map((section) =>
@@ -1079,6 +1106,12 @@ const SectionComposerPage = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings, sections, themeSettings, componentStyles, navSettings, footerSettings, announcementSettings, pageSettings, advancedSettings, canManageAdvancedSettings, stagedHomepage, livePreviewTick]);
 
+  const templatePreviewSettings = useMemo(() =>
+    assignmentKey && livePreviewSettings
+      ? { ...livePreviewSettings, [pageGroup]: editablePageSettings }
+      : livePreviewSettings,
+  [assignmentKey, pageGroup, editablePageSettings, livePreviewSettings]);
+
   if (loading) {
     return (
       <Container maxWidth="md" sx={{ py: 5, textAlign: 'center' }}>
@@ -1132,9 +1165,11 @@ const SectionComposerPage = () => {
     setPageSearch('');
   };
   const blockLabel = editSection ? getBlockLabel(editSection, panelView.blockKey, panelView.blockIndex) : null;
-  const designerBreadcrumbs = activePage !== 'home'
-    ? [activePageLabel, 'Page Layout']
-    : editSection
+  const designerBreadcrumbs = assignmentKey
+    ? [activePageLabel, selectedTemplate?.name || 'Default template']
+    : activePage !== 'home'
+      ? [activePageLabel, 'Page Layout']
+      : editSection
       ? blockLabel
         ? [activePageLabel, 'Sections', getSectionLabel(editSection), blockLabel]
         : [activePageLabel, 'Sections', getSectionLabel(editSection)]
@@ -1397,7 +1432,19 @@ const SectionComposerPage = () => {
               loadError={loadError}
               onRetryLoad={fetchSections}
               activePage={activePage}
-              pageSettings={pageSettings}
+              pageSettings={assignmentKey ? { ...pageSettings, [activePage]: editablePageSettings } : pageSettings}
+              pageTemplateControls={assignmentKey && <PageTemplateControls
+                key={activePage}
+                page={activePage}
+                templates={alternateTemplates}
+                defaultSettings={defaultTemplate}
+                selectedTemplate={selectedTemplate}
+                onSelect={(id) => {
+                  setSelectedTemplateIds((current) => ({ ...current, [activePage]: id }));
+                  backToTree();
+                }}
+                onChange={updatePageTemplates}
+              />}
               selectedSectionId={panelView.sectionId}
               onSectionClick={selectSection}
               onThemeSettingsClick={() => setPanelView({ mode: 'theme-settings', sectionId: null, componentKey: null })}
@@ -1531,20 +1578,22 @@ const SectionComposerPage = () => {
             >
               <Box sx={{ width: '100%', flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
                 {activePage !== 'home' ? (
-                  previewTarget.error ? (
+                  previewTarget.error && !assignedPreviewSlug ? (
                     <Box sx={{ p: 4, textAlign: 'center' }}>
                       <Alert severity="info" variant="outlined" sx={{ maxWidth: 480, mx: 'auto' }}>
                         {previewTarget.error}
                       </Alert>
                     </Box>
-                  ) : previewTarget.loading ? (
+                  ) : previewTarget.loading && !assignedPreviewSlug ? (
                     <Box sx={{ p: 4, textAlign: 'center' }}>
                       <CircularProgress size={28} />
                     </Box>
                   ) : (
                     <LiveStorefrontPreview
-                      settings={livePreviewSettings}
-                      path={previewTarget.path || '/'}
+                      settings={templatePreviewSettings}
+                      path={assignedPreviewSlug
+                        ? `/${activePage === 'category' ? 'category' : 'products'}/${encodeURIComponent(assignedPreviewSlug)}`
+                        : previewTarget.path || '/'}
                       reloadOnSettingsChange
                       device={viewportMode}
                       showToolbar={false}

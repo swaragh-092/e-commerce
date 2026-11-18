@@ -1,11 +1,12 @@
 import { useParams } from 'react-router-dom';
 import { Container } from '@mui/material';
 import { useFeatureVisible, useSettings } from '../../../hooks/useSettings';
-import { getPageProductRows, getPageSectionTypes } from '../../../utils/designerSections';
+import { getPageProductRows, getPageSectionTypes, findAssignedPageTemplate, PAGE_SETTINGS_GROUPS } from '../../../utils/designerSections';
 import { fetchStaffPicks, PRODUCT_SOURCE_PARAMS } from '../../../utils/productRowSources';
-import React, { useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { getProducts } from '../../../services/productService';
 import SectionRenderer from './SectionRenderer';
+import { SettingsContext } from '../../../context/ThemeContext';
 import ProductRow from '../../product/ProductRow';
 
 const DiscoveryRow = ({ row, category }) => {
@@ -54,11 +55,14 @@ export default function PageProductRows({ rows = [], category }) {
 }
 
 export function RoutedProductRows({ page, children }) {
+  const settingsContext = useContext(SettingsContext);
   const { settings } = useSettings();
   const pricingEnabled = useFeatureVisible('pricing', 'storefront');
-  const { categorySlug } = useParams();
+  const { categorySlug, slug } = useParams();
+  const alternate = findAssignedPageTemplate(settings, page, page === 'category' ? categorySlug : slug);
+  const pageSettings = alternate ? { ...settings, [PAGE_SETTINGS_GROUPS[page]]: alternate.settings } : settings;
   const allowedTypes = getPageSectionTypes(page);
-  const rows = getPageProductRows(settings, page)
+  const rows = getPageProductRows(pageSettings, page)
     .filter((row) => allowedTypes.includes(row?.type) && row.enabled !== false && (row.source !== 'sale' || pricingEnabled));
   const category = page === 'category' ? categorySlug : undefined;
   const above = rows.filter(({ pagePosition }) => pagePosition === 'above');
@@ -72,5 +76,10 @@ export function RoutedProductRows({ page, children }) {
       </Container>
     : <SectionRenderer key={section.id} section={section} />);
 
-  return <>{renderSections(above)}{children}{renderSections(below)}</>;
+  const layout = <>{renderSections(above)}{children}{renderSections(below)}</>;
+  return alternate
+    ? <SettingsContext.Provider value={{ ...settingsContext, settings: pageSettings, productTemplateId: page === 'product' ? alternate.id : undefined }}>
+        {layout}
+      </SettingsContext.Provider>
+    : layout;
 }

@@ -1,6 +1,7 @@
 'use strict';
 
 const Joi = require('joi');
+const { TEMPLATE_ASSIGNMENT_KEYS, buildAlternateTemplatesSchema } = require('../settings/alternateTemplates');
 
 const hexColor = Joi.string().pattern(/^#[0-9a-fA-F]{3,8}$/).max(9).messages({
   'string.pattern.base': '{{#label}} must be a valid hex color (e.g. #ff0000)',
@@ -387,9 +388,21 @@ const pageTemplateSchema = Joi.object({
   filterLayout: Joi.string().valid('sidebar', 'drawer', 'topbar'),
 }).unknown(false);
 
+const alternatePageTemplates = (group, systemTypes) => buildAlternateTemplatesSchema(
+  TEMPLATE_ASSIGNMENT_KEYS[group],
+  Joi.object({
+    productRows: contentPageLayoutSchema,
+    sections: pageSectionsSchema(systemTypes),
+  }).unknown(true),
+);
+
+const productSectionTypes = ['product-info', 'product-reviews'];
+const categorySectionTypes = ['category-header', 'category-products'];
+
 const categoryPageTemplateSchema = Joi.object({
   productRows: contentPageLayoutSchema,
-  sections: pageSectionsSchema(['category-header', 'category-products']),
+  sections: pageSectionsSchema(categorySectionTypes),
+  alternateTemplates: alternatePageTemplates('categoryPage', categorySectionTypes),
   heroTitle: safeText,
   headerLayout: Joi.string().valid('standard', 'cover', 'split'),
   showSubcategories: Joi.boolean(),
@@ -581,7 +594,10 @@ const packageSchema = Joi.object({
   }).unknown(false),
   dataSources: Joi.array().items(dataSourceSchema).max(12),
   pageTemplates: Joi.object({
-    product: pageTemplateSchema.keys({ sections: pageSectionsSchema(['product-info', 'product-reviews']) }),
+    product: pageTemplateSchema.keys({
+      sections: pageSectionsSchema(productSectionTypes),
+      alternateTemplates: alternatePageTemplates('productPage', productSectionTypes),
+    }),
     category: categoryPageTemplateSchema,
     collection: pageTemplateSchema.keys({
       sections: pageSectionsSchema(['catalog-header', 'catalog-products']),

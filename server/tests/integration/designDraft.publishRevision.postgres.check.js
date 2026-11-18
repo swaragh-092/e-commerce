@@ -81,6 +81,35 @@ async function main() {
     await service.publishDraft({ expectedRevision: reopened.revision }, user);
     assert.deepEqual((await db.Setting.findOne({ where: sectionSetting })).value, productRows);
     console.log('PASS: reopening and publishing preserves Staff Picks and both FAQ items in order.');
+
+    for (const [group, assignmentKey] of [
+      ['productPage', 'productSlugs'],
+      ['categoryPage', 'categorySlugs'],
+    ]) {
+      const alternateSetting = { group, key: 'alternateTemplates' };
+      const alternateTemplates = [{
+        id: randomUUID(),
+        name: 'Seeds',
+        [assignmentKey]: ['basil-seeds'],
+        settings: { productRows: [{
+          id: 'care', type: 'faq', items: [{ title: 'How deep should I sow?', text: 'Sow just below the surface.' }],
+        }] },
+      }];
+      const defaultSetting = { ...sectionSetting, group };
+      if (group === 'categoryPage') await db.Setting.create({ ...defaultSetting, value: productRows });
+      const publishedLayout = await db.DesignDraft.findOne();
+      await service.saveDraft({
+        settings: [{ ...alternateSetting, value: alternateTemplates }],
+        expectedRevision: publishedLayout.revision,
+      }, user);
+      const { draft: alternateDraft } = await service.getDraft();
+      assert.deepEqual(alternateDraft.payload[0].value, alternateTemplates);
+      assert.equal(await db.Setting.findOne({ where: alternateSetting }), null);
+      await service.publishDraft({ expectedRevision: alternateDraft.revision }, user);
+      assert.deepEqual((await db.Setting.findOne({ where: alternateSetting })).value, alternateTemplates);
+      assert.deepEqual((await db.Setting.findOne({ where: defaultSetting })).value, productRows);
+      console.log(`PASS: publishing the assigned Seeds template preserves the default layout for ${group}.`);
+    }
     console.log('PASS: published history, draft archives and restores preserve replaced drafts without publishing restored payload.');
   } finally {
     AuditService.log = originalAudit;

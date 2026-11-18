@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { getProducts } from '../../../services/productService';
 import { SettingsContext } from '../../../context/ThemeContext';
 import PageProductRows, { RoutedProductRows } from '../../../components/storefront/sections/PageProductRows';
@@ -11,6 +11,36 @@ describe('page product rows', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getProducts.mockResolvedValue({ data: [] });
+  });
+
+  it.each([
+    ['product', 'productPage', 'productSlugs', '/products', 'slug'],
+    ['category', 'categoryPage', 'categorySlugs', '/category', 'categorySlug'],
+  ].flatMap(([page, group, assignmentKey, prefix, param]) => [
+    [page, group, assignmentKey, prefix, param, 'seeds', 'Care FAQ', 'Default FAQ'],
+    [page, group, assignmentKey, prefix, param, 'watering-can', 'Default FAQ', 'Care FAQ'],
+  ]))('renders the correct %s layout for %s assignment', (page, group, assignmentKey, prefix, param, slug, heading, otherHeading) => {
+    const faq = (title) => ({
+      id: 'faq', type: 'faq', title, items: [{ title: 'How do I use it?', text: 'Follow the instructions.' }],
+    });
+    const pageSettings = {
+      productRows: [faq('Default FAQ')],
+      alternateTemplates: [{
+        id: 'seeds-template', name: 'Seeds', [assignmentKey]: ['seeds'],
+        settings: { productRows: [faq('Care FAQ')] },
+      }],
+    };
+    render(
+      <SettingsContext.Provider value={{ settings: { [group]: pageSettings } }}>
+        <MemoryRouter initialEntries={[`${prefix}/${slug}`]}>
+          <Routes>
+            <Route path={`${prefix}/:${param}`} element={<RoutedProductRows page={page}><h1>Product Information</h1></RoutedProductRows>} />
+          </Routes>
+        </MemoryRouter>
+      </SettingsContext.Provider>,
+    );
+    expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: otherHeading })).not.toBeInTheDocument();
   });
 
   it('renders enabled content sections around the main product content in saved order', () => {
