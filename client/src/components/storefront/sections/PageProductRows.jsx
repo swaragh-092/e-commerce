@@ -1,5 +1,5 @@
-import { useParams } from 'react-router-dom';
-import { Container } from '@mui/material';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { Box, Container } from '@mui/material';
 import { useFeatureVisible, useSettings } from '../../../hooks/useSettings';
 import { getPageProductRows, getPageSectionTypes, findAssignedPageTemplate, PAGE_SETTINGS_GROUPS } from '../../../utils/designerSections';
 import { fetchStaffPicks, PRODUCT_SOURCE_PARAMS } from '../../../utils/productRowSources';
@@ -59,6 +59,8 @@ export function RoutedProductRows({ page, children }) {
   const { settings } = useSettings();
   const pricingEnabled = useFeatureVisible('pricing', 'storefront');
   const { categorySlug, slug } = useParams();
+  const [searchParams] = useSearchParams();
+  const showInsertion = searchParams.get('previewMode') === '1' && page !== 'checkout';
   const alternate = findAssignedPageTemplate(settings, page, page === 'category' ? categorySlug : slug);
   const pageSettings = alternate ? { ...settings, [PAGE_SETTINGS_GROUPS[page]]: alternate.settings } : settings;
   const allowedTypes = getPageSectionTypes(page);
@@ -67,16 +69,28 @@ export function RoutedProductRows({ page, children }) {
   const category = page === 'category' ? categorySlug : undefined;
   const above = rows.filter(({ pagePosition }) => pagePosition === 'above');
   const below = rows.filter(({ pagePosition }) => pagePosition !== 'above');
-  const renderSections = (sections) => sections.map((section) => section.type === 'product-row'
-    ? <Container key={section.id} maxWidth="lg" sx={{ display: {
-        xs: section.hideOnMobile ? 'none' : 'block',
-        md: section.hideOnDesktop ? 'none' : 'block',
-      } }}>
-        <PageProductRows rows={[section]} category={category} />
-      </Container>
-    : <SectionRenderer key={section.id} section={section} />);
+  const insertion = (position, anchor) => showInsertion && (
+    <button type="button" hidden data-store-add-section={position} data-store-anchor={anchor}>Add section here</button>
+  );
+  const renderSections = (sections, position) => sections.map((section) => (
+    <React.Fragment key={section.id}>
+      {insertion(position, section.id)}
+      {section.type === 'product-row' ? (
+        <Container data-store-section={section.id} maxWidth="lg" sx={{ display: {
+          xs: section.hideOnMobile ? 'none' : 'block',
+          md: section.hideOnDesktop ? 'none' : 'block',
+        } }}>
+          <PageProductRows rows={[section]} category={category} />
+        </Container>
+      ) : <Box data-store-section={section.id}><SectionRenderer section={section} /></Box>}
+    </React.Fragment>
+  ));
 
-  const layout = <>{renderSections(above)}{children}{renderSections(below)}</>;
+  const layout = <>
+    {renderSections(above, 'above')}{insertion('above')}
+    {children}
+    {renderSections(below, 'below')}{insertion('below')}
+  </>;
   return alternate
     ? <SettingsContext.Provider value={{ ...settingsContext, settings: pageSettings, productTemplateId: page === 'product' ? alternate.id : undefined }}>
         {layout}

@@ -10,11 +10,23 @@ const { getPermissionsForUser, PERMISSIONS } = require('../../config/permissions
 const { DESIGN_DRAFT_KEY, DESIGN_DRAFT_GROUPS, isDesignDraftTarget } = require('./designDraft');
 
 const { TEMPLATE_ASSIGNMENT_KEYS, buildAlternateTemplatesSchema } = require('./alternateTemplates');
+const { productBlockPlacementSchema } = require('../theme/theme.validation');
 
 const valuesEqual = isDeepStrictEqual;
 
 const alternateTemplateSchemas = Object.fromEntries(Object.entries(TEMPLATE_ASSIGNMENT_KEYS)
   .map(([group, assignmentKey]) => [group, buildAlternateTemplatesSchema(assignmentKey).required()]));
+
+const validateProductBlockPlacements = (sections) => {
+  if (!Array.isArray(sections)) return;
+  for (const section of sections) {
+    if (section?.type !== 'product-info' || !Array.isArray(section.heroBlocks)) continue;
+    for (const block of section.heroBlocks) {
+      const { error } = productBlockPlacementSchema.validate(block?.productPlacement, { convert: false });
+      if (error) throw new AppError('VALIDATION_ERROR', 400, `Invalid product block placement: ${error.details[0].message}`);
+    }
+  }
+};
 
 const serializeDraft = (draft) => {
   if (!draft) return null;
@@ -87,6 +99,9 @@ const normalizePayload = (settings) => {
     if (operation === 'upsert' && key === 'alternateTemplates' && templateSchema) {
       const { error } = templateSchema.validate(entry.value, { convert: false });
       if (error) throw new AppError('VALIDATION_ERROR', 400, error.details[0].message);
+      if (group === 'productPage') entry.value.forEach(({ settings }) => validateProductBlockPlacements(settings.sections));
+    } else if (operation === 'upsert' && group === 'productPage' && key === 'sections') {
+      validateProductBlockPlacements(entry.value);
     }
     return operation === 'delete'
       ? { group, key, operation }

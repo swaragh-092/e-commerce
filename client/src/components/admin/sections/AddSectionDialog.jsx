@@ -1,8 +1,8 @@
-import { useState, useId } from 'react';
+import { useState } from 'react';
 import {
-  Box, Card, CardActionArea, Dialog, DialogTitle, DialogContent, DialogActions, Button,
-  FormControl, InputLabel, Select, MenuItem, Stack, TextField, Typography, Chip,
+  Box, Button, Dialog, DialogTitle, DialogContent, Popover, Stack, TextField, Typography,
 } from '@mui/material';
+import DashboardCustomizeOutlinedIcon from '@mui/icons-material/DashboardCustomizeOutlined';
 import { SECTION_DEFINITIONS, SECTION_VARIANTS } from '../../storefront/sections/sectionRegistry';
 import { createDefaultSection, getSectionPresetGallery, SECTION_PRESET_GOALS } from '../../../utils/sectionPresets';
 
@@ -31,7 +31,7 @@ const sectionOptions = Object.entries(SECTION_DEFINITIONS)
   .map(([type, def]) => ({
     type,
     label: def.label,
-    family: def.family,
+    goal: def.family,
   }));
 
 const generateId = (type, existingIds) => {
@@ -42,152 +42,75 @@ const generateId = (type, existingIds) => {
   return id;
 };
 
-const AddSectionDialog = ({ open, onClose, onAdd, existingIds = [], sectionPresets = {}, allowedTypes, insertLabel = 'last section' }) => {
-  const typeLabelId = useId();
-  const variantLabelId = useId();
-  const [selection, setSelection] = useState('');
-  const [variant, setVariant] = useState('');
-  const [title, setTitle] = useState('');
-  const [goal, setGoal] = useState('all');
-
-  const productChoice = productChoices.find((choice) => choice.key === selection);
-  const type = productChoice?.type || selection;
-  const variants = type ? (SECTION_VARIANTS[type] || []) : [];
-  const allowed = (type) => !allowedTypes || allowedTypes.includes(type);
-  const presetCards = [...productChoices, ...getSectionPresetGallery(sectionPresets)].filter((preset) => allowed(preset.type) && (goal === 'all' || preset.goal === goal));
-  const selectedPreset = productChoice || presetCards.find((preset) => preset.type === type) || getSectionPresetGallery(sectionPresets).find((preset) => preset.type === type);
-
-  const handleAdd = () => {
-    if (!type || !allowed(type)) return;
-    const section = createDefaultSection(type, {
-      id: generateId(type, existingIds),
+const AddSectionDialog = ({ open, anchorEl, onClose, onAdd, existingIds = [], sectionPresets = {}, allowedTypes, insertLabel = 'this template' }) => {
+  const [query, setQuery] = useState('');
+  const gallery = new Map(getSectionPresetGallery(sectionPresets).map((preset) => [preset.type, preset]));
+  const options = [...productChoices, ...sectionOptions.flatMap((option) => {
+    const preset = gallery.get(option.type) || option;
+    return [preset, ...(SECTION_VARIANTS[option.type] || []).filter((variant) => variant !== preset.variant).map((variant) => ({
+      ...preset,
+      key: `${option.type}:${variant}`,
+      label: `${preset.label}: ${variant.replaceAll('-', ' ')}`,
       variant,
-      title,
+    }))];
+  })];
+  const groups = new Map();
+  const search = query.trim().toLowerCase();
+  options.forEach((option) => {
+    if (allowedTypes && !allowedTypes.includes(option.type)) return;
+    if (![option.label, option.title, option.variant, option.description].some((value) => String(value || '').toLowerCase().includes(search))) return;
+    const group = SECTION_PRESET_GOALS.find(({ value }) => value === option.goal)?.label || 'Sections';
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(option);
+  });
+
+  const handleAdd = (option) => {
+    const section = createDefaultSection(option.type, {
+      variant: option.variant,
       sectionPresets,
     });
-    onAdd(productChoice ? {
+    // A reusable preset must not override the ID allocated for this instance.
+    section.id = generateId(option.type, existingIds);
+    setQuery('');
+    onAdd(option.source ? {
       ...section,
-      source: productChoice.source,
-      title: title || productChoice.label,
+      source: option.source,
+      title: option.label,
       subtitle: '',
-      viewAllLink: productChoice.link,
+      viewAllLink: option.link,
       dataSourceSlug: '',
       query: {},
       saleLabel: '',
     } : section);
-    setSelection(''); setVariant(''); setTitle('');
   };
 
-  const handleClose = () => { onClose(); setSelection(''); setVariant(''); setTitle(''); setGoal('all'); };
+  const handleClose = () => { setQuery(''); onClose(); };
+  const content = <Stack spacing={1} sx={{ p: 1 }}>
+    <TextField autoFocus size="small" label="Search sections" value={query} onChange={(event) => setQuery(event.target.value)} />
+    <Typography variant="caption" color="text.secondary" sx={{ px: 0.5 }}>Insert in {insertLabel}</Typography>
+    <Box sx={{ maxHeight: 'min(52vh, 420px)', overflowY: 'auto', overscrollBehavior: 'contain' }}>
+      {groups.size === 0 && <Typography role="status" variant="body2" sx={{ p: 1 }}>No matching sections</Typography>}
+      {[...groups].map(([group, choices]) => <Box component="section" aria-label={group} key={group} sx={{ py: 0.5, borderTop: 1, borderColor: 'divider' }}>
+        <Typography component="h3" variant="caption" fontWeight={700} sx={{ px: 1 }}>{group}</Typography>
+        {choices.map((option) => <Button key={option.key || option.type} fullWidth color="inherit" size="small"
+          title={option.description} onClick={() => handleAdd(option)} startIcon={<DashboardCustomizeOutlinedIcon />}
+          sx={{ justifyContent: 'flex-start', textTransform: 'none', textAlign: 'left' }}>
+          {option.label}
+        </Button>)}
+      </Box>)}
+    </Box>
+  </Stack>;
 
-  return (
-    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
-      <DialogTitle>Add Section</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2.5} sx={{ mt: 1 }}>
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            {SECTION_PRESET_GOALS.map((item) => (
-              <Chip
-                key={item.value}
-                label={item.label}
-                clickable
-                color={goal === item.value ? 'primary' : 'default'}
-                variant={goal === item.value ? 'filled' : 'outlined'}
-                onClick={() => setGoal(item.value)}
-              />
-            ))}
-          </Stack>
+  if (anchorEl) return <Popover open={open} anchorEl={anchorEl} onClose={handleClose}
+    anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+    slotProps={{ paper: { role: 'dialog', 'aria-label': 'Add section', sx: { width: 304 } } }}>
+    {content}
+  </Popover>;
 
-          <Box sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
-            gridAutoRows: 'min-content',
-            alignContent: 'start',
-            gap: 1.5,
-            maxHeight: { xs: 240, sm: 360 },
-            minHeight: 0,
-            overflowY: 'auto',
-            overscrollBehaviorY: 'contain',
-            pr: 0.5,
-            flexShrink: 0,
-          }}>
-            {presetCards.map((preset) => (
-              <Card
-                key={preset.key || preset.type}
-                variant="outlined"
-                sx={{
-                  borderColor: selection === (preset.key || preset.type) ? 'primary.main' : 'divider',
-                  borderWidth: selection === (preset.key || preset.type) ? 2 : 1,
-                  bgcolor: selection === (preset.key || preset.type) ? 'action.selected' : 'background.paper',
-                  '&:hover': { borderColor: 'primary.main', boxShadow: '0 8px 24px rgba(15,23,42,0.08)' },
-                }}
-              >
-                <CardActionArea
-                  aria-pressed={selection === (preset.key || preset.type)}
-                  onClick={() => { setSelection(preset.key || preset.type); setVariant(preset.variant || ''); setTitle(''); }}
-                  sx={{ height: '100%', p: 1.75, textAlign: 'left', alignItems: 'stretch' }}
-                >
-                  <Stack spacing={1}>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
-                      <Typography variant="subtitle2" fontWeight={800}>{preset.label}</Typography>
-                      {preset.installed && <Chip label="Theme" size="small" color="primary" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />}
-                    </Stack>
-                    <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.5 }}>{preset.description}</Typography>
-                    <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
-                      <Chip label={preset.goal} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />
-                      {preset.variant && <Chip label={preset.variant} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />}
-                    </Stack>
-                  </Stack>
-                </CardActionArea>
-              </Card>
-            ))}
-          </Box>
-
-          <FormControl size="small" fullWidth>
-            <InputLabel id={typeLabelId}>Section Type</InputLabel>
-            <Select labelId={typeLabelId} value={type} label="Section Type" onChange={(e) => { setSelection(e.target.value); setVariant(''); }}>
-              {sectionOptions.filter((option) => allowed(option.type)).map((opt) => (
-                <MenuItem key={opt.type} value={opt.type}>
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    <span>{opt.label}</span>
-                    <Chip label={opt.family} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.7rem' }} />
-                  </Stack>
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          {selectedPreset?.description && (
-            <Typography variant="caption" color="text.secondary">
-              Selected preset: {selectedPreset.description}
-            </Typography>
-          )}
-
-          {variants.length > 0 && (
-            <FormControl size="small" fullWidth>
-              <InputLabel id={variantLabelId}>Variant</InputLabel>
-              <Select labelId={variantLabelId} value={variant} label="Variant" onChange={(e) => setVariant(e.target.value)}>
-                <MenuItem value="">Default</MenuItem>
-                {variants.map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
-              </Select>
-            </FormControl>
-          )}
-
-          <TextField label="Title (optional)" value={title} onChange={(e) => setTitle(e.target.value)} size="small" fullWidth />
-
-          {type && (
-            <Typography variant="caption" color="text.secondary">
-              Will be added to {insertLabel}. You can reorder after adding.
-            </Typography>
-          )}
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button color="error" onClick={handleClose}>Cancel</Button>
-        <Button variant="contained" onClick={handleAdd} disabled={!type}>Add Section</Button>
-      </DialogActions>
-    </Dialog>
-  );
+  return <Dialog open={open} onClose={handleClose} aria-label="Add section" maxWidth="xs" fullWidth>
+    <DialogTitle>Add section</DialogTitle>
+    <DialogContent sx={{ p: 1 }}>{content}</DialogContent>
+  </Dialog>;
 };
 
 export default AddSectionDialog;

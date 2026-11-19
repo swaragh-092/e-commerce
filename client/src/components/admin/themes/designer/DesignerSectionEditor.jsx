@@ -39,7 +39,7 @@ const PRODUCT_SOURCES = [
 ];
 
 
-const BLOCK_FIELD_PRESETS = {
+export const BLOCK_FIELD_PRESETS = {
   'hero-carousel': {
     key: 'slides',
     title: 'Slides',
@@ -582,6 +582,7 @@ const DesignerSectionEditor = ({
   onComponentEdit,
   activeBlockKey,
   activeBlockIndex,
+  blockInsertion,
   mappedComponent,
   mappedComponentLabel,
   onBlockFocus,
@@ -696,6 +697,8 @@ const DesignerSectionEditor = ({
 
           {['composed-hero', 'product-info', 'editorial-image-text'].includes(section.type) && (
             <ComposedHeroEditor
+              productInformation={section.type === 'product-info'}
+              insertion={blockInsertion}
               blocks={section.heroBlocks}
               activeId={activeBlockKey === 'heroBlocks' ? activeBlockIndex : null}
               onChange={(blocks) => onChange('heroBlocks', blocks)}

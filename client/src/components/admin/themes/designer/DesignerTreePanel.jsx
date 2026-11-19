@@ -1,4 +1,7 @@
-import { useState } from 'react';
+import { BLOCK_FIELD_PRESETS } from './DesignerSectionEditor';
+import { PRODUCT_BLOCK_PLACEMENTS, getProductBlockPlacement } from '../../../../utils/productBlockPlacement';
+import { HERO_BLOCK_LABELS } from '../../../storefront/sections/ComposedHero';
+import { Fragment, useState } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import {
   Box, Stack, Typography, IconButton, Switch, Button, Chip, Divider,
@@ -11,6 +14,7 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import NavigationIcon from '@mui/icons-material/Navigation';
 import FootprintIcon from '@mui/icons-material/DirectionsWalk';
 import TuneIcon from '@mui/icons-material/Tune';
@@ -66,9 +70,7 @@ const AddSectionButton = ({ children = 'Add section', onClick, variant = 'text',
       fontSize: compact ? '0.68rem' : '0.75rem',
       py: compact ? 0.15 : 0.55,
       px: compact ? 0.75 : undefined,
-      color: variant === 'text' ? 'text.secondary' : undefined,
       textTransform: 'none',
-      '&:hover': { color: variant === 'text' ? 'primary.main' : undefined },
     }}
   >
     {children}
@@ -83,7 +85,13 @@ const InsertSectionControl = ({ label = 'Add section here', onClick }) => (
       alignItems: 'center',
       gap: 0.75,
       px: 0.5,
-      py: 0.15,
+      '@media (hover: hover) and (pointer: fine)': {
+        height: 10,
+        position: 'relative',
+        '& > *': { opacity: 0 },
+        '&:hover > *, &:focus-within > *': { opacity: 1, zIndex: 1 },
+        '& > button': { bgcolor: 'background.paper' },
+      },
     }}
   >
     <Box sx={{ borderTop: '1px dashed', borderColor: 'divider' }} />
@@ -94,7 +102,14 @@ const InsertSectionControl = ({ label = 'Add section here', onClick }) => (
   </Box>
 );
 
-const SectionRow = ({ section, index, total, isSelected, onSelect, onMove, onToggle, onDelete, dragHandleProps }) => (
+const ExpandItemsButton = ({ label, expanded, onToggle }) => (
+  <IconButton size="small" aria-label={`${expanded ? 'Collapse' : 'Expand'} ${label}`} aria-expanded={expanded}
+    onClick={(event) => { event.stopPropagation(); onToggle(); }} sx={{ p: 0.25 }}>
+    {expanded ? <ExpandMoreIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
+  </IconButton>
+);
+
+const SectionRow = ({ section, index, total, isSelected, onSelect, onMove, onToggle, onDelete, dragHandleProps, expandControl }) => (
   <Box
     onClick={() => onSelect(section)}
     sx={{
@@ -119,6 +134,7 @@ const SectionRow = ({ section, index, total, isSelected, onSelect, onMove, onTog
       },
     }}
   >
+    {expandControl}
     {dragHandleProps && <Box {...dragHandleProps} aria-label={`Reorder ${getSectionLabel(section)}`} sx={{ display: 'flex', color: 'text.secondary', cursor: 'grab' }}><DragIndicatorIcon sx={{ fontSize: 18 }} /></Box>}
     <Box component="button" type="button" onClick={(event) => { event.stopPropagation(); onSelect(section); }} aria-label={`Edit ${getSectionLabel(section)}`} sx={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', p: 0, color: 'inherit', cursor: 'pointer' }}>
       <Typography variant="body2" fontWeight={isSelected ? 800 : 600} noWrap sx={{ fontSize: '0.85rem' }}>
@@ -195,12 +211,8 @@ const HeaderBlockRow = ({ icon, label, description, onClick }) => (
   </Box>
 );
 
-const FixedNode = ({ icon, label, description, onClick }) => (
+const FixedNode = ({ icon, label, description, onClick, expandControl }) => (
   <Box
-    onClick={onClick}
-    role="button"
-    tabIndex={0}
-    onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onClick?.(); } }}
     sx={{
       display: 'flex',
       alignItems: 'center',
@@ -216,14 +228,17 @@ const FixedNode = ({ icon, label, description, onClick }) => (
       '&:hover': { borderColor: 'text.primary', bgcolor: 'action.selected' },
     }}
   >
-    <Box sx={{ color: 'text.secondary', display: 'flex', alignItems: 'center' }}>{icon}</Box>
-    <Box sx={{ flex: 1, minWidth: 0 }}>
-      <Typography variant="body2" fontWeight={700} sx={{ fontSize: '0.85rem' }}>{label}</Typography>
-      {description && (
-        <Typography variant="caption" color="text.secondary" noWrap sx={{ fontSize: '0.7rem' }}>{description}</Typography>
-      )}
+    {expandControl}
+    <Box component="button" type="button" onClick={onClick} sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0, p: 0, border: 0, bgcolor: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
+      <Box sx={{ color: 'text.secondary', display: 'flex', alignItems: 'center' }}>{icon}</Box>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography variant="body2" fontWeight={700} sx={{ fontSize: '0.85rem' }}>{label}</Typography>
+        {description && (
+          <Typography variant="caption" color="text.secondary" noWrap sx={{ fontSize: '0.7rem' }}>{description}</Typography>
+        )}
+      </Box>
+      <TuneIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
     </Box>
-    <TuneIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
   </Box>
 );
 
@@ -237,6 +252,10 @@ const DesignerTreePanel = ({
   onSectionClick,
   onThemeSettingsClick,
   onAddSection,
+  onAddProductBlock,
+  onAddSectionItem,
+  inheritedBlocksForSection,
+  onSelectProductBlock,
   onMoveSection,
   onReorderSection,
   onToggleSection,
@@ -248,6 +267,7 @@ const DesignerTreePanel = ({
   onHeaderPartClick,
   onFooterClick,
 }) => {
+  const [expandedSections, setExpandedSections] = useState({});
   const [headerExpanded, setHeaderExpanded] = useState(false);
   const [pageSettingsOpen, setPageSettingsOpen] = useState(true);
 
@@ -259,12 +279,68 @@ const DesignerTreePanel = ({
   const isHomePage = activePage === 'home';
   const templateSectionRows = sections
     .map((section, originalIndex) => ({ section, originalIndex }))
-    .filter(({ section }) => section.placement !== 'footer');
+    .filter(({ section }) => !section.placement || section.placement === 'template');
+  const headerSectionRows = sections.map((section, originalIndex) => ({ section, originalIndex }))
+    .filter(({ section }) => section.placement === 'header');
   const footerSectionRows = sections
     .map((section, originalIndex) => ({ section, originalIndex }))
     .filter(({ section }) => section.placement === 'footer');
   const templateInsertIndex = footerSectionRows.length > 0 ? footerSectionRows[0].originalIndex : sections.length;
   const footerStartIndex = footerSectionRows.length > 0 ? footerSectionRows[0].originalIndex : sections.length;
+  const showSectionPicker = (index, area) => (event) => onAddSection(index, area, event.currentTarget);
+  const isComposedSection = (section) => ['composed-hero', 'editorial-image-text'].includes(section.type);
+  const expandSectionControl = (section) => (isComposedSection(section) || BLOCK_FIELD_PRESETS[section.type] || section.type === 'product-info') && (
+    <ExpandItemsButton label={section.title || getSectionLabel(section)} expanded={Boolean(expandedSections[section.id])}
+      onToggle={() => setExpandedSections((current) => ({ ...current, [section.id]: !current[section.id] }))} />
+  );
+
+  const renderBlockList = (section, blocks, parentId = null, depth = 0) => (
+    <Stack sx={{ pl: 1.5, borderLeft: 1, borderColor: 'divider' }} spacing={0.1}>
+      {blocks.length < 12 && <AddSectionButton compact onClick={(event) => onAddProductBlock(section, { parentId, depth, atStart: true, anchorEl: event.currentTarget })}>
+        Add block
+      </AddSectionButton>}
+      {blocks.map((block) => (
+        <Fragment key={block.id}>
+          <Button size="small" sx={{ justifyContent: 'flex-start', textTransform: 'none', minWidth: 0 }}
+            onClick={() => onSelectProductBlock(section, block.id)}>
+            <Typography variant="inherit" noWrap>
+              {HERO_BLOCK_LABELS[block.type]}{block.text?.trim() ? ` – ${block.text.trim()}` : ''}
+            </Typography>
+          </Button>
+          {block.type === 'group' && depth < 3 && renderBlockList(section, block.children || [], block.id, depth + 1)}
+          {blocks.length < 12 && <InsertSectionControl label="Add block below"
+            onClick={(event) => onAddProductBlock(section, { parentId, depth, afterId: block.id, anchorEl: event.currentTarget })} />}
+        </Fragment>
+      ))}
+    </Stack>
+  );
+  const renderExpandableBlocks = (section) => {
+    if (!expandedSections[section.id]) return null;
+    const composed = isComposedSection(section);
+    const schema = BLOCK_FIELD_PRESETS[section.type];
+    if (!composed && !schema) return null;
+    const items = schema && (section[schema.key] ?? inheritedBlocksForSection?.(section) ?? []);
+
+    return <>
+        {composed && renderBlockList(section, section.heroBlocks || [])}
+        {schema && <Stack sx={{ pl: 1.5, borderLeft: 1, borderColor: 'divider' }}>
+          {items.length < 12 && <AddSectionButton compact onClick={() => onAddSectionItem(section, schema, items, 0)}>
+            {schema.addLabel}
+          </AddSectionButton>}
+          {items.map((item, index) => (
+            <Fragment key={item.id || index}>
+              <Button size="small" sx={{ justifyContent: 'flex-start', textTransform: 'none' }}
+                onClick={() => onSelectProductBlock(section, index, schema.key)}>
+                {schema.label(item, index)}
+              </Button>
+              {items.length < 12 && <AddSectionButton compact onClick={() => onAddSectionItem(section, schema, items, index + 1)}>
+                {schema.addLabel} below
+              </AddSectionButton>}
+            </Fragment>
+          ))}
+        </Stack>}
+    </>;
+  };
 
   return (
     <DragDropContext onDragEnd={({ source, destination }) => {
@@ -347,39 +423,52 @@ const DesignerTreePanel = ({
 
         {/* Fixed Header node */}
         <Box sx={{ px: 1, mb: 0.5 }}>
+          <Typography component="h3" variant="caption" color="text.secondary">Header</Typography>
           <FixedNode
             icon={<NavigationIcon sx={{ fontSize: 16 }} />}
             label="Header"
             description="Layout, logo, menu, actions"
             onClick={() => onHeaderClick()}
+            expandControl={<ExpandItemsButton label="Header elements" expanded={headerExpanded} onToggle={() => setHeaderExpanded((current) => !current)} />}
           />
-          <Button size="small" onClick={() => setHeaderExpanded(!headerExpanded)} aria-expanded={headerExpanded} endIcon={<ExpandMoreIcon sx={{ transform: headerExpanded ? 'rotate(180deg)' : 'none' }} />} sx={{ mt: .5, textTransform: 'none' }}>Header elements</Button>
           {headerExpanded && <Stack spacing={0.1} sx={{ mt: 0.25 }}>
             <HeaderBlockRow icon={<CampaignIcon sx={{ fontSize: 15 }} />} label="Announcement bar" description="Message, colors, link" onClick={() => onHeaderPartClick?.('announcementBar')} />
             <HeaderBlockRow icon={<StorefrontIcon sx={{ fontSize: 15 }} />} label="Logo" description="Store name and logo image" onClick={() => onHeaderPartClick?.('headerLogo')} />
             <HeaderBlockRow icon={<MenuIcon sx={{ fontSize: 15 }} />} label="Menu" description="Primary links and categories" onClick={() => onHeaderPartClick?.('headerMenu')} />
             <HeaderBlockRow icon={<ShoppingBagIcon sx={{ fontSize: 15 }} />} label="Actions" description="Search, account, cart" onClick={() => onHeaderPartClick?.('headerActions')} />
           </Stack>}
+          {isHomePage && <>
+            {headerSectionRows.map(({ section, originalIndex }, index) => (
+              <Box key={section.id}>
+                <InsertSectionControl label="Add section before" onClick={showSectionPicker(originalIndex, 'header')} />
+                <SectionRow section={section} index={index} total={headerSectionRows.length}
+                  expandControl={expandSectionControl(section)}
+                  isSelected={selectedSectionId === section.id} onSelect={onSectionClick}
+                  onMove={(_, direction) => onMoveSection(originalIndex, direction, 'header')}
+                  onToggle={() => onToggleSection(originalIndex)} onDelete={() => onDeleteSection(originalIndex)} />
+                {renderExpandableBlocks(section)}
+              </Box>
+            ))}
+            <AddSectionButton onClick={showSectionPicker(sections.length, 'header')}>Add section to header</AddSectionButton>
+          </>}
         </Box>
 
         {isHomePage ? <>
         <Divider sx={{ mx: 1, my: 0.75 }}>
-          <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.68rem', px: 1 }}>
-            {isHomePage ? 'Template Sections' : 'Page Sections'}
+          <Typography component="h3" variant="caption" color="text.secondary" sx={{ px: 1 }}>
+            Template
           </Typography>
         </Divider>
 
         {/* Section rows */}
         <Stack spacing={0.35} sx={{ px: 1 }}>
-          {templateSectionRows.length > 0 && <AddSectionButton onClick={() => onAddSection(templateInsertIndex, 'template')} variant="outlined">Add section</AddSectionButton>}
-
           {templateSectionRows.length === 0 ? (
             <Box sx={{ p: 2, textAlign: 'center', bgcolor: 'action.hover', borderRadius: 1.5, border: '1px dashed', borderColor: 'divider' }}>
               <Typography variant="caption" color="text.secondary">No template sections yet</Typography>
               <Button
                 size="small"
                 startIcon={<AddIcon />}
-                onClick={() => onAddSection(templateInsertIndex, 'template')}
+                onClick={showSectionPicker(templateInsertIndex, 'template')}
                 sx={{ display: 'block', mx: 'auto', mt: 1, textTransform: 'none' }}
               >
                 Add first section
@@ -389,7 +478,10 @@ const DesignerTreePanel = ({
             <Droppable droppableId="template">{(provided) => <Box ref={provided.innerRef} {...provided.droppableProps}>
             {templateSectionRows.map(({ section, originalIndex }, index) => (
               <Draggable key={section.id} draggableId={String(section.id)} index={index}>{(drag) => <Box ref={drag.innerRef} {...drag.draggableProps}>
+                <InsertSectionControl label={`Add section before ${section.title || getSectionLabel(section)}`}
+                  onClick={showSectionPicker(originalIndex, 'template')} />
                 <SectionRow
+                  expandControl={expandSectionControl(section)}
                   dragHandleProps={drag.dragHandleProps}
                   section={section}
                   index={index}
@@ -400,13 +492,15 @@ const DesignerTreePanel = ({
                   onToggle={() => onToggleSection(originalIndex)}
                   onDelete={() => onDeleteSection(originalIndex)}
                 />
+                {renderExpandableBlocks(section)}
               </Box>}</Draggable>
             ))}{provided.placeholder}</Box>}</Droppable>
           )}
+          {templateSectionRows.length > 0 && <AddSectionButton onClick={showSectionPicker(templateInsertIndex, 'template')} />}
         </Stack>
         </> : (
           <Stack spacing={0.5} sx={{ px: 1, py: 1 }}>
-            <Typography variant="caption" color="text.secondary">Page layout</Typography>
+            <Typography component="h3" variant="caption" color="text.secondary">Template</Typography>
             {['above', 'below'].map((position) => {
               const rows = pageSections
                 .map((section, originalIndex) => ({ section, originalIndex }))
@@ -415,11 +509,42 @@ const DesignerTreePanel = ({
 
               return <Stack key={position} spacing={0.35}>
                 {position === 'below' && (mainSection ? (
-                  <FixedNode icon={<StorefrontIcon fontSize="small" />} label="Product Information"
-                    description="Edit blocks" onClick={() => onSectionClick(mainSection)} />
+                  <>
+                    <FixedNode icon={<StorefrontIcon fontSize="small" />} label="Product Information"
+                      expandControl={expandSectionControl(mainSection)}
+                      description="Edit blocks" onClick={() => onSectionClick(mainSection)} />
+                    {expandedSections[mainSection.id] && <Stack sx={{ pl: 2, borderLeft: 1, borderColor: 'divider' }} spacing={0.25}>
+                      {Object.entries(PRODUCT_BLOCK_PLACEMENTS).map(([placement, label]) => {
+                        const blocks = (mainSection.heroBlocks || []).filter((block) => getProductBlockPlacement(block) === placement);
+                        return <Stack key={placement} spacing={0.1}>
+                          <Typography variant="caption" color="text.secondary">{label}</Typography>
+                          {(mainSection.heroBlocks?.length || 0) < 12 && (
+                            <InsertSectionControl label={`Add block ${label.toLowerCase()}`}
+                              onClick={(event) => onAddProductBlock(mainSection, { placement, atStart: true, anchorEl: event.currentTarget })} />
+                          )}
+                          {blocks.map((block) => <Fragment key={block.id}>
+                            <Button size="small" sx={{ justifyContent: 'flex-start', textTransform: 'none' }}
+                              onClick={() => onSelectProductBlock(mainSection, block.id)}>
+                              {block.text || HERO_BLOCK_LABELS[block.type]}
+                            </Button>
+                            {mainSection.heroBlocks.length < 12 && (
+                              <InsertSectionControl label="Add block below"
+                                onClick={(event) => onAddProductBlock(mainSection, { placement, afterId: block.id, anchorEl: event.currentTarget })} />
+                            )}
+                          </Fragment>)}
+                        </Stack>;
+                      })}
+                    </Stack>}
+                  </>
                 ) : <Typography variant="body2" fontWeight={700} sx={{ px: 1, py: 1 }}>Page content</Typography>)}
                 {rows.map(({ section, originalIndex }, index) => (
+                  <Fragment key={section.id}>
+                    {activePage !== 'checkout' && pageSections.length < 6 && (
+                      <InsertSectionControl label={`Add section before ${section.title || getSectionLabel(section)}`}
+                        onClick={showSectionPicker(originalIndex, position)} />
+                    )}
                   <SectionRow key={section.id} section={section} index={index} total={rows.length}
+                    expandControl={expandSectionControl(section)}
                     isSelected={selectedSectionId === section.id} onSelect={onSectionClick}
                     onMove={(_, direction) => {
                       const targetIndex = rows[index + direction].originalIndex;
@@ -431,9 +556,11 @@ const DesignerTreePanel = ({
                       item.id === section.id ? { ...item, enabled: item.enabled === false } : item))}
                     onDelete={() => onChangePageSections(pageSections.filter((item) => item.id !== section.id))}
                   />
+                    {renderExpandableBlocks(section)}
+                  </Fragment>
                 ))}
                 {activePage !== 'checkout' && pageSections.length < 6 && (
-                  <AddSectionButton onClick={() => onAddSection(pageSections.length, position)}>
+                  <AddSectionButton onClick={showSectionPicker(pageSections.length, position)}>
                     Add section {position} page content
                   </AddSectionButton>
                 )}
@@ -446,6 +573,7 @@ const DesignerTreePanel = ({
 
         {/* Fixed Footer node */}
         <Box sx={{ px: 1, mb: 0.5 }}>
+          <Typography component="h3" variant="caption" color="text.secondary">Footer</Typography>
           <FixedNode
             icon={<FootprintIcon sx={{ fontSize: 16 }} />}
             label="Footer"
@@ -457,12 +585,15 @@ const DesignerTreePanel = ({
         {isHomePage && <Stack spacing={0.35} sx={{ px: 1, mt: 0.75, pb: 1 }}>
           <InsertSectionControl
             label={footerSectionRows.length ? 'Add footer section here' : 'Add section to footer'}
-            onClick={() => onAddSection(footerStartIndex, 'footer')}
+            onClick={showSectionPicker(footerStartIndex, 'footer')}
           />
           <Droppable droppableId="footer">{(provided) => <Box ref={provided.innerRef} {...provided.droppableProps}>
           {footerSectionRows.map(({ section, originalIndex }, index) => (
             <Draggable key={section.id} draggableId={String(section.id)} index={index}>{(drag) => <Box ref={drag.innerRef} {...drag.draggableProps}>
+              {index > 0 && <InsertSectionControl label={`Add section before ${section.title || getSectionLabel(section)}`}
+                onClick={showSectionPicker(originalIndex, 'footer')} />}
               <SectionRow
+                expandControl={expandSectionControl(section)}
                 dragHandleProps={drag.dragHandleProps}
                 section={section}
                 index={index}
@@ -473,8 +604,10 @@ const DesignerTreePanel = ({
                 onToggle={() => onToggleSection(originalIndex)}
                 onDelete={() => onDeleteSection(originalIndex)}
               />
+              {renderExpandableBlocks(section)}
             </Box>}</Draggable>
           ))}{provided.placeholder}</Box>}</Droppable>
+          {footerSectionRows.length > 0 && <AddSectionButton onClick={showSectionPicker(sections.length, 'footer')}>Add section to footer</AddSectionButton>}
         </Stack>}
       </Box>
 

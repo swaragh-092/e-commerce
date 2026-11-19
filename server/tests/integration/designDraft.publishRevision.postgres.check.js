@@ -91,9 +91,17 @@ async function main() {
         id: randomUUID(),
         name: 'Seeds',
         [assignmentKey]: ['basil-seeds'],
-        settings: { productRows: [{
-          id: 'care', type: 'faq', items: [{ title: 'How deep should I sow?', text: 'Sow just below the surface.' }],
-        }] },
+        settings: {
+          ...(group === 'productPage' && { sections: [{
+            id: 'info', type: 'product-info', heroBlocks: [{
+              id: 'care-attribute', type: 'product-attribute', attributeName: 'Care instructions', text: 'Care instructions',
+              productPlacement: 'before-options',
+            }],
+          }] }),
+          productRows: [{
+            id: 'care', type: 'faq', items: [{ title: 'How deep should I sow?', text: 'Sow just below the surface.' }],
+          }],
+        },
       }];
       const defaultSetting = { ...sectionSetting, group };
       if (group === 'categoryPage') await db.Setting.create({ ...defaultSetting, value: productRows });

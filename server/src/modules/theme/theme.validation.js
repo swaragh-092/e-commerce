@@ -194,10 +194,13 @@ const heroSlideSchema = Joi.object({
 const padding = Joi.number().integer().min(0).max(240);
 const margin = Joi.number().integer().min(-240).max(240);
 
+const productBlockPlacementSchema = Joi.string().valid('before-options', 'before-specifications', 'after-details');
+
 const heroBlockSchema = (depth = 0) => Joi.object({
   id: Joi.string().max(50).required(),
   type: Joi.string().valid('group', 'heading', 'text', 'button', 'media', 'collection', 'brand', 'tag', 'product', 'product-attribute', 'product-rating', 'availability', 'fulfillment', 'enquiry', 'newsletter', 'blog', 'page', 'gallery').required(),
   text: Joi.string().max(1500).allow(''),
+  productPlacement: depth === 0 ? productBlockPlacementSchema : Joi.forbidden(),
   href: linkUrl,
   url: sectionImageUrl,
   mobileUrl: sectionImageUrl,
@@ -646,6 +649,7 @@ const idParamSchema = Joi.object({
 });
 
 module.exports = {
+  productBlockPlacementSchema,
   packageSchema,
   applyRequestSchema,
   previewRequestSchema,

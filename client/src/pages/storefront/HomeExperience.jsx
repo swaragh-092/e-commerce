@@ -312,6 +312,8 @@ const HomeExperience = () => {
 
         return (
           <Box key={section.id || index} data-store-section={section.id} sx={{ display }}>
+            {designerPreview && <button type="button" hidden data-store-add-section="template"
+              data-store-anchor={section.id}>Add section here</button>}
             <SectionRenderer
               section={renderedSection}
               mode={previewSection ? 'preview' : 'live'}
@@ -321,6 +323,7 @@ const HomeExperience = () => {
           </Box>
         );
       })}
+      {designerPreview && <button type="button" hidden data-store-add-section="template">Add section to template</button>}
     </Box>
   );
 };
