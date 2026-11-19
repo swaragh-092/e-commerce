@@ -311,11 +311,10 @@ const AppRoutes = () => (
           <Route element={<ProtectedRoute role="super_admin" />}>
             <Route path="features" element={<FeaturesPage />} />
           </Route>
-          <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_MANAGE} />}>
-            <Route path="gift-cards" element={<GiftCardsPage />} />
-          </Route>
-          {/* Payment Gateways, Shipping, Sale Labels — ecommerce only */}
           <Route element={<ModeRoute requiredMode="ecommerce" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_MANAGE} />}>
+              <Route path="gift-cards" element={<GiftCardsPage />} />
+            </Route>
             <Route element={<FeatureRoute feature="payments" surface="admin" redirectTo="/admin" />}>
               <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_READ} />}>
                 <Route path="payment-gateways" element={<PaymentGatewaysPage />} />
