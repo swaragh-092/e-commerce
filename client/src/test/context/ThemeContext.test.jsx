@@ -17,6 +17,7 @@ const settings = {
 const { service } = vi.hoisted(() => ({
   service: {
     getAllSettings: vi.fn(),
+    getPublicSettings: vi.fn(),
     getFeatures: vi.fn(),
   },
 }));
@@ -59,6 +60,7 @@ describe('SettingsProvider admin/storefront theme separation', () => {
     document.getElementById('admin-custom-css')?.remove();
     document.getElementById('theme-critical-css')?.remove();
     service.getAllSettings.mockResolvedValue(settings);
+    service.getPublicSettings.mockResolvedValue(settings);
     service.getFeatures.mockResolvedValue({ mode: 'ecommerce', features: {} });
   });
 
@@ -157,7 +159,7 @@ describe('SettingsProvider admin/storefront theme separation', () => {
   });
 
   it('keeps the storefront in light mode even if saved theme settings request dark mode', async () => {
-    service.getAllSettings.mockResolvedValue({ ...settings, theme: { ...settings.theme, mode: 'dark' } });
+    service.getPublicSettings.mockResolvedValue({ ...settings, theme: { ...settings.theme, mode: 'dark' } });
     renderAt('/');
     const probe = await screen.findByTestId('probe');
 

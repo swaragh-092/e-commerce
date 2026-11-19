@@ -2244,8 +2244,8 @@ const updateContactEmail = async (orderId, email) => sequelize.transaction(async
     const order = await Order.findByPk(orderId, { transaction, lock: Transaction.LOCK.UPDATE });
     if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
     if (order.userId) throw new AppError('VALIDATION_ERROR', 400, 'Only guest orders use an order contact email.');
-    const contactEmail = email.trim();
-    await order.update({ shippingAddressSnapshot: { ...(order.shippingAddressSnapshot || {}), email: contactEmail } }, { transaction });
+    const contactEmail = email.trim().toLowerCase();
+    await order.update({ shippingAddressSnapshot: { ...(order.shippingAddressSnapshot || {}), email: contactEmail }, guestEmail: contactEmail }, { transaction });
     const shipments = await Shipment.findAll({ where: { orderId }, attributes: ['id'], transaction });
     if (shipments.length > 0) {
         const operations = await ShippingOperation.findAll({
@@ -2290,6 +2290,7 @@ const updateOrderDetails = async (orderId, payload, actorId) => sequelize.transa
         if (incoming.email !== undefined && order.userId) {
             throw new AppError('VALIDATION_ERROR', 400, 'Only guest orders use an order contact email.');
         }
+        if (incoming.email !== undefined) incoming.email = incoming.email.trim().toLowerCase();
         for (const field of ['state', 'country']) {
             if (incoming[field] !== undefined && normalizeAddressValue(incoming[field]) !== normalizeAddressValue(current[field])) {
                 throw new AppError('VALIDATION_ERROR', 400, 'State and country cannot be changed because tax was calculated for the original destination. Cancel and re-place the order instead.');
@@ -2303,6 +2304,7 @@ const updateOrderDetails = async (orderId, payload, actorId) => sequelize.transa
                 throw new AppError('VALIDATION_ERROR', 400, 'The shipping address cannot be changed after a shipment has been created.');
             }
             updates.shippingAddressSnapshot = { ...current, ...incoming };
+            if (incoming.email !== undefined) updates.guestEmail = incoming.email;
             changedFields.push(...addressChanged.map((field) => `shipping ${field}`));
         }
     }

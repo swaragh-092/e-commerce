@@ -44,7 +44,7 @@ describe('Guest order ownership and Shiprocket contact', () => {
 
         await OrderService.updateContactEmail('order-1', ' buyer@example.com ');
 
-        expect(order.update).toHaveBeenCalledWith({ shippingAddressSnapshot: { city: 'Mumbai', email: 'buyer@example.com' } }, expect.any(Object));
+        expect(order.update).toHaveBeenCalledWith({ shippingAddressSnapshot: { city: 'Mumbai', email: 'buyer@example.com' }, guestEmail: 'buyer@example.com' }, expect.any(Object));
         expect(operation.update).toHaveBeenCalledWith({ requestPayload: {
             order: { total: 1118, subtotal: 1000, user: { email: 'buyer@example.com' } },
             shipment: { providerRequestId: 'GUEST-1-PARCEL-1' },
@@ -123,5 +123,56 @@ describe('Admin order details edit', () => {
 
         find.mockResolvedValueOnce({ status: 'processing', shippingAddressSnapshot: { state: 'MH' }, update: vi.fn() });
         await expect(OrderService.updateOrderDetails('o', { shippingAddress: { state: 'KA' } }, 'a')).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    });
+});
+
+
+describe('Admin order edit edge cases', () => {
+    const setup = (overrides = {}) => {
+        const order = { id: 'order-1', status: 'processing', userId: null, notes: null,
+            guestEmail: 'old@example.com', shippingAddressSnapshot: { city: 'Mumbai', email: 'old@example.com' },
+            update: vi.fn(), ...overrides };
+        vi.spyOn(sequelize, 'transaction').mockImplementation(async callback => callback({}));
+        vi.spyOn(Order, 'findByPk').mockResolvedValue(order);
+        vi.spyOn(Shipment, 'findAll').mockResolvedValue([]);
+        const history = vi.spyOn(require('../../src/modules').OrderHistory, 'create').mockResolvedValue({});
+        return { order, history };
+    };
+
+    it('keeps the guest claim email in sync with the corrected contact address', async () => {
+        const { order } = setup();
+        await OrderService.updateOrderDetails('order-1', { shippingAddress: { email: ' Corrected@Example.com ' } }, 'admin-1');
+        expect(order.update).toHaveBeenCalledWith({
+            shippingAddressSnapshot: { city: 'Mumbai', email: 'corrected@example.com' },
+            guestEmail: 'corrected@example.com',
+        }, expect.any(Object));
+    });
+
+    it('rejects shipping address edits on digital orders', async () => {
+        const { order } = setup({ shippingAddressSnapshot: { digital: true } });
+        await expect(OrderService.updateOrderDetails('order-1', { shippingAddress: { city: 'Pune' } }, 'admin-1'))
+            .rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+        expect(order.update).not.toHaveBeenCalled();
+    });
+
+    it('allows notes-only changes when a shipment exists', async () => {
+        const { order } = setup();
+        Shipment.findAll.mockResolvedValue([{ status: 'created' }]);
+        await OrderService.updateOrderDetails('order-1', { notes: '  Gate 2  ' }, 'admin-1');
+        expect(order.update).toHaveBeenCalledWith({ notes: 'Gate 2' }, expect.any(Object));
+    });
+
+    it('does not write or audit unchanged values', async () => {
+        const { order, history } = setup();
+        await OrderService.updateOrderDetails('order-1', { shippingAddress: { city: 'Mumbai' }, notes: '' }, 'admin-1');
+        expect(order.update).not.toHaveBeenCalled();
+        expect(history).not.toHaveBeenCalled();
+    });
+
+    it('rejects changes to the tax destination country', async () => {
+        const { order } = setup({ shippingAddressSnapshot: { country: 'India' } });
+        await expect(OrderService.updateOrderDetails('order-1', { shippingAddress: { country: 'UK' } }, 'admin-1'))
+            .rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+        expect(order.update).not.toHaveBeenCalled();
     });
 });

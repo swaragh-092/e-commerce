@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [1.6.0.0] - 2026-11-19
+
+### Added
+- Let authorized administrators edit order shipping details and notes before dispatch, with shipment and tax-destination safeguards and an order-history event.
+
+### Fixed
+- Load the configured currency and branding on first admin login without requiring a page refresh.
+- Keep corrected guest contact emails synchronized with guest-order claiming.
+- Restore the order-edit client API helper and update stale dashboard and public-tag test expectations.
+
 ## [1.5.2.1] - 2026-11-16
 
 ### Changed

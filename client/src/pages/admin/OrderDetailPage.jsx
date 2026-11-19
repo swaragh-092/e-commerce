@@ -1282,9 +1282,7 @@ const OrderDetailPage = () => {
     : 0;
   const capturedPaymentAmount = order?.paymentMethod === 'cod'
     ? (codCollectedAmount || legacyCodCapturedAmount || (payment?.status === 'paid_cod' ? Number(payment?.amount || order?.total || 0) : 0))
-    : order?.giftCardAmountPaise && !payment?.metadata?.lateSettlement
-      ? Number(payment?.amount || 0) + order.giftCardAmountPaise / 100
-      : Number(payment?.amount || order?.total || 0);
+    : Number(payment?.amount || order?.total || 0);
   const refundableAmount = Math.max(capturedPaymentAmount - refundedAmount, 0);
 
   const handleStatusUpdate = async () => {
