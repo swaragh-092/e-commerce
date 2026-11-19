@@ -7,14 +7,19 @@ const { resetForReenrollment } = require('../../src/scripts/enrollAdminMfa');
 afterEach(() => vi.restoreAllMocks());
 
 describe('operator MFA recovery', () => {
-  it('resets the factor, sessions, and remembered devices with an audit record in one transaction', async () => {
+  it.each(['admin', 'customer'])('recovers a %s-base administrator with an audit record in one transaction', async role => {
     const transaction = { LOCK: { UPDATE: 'UPDATE' } };
     const locked = {
-      id: 'admin-id', email: 'admin@example.test', role: 'admin', status: 'active',
+      id: 'admin-id', email: 'admin@example.test', role, status: 'active',
       twoFactorEnabled: true, update: vi.fn().mockResolvedValue(undefined),
     };
     vi.spyOn(db.sequelize, 'transaction').mockImplementation(callback => callback(transaction));
-    vi.spyOn(db.User, 'findByPk').mockResolvedValue(locked);
+    vi.spyOn(db.User, 'findByPk').mockImplementation(async (_id, { include }) => ({
+      ...locked,
+      ...(role === 'customer' ? { roles: [{ slug: 'ops', baseRole: 'customer',
+        permissions: include[0]?.include?.some(entry => entry.as === 'permissions') ? [{ key: 'products.read' }] : [],
+      }] } : {}),
+    }));
     vi.spyOn(db.User, 'findAll').mockResolvedValue([{ id: locked.id }]);
     vi.spyOn(db.RefreshToken, 'update').mockResolvedValue([2]);
     vi.spyOn(db.RememberedDevice, 'update').mockResolvedValue([3]);

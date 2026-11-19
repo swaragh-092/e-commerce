@@ -5,15 +5,17 @@
 const readline = require('node:readline/promises');
 const { stdin, stdout } = require('node:process');
 const os = require('node:os');
-const { sequelize, User, AuditLog } = require('../modules');
+const { sequelize, User, Role, Permission, AuditLog } = require('../modules');
 const TwoFactorService = require('../modules/auth/twoFactor.service');
 const { classifyUser } = require('../modules/auth/mfaPolicy');
 const { revokeUserSessions } = require('../modules/auth/sessionRevocation');
 const rememberedDevices = require('../modules/auth/rememberedDevice');
 
+const authorizationInclude = [{ model: Role, as: 'roles', include: [{ model: Permission, as: 'permissions' }] }];
+
 const resetForReenrollment = async (userId, email, operator) => sequelize.transaction(async transaction => {
   const locked = await User.findByPk(userId, {
-    include: ['roles'], transaction, lock: { level: transaction.LOCK.UPDATE, of: User },
+    include: authorizationInclude, transaction, lock: { level: transaction.LOCK.UPDATE, of: User },
   });
   if (!locked || locked.status !== 'active' || !classifyUser(locked).administrative
       || !locked.twoFactorEnabled || String(locked.email).trim().toLowerCase() !== email) {
@@ -41,7 +43,7 @@ const main = async () => {
   const prompt = readline.createInterface({ input: stdin, output: stdout });
   try {
     const email = (await prompt.question('Administrator email: ')).trim().toLowerCase();
-    const user = await User.findOne({ where: { email }, include: ['roles'] });
+    const user = await User.findOne({ where: { email }, include: authorizationInclude });
     if (!user || user.status !== 'active' || !classifyUser(user).administrative) {
       throw new Error('An active administrator account is required');
     }
