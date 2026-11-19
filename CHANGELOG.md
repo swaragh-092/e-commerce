@@ -8,6 +8,7 @@ All notable changes to this project are documented here.
 - Let authorized administrators edit order shipping details and notes before dispatch, with shipment and tax-destination safeguards and an order-history event.
 
 ### Fixed
+- Prevent admin address edits from changing the shipping destination while retaining an outdated shipping quote and courier selection.
 - Load the configured currency and branding on first admin login without requiring a page refresh.
 - Keep corrected guest contact emails synchronized with guest-order claiming.
 - Restore the order-edit client API helper and update stale dashboard and public-tag test expectations.

@@ -108,7 +108,7 @@ This is a **complete, production-ready e-commerce platform** that can operate in
 |---------|-------------|
 | **Order DataGrid** | Sortable, filterable order table with status summary cards |
 | **Status Updates** | Move orders through workflow: `pending_payment` → `confirmed` → `processing` → `shipped` → `delivered` |
-| **Edit Order** | Open **Edit Order** on an eligible order to correct shipping details and notes before dispatch. Address edits stop once a non-cancelled shipment exists; state/country remain locked, and changes appear in order history. |
+| **Edit Order** | Open **Edit Order** on an eligible order to correct shipping details and notes before dispatch. Address edits stop once a non-cancelled shipment exists; city/postal code/state/country remain locked, and changes appear in order history. |
 | **Fulfillment Creation** | Create shipments with shipping provider selection |
 | **Refund Management** | Initiate and track refunds from admin interface |
 | **COD Confirmation** | Confirm Cash on Delivery orders |

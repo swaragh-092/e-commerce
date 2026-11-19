@@ -2291,9 +2291,9 @@ const updateOrderDetails = async (orderId, payload, actorId) => sequelize.transa
             throw new AppError('VALIDATION_ERROR', 400, 'Only guest orders use an order contact email.');
         }
         if (incoming.email !== undefined) incoming.email = incoming.email.trim().toLowerCase();
-        for (const field of ['state', 'country']) {
+        for (const field of ['city', 'postalCode', 'state', 'country']) {
             if (incoming[field] !== undefined && normalizeAddressValue(incoming[field]) !== normalizeAddressValue(current[field])) {
-                throw new AppError('VALIDATION_ERROR', 400, 'State and country cannot be changed because tax was calculated for the original destination. Cancel and re-place the order instead.');
+                throw new AppError('VALIDATION_ERROR', 400, 'City, postal code, state and country cannot be changed because shipping eligibility and tax were calculated for the original destination. Cancel and re-place the order instead.');
             }
             delete incoming[field];
         }

@@ -1151,14 +1151,14 @@ const OrderDetailPage = () => {
     const payload = {};
     if (canEditAddress) {
       const shippingAddress = {};
-      ['fullName', 'phone', 'addressLine1', 'addressLine2', 'city', 'postalCode'].forEach((field) => {
+      ['fullName', 'phone', 'addressLine1', 'addressLine2'].forEach((field) => {
         const value = (editForm[field] || '').trim();
         if (value !== (snapshot[field] || '')) shippingAddress[field] = value;
       });
       const email = (editForm.email || '').trim();
       if (!order.userId && email !== (snapshot.email || '')) shippingAddress.email = email;
-      if (['fullName', 'addressLine1', 'city', 'postalCode'].some((field) => shippingAddress[field] === '')) {
-        notify('Name, address line 1, city and postal code are required.', 'error');
+      if (['fullName', 'addressLine1'].some((field) => shippingAddress[field] === '')) {
+        notify('Name and address line 1 are required.', 'error');
         return;
       }
       if (shippingAddress.email !== undefined && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(shippingAddress.email)) {
@@ -2355,11 +2355,11 @@ const OrderDetailPage = () => {
                 <TextField size="small" label="Address line 1" value={editForm.addressLine1 || ''} onChange={(e) => setEditForm((f) => ({ ...f, addressLine1: e.target.value }))} inputProps={{ maxLength: 255 }} fullWidth />
                 <TextField size="small" label="Address line 2" value={editForm.addressLine2 || ''} onChange={(e) => setEditForm((f) => ({ ...f, addressLine2: e.target.value }))} inputProps={{ maxLength: 255 }} fullWidth />
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                  <TextField size="small" label="City" value={editForm.city || ''} onChange={(e) => setEditForm((f) => ({ ...f, city: e.target.value }))} inputProps={{ maxLength: 100 }} fullWidth />
-                  <TextField size="small" label="Postal code" value={editForm.postalCode || ''} onChange={(e) => setEditForm((f) => ({ ...f, postalCode: e.target.value }))} inputProps={{ maxLength: 20 }} fullWidth />
+                  <TextField size="small" label="City" value={editForm.city || ''} disabled inputProps={{ maxLength: 100 }} fullWidth />
+                  <TextField size="small" label="Postal code" value={editForm.postalCode || ''} disabled inputProps={{ maxLength: 20 }} fullWidth />
                 </Stack>
                 <Typography variant="caption" color="text.secondary">
-                  State and country are locked because tax was calculated for the original destination.
+                  City, postal code, state and country are locked to preserve shipping eligibility and tax. To change the destination, cancel and re-place the order.
                 </Typography>
               </>
             ) : (

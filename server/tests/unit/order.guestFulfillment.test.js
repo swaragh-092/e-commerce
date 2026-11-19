@@ -105,9 +105,9 @@ describe('Admin order details edit', () => {
         vi.spyOn(Shipment, 'findAll').mockResolvedValue([]);
         const history = vi.spyOn(require('../../src/modules').OrderHistory, 'create').mockResolvedValue({});
 
-        await OrderService.updateOrderDetails('order-1', { shippingAddress: { city: 'Pune' }, notes: 'Leave at gate' }, 'admin-1');
+        await OrderService.updateOrderDetails('order-1', { shippingAddress: { fullName: 'B' }, notes: 'Leave at gate' }, 'admin-1');
 
-        expect(order.update).toHaveBeenCalledWith({ shippingAddressSnapshot: { fullName: 'A', city: 'Pune', state: 'MH', country: 'India' }, notes: 'Leave at gate' }, expect.any(Object));
+        expect(order.update).toHaveBeenCalledWith({ shippingAddressSnapshot: { fullName: 'B', city: 'Mumbai', state: 'MH', country: 'India' }, notes: 'Leave at gate' }, expect.any(Object));
         expect(history).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'order_edited', actorId: 'admin-1' }), expect.any(Object));
     });
 
@@ -117,9 +117,9 @@ describe('Admin order details edit', () => {
         find.mockResolvedValueOnce({ status: 'closed', update: vi.fn() });
         await expect(OrderService.updateOrderDetails('o', { notes: 'x' }, 'a')).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
 
-        find.mockResolvedValueOnce({ status: 'processing', shippingAddressSnapshot: { city: 'A' }, update: vi.fn() });
+        find.mockResolvedValueOnce({ status: 'processing', shippingAddressSnapshot: { fullName: 'A' }, update: vi.fn() });
         vi.spyOn(Shipment, 'findAll').mockResolvedValue([{ id: 's', status: 'created' }]);
-        await expect(OrderService.updateOrderDetails('o', { shippingAddress: { city: 'B' } }, 'a')).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+        await expect(OrderService.updateOrderDetails('o', { shippingAddress: { fullName: 'B' } }, 'a')).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
 
         find.mockResolvedValueOnce({ status: 'processing', shippingAddressSnapshot: { state: 'MH' }, update: vi.fn() });
         await expect(OrderService.updateOrderDetails('o', { shippingAddress: { state: 'KA' } }, 'a')).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
@@ -174,5 +174,19 @@ describe('Admin order edit edge cases', () => {
         await expect(OrderService.updateOrderDetails('order-1', { shippingAddress: { country: 'UK' } }, 'admin-1'))
             .rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
         expect(order.update).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['city', 'Mumbai', 'Pune'],
+        ['postalCode', '400001', '411001'],
+    ])('rejects changing %s without altering the saved shipping decision', async (field, original, destination) => {
+        const shippingSnapshot = { serviceable: true, codAvailable: true, courierCompanyId: 42 };
+        const { order, history } = setup({ shippingAddressSnapshot: { [field]: original }, shippingSnapshot });
+        await expect(OrderService.updateOrderDetails('order-1', {
+            shippingAddress: { [field]: destination }, notes: 'New destination',
+        }, 'admin-1')).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+        expect(order.update).not.toHaveBeenCalled();
+        expect(history).not.toHaveBeenCalled();
+        expect(order.shippingSnapshot).toBe(shippingSnapshot);
     });
 });
