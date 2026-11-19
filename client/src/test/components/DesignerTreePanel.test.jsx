@@ -49,4 +49,17 @@ describe('store designer section navigation', () => {
     expect(screen.getByText('Summer Sale 2026')).toBeInTheDocument();
     expect(screen.getByText('Hero carousel')).toBeInTheDocument();
   });
+
+  it('can put a legacy supplemental block directly after a built-in product block', () => {
+    const info = { id: 'info', type: 'product-info', heroBlocks: [{ id: 'care', type: 'text', text: 'Care instructions' }] };
+    const onProductDetailsOrderChange = vi.fn();
+    render(<DesignerTreePanel sections={[info]} activePage="product" pageSettings={{}}
+      onProductDetailsOrderChange={onProductDetailsOrderChange} />);
+    fireEvent.click(screen.getByRole('button', { name: /expand product information/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move Care instructions down' }));
+    const [section, order] = onProductDetailsOrderChange.mock.calls[0];
+    expect(section).toBe(info);
+    expect(order.slice(-3)).toEqual(['specifications', 'custom:care', 'description']);
+    expect(order).toContain('purchase');
+  });
 });

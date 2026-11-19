@@ -63,7 +63,7 @@ const blockGroups = [
 const newBlockId = () => Array.from(globalThis.crypto.getRandomValues(new Uint8Array(12)),
   (byte) => byte.toString(16).padStart(2, '0')).join('');
 
-export default function ComposedHeroEditor({ productInformation, insertion, blocks = [], activeId, onChange, onCommit, onFocus, ImageField }) {
+export default function ComposedHeroEditor({ productInformation, orderedDetails, insertion, blocks = [], activeId, onChange, onCommit, onFocus, ImageField }) {
   const [parentId, setParentId] = useState(undefined);
   const [target, setTarget] = useState(null);
   const [pickerDepth, setPickerDepth] = useState(0);
@@ -120,12 +120,16 @@ export default function ComposedHeroEditor({ productInformation, insertion, bloc
     if (productInformation && parentId === null) {
       block.productPlacement = target?.placement || DEFAULT_PRODUCT_BLOCK_PLACEMENT;
     }
-    commit(updateChildren(parentId, (list) => {
+    const next = updateChildren(parentId, (list) => {
       const anchorIndex = list.findIndex(({ id: itemId }) => itemId === target?.afterId);
       return anchorIndex < 0
         ? (target?.atStart ? [block, ...list] : [...list, block])
         : [...list.slice(0, anchorIndex + 1), block, ...list.slice(anchorIndex + 1)];
-    }));
+    });
+    if (productInformation && parentId === null && target?.detailAfter !== undefined) {
+      onChange(next, { id, after: target.detailAfter });
+      onCommit();
+    } else commit(next);
     onFocus(id);
     setParentId(undefined);
   };
@@ -150,7 +154,7 @@ export default function ComposedHeroEditor({ productInformation, insertion, bloc
           || (block.type === 'product-attribute' && block.text) || HERO_BLOCK_LABELS[block.type]}</Button>
         {active && (
           <Stack spacing={1.25} sx={{ py: 1 }}>
-            {productInformation && parent === null && (
+            {productInformation && !orderedDetails && parent === null && (
               <TextField select size="small" label="Block placement" value={getProductBlockPlacement(block)}
                 onChange={(event) => { edit('productPlacement', event.target.value); onCommit(); }}>
                 {Object.entries(PRODUCT_BLOCK_PLACEMENTS).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
@@ -206,8 +210,10 @@ export default function ComposedHeroEditor({ productInformation, insertion, bloc
               </>
             )}
             <Stack direction="row" flexWrap="wrap">
-              <Button size="small" disabled={index === 0} onClick={() => move(-1)}>Move up</Button>
-              <Button size="small" disabled={index === list.length - 1} onClick={() => move(1)}>Move down</Button>
+              {(!orderedDetails || parent !== null) && <>
+                <Button size="small" disabled={index === 0} onClick={() => move(-1)}>Move up</Button>
+                <Button size="small" disabled={index === list.length - 1} onClick={() => move(1)}>Move down</Button>
+              </>}
               <Button size="small" color="error" onClick={() => commit(updateChildren(parent, (siblings) => siblings.filter((item) => item.id !== block.id)))}>Remove</Button>
             </Stack>
           </Stack>
@@ -243,7 +249,11 @@ export default function ComposedHeroEditor({ productInformation, insertion, bloc
   return (
     <Stack spacing={1}>
       <Typography variant="subtitle2">Blocks</Typography>
-      {productInformation ? Object.entries(PRODUCT_BLOCK_PLACEMENTS).map(([placement, label]) => {
+      {orderedDetails ? <>
+        <Typography variant="caption" color="text.secondary">Use the Details list in the section tree to arrange blocks.</Typography>
+        {renderTree(blocks, null, 0)}
+        <Button variant="outlined" disabled={blocks.length >= 12} onClick={() => openPicker(null)}>Add block</Button>
+      </> : productInformation ? Object.entries(PRODUCT_BLOCK_PLACEMENTS).map(([placement, label]) => {
         const placedBlocks = blocks.filter((block) => getProductBlockPlacement(block) === placement);
         return <Stack key={placement} spacing={0.5}>
           <Typography variant="caption" color="text.secondary">{label}</Typography>

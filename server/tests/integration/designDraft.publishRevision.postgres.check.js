@@ -82,6 +82,22 @@ async function main() {
     assert.deepEqual((await db.Setting.findOne({ where: sectionSetting })).value, productRows);
     console.log('PASS: reopening and publishing preserves Staff Picks and both FAQ items in order.');
 
+    const infoSetting = { group: 'productPage', key: 'sections' };
+    const productInfo = {
+      id: 'info', type: 'product-info', enabled: true,
+      detailsBlockOrder: ['title', 'metadata', 'price', 'summary', 'variants', 'purchase', 'specifications', 'description', 'custom:care-attribute'],
+      heroBlocks: [{ id: 'care-attribute', type: 'product-attribute', attributeName: 'Care instructions' }],
+    };
+    const infoDraft = await service.saveDraft({
+      settings: [{ ...infoSetting, value: [productInfo] }],
+      expectedRevision: (await db.DesignDraft.findOne()).revision,
+    }, user);
+    assert.deepEqual((await service.getDraft()).draft.payload[0].value, [productInfo]);
+    assert.equal(await db.Setting.findOne({ where: infoSetting }), null);
+    await service.publishDraft({ expectedRevision: infoDraft.revision }, user);
+    assert.deepEqual((await db.Setting.findOne({ where: infoSetting })).value, [productInfo]);
+    console.log('PASS: default Product Information order survives draft reload and publish.');
+
     for (const [group, assignmentKey] of [
       ['productPage', 'productSlugs'],
       ['categoryPage', 'categorySlugs'],
@@ -93,7 +109,9 @@ async function main() {
         [assignmentKey]: ['basil-seeds'],
         settings: {
           ...(group === 'productPage' && { sections: [{
-            id: 'info', type: 'product-info', heroBlocks: [{
+             ...productInfo,
+             detailsBlockOrder: ['title', 'metadata', 'price', 'summary', 'custom:care-attribute', 'variants', 'purchase', 'specifications', 'description'],
+             heroBlocks: [{
               id: 'care-attribute', type: 'product-attribute', attributeName: 'Care instructions', text: 'Care instructions',
               productPlacement: 'before-options',
             }],
@@ -115,7 +133,8 @@ async function main() {
       assert.equal(await db.Setting.findOne({ where: alternateSetting }), null);
       await service.publishDraft({ expectedRevision: alternateDraft.revision }, user);
       assert.deepEqual((await db.Setting.findOne({ where: alternateSetting })).value, alternateTemplates);
-      assert.deepEqual((await db.Setting.findOne({ where: defaultSetting })).value, productRows);
+       assert.deepEqual((await db.Setting.findOne({ where: defaultSetting })).value, productRows);
+       assert.deepEqual((await db.Setting.findOne({ where: infoSetting })).value, [productInfo]);
       console.log(`PASS: publishing the assigned Seeds template preserves the default layout for ${group}.`);
     }
     console.log('PASS: published history, draft archives and restores preserve replaced drafts without publishing restored payload.');

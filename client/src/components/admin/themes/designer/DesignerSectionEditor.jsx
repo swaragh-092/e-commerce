@@ -698,10 +698,11 @@ const DesignerSectionEditor = ({
           {['composed-hero', 'product-info', 'editorial-image-text'].includes(section.type) && (
             <ComposedHeroEditor
               productInformation={section.type === 'product-info'}
+              orderedDetails={section.type === 'product-info' && Array.isArray(section.detailsBlockOrder)}
               insertion={blockInsertion}
               blocks={section.heroBlocks}
               activeId={activeBlockKey === 'heroBlocks' ? activeBlockIndex : null}
-              onChange={(blocks) => onChange('heroBlocks', blocks)}
+              onChange={(blocks, insertion) => insertion ? onChange('heroBlocks', blocks, insertion) : onChange('heroBlocks', blocks)}
               onCommit={onBlur}
               onFocus={(id) => onBlockFocus?.('heroBlocks', id)}
               ImageField={ImageField}

@@ -171,6 +171,15 @@ describe('Design draft safety', () => {
     expect(payload).toEqual([{ group: 'theme', key: 'radius', operation: 'delete' }]);
   });
 
+  it('preserves an explicit Details order and rejects duplicate entries', () => {
+    const entry = (detailsBlockOrder) => ({ group: 'productPage', key: 'sections', value: [{
+      id: 'prod-info', type: 'product-info', detailsBlockOrder, heroBlocks: [{ id: 'care', type: 'text' }],
+    }] });
+    const valid = entry(['title', 'description', 'custom:care', 'purchase']);
+    expect(DesignDraftService.normalizePayload([valid])[0].value).toEqual(valid.value);
+    expect(() => DesignDraftService.normalizePayload([entry(['purchase', 'purchase'])])).toThrow(/Invalid product details order/);
+  });
+
   it('freezes the published payload at the draft revision before incrementing it', () => {
     const publishedAt = new Date('2026-09-23T12:00:00.000Z');
     expect(DesignDraftService.buildPublishedVersion({

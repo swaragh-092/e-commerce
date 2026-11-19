@@ -45,6 +45,7 @@ import { SettingsContext } from '../../context/ThemeContext';
 import { getSectionLabel, SECTION_VARIANTS } from '../../components/storefront/sections/sectionRegistry';
 import { createDefaultSection } from '../../utils/sectionPresets';
 import AddSectionDialog from '../../components/admin/sections/AddSectionDialog';
+import { customDetailKey, getProductDetailsOrder, PRODUCT_DETAILS_LABELS } from '../../utils/productDetailsOrder';
 import SaveAsTemplateDialog from '../../components/admin/themes/SaveAsTemplateDialog';
 import DraftReviewDialog from '../../components/admin/themes/DraftReviewDialog';
 import DraftArchivesDialog from '../../components/admin/themes/DraftArchivesDialog';
@@ -331,6 +332,7 @@ const SectionComposerPage = () => {
 
   const getBlockLabel = (section, blockKey, blockIndex) => {
     if (!section || blockKey == null || blockIndex == null) return null;
+    if (blockKey === 'detailsBlockOrder') return PRODUCT_DETAILS_LABELS[blockIndex];
     const blocks = section[blockKey];
     if (!Array.isArray(blocks) || !blocks[blockIndex]) return null;
     const block = blocks[blockIndex];
@@ -855,7 +857,12 @@ const SectionComposerPage = () => {
   // input remains responsive, but the downstream preview re-render is
   // coalesced to ~200ms.
   const livePreviewRef = useRef({ value: null, timer: null });
-  const handleInlineFieldChange = (key, value) => {
+  const changeProductInfo = (id, apply) => handlePageSettingChange('product', (current) => ({
+    ...current, sections: getPageSections({ productPage: current }, 'product').map((section) =>
+      section.id === id && section.type === 'product-info' ? apply(section) : section),
+  }));
+
+  const handleInlineFieldChange = (key, value, detailInsertion) => {
     if (!panelView.sectionId) return;
     if (pageSections.some((section) => section.id === panelView.sectionId)) {
       handlePageSettingChange(activePage, (current) => ({
@@ -866,6 +873,20 @@ const SectionComposerPage = () => {
       return;
     }
     if (activePage === 'product') {
+      if (editSection?.type === 'product-info' && key === 'heroBlocks') {
+        changeProductInfo(editSection.id, (section) => {
+          const next = { ...section, heroBlocks: value };
+          if (detailInsertion) {
+            const order = getProductDetailsOrder(section);
+            order.splice(detailInsertion.after === null ? 0 : order.indexOf(detailInsertion.after) + 1, 0, customDetailKey(detailInsertion.id));
+            next.detailsBlockOrder = getProductDetailsOrder({ ...next, detailsBlockOrder: order });
+          } else if (section.detailsBlockOrder) {
+            next.detailsBlockOrder = getProductDetailsOrder(next);
+          }
+          return next;
+        });
+        return;
+      }
       handlePageSettingChange('product', (current) => ({ ...current, sections: getPageSections({ productPage: current }, 'product').map((section) =>
         section.id === panelView.sectionId ? updateSectionField(section, key, value) : section) }));
       return;
@@ -1221,6 +1242,12 @@ const SectionComposerPage = () => {
       onThemeSettingsClick={() => setPanelView({ mode: 'theme-settings', sectionId: null, componentKey: null })}
       onAddSection={openAddSection}
       onAddProductBlock={openProductBlockPicker}
+      onProductDetailsOrderChange={(section, detailsBlockOrder) => changeProductInfo(section.id, (current) => {
+        const next = { ...current };
+        if (detailsBlockOrder) next.detailsBlockOrder = detailsBlockOrder;
+        else delete next.detailsBlockOrder;
+        return next;
+      })}
       onSelectProductBlock={(section, id, key = 'heroBlocks') => handleInlineBlockFocus(section.id, key, id)}
       inheritedBlocksForSection={getInheritedBlocksForSection}
       onAddSectionItem={(section, schema, items, index) => {
@@ -1635,8 +1662,11 @@ const SectionComposerPage = () => {
                         : previewTarget.path || '/'}
                       reloadOnSettingsChange
                       selectedSectionId={panelView.sectionId}
-                      selectedBlockId={panelView.blockKey === 'heroBlocks' ? panelView.blockIndex : undefined}
-                      onSelectBlock={!livePreview ? (owner, id) => handleInlineBlockFocus(owner, 'heroBlocks', id) : undefined}
+                       selectedBlockId={panelView.blockKey === 'detailsBlockOrder' ? `builtin:${panelView.blockIndex}`
+                         : panelView.blockKey === 'heroBlocks' ? panelView.blockIndex : undefined}
+                       onSelectBlock={!livePreview ? (owner, id) => id.startsWith('builtin:')
+                         ? handleInlineBlockFocus(owner, 'detailsBlockOrder', id.slice(8))
+                         : handleInlineBlockFocus(owner, 'heroBlocks', id) : undefined}
                       onSelectSection={!livePreview ? (id) => {
                         const section = editableSections.find((item) => item.id === id);
                         if (section) selectSection(section);
@@ -1648,7 +1678,8 @@ const SectionComposerPage = () => {
                         } : undefined}
                        onInsertBlock={!livePreview ? (id, placement, afterId) => {
                          const section = editableSections.find((item) => item.id === id);
-                        if (section && (section.heroBlocks?.length || 0) < 12) openProductBlockPicker(section, { placement, atStart: !afterId, afterId });
+                        if (section && (section.heroBlocks?.length || 0) < 12) openProductBlockPicker(section, placement === 'details-order'
+                          ? { detailAfter: afterId || null } : { placement, atStart: !afterId, afterId });
                       } : undefined}
                       device={viewportMode}
                       showToolbar={false}
