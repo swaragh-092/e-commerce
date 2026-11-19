@@ -273,7 +273,6 @@ exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20,
 
 exports.CATEGORY_PRODUCT_VARIANT_ATTRIBUTES = CATEGORY_PRODUCT_VARIANT_ATTRIBUTES;
 
-
 /**
  * Check if a root category with the same name already exists.
  * Root categories are those with parentId === null.
