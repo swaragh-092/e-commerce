@@ -1,17 +1,11 @@
 'use strict';
 
-const jwt = require('jsonwebtoken');
 const { AUTH_TIME } = require('../../config/constants');
 
 const ACCESS_COOKIE = 'auth_access_token';
 const REFRESH_COOKIE = 'auth_refresh_token';
 const TRUSTED_DEVICE_COOKIE = 'trusted_device';
 const REMEMBERED_DEVICE_COOKIE = 'remembered_device';
-
-const getJwtIssAud = () => ({
-  issuer: process.env.JWT_ISSUER || 'ecommerce-pro',
-  audience: process.env.JWT_AUDIENCE || 'ecommerce-pro-client',
-});
 
 const getCookieOptions = () => {
     const sameSite = (process.env.AUTH_COOKIE_SAMESITE || 'lax').toLowerCase();
@@ -64,74 +58,20 @@ const setRememberedDeviceCookie = (res, token) => {
     res.cookie(REMEMBERED_DEVICE_COOKIE, token, { ...getCookieOptions(), maxAge: 30 * 24 * 60 * 60 * 1000 });
 };
 const clearRememberedDeviceCookie = res => res.clearCookie(REMEMBERED_DEVICE_COOKIE, getCookieOptions());
+const clearTrustedDeviceCookie = res => res.clearCookie(TRUSTED_DEVICE_COOKIE, getCookieOptions());
 
-const crypto = require('crypto');
-
-const getEncryptionKey = () => {
-    const secret = getJwtSecret();
-    return crypto.createHash('sha256').update(secret).digest();
-};
-
-const encrypt = (plainText) => {
-    const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv('aes-256-gcm', getEncryptionKey(), iv);
-    let encrypted = cipher.update(plainText, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-    const authTag = cipher.getAuthTag().toString('hex');
-    return `${iv.toString('hex')}:${authTag}:${encrypted}`;
-};
-
-const decrypt = (encryptedText) => {
-    try {
-        const parts = String(encryptedText || '').split(':');
-        if (parts.length !== 3) return null;
-        const [ivHex, authTagHex, dataHex] = parts;
-        const iv = Buffer.from(ivHex, 'hex');
-        const authTag = Buffer.from(authTagHex, 'hex');
-        const decipher = crypto.createDecipheriv('aes-256-gcm', getEncryptionKey(), iv);
-        decipher.setAuthTag(authTag);
-        let decrypted = decipher.update(dataHex, 'hex', 'utf8');
-        decrypted += decipher.final('utf8');
-        return decrypted;
-    } catch {
-        return null;
-    }
-};
-
-const getJwtSecret = () => {
-    const secret = process.env.JWT_ACCESS_SECRET;
-    if (!secret || secret.length < 32) throw new Error('JWT_ACCESS_SECRET must contain at least 32 characters');
-    return secret;
-};
-
-const createTrustedDeviceToken = (userId) => {
-    const { issuer, audience } = getJwtIssAud();
-    return jwt.sign({ id: userId, purpose: 'trusted_device' }, getJwtSecret(), {
-        expiresIn: '30d',
-        issuer,
-        audience,
-    });
-};
-
-const verifyTrustedDevice = (cookieValue, userId) => {
+const verifyTrustedDevice = async (cookieValue, userId) => {
     if (!cookieValue || !userId) return false;
     try {
-        const decrypted = decrypt(cookieValue) || cookieValue;
-        const { issuer, audience } = getJwtIssAud();
-        const decoded = jwt.verify(decrypted, getJwtSecret(), {
-            algorithms: ['HS256'],
-            issuer,
-            audience,
-        });
-        return decoded.purpose === 'trusted_device' && decoded.id === userId;
+        return await require('./rememberedDevice').recognize(cookieValue, userId);
     } catch {
         return false;
     }
 };
 
-const setTrustedDeviceCookie = (res, userId) => {
-    const rawToken = createTrustedDeviceToken(userId);
-    res.cookie(TRUSTED_DEVICE_COOKIE, encrypt(rawToken), {
+const setTrustedDeviceCookie = async (res, userId) => {
+    const token = await require('./rememberedDevice').issue(userId);
+    res.cookie(TRUSTED_DEVICE_COOKIE, token, {
         ...getCookieOptions(),
         secure: true,
         maxAge: 30 * 24 * 60 * 60 * 1000,
@@ -148,12 +88,10 @@ module.exports = {
     getRefreshToken,
     setAuthCookies,
     stripAuthTokens,
-    createTrustedDeviceToken,
     verifyTrustedDevice,
     setTrustedDeviceCookie,
+    clearTrustedDeviceCookie,
     setRememberedDeviceCookie,
     clearRememberedDeviceCookie,
-    encrypt,
-    decrypt,
 };
 

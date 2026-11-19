@@ -9,6 +9,7 @@ const attempts = require('../../src/modules/auth/loginAttemptStore');
 const factors = require('../../src/modules/auth/twoFactor.service');
 const audit = require('../../src/modules/audit/audit.service');
 const emailMfa = require('../../src/modules/auth/emailMfa.service');
+const twoFactorChallenge = require('../../src/modules/auth/twoFactorChallenge');
 const { signTempTwoFactorToken } = require('../../src/modules/auth/tokenUtils');
 const policy = { requireAdministrators: true, staffMode: 'all', requiredRoleIds: [], allowEmailCodes: true };
 let user, row, code;
@@ -36,7 +37,18 @@ beforeEach(() => {
     };
     return row;
   });
+  vi.spyOn(db.OtpToken, 'destroy').mockImplementation(async ({ where }) => {
+    if (row?.identifier === where.identifier && row?.purpose === where.purpose && row?.otpHash === where.otpHash) {
+      row = undefined;
+      return 1;
+    }
+    return 0;
+  });
   vi.spyOn(db.RefreshToken, 'create').mockResolvedValue({});
+  vi.spyOn(audit, 'log').mockResolvedValue();
+  vi.spyOn(attempts, 'checkMfaLock').mockResolvedValue();
+  vi.spyOn(attempts, 'clearMfaFailures').mockResolvedValue();
+  vi.spyOn(attempts, 'recordMfaFailure').mockResolvedValue();
   vi.spyOn(mail, 'send').mockImplementation(async message => {
     expect(message).toMatchObject({ to: user.email, sensitive: true });
     code = message.text.match(/\b\d{6}\b/)[0];
@@ -52,6 +64,28 @@ describe('Email sign-in alternate', () => {
   it('rejects a regular authenticator challenge', async () => {
     await expect(emailMfa.sendCode(signTempTwoFactorToken(user.id))).rejects.toMatchObject({ statusCode: 401 });
     expect(mail.send).not.toHaveBeenCalled();
+  });
+
+  it('releases only the unsent code record so delivery can be retried', async () => {
+    const challenge = emailMfa.issueChallenge(user);
+    mail.send.mockRejectedValueOnce(new Error('mail transport unavailable'));
+    await expect(emailMfa.sendCode(challenge)).rejects.toMatchObject({ code: 'EMAIL_DELIVERY_FAILED' });
+    expect(row).toBeUndefined();
+
+    await expect(emailMfa.sendCode(challenge)).resolves.toBeUndefined();
+    expect(row).toBeDefined();
+    expect(mail.send).toHaveBeenCalledTimes(2);
+  });
+
+  it('consumes the paired authenticator challenge when email verification succeeds', async () => {
+    const challenge = emailMfa.issueChallenge(user, { tempChallengeId: 'paired-challenge' });
+    vi.spyOn(twoFactorChallenge, 'lock').mockResolvedValue({
+      attempts: 0, maxAttempts: 1, expiresAt: new Date(Date.now() + 60_000),
+    });
+    const consume = vi.spyOn(twoFactorChallenge, 'consume').mockResolvedValue(true);
+    await emailMfa.sendCode(challenge);
+    await emailMfa.verifyCode(challenge, code);
+    expect(consume).toHaveBeenCalledWith('paired-challenge', expect.any(Object));
   });
 
   it('offers email on later password sign-ins after an authenticator code proves the current password', async () => {
@@ -89,6 +123,9 @@ describe('Email sign-in alternate', () => {
     await expect(emailMfa.verifyCode(emailMfa.issueChallenge(user), code)).rejects.toMatchObject({ statusCode: 400 });
     const result = await emailMfa.verifyCode(challenge, code);
     expect(result).toHaveProperty('tokens');
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
+      userId: user.id, action: 'LOGIN', entity: 'User', entityId: user.id, ipAddress: undefined,
+    }), expect.any(Object));
     await expect(emailMfa.verifyCode(challenge, code)).rejects.toMatchObject({ statusCode: 400 });
     expect(db.RefreshToken.create).toHaveBeenCalledTimes(1);
 

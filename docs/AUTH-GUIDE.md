@@ -112,7 +112,7 @@ Response: { qrCodeDataUrl, otpauth, secret }
 ```
 POST /api/auth/2fa/enable (requires auth)
 Body: { code } (6-digit TOTP or one-time backup code for customer accounts)
-Response: { enabled: true, backupCodes: ["b2ef58fb", "54388477", ...] }
+Response: { enabled: true, backupCodes: ["0123456789abcdef0123456789abcdef", ...] }
 ```
 - Verifies user can generate valid codes
 - Returns 8 one-time backup codes — **shown only once**
@@ -125,10 +125,12 @@ Body: { tempToken, code }
 ```
 - `code` accepts either:
   - **6-digit numeric** TOTP from authenticator app (e.g. `482901`)
-  - **8-character hex** backup code (e.g. `b2ef58fb`)
+  - **32-character hex** backup code for newly issued codes
+  - **8-character hex** backup code for codes issued before the stronger format
 - TOTP is tried first; if it fails/throws, backup code is attempted
 - Backup codes are single-use (removed atomically with row lock after use)
-- Rate limit: 5 requests / 15 min
+- Temporary authenticator challenges expire after five minutes and are consumed once in the same transaction as session creation. Email verification consumes its paired authenticator challenge too.
+- Five failed authenticator or backup-code attempts per account within 15 minutes trigger a 15-minute MFA lock; the endpoint also has an IP-based rate limit.
 - MFA enrollment requirements are configurable in **Admin → Settings → Security** for administrators, all staff, or selected active custom staff roles. Before an administrator-managed policy is saved, `REQUIRE_ADMIN_MFA` supplies the fallback; the saved policy then takes precedence. Customer MFA remains voluntary.
 - Accounts whose current role requires MFA must enroll before sign-in. Use the operator-assisted process in [Accounts and login security](ACCOUNT-LOGIN-SECURITY.md); do not reset an administrator's MFA with direct SQL. Recovery for an already enrolled administrator requires a separately approved identity-verification procedure.
 - Enrolled administrators and staff must complete MFA for each session and cannot use trusted-device bypass. Self-service disable is allowed only when the account's current role is outside the required policy; required factors can be disabled only through the operator recovery procedure.

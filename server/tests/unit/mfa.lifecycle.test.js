@@ -22,6 +22,7 @@ beforeEach(() => {
   vi.spyOn(db.User, 'findAll').mockResolvedValue([locked]);
   vi.spyOn(db.RefreshToken, 'update').mockResolvedValue([2]);
   vi.spyOn(db.RefreshToken, 'create').mockResolvedValue({});
+  vi.spyOn(db.RememberedDevice, 'update').mockResolvedValue([0]);
   vi.spyOn(db.Setting, 'findOne').mockResolvedValue({ value: {
     requireAdministrators: false, staffMode: 'optional', requiredRoleIds: [],
   } });
@@ -34,6 +35,7 @@ describe('MFA factor lifecycle', () => {
   it('enables MFA and replaces the authenticated session in the same transaction', async () => {
     const result = await factors.enable(initial.id, code, { createSession: true, ipAddress: '127.0.0.1' });
     expect(result.backupCodes).toHaveLength(8);
+    expect(result.backupCodes.every(value => /^[a-f0-9]{32}$/.test(value))).toBe(true);
     expect(locked.twoFactorEnabled).toBe(true);
     expect(locked.twoFactorBackupCodes).not.toContain(result.backupCodes[0]);
     expect(jwt.decode(result.tokens.accessToken).mfa).toBe(true);

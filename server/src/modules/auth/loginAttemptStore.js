@@ -20,17 +20,17 @@ const getEmailThrottleHash = (kind, email) => crypto
   .update(`${kind}\0${String(email || '').trim().toLowerCase()}`)
   .digest('hex');
 
-const checkLock = async (email) => {
+const checkLock = async (email, transaction) => {
   const rows = await sequelize.query(
     'SELECT locked_until FROM auth_login_attempts WHERE email_hash = :emailHash',
-    { replacements: { emailHash: getEmailHash(email) }, type: QueryTypes.SELECT },
+    { replacements: { emailHash: getEmailHash(email) }, type: QueryTypes.SELECT, ...(transaction ? { transaction } : {}) },
   );
   if (rows[0]?.locked_until && new Date(rows[0].locked_until) > new Date()) {
     throw new AppError('TOO_MANY_REQUESTS', 429, 'Too many failed attempts for this account. Please try again later.');
   }
 };
 
-const recordFailure = async (email) => {
+const recordFailure = async (email, transaction) => {
   const now = Date.now();
   const windowStartedAt = new Date(now - WINDOW_MS);
   const lockedUntil = new Date(now + LOCK_MS);
@@ -61,18 +61,26 @@ const recordFailure = async (email) => {
       lockedUntil,
       maxFailures: MAX_FAILURES,
     },
+    ...(transaction ? { transaction } : {}),
   });
 
   await sequelize.query('DELETE FROM auth_login_attempts WHERE updated_at <= :cutoff', {
     replacements: { cutoff: new Date(now - RETENTION_MS) },
+    ...(transaction ? { transaction } : {}),
   });
 };
 
-const clear = async (email) => {
+const clear = async (email, transaction) => {
   await sequelize.query('DELETE FROM auth_login_attempts WHERE email_hash = :emailHash', {
     replacements: { emailHash: getEmailHash(email) },
+    ...(transaction ? { transaction } : {}),
   });
 };
+
+const mfaKey = email => `${String(email || '').trim().toLowerCase()}\0mfa`;
+const checkMfaLock = (email, transaction) => checkLock(mfaKey(email), transaction);
+const recordMfaFailure = (email, transaction) => recordFailure(mfaKey(email), transaction);
+const clearMfaFailures = (email, transaction) => clear(mfaKey(email), transaction);
 
 const claimEmailSend = async (kind, email) => {
   const now = new Date();
@@ -91,4 +99,8 @@ const claimEmailSend = async (kind, email) => {
   return rows.length === 0;
 };
 
-module.exports = { checkLock, recordFailure, clear, claimEmailSend };
+module.exports = {
+  checkLock, recordFailure, clear,
+  checkMfaLock, recordMfaFailure, clearMfaFailures,
+  claimEmailSend,
+};
