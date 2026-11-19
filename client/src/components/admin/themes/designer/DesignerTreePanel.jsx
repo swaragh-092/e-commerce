@@ -356,7 +356,22 @@ const DesignerTreePanel = ({
 
   return (
     <DragDropContext onDragEnd={({ source, destination }) => {
-      if (!destination || source.droppableId !== destination.droppableId || source.index === destination.index) return;
+      if (!destination) return;
+      if (source.droppableId !== destination.droppableId) {
+        const positions = ['above', 'below'];
+        const from = positions.find((position) => source.droppableId === `page-template-${position}`);
+        const to = positions.find((position) => destination.droppableId === `page-template-${position}`);
+        if (!from || !to) return;
+        const group = (section) => section.pagePosition || 'below';
+        const moving = pageSections.filter((section) => group(section) === from)[source.index];
+        if (!moving) return;
+        const next = pageSections.filter((section) => section !== moving);
+        const target = next.filter((section) => group(section) === to)[destination.index];
+        next.splice(target ? next.indexOf(target) : next.length, 0, { ...moving, pagePosition: to });
+        onChangePageSections(next);
+        return;
+      }
+      if (source.index === destination.index) return;
       if (source.droppableId === 'product-details') {
         moveDetail(source.index, destination.index);
         return;
@@ -583,9 +598,17 @@ const DesignerTreePanel = ({
                     else onPageContentClick?.();
                   }} />
                   {activePage === 'cart' && cartExpanded && <Stack sx={{ pl: 2, borderLeft: 1, borderColor: 'divider' }}>
-                    <Button size="small" sx={{ justifyContent: 'flex-start', textTransform: 'none' }} onClick={() => setPageSettingsOpen(true)}>Title</Button>
-                    <Button size="small" sx={{ justifyContent: 'flex-start', textTransform: 'none' }} onClick={() => onPageContentClick?.('cartItem')}>Cart products</Button>
-                    <Button size="small" sx={{ justifyContent: 'flex-start', textTransform: 'none' }} onClick={() => onPageContentClick?.('checkoutBlock')}>Summary</Button>
+                    {[
+                      ['Title', 'showCartTitle', () => setPageSettingsOpen(true)],
+                      ['Cart products', 'showCartProducts', () => onPageContentClick?.('cartItem')],
+                      ['Summary', 'showCartSummary', () => onPageContentClick?.('checkoutBlock')],
+                    ].map(([label, key, openSettings]) => (
+                      <Stack key={key} direction="row" alignItems="center" justifyContent="space-between">
+                        <Button size="small" sx={{ textTransform: 'none' }} onClick={openSettings}>{label}</Button>
+                        <Switch size="small" checked={currentPageSettings[key] !== false} inputProps={{ 'aria-label': `Show ${label}` }}
+                          onChange={(_, checked) => onPageSettingChange('cart', (current) => ({ ...current, [key]: checked }))} />
+                      </Stack>
+                    ))}
                   </Stack>}
                 </>)}
                 <Droppable droppableId={`page-template-${position}`}>{(drop) => <Box ref={drop.innerRef} {...drop.droppableProps}>

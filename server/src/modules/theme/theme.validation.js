@@ -435,6 +435,9 @@ const brandPageTemplateSchema = Joi.object({
 }).unknown(false);
 
 const cartPageTemplateSchema = Joi.object({
+  showCartTitle: Joi.boolean(),
+  showCartProducts: Joi.boolean(),
+  showCartSummary: Joi.boolean(),
   productRows: contentPageLayoutSchema,
   sections: pageSectionsSchema(['cart-main']),
   layout: Joi.string().valid('standard', 'compact').required(),

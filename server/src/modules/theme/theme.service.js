@@ -242,6 +242,9 @@ const buildPageTemplateRows = (pkg, scopes) => {
     pushDefinedSetting(rows, 'cartPage', 'showCrossSells', cart.showCrossSells);
     pushDefinedSetting(rows, 'cartPage', 'showTrustBadges', cart.showTrustBadges);
     pushDefinedSetting(rows, 'cartPage', 'emptyStateText', cart.emptyStateText);
+    for (const key of ['showCartTitle', 'showCartProducts', 'showCartSummary']) {
+      pushDefinedSetting(rows, 'cartPage', key, cart[key]);
+    }
   }
 
   const account = pkg.pageTemplates.account;
@@ -818,6 +821,9 @@ const exportCurrent = async (options = {}) => {
       showCrossSells: snapshot.cartPage?.showCrossSells,
       showTrustBadges: snapshot.cartPage?.showTrustBadges,
       emptyStateText: snapshot.cartPage?.emptyStateText,
+      showCartTitle: snapshot.cartPage?.showCartTitle,
+      showCartProducts: snapshot.cartPage?.showCartProducts,
+      showCartSummary: snapshot.cartPage?.showCartSummary,
     },
     account: {
       layout: snapshot.accountPage?.layout || 'tabs',
