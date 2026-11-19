@@ -34,12 +34,13 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import SendIcon from '@mui/icons-material/Send';
 import HistoryIcon from '@mui/icons-material/History';
 import CloseIcon from '@mui/icons-material/Close';
+import EditIcon from '@mui/icons-material/Edit';
 import { useCurrency, useFeature } from '../../hooks/useSettings';
 import { PAYMENT_SETTLED_STATUSES } from '../../utils/constants';
 import ShipmentTrackingTimeline from '../../components/orders/order-detail/ShipmentTrackingTimeline';
 import { getTaxRows } from '../../components/orders/order-detail/orderDetailUtils';
 import { formatDateOnly, formatDateTime } from '../../utils/dates';
-import { getOrderById, updateOrderStatus, updateOrderContactEmail, createFulfillment, updateFulfillmentStatus, updateShipment, retryShippingOperation, confirmCodPayment, getShippingProviders, addOrderNote, updateReturnStatus, processRefund } from '../../services/adminService';
+import { getOrderById, updateOrderStatus, updateOrderContactEmail, updateOrderDetails, createFulfillment, updateFulfillmentStatus, updateShipment, retryShippingOperation, confirmCodPayment, getShippingProviders, addOrderNote, updateReturnStatus, processRefund } from '../../services/adminService';
 import { getSettingsGroup } from '../../services/settingsService';
 import { useNotification } from '../../context/NotificationContext';
 import {
@@ -74,6 +75,7 @@ import { useOrderStatusTransitions } from '../../hooks/useOrderStatusTransitions
 // ─── Order History helpers ──────────────────────────────────────────────────
 
 const EVENT_META = {
+  order_edited:    { icon: EditIcon,                color: '#14b8a6', label: 'Order Edited' },
   order_placed:    { icon: ShoppingCartIcon,        color: '#6366f1', label: 'Order Placed' },
   status_changed:  { icon: SwapHorizIcon,           color: '#0ea5e9', label: 'Status Changed' },
   admin_note:      { icon: NoteAddIcon,             color: '#f59e0b', label: 'Admin Note' },
@@ -1109,6 +1111,9 @@ const OrderDetailPage = () => {
   const [addingNote, setAddingNote] = useState(false);
   const [guestContactEmail, setGuestContactEmail] = useState('');
   const [savingContactEmail, setSavingContactEmail] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editForm, setEditForm] = useState({});
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const fetchOrder = async () => {
     try {
@@ -1123,6 +1128,60 @@ const OrderDetailPage = () => {
       setError(getApiErrorMessage(fetchError, 'Failed to load order details.'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openEditDialog = () => {
+    const snapshot = order?.shippingAddressSnapshot || {};
+    setEditForm({
+      fullName: snapshot.fullName || '',
+      phone: snapshot.phone || '',
+      addressLine1: snapshot.addressLine1 || '',
+      addressLine2: snapshot.addressLine2 || '',
+      city: snapshot.city || '',
+      postalCode: snapshot.postalCode || '',
+      email: snapshot.email || '',
+      notes: order?.notes || '',
+    });
+    setEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    const snapshot = order?.shippingAddressSnapshot || {};
+    const payload = {};
+    if (canEditAddress) {
+      const shippingAddress = {};
+      ['fullName', 'phone', 'addressLine1', 'addressLine2'].forEach((field) => {
+        const value = (editForm[field] || '').trim();
+        if (value !== (snapshot[field] || '')) shippingAddress[field] = value;
+      });
+      const email = (editForm.email || '').trim();
+      if (!order.userId && email !== (snapshot.email || '')) shippingAddress.email = email;
+      if (['fullName', 'addressLine1'].some((field) => shippingAddress[field] === '')) {
+        notify('Name and address line 1 are required.', 'error');
+        return;
+      }
+      if (shippingAddress.email !== undefined && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(shippingAddress.email)) {
+        notify('Enter a valid customer email address.', 'error');
+        return;
+      }
+      if (Object.keys(shippingAddress).length > 0) payload.shippingAddress = shippingAddress;
+    }
+    if ((editForm.notes || '').trim() !== (order?.notes || '')) payload.notes = (editForm.notes || '').trim();
+    if (Object.keys(payload).length === 0) {
+      setEditDialogOpen(false);
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      await updateOrderDetails(id, payload);
+      await fetchOrder();
+      setEditDialogOpen(false);
+      notify('Order updated.', 'success');
+    } catch (saveError) {
+      notify(getApiErrorMessage(saveError, 'Could not update order.'), 'error');
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -1195,6 +1254,9 @@ const OrderDetailPage = () => {
   }, [order?.status, allowedNextStatuses, canCloseOrder]);
   const hasStatusTransitions = availableStatuses.length > 1;
   const awaitingOnlinePayment = order?.paymentMethod !== 'cod' && !PAYMENT_SETTLED_STATUSES.includes(payment?.status);
+  const canEditOrder = canUpdateOrderStatus && ['pending_payment', 'confirmed', 'on_hold', 'processing', 'ready_for_shipment'].includes(order?.status);
+  const hasActiveShipment = (order?.shipments || []).some((shipment) => shipment.status !== 'cancelled');
+  const canEditAddress = canEditOrder && !hasActiveShipment && !order?.shippingAddressSnapshot?.digital;
   const canFulfill = canUpdateOrderStatus && isFulfillable && !awaitingOnlinePayment;
   const codCollectedAmount = Number(
     payment?.metadata?.codCollectedAmount
@@ -1514,6 +1576,11 @@ const OrderDetailPage = () => {
           >
             Print Invoice
           </Button>
+          {canEditOrder && (
+            <Button variant="outlined" startIcon={<EditIcon />} onClick={openEditDialog}>
+              Edit Order
+            </Button>
+          )}
           {canConfirmCod && (
             <Button variant="contained" color="success" onClick={openCodCollectionDialog} disabled={updating}>
               {updating ? 'Saving…' : codCollectedAmount > 0 ? `Collect COD Balance ${formatPrice(codDueAmount)}` : 'Collect COD'}
@@ -2271,6 +2338,43 @@ const OrderDetailPage = () => {
             inDialog
           />
         </DialogContent>
+      </Dialog>
+
+      <Dialog open={editDialogOpen} onClose={() => !savingEdit && setEditDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit Order {order?.orderNumber}</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ mt: 0.5 }}>
+            {canEditAddress ? (
+              <>
+                <Typography variant="subtitle2" fontWeight={700}>Shipping address</Typography>
+                <TextField size="small" label="Full name" value={editForm.fullName || ''} onChange={(e) => setEditForm((f) => ({ ...f, fullName: e.target.value }))} inputProps={{ maxLength: 255 }} fullWidth />
+                <TextField size="small" label="Phone" value={editForm.phone || ''} onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))} inputProps={{ maxLength: 20 }} fullWidth />
+                {!order?.userId && (
+                  <TextField size="small" type="email" label="Guest email" value={editForm.email || ''} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} inputProps={{ maxLength: 255 }} fullWidth />
+                )}
+                <TextField size="small" label="Address line 1" value={editForm.addressLine1 || ''} onChange={(e) => setEditForm((f) => ({ ...f, addressLine1: e.target.value }))} inputProps={{ maxLength: 255 }} fullWidth />
+                <TextField size="small" label="Address line 2" value={editForm.addressLine2 || ''} onChange={(e) => setEditForm((f) => ({ ...f, addressLine2: e.target.value }))} inputProps={{ maxLength: 255 }} fullWidth />
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                  <TextField size="small" label="City" value={editForm.city || ''} disabled inputProps={{ maxLength: 100 }} fullWidth />
+                  <TextField size="small" label="Postal code" value={editForm.postalCode || ''} disabled inputProps={{ maxLength: 20 }} fullWidth />
+                </Stack>
+                <Typography variant="caption" color="text.secondary">
+                  City, postal code, state and country are locked to preserve shipping eligibility and tax. To change the destination, cancel and re-place the order.
+                </Typography>
+              </>
+            ) : (
+              <Alert severity="info">
+                The shipping address cannot be changed once a shipment exists or for digital orders. You can still edit the order notes.
+              </Alert>
+            )}
+            <Typography variant="subtitle2" fontWeight={700}>Order notes</Typography>
+            <TextField size="small" multiline minRows={2} label="Notes" value={editForm.notes || ''} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} inputProps={{ maxLength: 1000 }} fullWidth />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditDialogOpen(false)} disabled={savingEdit}>Cancel</Button>
+          <Button variant="contained" onClick={handleSaveEdit} disabled={savingEdit}>{savingEdit ? 'Saving…' : 'Save changes'}</Button>
+        </DialogActions>
       </Dialog>
 
       <FulfillmentDialog

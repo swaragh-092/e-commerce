@@ -55,14 +55,14 @@ describe('Admin route feature gating', () => {
     expect(recentOrdersRoute.middlewareCount).toBe(5);
     // stats has adminOnly (2), controller (1) = 3 (feature-aware payload in service)
     expect(statsRoute.middlewareCount).toBe(3);
-    // top-products has authentication + dashboard/orders authorization (2), validate (1), controller (1) = 4
-    expect(topProductsRoute.middlewareCount).toBe(4);
+    // top-products has authentication + dashboard/orders authorization (2), ordersFeature (1), validate (1), controller (1) = 5
+    expect(topProductsRoute.middlewareCount).toBe(5);
     // aov-trend has dashboard+orders checks (2), ordersFeature (1), validate (1), controller (1) = 5
     expect(aovTrendRoute.middlewareCount).toBe(5);
     // coupon-performance has dashboard+orders checks (2), ordersFeature (1), couponsFeature (1), validate (1), controller (1) = 6
     expect(couponPerformanceRoute.middlewareCount).toBe(6);
-    // export route has authentication + dashboard/orders/customers authorization (2), ordersFeature (1), exportMetricFeatureGate (1), controller (1) = 5
-    expect(exportRoute.middlewareCount).toBe(5);
+    // export route has authentication + dashboard/orders authorization (2), ordersFeature (1), metric authorization/validation (1), exportMetricFeatureGate (1), controller (1) = 6
+    expect(exportRoute.middlewareCount).toBe(6);
   });
 
   it('gates coupon CSV exports when coupons feature is disabled', async () => {

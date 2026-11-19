@@ -53,6 +53,7 @@ export const SettingsProvider = ({ children }) => {
 
   const location = useLocation();
   const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
+  const useAdminSettings = isAdminRoute && location.pathname.replace(/\/+$/, '') !== '/admin/login';
   const [settings, setSettings] = useState(null);
   const [mode, setMode] = useState('ecommerce');           // APP_MODE from server
   const [features, setFeatures] = useState(null);         // fully resolved feature map
@@ -78,6 +79,8 @@ export const SettingsProvider = ({ children }) => {
       if (previewMode) {
         const raw = localStorage.getItem(PREVIEW_KEY);
         data = raw ? JSON.parse(raw) : {};
+      } else if (!useAdminSettings) {
+        data = await settingsService.getPublicSettings();
       } else {
         try {
           data = await settingsService.getAllSettings();
@@ -144,7 +147,7 @@ export const SettingsProvider = ({ children }) => {
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previewMode]);
+  }, [previewMode, useAdminSettings]);
 
   const applyDocumentSettings = (data) => {
     // Page title
@@ -202,7 +205,7 @@ export const SettingsProvider = ({ children }) => {
 
   useEffect(() => {
     fetchSettings();
-  }, []);
+  }, [fetchSettings]);
 
   const storefrontTokens = useMemo(() => resolveDesignTokens(t, 'light'), [t]);
   const themeConfig = useMemo(
