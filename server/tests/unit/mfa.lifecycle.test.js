@@ -32,6 +32,34 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 describe('MFA factor lifecycle', () => {
+  it('rejects an empty decrypted setup secret and directs the user to run setup again', async () => {
+    initial.twoFactorSecret = encrypt('');
+    await expect(factors.enable(initial.id, code)).rejects.toMatchObject({
+      statusCode: 400, message: '2FA setup expired or corrupted. Please run setup again.',
+    });
+    expect(locked.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects authenticator verification when the decrypted secret is empty', () => {
+    expect(factors.verify({ twoFactorSecret: encrypt('') }, code)).toBe(false);
+  });
+  it('does not overwrite a newer backup-code set during regeneration', async () => {
+    initial.twoFactorEnabled = true;
+    locked.twoFactorEnabled = true;
+    initial.twoFactorBackupCodes = ['previous-hash'];
+    locked.twoFactorBackupCodes = ['newer-hash'];
+    await expect(factors.regenerateBackupCodes(initial.id, code)).rejects.toMatchObject({ statusCode: 409 });
+    expect(locked.update).not.toHaveBeenCalled();
+  });
+
+  it('persists and returns replacement codes when the factor and set are unchanged', async () => {
+    initial.twoFactorEnabled = true;
+    locked.twoFactorEnabled = true;
+    const result = await factors.regenerateBackupCodes(initial.id, code);
+    expect(result.backupCodes).toHaveLength(8);
+    expect(locked.twoFactorBackupCodes).toHaveLength(8);
+    expect(locked.twoFactorBackupCodes).not.toContain(result.backupCodes[0]);
+  });
   it('enables MFA and replaces the authenticated session in the same transaction', async () => {
     const result = await factors.enable(initial.id, code, { createSession: true, ipAddress: '127.0.0.1' });
     expect(result.backupCodes).toHaveLength(8);
