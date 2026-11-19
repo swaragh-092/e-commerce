@@ -23,11 +23,9 @@ describe('Authentication configuration safety', () => {
     vi.stubEnv('SERVER_URL', 'https://example.com/');
     expect(redirects.getGoogleCallbackUrl()).toBe('https://example.com/api/auth/google/callback');
   });
-  it('does not sign trusted-device tokens with a default secret', () => {
-    vi.stubEnv('JWT_ACCESS_SECRET', '');
-    expect(() => cookies.createTrustedDeviceToken('user')).toThrow();
-    expect(() => cookies.encrypt('test')).toThrow();
-    expect(cookies.verifyTrustedDevice('untrusted', 'user')).toBe(false);
+  it('rejects an unrecognized trusted-device token', async () => {
+    vi.spyOn(require('../../src/modules/auth/rememberedDevice'), 'recognize').mockResolvedValue(false);
+    expect(await cookies.verifyTrustedDevice('untrusted', 'user')).toBe(false);
   });
   it('requires Secure cookies with SameSite=None and rejects unknown SameSite settings', () => {
     const response = { cookie: vi.fn() };

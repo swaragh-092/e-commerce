@@ -4,9 +4,10 @@ const crypto = require('crypto');
 const { RememberedDevice } = require('../index');
 
 const hash = token => crypto.createHash('sha256').update(token).digest('hex');
-const issue = async userId => {
+const issue = async (userId, transaction) => {
   const token = crypto.randomBytes(32).toString('base64url');
-  await RememberedDevice.create({ userId, tokenHash: hash(token), expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) });
+  await RememberedDevice.create({ userId, tokenHash: hash(token), expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+    transaction ? { transaction } : undefined);
   return token;
 };
 const recognize = async (token, userId) => Boolean(token && userId && await RememberedDevice.findOne({

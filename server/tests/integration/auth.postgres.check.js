@@ -21,6 +21,7 @@ const { generateTokens, hashToken } = require('../../src/modules/auth/tokenUtils
 const { authenticate } = require('../../src/middleware/auth.middleware');
 const blocklist = require('../../src/utils/tokenBlocklist');
 const { revokeUserSessions } = require('../../src/modules/auth/sessionRevocation');
+const rememberedDevices = require('../../src/modules/auth/rememberedDevice');
 // Delivery/audit are not the subject of these checks; do not contact providers.
 require('../../src/modules/notification/notification.service').send = async () => {};
 require('../../src/modules/audit/audit.service').log = async () => {};
@@ -206,11 +207,13 @@ const newSession = async (expired = false) => {
   await check('password reset consumes its token and revokes existing sessions', async () => {
     const reset = crypto.randomBytes(32).toString('hex');
     const { id } = await newSession();
+    const trustedDevice = await rememberedDevices.issue(user.id);
     await db.PasswordResetToken.create({ userId: user.id, token: hashToken(reset), purpose: 'password_reset', expiresAt: new Date(Date.now() + 60000) });
     testCredential = `${crypto.randomBytes(24).toString('hex')}Aa1!`;
     await auth.resetPassword(reset, testCredential);
     await assert.rejects(auth.resetPassword(reset, testCredential), error => error.statusCode === 400);
     assert.ok((await db.RefreshToken.findByPk(id)).revokedAt);
+    assert.equal(await rememberedDevices.recognize(trustedDevice, user.id), false);
     const updated = await db.User.scope('withPassword').findByPk(user.id);
     assert.equal(await updated.validatePassword(testCredential), true);
   });
@@ -242,6 +245,10 @@ const newSession = async (expired = false) => {
     const result = await auth.verifyTwoFactor(challenge.tempToken, authenticator.generate(setup.secret), '127.0.0.1');
     const claims = require('jsonwebtoken').verify(result.tokens.accessToken, process.env.JWT_ACCESS_SECRET, require('../../src/modules/auth/tokenUtils').getIssAud());
     assert.equal(claims.mfa, true);
+    await assert.rejects(
+      auth.verifyTwoFactor(challenge.tempToken, authenticator.generate(setup.secret), '127.0.0.1'),
+      error => error.code === 'UNAUTHORIZED',
+    );
     const updated = await db.User.scope('withPassword').findByPk(user.id);
     assert.equal(await factors.verifyBackupCode(updated, enabled.backupCodes[0]), true);
     assert.equal(await factors.verifyBackupCode(updated, enabled.backupCodes[0]), false);

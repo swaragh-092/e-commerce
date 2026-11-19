@@ -13,6 +13,7 @@ const enrollmentClaims = (token) => {
 
 const setup = async (req, res, next) => {
   try {
+    res.setHeader('Cache-Control', 'no-store');
     const result = await TwoFactorService.setup(req.user.id);
     return success(res, result, '2FA setup initiated. Scan the QR code and verify.');
   } catch (err) { next(err); }

@@ -33,6 +33,15 @@ describe('Role-scoped MFA enforcement', () => {
     expect(policy.isEnrollmentRequired({ ...staff, roles: [{ id: 'other', slug: 'sales', baseRole: 'admin' }] }, selected)).toBe(false);
     expect(policy.isEnrollmentRequired({ role: 'super_admin', roles: staff.roles }, { ...optional, requireAdministrators: true })).toBe(true);
   });
+  it('requires administrator MFA for customer-base roles granted admin-only permissions', () => {
+    const delegatedAdmin = {
+      role: 'customer',
+      roles: [{ id: roleId, slug: 'ops', baseRole: 'customer', permissions: [{ key: 'products.read' }] }],
+    };
+    const adminPolicy = { ...optional, requireAdministrators: true };
+    expect(policy.classifyUser(delegatedAdmin)).toMatchObject({ administrator: true, administrative: true });
+    expect(policy.isEnrollmentRequired(delegatedAdmin, adminPolicy)).toBe(true);
+  });
   it('never requires customer enrollment and keeps enrolled staff evidence enforced', () => {
     expect(policy.isEnrollmentRequired({ role: 'customer', roles: [{ id: roleId, baseRole: 'customer' }] }, selected)).toBe(false);
     expect(() => policy.assertMfaSession({ role: 'admin', twoFactorEnabled: true }, {}, optional)).toThrow();

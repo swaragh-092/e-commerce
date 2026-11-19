@@ -45,6 +45,18 @@ describe('Backend audit security boundaries', () => {
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
     expect(next).not.toHaveBeenCalled();
   });
+  it('revokes and clears trusted-device credentials on logout', async () => {
+    vi.spyOn(jwt, 'verify').mockReturnValue({ id: 'user-1', sid: 'sid-logout' });
+    vi.spyOn(db.RefreshToken, 'update').mockResolvedValue([1]);
+    const deviceRevocation = vi.spyOn(db.RememberedDevice, 'update').mockResolvedValue([1]);
+    vi.spyOn(tokenBlocklist, 'revokeSession').mockImplementation(() => {});
+    const req = request();
+    req.cookies = { trusted_device: 'trusted-cookie', remembered_device: 'remembered-cookie' };
+    const res = response();
+    await authController.logout(req, res, vi.fn());
+    expect(deviceRevocation).toHaveBeenCalledTimes(2);
+    expect(res.clearCookie).toHaveBeenCalledWith('trusted_device', expect.any(Object));
+  });
   it('refuses deletion before touching a referenced media record', async () => {
     const record = { get: vi.fn().mockReturnValue('2'), destroy: vi.fn() };
     vi.spyOn(db.Media, 'findByPk').mockResolvedValue(record);

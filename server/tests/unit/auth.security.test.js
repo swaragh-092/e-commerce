@@ -151,6 +151,7 @@ describe('MFA bypass paths', () => {
     const cookies = require('../../src/modules/auth/authCookies');
     const verify = vi.spyOn(cookies, 'verifyTrustedDevice').mockReturnValue(true);
     vi.spyOn(db.RememberedDevice, 'findOne').mockResolvedValue(null);
+    vi.spyOn(db.OtpToken, 'create').mockResolvedValue({});
     vi.spyOn(db.User, 'scope').mockReturnValue({ findOne: async () => ({ ...admin, twoFactorEnabled: true, validatePassword: async () => true }) });
     vi.spyOn(features, 'getResolvedFeature').mockResolvedValue(false);
     expect(await auth.login(admin.email, 'correct', '127.0.0.1', false, '', 'trusted-cookie')).toMatchObject({ requiresTwoFactor: true });
@@ -167,7 +168,8 @@ describe('MFA bypass paths', () => {
       validatePassword: async () => true, update: vi.fn().mockResolvedValue(undefined) };
     vi.spyOn(db.User, 'scope').mockReturnValue({ findOne: async () => customer });
     vi.spyOn(db.User, 'findByPk').mockResolvedValue(customer);
-    const trustedToken = require('../../src/modules/auth/authCookies').createTrustedDeviceToken(customer.id);
+    const trustedToken = 'opaque-trusted-device-token';
+    db.RememberedDevice.findOne.mockResolvedValue({ id: 'trusted-device-record' });
     const result = await auth.login(customer.email, 'correct', '127.0.0.1', false, '', null, null, trustedToken);
     expect(result.requiresTwoFactor).not.toBe(true);
     expect(result.tokens.accessToken).toBeTruthy();
@@ -241,7 +243,9 @@ describe('MFA recovery codes', () => {
     const crypto = require('crypto');
     const service = require('../../src/modules/auth/twoFactor.service');
     const hash = crypto.createHash('sha256').update('abcd1234').digest('hex');
-    const locked = { twoFactorBackupCodes: [hash], save: vi.fn() };
+    const newCode = '0123456789abcdef0123456789abcdef';
+    const newHash = crypto.createHash('sha256').update(newCode).digest('hex');
+    const locked = { twoFactorBackupCodes: [hash, newHash], save: vi.fn() };
     const findByPk = vi.fn().mockResolvedValue(locked);
     const scope = vi.spyOn(db.User, 'scope').mockReturnValue({ findByPk });
     vi.spyOn(db.sequelize, 'transaction').mockImplementation(async (callback) => callback({ LOCK: { UPDATE: 'UPDATE' } }));
@@ -251,5 +255,6 @@ describe('MFA recovery codes', () => {
     expect(findByPk).toHaveBeenCalledWith('u', expect.objectContaining({ lock: 'UPDATE' }));
     expect(locked.save).toHaveBeenCalled();
     expect(await service.verifyBackupCode(user, 'abcd1234')).toBe(false);
+    expect(await service.verifyBackupCode({ id: 'u', twoFactorBackupCodes: [newHash] }, newCode)).toBe(true);
   });
 });

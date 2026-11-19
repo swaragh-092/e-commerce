@@ -11,6 +11,7 @@ const { User, RefreshToken, sequelize } = require('../index');
 const AppError = require('../../utils/AppError');
 const { isEnrollmentRequired, loadMfaPolicy } = require('./mfaPolicy');
 const { revokeUserSessions } = require('./sessionRevocation');
+const rememberedDevices = require('./rememberedDevice');
 
 const APP_NAME = process.env.APP_NAME || 'E-Commerce Pro';
 const AccountEvents = require('./accountEvents');
@@ -33,7 +34,7 @@ const sameSecret = (left, right) => ['ciphertext', 'iv', 'tag', 'version']
 const generateBackupCodes = () => {
   const codes = [];
   for (let i = 0; i < 8; i++) {
-    codes.push(crypto.randomBytes(4).toString('hex')); // 8-char hex codes
+    codes.push(crypto.randomBytes(16).toString('hex')); // 128-bit, 32-character hex codes
   }
   return codes;
 };
@@ -80,6 +81,7 @@ const enable = async (userId, totpCode, { createSession = false, ipAddress } = {
       throw new AppError('VALIDATION_ERROR', 409, 'MFA setup changed. Reload your profile and try again.');
     }
     await revokeUserSessions([user.id], transaction);
+    await rememberedDevices.revokeAll(user.id, transaction);
     await locked.update({
       twoFactorEnabled: true,
       twoFactorBackupCodes: hashedCodes,
@@ -147,14 +149,14 @@ const verify = (user, totpCode) => {
   }
 };
 
-const verifyBackupCode = async (user, code) => {
+const verifyBackupCode = async (user, code, { transaction } = {}) => {
   if (!user.twoFactorBackupCodes || !Array.isArray(user.twoFactorBackupCodes)) return false;
 
   const hashed = hashCode(String(code || '').trim().toLowerCase());
   if (!user.twoFactorBackupCodes.includes(hashed)) return false;
 
   const { sequelize } = require('../index');
-  return sequelize.transaction(async (t) => {
+  const consume = async t => {
     const locked = await User.scope('withPassword').findByPk(user.id, { transaction: t, lock: t.LOCK.UPDATE });
     if (!locked?.twoFactorBackupCodes) return false;
 
@@ -166,7 +168,8 @@ const verifyBackupCode = async (user, code) => {
     locked.twoFactorBackupCodes = remaining;
     await locked.save({ transaction: t });
     return true;
-  });
+  };
+  return transaction ? consume(transaction) : sequelize.transaction(consume);
 };
 
 const regenerateBackupCodes = async (userId, totpCode) => {

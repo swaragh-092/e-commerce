@@ -9,16 +9,18 @@ beforeEach(() => vi.clearAllMocks());
 describe('Authenticator enrollment and recovery codes', () => {
   it('keeps one-time backup codes visible until the user confirms saving them', async () => {
     authService.setup2FA.mockResolvedValue({ qrCodeDataUrl: 'data:image/png;base64,', secret: 'test-only-setup' });
-    authService.enable2FA.mockResolvedValue({ enabled: true, backupCodes: ['aabb1122', 'ccdd3344'] });
+    authService.enable2FA.mockResolvedValue({ enabled: true, backupCodes: [
+      '0123456789abcdef0123456789abcdef', 'fedcba9876543210fedcba9876543210',
+    ] });
     const update = vi.fn().mockResolvedValue({});
     render(<TwoFactorSetup user={{ twoFactorEnabled: false }} onUpdate={update} />);
     fireEvent.click(screen.getByRole('button', { name: 'Set Up 2FA' }));
     fireEvent.change(await screen.findByPlaceholderText('Enter 6-digit code'), { target: { value: '123456' } });
     fireEvent.click(screen.getByRole('button', { name: 'Verify & Enable' }));
-    expect(await screen.findByText('aabb1122')).toBeInTheDocument();
+    expect(await screen.findByText('0123456789abcdef0123456789abcdef')).toBeInTheDocument();
     expect(update).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: "I've saved my codes" }));
+    fireEvent.click(screen.getByRole('button', { name: "I've saved my recovery codes" }));
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
-    expect(screen.queryByText('aabb1122')).not.toBeInTheDocument();
+    expect(screen.queryByText('0123456789abcdef0123456789abcdef')).not.toBeInTheDocument();
   });
 });
