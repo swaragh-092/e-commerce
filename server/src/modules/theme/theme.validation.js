@@ -195,6 +195,10 @@ const padding = Joi.number().integer().min(0).max(240);
 const margin = Joi.number().integer().min(-240).max(240);
 
 const productBlockPlacementSchema = Joi.string().valid('before-options', 'before-specifications', 'after-details');
+const productDetailsOrderSchema = Joi.array().items(Joi.alternatives().try(
+  Joi.string().valid('title', 'metadata', 'price', 'summary', 'variants', 'purchase', 'specifications', 'description'),
+  Joi.string().pattern(/^custom:.{1,50}$/),
+)).min(1).max(20).unique();
 
 const heroBlockSchema = (depth = 0) => Joi.object({
   id: Joi.string().max(50).required(),
@@ -254,6 +258,7 @@ const homepageSectionSchema = Joi.object({
   type: Joi.string().valid(...SECTION_TYPES).required(),
   enabled: Joi.boolean().required(),
   heroBlocks: Joi.when('type', { is: Joi.valid('composed-hero', 'product-info', 'editorial-image-text'), then: Joi.array().items(heroBlockSchema()).max(12).unique('id'), otherwise: Joi.forbidden() }),
+  detailsBlockOrder: Joi.when('type', { is: 'product-info', then: productDetailsOrderSchema, otherwise: Joi.forbidden() }),
   title: safeText,
   subtitle: safeText,
   source: Joi.string().valid(...PRODUCT_SOURCES),
@@ -650,6 +655,7 @@ const idParamSchema = Joi.object({
 
 module.exports = {
   productBlockPlacementSchema,
+  productDetailsOrderSchema,
   packageSchema,
   applyRequestSchema,
   previewRequestSchema,

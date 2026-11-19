@@ -1,5 +1,5 @@
 import { BLOCK_FIELD_PRESETS } from './DesignerSectionEditor';
-import { PRODUCT_BLOCK_PLACEMENTS, getProductBlockPlacement } from '../../../../utils/productBlockPlacement';
+import { getProductDetailsOrder, PRODUCT_DETAILS_LABELS, customDetailKey } from '../../../../utils/productDetailsOrder';
 import { HERO_BLOCK_LABELS } from '../../../storefront/sections/ComposedHero';
 import { Fragment, useState } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
@@ -253,6 +253,7 @@ const DesignerTreePanel = ({
   onThemeSettingsClick,
   onAddSection,
   onAddProductBlock,
+  onProductDetailsOrderChange,
   onAddSectionItem,
   inheritedBlocksForSection,
   onSelectProductBlock,
@@ -277,6 +278,14 @@ const DesignerTreePanel = ({
   const currentPageSettings = pageSettings[activePage] || {};
   const pageSections = currentPageSettings.productRows || [];
   const isHomePage = activePage === 'home';
+  const productInfo = activePage === 'product' ? sections.find((section) => section.type === 'product-info') : null;
+  const detailsOrder = productInfo ? getProductDetailsOrder(productInfo) : [];
+  const moveDetail = (from, to) => {
+    if (!productInfo || from === to || !detailsOrder[from] || !detailsOrder[to]) return;
+    const next = [...detailsOrder];
+    next.splice(to, 0, next.splice(from, 1)[0]);
+    onProductDetailsOrderChange(productInfo, next);
+  };
   const templateSectionRows = sections
     .map((section, originalIndex) => ({ section, originalIndex }))
     .filter(({ section }) => !section.placement || section.placement === 'template');
@@ -345,6 +354,10 @@ const DesignerTreePanel = ({
   return (
     <DragDropContext onDragEnd={({ source, destination }) => {
       if (!destination || source.droppableId !== destination.droppableId || source.index === destination.index) return;
+      if (source.droppableId === 'product-details') {
+        moveDetail(source.index, destination.index);
+        return;
+      }
       const rows = source.droppableId === 'footer' ? footerSectionRows : templateSectionRows;
       const from = rows[source.index].originalIndex;
       const target = rows[destination.index].originalIndex;
@@ -505,7 +518,7 @@ const DesignerTreePanel = ({
               const rows = pageSections
                 .map((section, originalIndex) => ({ section, originalIndex }))
                 .filter(({ section }) => (section.pagePosition || 'below') === position);
-              const mainSection = activePage === 'product' && sections.find((section) => section.type === 'product-info');
+              const mainSection = productInfo;
 
               return <Stack key={position} spacing={0.35}>
                 {position === 'below' && (mainSection ? (
@@ -514,26 +527,36 @@ const DesignerTreePanel = ({
                       expandControl={expandSectionControl(mainSection)}
                       description="Edit blocks" onClick={() => onSectionClick(mainSection)} />
                     {expandedSections[mainSection.id] && <Stack sx={{ pl: 2, borderLeft: 1, borderColor: 'divider' }} spacing={0.25}>
-                      {Object.entries(PRODUCT_BLOCK_PLACEMENTS).map(([placement, label]) => {
-                        const blocks = (mainSection.heroBlocks || []).filter((block) => getProductBlockPlacement(block) === placement);
-                        return <Stack key={placement} spacing={0.1}>
-                          <Typography variant="caption" color="text.secondary">{label}</Typography>
-                          {(mainSection.heroBlocks?.length || 0) < 12 && (
-                            <InsertSectionControl label={`Add block ${label.toLowerCase()}`}
-                              onClick={(event) => onAddProductBlock(mainSection, { placement, atStart: true, anchorEl: event.currentTarget })} />
-                          )}
-                          {blocks.map((block) => <Fragment key={block.id}>
-                            <Button size="small" sx={{ justifyContent: 'flex-start', textTransform: 'none' }}
-                              onClick={() => onSelectProductBlock(mainSection, block.id)}>
-                              {block.text || HERO_BLOCK_LABELS[block.type]}
-                            </Button>
-                            {mainSection.heroBlocks.length < 12 && (
-                              <InsertSectionControl label="Add block below"
-                                onClick={(event) => onAddProductBlock(mainSection, { placement, afterId: block.id, anchorEl: event.currentTarget })} />
-                            )}
-                          </Fragment>)}
-                        </Stack>;
-                      })}
+                      <Typography variant="body2" sx={{ py: 0.5 }}>Product media</Typography>
+                      <Typography component="h4" variant="caption" fontWeight={700}>Details</Typography>
+                      {(mainSection.heroBlocks?.length || 0) < 12 && (
+                        <AddSectionButton onClick={(event) => onAddProductBlock(mainSection, { detailAfter: null, anchorEl: event.currentTarget })}>
+                          Add block
+                        </AddSectionButton>
+                      )}
+                      <Droppable droppableId="product-details">{(drop) => <Box ref={drop.innerRef} {...drop.droppableProps}>
+                        {detailsOrder.map((key, index) => {
+                          const block = mainSection.heroBlocks?.find(({ id }) => customDetailKey(id) === key);
+                          const label = block ? block.text || HERO_BLOCK_LABELS[block.type] : PRODUCT_DETAILS_LABELS[key];
+                          return <Draggable key={key} draggableId={`product-detail:${key}`} index={index}>{(drag) => (
+                            <Box ref={drag.innerRef} {...drag.draggableProps}>
+                              <Stack direction="row" alignItems="center">
+                                <Box {...drag.dragHandleProps} sx={{ display: 'flex', cursor: 'grab' }} aria-label={`Reorder ${label}`}><DragIndicatorIcon fontSize="small" /></Box>
+                                <Button size="small" sx={{ justifyContent: 'flex-start', textTransform: 'none', flex: 1, minWidth: 0 }}
+                                  onClick={() => onSelectProductBlock(mainSection, block?.id || key, block ? 'heroBlocks' : 'detailsBlockOrder')}>
+                                  <Typography variant="inherit" noWrap>{label}</Typography>
+                                </Button>
+                                <IconButton size="small" disabled={index === 0} aria-label={`Move ${label} up`} onClick={() => moveDetail(index, index - 1)}><ArrowUpwardIcon fontSize="inherit" /></IconButton>
+                                <IconButton size="small" disabled={index === detailsOrder.length - 1} aria-label={`Move ${label} down`} onClick={() => moveDetail(index, index + 1)}><ArrowDownwardIcon fontSize="inherit" /></IconButton>
+                              </Stack>
+                              {(mainSection.heroBlocks?.length || 0) < 12 && <InsertSectionControl label={`Add block after ${label}`}
+                                onClick={(event) => onAddProductBlock(mainSection, { detailAfter: key, anchorEl: event.currentTarget })} />}
+                            </Box>
+                          )}</Draggable>;
+                        })}
+                        {drop.placeholder}
+                      </Box>}</Droppable>
+                      {mainSection.detailsBlockOrder && <Button size="small" onClick={() => onProductDetailsOrderChange(mainSection, null)}>Restore default order</Button>}
                     </Stack>}
                   </>
                 ) : <Typography variant="body2" fontWeight={700} sx={{ px: 1, py: 1 }}>Page content</Typography>)}
