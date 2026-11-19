@@ -1,9 +1,9 @@
-'use strict';
+use strict';
 
 const express = require('express');
 const router = express.Router();
 const categoryController = require('./category.controller');
-const { createCategorySchema, updateCategorySchema, getCategoryProductsQuerySchema } = require('./category.validation');
+const { createCategorySchema, updateCategorySchema, getCategoryProductsQuerySchema, moveCategorySchema } = require('./category.validation');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { validate } = require('../../middleware/validate.middleware');
@@ -11,11 +11,8 @@ const { auditLog } = require('../audit/audit.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
 const { idParamSchema, hideEmptyQuerySchema } = require('../../utils/common.validation');
 
-
-
 router.get('/', validate(hideEmptyQuerySchema, 'query'), categoryController.getTree);
 router.get('/:slug', validate(getCategoryProductsQuerySchema, 'query'), categoryController.getBySlug);
-
 
 router.post('/',
     authenticate,
@@ -34,7 +31,6 @@ router.put('/:id',
     categoryController.update
 );
 
-
 router.post('/:id/reorder',
     authenticate,
     authorizePermissions(PERMISSIONS.CATEGORIES_MANAGE),
@@ -43,6 +39,14 @@ router.post('/:id/reorder',
     categoryController.reorder
 );
 
+router.post('/:id/move',
+    authenticate,
+    authorizePermissions(PERMISSIONS.CATEGORIES_MANAGE),
+    validate(idParamSchema, 'params'),
+    validate(moveCategorySchema),
+    auditLog('Category'),
+    categoryController.move
+);
 
 router.post('/:id/products/reorder',
     authenticate,
@@ -52,7 +56,6 @@ router.post('/:id/products/reorder',
     categoryController.reorderProducts
 );
 
-
 router.delete('/:id',
     authenticate,
     authorizePermissions(PERMISSIONS.CATEGORIES_MANAGE),
@@ -60,6 +63,5 @@ router.delete('/:id',
     auditLog('Category'),
     categoryController.delete
 );
-
 
 module.exports = router;
