@@ -2,11 +2,13 @@
 
 const jwt = require('jsonwebtoken');
 const AppError = require('../utils/AppError');
-const { User, Role, Permission } = require('../modules');
-const { enrichUserAuthorization } = require('../config/permissions');
+const { User, Role, Permission, RefreshToken } = require('../modules');
+const { enrichUserAuthorization, isAdminUser } = require('../config/permissions');
 const logger = require('../utils/logger');
 const tokenBlocklist = require('../utils/tokenBlocklist');
+const { assertMfaSession, loadMfaPolicy } = require('../modules/auth/mfaPolicy');
 const { getAccessToken } = require('../modules/auth/authCookies');
+const enforceAdminSession = (user, decoded, session) => require('../modules/auth/adminSession').enforce(user, session);
 
 const JWT_VERIFY_OPTS = { algorithms: ['HS256'], issuer: process.env.JWT_ISSUER || 'ecommerce-pro', audience: process.env.JWT_AUDIENCE || 'ecommerce-pro-client' };
 
@@ -48,6 +50,17 @@ const authenticate = async (req, res, next) => {
       throw new AppError('UNAUTHORIZED', 401, 'Session has been revoked');
     }
 
+    // The refresh-token row is the durable session record. Checking it here
+    // makes logout, password resets, and force-logout effective across workers
+    // and after a process restart, not just in this worker's memory.
+    let session = null;
+    if (decoded.sid) {
+      session = await RefreshToken.findByPk(decoded.sid, { attributes: ['id', 'revokedAt', 'expiresAt', 'absoluteExpiresAt', 'lastActiveAt', 'createdAt'] });
+      if (!session || session.revokedAt) {
+        throw new AppError('UNAUTHORIZED', 401, 'Session has been revoked');
+      }
+    }
+
     // Check blocklist (tokens invalidated on logout)
     if (tokenBlocklist.isBlocked(token)) {
       throw new AppError('UNAUTHORIZED', 401, 'Token has been revoked');
@@ -55,7 +68,7 @@ const authenticate = async (req, res, next) => {
 
     // Check if user still exists (could be deleted)
     const user = await User.findByPk(decoded.id, {
-      attributes: ['id', 'email', 'role', 'status'],
+      attributes: ['id', 'email', 'role', 'status', 'twoFactorEnabled', 'emailVerified', 'emailMfaPasswordBinding'],
       include: authUserInclude,
     });
 
@@ -67,6 +80,17 @@ const authenticate = async (req, res, next) => {
       throw new AppError('FORBIDDEN', 403, 'Your account is inactive');
     }
 
+    assertMfaSession(user, decoded, await loadMfaPolicy(user));
+    if (isAdminUser(user)) {
+      enforceAdminSession(user, decoded, session);
+    } else if (decoded.sid) {
+      if (!session.expiresAt || !Number.isFinite(new Date(session.expiresAt).getTime()) || new Date(session.expiresAt) <= new Date()) {
+        throw new AppError('UNAUTHORIZED', 401, 'Session has been revoked');
+      }
+    }
+    if (session) {
+      req.authSession = session;
+    }
     req.user = enrichUserAuthorization(user);
     next();
   } catch (error) {
@@ -98,12 +122,21 @@ const optionalAuth = async (req, res, next) => {
       return next();
     }
 
+    if (decoded.sid) {
+      const session = await RefreshToken.findByPk(decoded.sid, { attributes: ['id', 'revokedAt', 'expiresAt', 'absoluteExpiresAt', 'lastActiveAt', 'createdAt'] });
+      if (!session || session.revokedAt || (!session.expiresAt || !Number.isFinite(new Date(session.expiresAt).getTime()) || new Date(session.expiresAt) <= new Date())) return next();
+    }
+
     const user = await User.findByPk(decoded.id, {
-      attributes: ['id', 'email', 'role', 'status'],
+      attributes: ['id', 'email', 'role', 'status', 'twoFactorEnabled', 'emailVerified', 'emailMfaPasswordBinding'],
       include: authUserInclude,
     });
 
     if (user && user.status === 'active') {
+      try { assertMfaSession(user, decoded, await loadMfaPolicy(user)); } catch { return next(); }
+      if (isAdminUser(user)) {
+        try { enforceAdminSession(user, decoded, decoded.sid ? await RefreshToken.findByPk(decoded.sid) : null); } catch { return next(); }
+      }
       req.user = enrichUserAuthorization(user);
     }
     next();
@@ -113,4 +146,4 @@ const optionalAuth = async (req, res, next) => {
   }
 };
 
-module.exports = { authenticate, optionalAuth };
+module.exports = { authenticate, optionalAuth, enforceAdminSession };

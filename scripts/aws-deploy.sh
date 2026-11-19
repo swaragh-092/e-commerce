@@ -257,6 +257,16 @@ server {
         proxy_cache_bypass \$http_upgrade;
     }
 
+    location = /sitemap.xml {
+        proxy_pass http://localhost:5000/sitemap.xml;
+        proxy_set_header Host \$host;
+    }
+
+    location = /robots.txt {
+        proxy_pass http://localhost:5000/robots.txt;
+        proxy_set_header Host \$host;
+    }
+
     location /uploads/ {
         proxy_pass http://localhost:5000/uploads/;
     }

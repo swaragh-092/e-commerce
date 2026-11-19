@@ -363,8 +363,14 @@ const OrdersManagePage = () => {
       {
         field: 'createdAt',
         headerName: 'Placed',
-        width: 180,
-        renderCell: ({ value }) => formatDateTime(value),
+        width: 220,
+        align: 'center',
+        headerAlign: 'center',
+        renderCell: ({ value }) => (
+          <Typography variant="body2" noWrap sx={{ width: '100%', textAlign: 'center' }}>
+            {formatDateTime(value)}
+          </Typography>
+        ),
       },
       {
         field: 'actions',

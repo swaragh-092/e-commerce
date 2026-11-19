@@ -16,6 +16,14 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe('image editor controls', () => {
+  it('explains updating placements and allows restoring the original', async () => {
+    const revert = vi.fn();
+    render(<MediaImageEditor source="/image.png" name="image.png" replaceExisting onRevert={revert} onSave={vi.fn()} onClose={vi.fn()} />);
+    await screen.findByText('Output: 1800 × 1200 px');
+    expect(screen.getByText(/Saving updates this image everywhere/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Revert to original' }));
+    await waitFor(() => expect(revert).toHaveBeenCalledOnce());
+  });
   it('applies product and banner presets with proportional output', async () => {
     render(<MediaImageEditor source="/image.png" name="image.png" onSave={vi.fn()} onClose={vi.fn()} />);
     await screen.findByText('Output: 1800 × 1200 px');

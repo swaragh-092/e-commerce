@@ -20,6 +20,7 @@ This platform is engineered as a **reusable foundation** for high-scale e-commer
 ### 🔐 Authentication & Access Control (RBAC)
 - **Advanced Permissions**: Granular permission gates (e.g., `products.read`, `orders.manage`) for every feature.
 - **Dynamic Roles**: Super-admins can create custom roles with specific inherited permissions.
+- **Configurable MFA**: Super-admins can require authenticator MFA for administrators, all staff, or selected staff roles; customer MFA remains voluntary. See [Accounts and login security](docs/ACCOUNT-LOGIN-SECURITY.md).
 - **Security-Hardened**: JWT with refresh token rotation, bcrypt hashing (cost 12), and per-route rate limiting.
 - **Session Protection**: Brute-force protection and automated refresh token revocation on logout.
 
@@ -104,7 +105,8 @@ e-commerce/
 ### 1. Setup Environment
 ```bash
 cp .env.example .env
-# Fill in your Database, JWT_SECRET, and Provider API Keys
+# Fill in your database, distinct JWT_ACCESS_SECRET and JWT_REFRESH_SECRET,
+# CREDENTIAL_ENCRYPTION_KEY, and any provider API keys you use
 ```
 
 ### 2. Install & Initialize
@@ -169,12 +171,12 @@ For deep dives into specific subsystems, refer to the `docs/` directory:
 
 - [Testing Guide](docs/TESTING_GUIDE.md)
 
-## 🛡️ Default Access (Post-Seed)
+## 🛡️ Default Access
 
-| Role | Email | Password |
-| :--- | :--- | :--- |
-| **Super Admin** | `admin@example.com` | `Password123!` |
-| **Customer** | `customer@example.com` | `Password123!` |
+The seed process does not create default admin or customer accounts. Create an
+administrator through the approved setup process and require MFA enrollment
+before sign-in. See [Accounts and login security](docs/ACCOUNT-LOGIN-SECURITY.md)
+for the operator enrollment procedure and current rollout evidence.
 
 ---
 

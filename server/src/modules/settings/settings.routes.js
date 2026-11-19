@@ -11,6 +11,7 @@ const {
   saveDesignDraftSchema,
   publishDesignDraftSchema,
   restoreDesignVersionSchema,
+  restoreDesignArchiveSchema,
 } = require('./settings.validation');
 const {
   saleLabelBodySchema,
@@ -93,6 +94,13 @@ router.get('/design-versions',
   settingsController.getDesignVersions
 );
 
+router.get('/design-draft/archives', authenticate, authorizePermissions(PERMISSIONS.SETTINGS_MANAGE), settingsController.getDesignArchives);
+router.post('/design-draft/archives/:id/restore',
+  authenticate, authorizePermissions(PERMISSIONS.SETTINGS_MANAGE),
+  validate(idParamSchema, 'params'), validate(restoreDesignArchiveSchema),
+  settingsController.restoreDesignArchive
+);
+
 router.post('/design-draft',
   authenticate,
   authorizePermissions(PERMISSIONS.SETTINGS_MANAGE),
@@ -118,6 +126,7 @@ router.post('/design-versions/:id/restore',
 router.delete('/design-draft',
   authenticate,
   authorizePermissions(PERMISSIONS.SETTINGS_MANAGE),
+  validate(publishDesignDraftSchema),
   settingsController.discardDesignDraft
 );
 

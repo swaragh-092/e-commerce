@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Box, Typography, TextField, Button, Alert, useTheme, IconButton, InputAdornment, CircularProgress, Divider, Checkbox, FormControlLabel } from '@mui/material';
-import { useNavigate, Link as RouterLink, useLocation, useSearchParams } from 'react-router-dom';
+import { useNavigate, Link as RouterLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { validateEmail, validateRequired } from '../../utils/authValidation';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import authService from '../../services/authService';
 import { EmailOutlined, LockOutlined, Visibility, VisibilityOff, PhoneOutlined } from '@mui/icons-material';
+import EmailMfaStep from '../../components/auth/EmailMfaStep';
 import AuthPageShell from '../../components/storefront/AuthPageShell';
 import newsletterService from '../../services/newsletterService';
 import { useSettings } from '../../hooks/useSettings';
@@ -19,8 +20,7 @@ const LoginPage = () => {
   const { notify } = useNotification();
   const { settings, features } = useSettings();
   const newsletterEnabled = features?.newsletter === true && settings?.auth?.loginNewsletterEnabled !== false;
-  const [searchParams] = useSearchParams();
-  
+
   const [formData, setFormData] = useState({ email: localStorage.getItem('rememberedEmail') || '', password: '' });
   const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState('');
@@ -51,6 +51,8 @@ const LoginPage = () => {
 
   // 2FA state
   const [twoFactorStep, setTwoFactorStep] = useState(false);
+  const [emailChallenge, setEmailChallenge] = useState('');
+  const [emailStep, setEmailStep] = useState(false);
   const [tempToken, setTempToken] = useState('');
   const [totpCode, setTotpCode] = useState('');
   const [useBackupCode, setUseBackupCode] = useState(false);
@@ -58,11 +60,16 @@ const LoginPage = () => {
 
   // Handle OAuth 2FA redirect
   useEffect(() => {
-    if (searchParams.get('requiresTwoFactor') === 'true' && searchParams.get('tempToken')) {
+    const oauthParams = new URLSearchParams(location.hash.slice(1));
+    const oauthTempToken = oauthParams.get('tempToken');
+    if (oauthParams.get('requiresTwoFactor') === 'true' && oauthTempToken) {
       setTwoFactorStep(true);
-      setTempToken(searchParams.get('tempToken'));
+      setTempToken(oauthTempToken);
+      setEmailChallenge('');
+      setEmailStep(false);
+      window.history.replaceState(window.history.state, '', `${location.pathname}${location.search}`);
     }
-  }, [searchParams]);
+  }, [location.hash, location.pathname, location.search]);
 
   // Phone login state
   const [loginMode, setLoginMode] = useState('email'); // 'email' | 'phone'
@@ -138,9 +145,14 @@ const LoginPage = () => {
 
     try {
       const result = await login(formData.email, formData.password, rememberMe);
+      if (result.requiresMfaEnrollment) {
+        navigate('/admin/login', { replace: true, state: { sessionExpired: false, mfaEnrollmentRequired: true } });
+        return;
+      }
       if (result.requiresTwoFactor) {
         setTwoFactorStep(true);
         setTempToken(result.tempToken);
+        setEmailChallenge(result.emailChallenge || '');
         setError('');
         return;
       }
@@ -195,8 +207,8 @@ const LoginPage = () => {
     }
   };
 
-  const handleGoogleLogin = () => {
-    window.location.href = authService.getGoogleOAuthUrl();
+  const handleGoogleLogin = async () => {
+    await authService.startGoogleOAuth();
   };
 
   const handleSendOtp = async () => {
@@ -226,6 +238,8 @@ const LoginPage = () => {
       if (result.requiresTwoFactor) {
         setTwoFactorStep(true);
         setTempToken(result.tempToken);
+        setEmailChallenge('');
+        setEmailStep(false);
         setLoginMode('email'); // switch to show 2FA input
         return;
       }
@@ -263,27 +277,33 @@ const LoginPage = () => {
       )}
       {successMsg && <Alert severity={location.state?.sessionExpired ? 'info' : 'success'} sx={{ mb: 2 }}>{successMsg}</Alert>}
 
-      {twoFactorStep ? (
+      {emailStep ? (
+          <EmailMfaStep challenge={emailChallenge} onBack={() => setEmailStep(false)} onComplete={async () => {
+            const signedInUser = await finalizeAuthenticatedSession();
+            await saveNewsletterChoice(signedInUser);
+            navigate(location.state?.from?.pathname || '/', { replace: true });
+          }} />
+        ) : twoFactorStep ? (
         <Box component="form" onSubmit={handleTwoFactorSubmit}>
           <Typography sx={{ mb: 2, fontSize: 14, color: '#475569' }}>
             {useBackupCode
-              ? 'Enter one of your 8-character backup codes.'
+              ? 'Enter a backup code. New codes contain 32 characters; existing 8-character codes still work.'
               : 'Enter the 6-digit code from your authenticator app.'}
           </Typography>
           <TextField
             fullWidth
             autoFocus
             name="totpCode"
-            placeholder={useBackupCode ? 'e.g. b2ef58fb' : '000000'}
+            placeholder={useBackupCode ? 'Enter your backup code' : '000000'}
             value={totpCode}
             onChange={(e) => {
               if (useBackupCode) {
-                setTotpCode(e.target.value.replace(/[^a-f0-9]/gi, '').toLowerCase().slice(0, 8));
+                setTotpCode(e.target.value.replace(/[^a-f0-9]/gi, '').toLowerCase().slice(0, 32));
               } else {
                 setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6));
               }
             }}
-            inputProps={{ maxLength: useBackupCode ? 8 : 6, autoComplete: 'one-time-code' }}
+            inputProps={{ maxLength: useBackupCode ? 32 : 6, autoComplete: 'one-time-code' }}
             sx={inputSx}
           />
           <Box component="label" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1, cursor: 'pointer', fontSize: 13, color: '#475569' }}>
@@ -296,7 +316,7 @@ const LoginPage = () => {
             variant="contained"
             size="large"
             sx={{ mt: 1, mb: 1, height: 52, borderRadius: '8px' }}
-            disabled={loading || totpCode.length !== (useBackupCode ? 8 : 6)}
+            disabled={loading || (useBackupCode ? ![8, 32].includes(totpCode.length) : totpCode.length !== 6)}
           >
             {loading ? <CircularProgress size={18} color="inherit" /> : 'Verify'}
           </Button>
@@ -307,6 +327,24 @@ const LoginPage = () => {
           >
             {useBackupCode ? 'Use authenticator code instead' : 'Lost your device? Use a backup code'}
           </Button>
+            {emailChallenge && (
+              <Button type="button" fullWidth disabled={loading} onClick={() => { setError(''); setEmailStep(true); }}>
+                Use an email code
+              </Button>
+            )}
+            {emailChallenge && (
+              <Button type="button" fullWidth disabled={loading} onClick={() => {
+                setTwoFactorStep(false);
+                setTempToken('');
+                setEmailChallenge('');
+                setTotpCode('');
+                setUseBackupCode(false);
+                setError('');
+                setFormData(current => ({ ...current, password: '' }));
+              }}>
+                Back to sign in
+              </Button>
+            )}
         </Box>
       ) : loginMode === 'phone' ? (
         <Box component="form" onSubmit={handleVerifyOtp}>

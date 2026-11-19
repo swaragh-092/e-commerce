@@ -3,6 +3,7 @@ const CartService = require('./cart.service');
 const { success } = require('../../utils/response');
 const AppError = require('../../utils/AppError');
 const { isGuestSessionId } = require('../../utils/guestSession');
+const AnalyticsEventService = require('../analytics/analyticsEvent.service');
 
 const getSessionId = (req) => {
     return req.headers['x-session-id'] || req.cookies?.sessionId || null;
@@ -29,6 +30,12 @@ const addItem = async (req, res, next) => {
     try {
         const { userId, sessionId } = getCartOwner(req);
         const cart = await CartService.addItem(userId, sessionId, req.validated);
+        AnalyticsEventService.recordEvent({
+            eventName: 'cart_added',
+            userId,
+            sessionId,
+            productId: req.validated.productId,
+        }).catch(() => {});
         return success(res, cart, 'Item added to cart', 201);
     } catch (err) { next(err); }
 };

@@ -3,7 +3,7 @@ import { Box, Typography, TextField, Button, Alert, Paper } from '@mui/material'
 import authService from '../../services/authService';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 
-const TwoFactorSetup = ({ user, onUpdate }) => {
+const TwoFactorSetup = ({ user, onUpdate, onComplete, setupRequest, enableRequest, embedded = false }) => {
   const [step, setStep] = useState('idle'); // idle | setup | verify | showCodes
   const [qrData, setQrData] = useState(null);
   const [backupCodes, setBackupCodes] = useState(null);
@@ -19,7 +19,7 @@ const TwoFactorSetup = ({ user, onUpdate }) => {
   const handleSetup = async () => {
     setLoading(true); setError('');
     try {
-      const data = await authService.setup2FA();
+      const data = await (setupRequest || authService.setup2FA)();
       setQrData(data);
       setStep('verify');
     } catch (err) { setError(getApiErrorMessage(err, 'Failed to setup 2FA')); }
@@ -29,11 +29,12 @@ const TwoFactorSetup = ({ user, onUpdate }) => {
   const handleEnable = async (e) => {
     e.preventDefault(); setLoading(true); setError('');
     try {
-      const data = await authService.enable2FA(code);
+      const data = await (enableRequest || authService.enable2FA)(code);
       setBackupCodes(data.backupCodes);
       setStep('showCodes');
       setCode(''); setQrData(null);
-      if (onUpdate) onUpdate();
+      // Keep one-time backup codes visible before reauthentication.
+      setSuccess('MFA enabled. Save your backup codes securely. Other sessions have been signed out.');
     } catch (err) { setError(getApiErrorMessage(err, 'Invalid code.')); }
     finally { setLoading(false); }
   };
@@ -43,7 +44,7 @@ const TwoFactorSetup = ({ user, onUpdate }) => {
     try {
       await authService.disable2FA(disableCode);
       setSuccess('2FA disabled.'); setDisableCode('');
-      if (onUpdate) onUpdate();
+      if (onUpdate) Promise.resolve(onUpdate()).catch(() => {});
     } catch (err) { setError(getApiErrorMessage(err, 'Invalid code.')); }
     finally { setLoading(false); }
   };
@@ -60,9 +61,16 @@ const TwoFactorSetup = ({ user, onUpdate }) => {
     finally { setLoading(false); }
   };
 
+  const Container = embedded ? Box : Paper;
+  const handleBackupCodesSaved = () => {
+    setStep('idle');
+    setBackupCodes(null);
+    Promise.resolve(onUpdate?.()).catch(() => {}).finally(() => onComplete?.());
+  };
+
   return (
-    <Paper sx={{ p: 3, mt: 3 }}>
-      <Typography variant="h6" sx={{ mb: 2 }}>Two-Factor Authentication</Typography>
+    <Container sx={embedded ? { pt: 0 } : { p: 3, mt: 3 }}>
+      <Typography variant="h6" sx={{ mb: 2 }}>{embedded ? 'Set up your authenticator app' : 'Two-Factor Authentication'}</Typography>
       
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
@@ -71,11 +79,11 @@ const TwoFactorSetup = ({ user, onUpdate }) => {
       {step === 'showCodes' && backupCodes ? (
         <Box>
           <Alert severity="warning" sx={{ mb: 2 }}>
-            Save these backup codes securely. Each can be used once if you lose access to your authenticator app.
+            Save these backup codes securely. New codes are 32-character hex values; each can be used once if you lose access to your authenticator app.
           </Alert>
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mb: 2, fontFamily: 'monospace', fontSize: 14 }}>
             {backupCodes.map((c, i) => (
-              <Box key={i} sx={{ p: 1, bgcolor: 'grey.100', borderRadius: 1, textAlign: 'center' }}>{c}</Box>
+              <Box key={i} sx={{ p: 1, bgcolor: 'grey.100', borderRadius: 1, textAlign: 'center', overflowWrap: 'anywhere' }}>{c}</Box>
             ))}
           </Box>
           <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
@@ -96,8 +104,8 @@ const TwoFactorSetup = ({ user, onUpdate }) => {
               Download
             </Button>
           </Box>
-          <Button variant="contained" onClick={() => { setStep('idle'); setBackupCodes(null); }}>
-            I've saved my codes
+          <Button variant="contained" onClick={handleBackupCodesSaved}>
+            I've saved my recovery codes
           </Button>
         </Box>
       ) : is2FAEnabled ? (
@@ -110,12 +118,12 @@ const TwoFactorSetup = ({ user, onUpdate }) => {
               value={disableCode}
               onChange={(e) => {
                 const v = e.target.value;
-                // Allow digits (TOTP) or hex (backup code)
-                setDisableCode(/^[0-9a-fA-F]*$/.test(v) ? v.toLowerCase().slice(0, 8) : disableCode);
+                // Allow digits (TOTP) or 32-character hex backup codes.
+                setDisableCode(/^[0-9a-fA-F]*$/.test(v) ? v.toLowerCase().slice(0, 32) : disableCode);
               }}
-              inputProps={{ maxLength: 8, autoComplete: 'one-time-code' }} sx={{ mr: 1 }}
+              inputProps={{ maxLength: 32, autoComplete: 'one-time-code' }} sx={{ mr: 1 }}
             />
-            <Button type="submit" variant="outlined" color="error" disabled={loading || !(disableCode.length === 6 || disableCode.length === 8)}>
+            <Button type="submit" variant="outlined" color="error" disabled={loading || ![6, 8, 32].includes(disableCode.length)}>
               Disable 2FA
             </Button>
           </Box>
@@ -164,7 +172,7 @@ const TwoFactorSetup = ({ user, onUpdate }) => {
           </Button>
         </Box>
       )}
-    </Paper>
+    </Container>
   );
 };
 

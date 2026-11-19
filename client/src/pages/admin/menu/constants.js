@@ -14,6 +14,7 @@ export const emptyItemForm = {
   targetType: 'none',
   targetId: '',
   syncChildren: false,
+  childDisplayLimit: null,
   url: '',
   placement: 'center',
   sortOrder: 0,

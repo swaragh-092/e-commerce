@@ -163,6 +163,20 @@
 | PUT    | `/categories/:id`   | ✅    | Admin  | Update                                        |
 | DELETE | `/categories/:id`   | ✅    | Admin  | Delete (products set to categoryId=NULL)      |
 
+Storefront category consumers opt in with `hideEmpty=true` (default: `false`).
+On `/categories`, this removes branches without a published, enabled, non-deleted
+product anywhere in their descendant tree. Parents with populated descendants and
+categories containing out-of-stock products remain visible. On
+`/categories/:slug`, it filters the subcategory rail without changing the product
+query or making direct category URLs invalid.
+
+The same flag is supported by public menus (`/menus/public/:location`,
+`/menus/slug/public/:slug`, and `/menus/public/:menuId/items/:itemId/children`),
+`/api-builder/public/:slug`, and `/search`. Filtering happens before limits and
+pagination. Search also filters category spelling suggestions. Menu Builder,
+category management, product assignment, and API Builder previews retain their
+existing full category data. Stock levels do not affect category visibility.
+
 ---
 
 ## Cart
@@ -447,6 +461,23 @@ or removed). Product rows are locked in a consistent order before tag mutations,
 so overlapping bulk edits and ordinary product saves do not lose associations.
 
 
+### Public contact form
+
+`POST /api/contact` does not require authentication or a store account. It accepts JSON:
+
+```json
+{
+  "name": "Jane Doe",
+  "email": "jane@example.com",
+  "phone": "+919876543210",
+  "message": "Please contact me about your seeds."
+}
+```
+
+All four fields are required. Names allow 2–120 characters, email addresses at most 254, formatted phone numbers at most 32 characters with 7–15 digits, and messages at most 5000 characters. The endpoint is limited to five attempts per IP per 15 minutes and returns `202` only after at least one notification has been queued. Invalid data returns `400`, rate limits return `429`, and submissions for which no notification can be queued return `503`. Acceptance means queued for the existing notification worker, not confirmed delivery.
+
+Run `cd server && npm run migrate` when deploying to add the `contact_form_admin` default template. Configure **Settings → Notifications → Event notifications → Contact form submitted** (`contact_form_submitted`) and click **Save event** to activate its recipients and messages. It uses the standard event controls: customer, administrators, people, roles and additional contacts; independent messages and channels; active switches; previews, test sends and delivery history. The involved customer is the visitor who submitted this form. Existing contact template edits and recipient choices are imported as the starting defaults. Before the event is saved, existing email delivery continues; a saved empty or paused event never falls back to those defaults. Each submission has its own occurrence ID, so identical messages from separate submissions are not discarded as duplicates. The public request cannot select recipients or notification rules. Contact notifications remain available independently of product enquiries and store feature modes, and use the standard queue and delivery retries. The static demo uses its existing `API_URL`; its origin must be allowed by the API's CORS configuration.
+
 ### Public tag landing pages
 
 `GET /tags/public/:slug` is public and returns `id`, `name`, `slug`, and
@@ -467,3 +498,11 @@ exact-name filtering is used only when no canonical slug matches.
 Run `cd server && npm run migrate` before deploying this version; migration
 `20261028100000-add-tag-description.js` adds the description column with an empty
 string default for existing records.
+
+### Public menu child batches
+
+Menu items can optionally return children in batches. The public menu response
+includes `childrenPagination` when a parent has a configured limit; clients can
+fetch subsequent batches from the public menu children endpoint. See the
+[menu child pagination reference](api/menu-child-pagination.md) for endpoint
+parameters, response examples, and migration details.

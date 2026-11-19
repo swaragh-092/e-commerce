@@ -1,8 +1,13 @@
 import api from './api';
 
 const MenuService = {
-  getPublicMenu: async (location) => {
-    const response = await api.get(`/menus/public/${location}`);
+  getPublicMenu: async (location, params) => {
+    const response = await api.get(`/menus/public/${location}`, { params });
+    return response.data;
+  },
+
+  getPublicMenuChildren: async (menuId, itemId, params) => {
+    const response = await api.get(`/menus/public/${encodeURIComponent(menuId)}/items/${encodeURIComponent(itemId)}/children`, { params });
     return response.data;
   },
 

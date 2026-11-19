@@ -1,9 +1,11 @@
+import { fetchStaffPicks, PRODUCT_SOURCE_PARAMS, usesProductRowSource } from '../../utils/productRowSources';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Box } from '@mui/material';
 import api from '../../services/api';
 import { getProducts } from '../../services/productService';
 import { getCategories } from '../../services/categoryService';
 import { useSettings, useFeature, useFeatureVisible } from '../../hooks/useSettings';
+import { getStoreName } from '../../utils/store';
 import { useBrands } from '../../context/BrandContext';
 import PageSEO from '../../components/common/PageSEO';
 import {
@@ -13,6 +15,7 @@ import {
 } from '../../components/storefront/sections/sectionRegistry';
 import SectionRenderer from '../../components/storefront/sections/SectionRenderer';
 import { buildSectionRendererData } from '../../components/storefront/sections/sectionData';
+import { filterCategoryTiles } from '../../utils/categories';
 
 const DEFAULT_HERO_IMAGE = 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1800&q=80';
 
@@ -23,7 +26,7 @@ const DEFAULT_HOMEPAGE = {
     { id: 'value-props', type: 'value-props', enabled: true },
     { id: 'categories', type: 'category-shortcuts', enabled: true, title: 'Shop by Category', count: 10 },
     { id: 'promo', type: 'promo-banners', enabled: true },
-    { id: 'trending', type: 'product-row', enabled: true, title: 'Trending Now', source: 'featured', count: 8, layout: 'carousel', viewAllLink: '/products?featured=true' },
+    { id: 'trending', type: 'product-row', enabled: true, title: 'Featured Products', source: 'featured', count: 8, layout: 'carousel', viewAllLink: '/products?featured=true' },
     { id: 'deals', type: 'product-row', enabled: true, title: 'Deals of the Day', source: 'sale', count: 8, layout: 'grid', viewAllLink: '/products?onSale=true' },
     { id: 'brands', type: 'brand-showcase', enabled: true, title: 'Featured Brands', count: 12 },
     { id: 'new-arrivals', type: 'product-row', enabled: true, title: 'New Arrivals', source: 'newest', count: 8, layout: 'carousel', viewAllLink: '/products?sort=newest' },
@@ -55,13 +58,6 @@ const DEFAULT_HOMEPAGE = {
   ],
 };
 
-const PRODUCT_SOURCE_PARAMS = {
-  newest: { sort: 'newest' },
-  featured: { featured: true },
-  bestSellers: { sort: 'best-selling' },
-  sale: { sale: true },
-  recommended: { sort: 'recommended' },
-};
 
 const bool = (val, fallback = true) => (val === undefined || val === null ? fallback : val !== false && val !== 'false');
 const num = (val, fallback = 8) => {
@@ -111,7 +107,7 @@ const legacySections = (hp = {}) => [
 const resolveHomepage = (settings = {}) => {
   const hp = settings.homepage || {};
   const hero = settings.hero || {};
-  const sections = arr(hp.sections).length ? hp.sections : legacySections(hp);
+  const sections = Array.isArray(hp.sections) ? hp.sections : legacySections(hp);
   const heroSlides = arr(hp.heroSlides).length
     ? hp.heroSlides
     : [{
@@ -138,14 +134,17 @@ const resolveHomepage = (settings = {}) => {
 const getProductParams = (section) => ({
   ...(PRODUCT_SOURCE_PARAMS[section.source] || {}),
   ...(section.query || {}),
-  limit: num(section.count, 8),
+  ...(section.source === 'sale' && section.saleLabel && { saleLabel: section.saleLabel }),
+  limit: ['bestSellers', 'mostViewed'].includes(section.source)
+    ? Math.max(4, num(section.count, 8)) : num(section.count, 8),
   status: 'published',
 });
 
 const circuitBreakerState = {};
 
 const fetchSectionData = async (section) => {
-  if (!section.dataSourceSlug) {
+  if (section.source === 'staffPicks') return fetchStaffPicks(section, getProducts);
+  if (usesProductRowSource(section)) {
     return getProducts(getProductParams(section));
   }
 
@@ -174,7 +173,7 @@ const fetchSectionData = async (section) => {
   }
 
   try {
-    const response = await api.get('/api-builder/public/' + slug, { timeout: 2000 });
+    const response = await api.get('/api-builder/public/' + slug, { timeout: 2000, params: { hideEmpty: true } });
     
     if (!response || !response.data) {
       throw new Error('Empty or null results returned');
@@ -204,16 +203,28 @@ const fetchSectionData = async (section) => {
 
 const HomeExperience = () => {
   const { settings } = useSettings();
+  const designerPreview = new URLSearchParams(window.location.search).get('previewMode') === '1';
   const { brands: contextBrands, loading: brandsLoading } = useBrands();
   const pricingEnabled = useFeatureVisible('pricing', 'storefront');
+  const ordersEnabled = useFeature('orders');
   const brandsEnabled = useFeature('brands');
+  const galleryEnabled = useFeature('gallery');
+  const newsletterEnabled = useFeature('newsletter');
   const config = useMemo(() => resolveHomepage(settings), [settings]);
-  const visibleSections = useMemo(
-    () => arr(config.sections).filter(
-      (section) => bool(section.enabled, true) && (brandsEnabled || section.type !== 'brand-showcase')
-    ),
-    [brandsEnabled, config.sections],
-  );
+  const visibleSections = useMemo(() => {
+    const sections = arr(config.sections).filter(
+      (section) => !(section.type === 'composed-hero' && ['header', 'footer'].includes(section.placement))
+        && bool(section.enabled, true)
+        && (ordersEnabled || section.source !== 'bestSellers')
+        && (brandsEnabled || section.type !== 'brand-showcase')
+        && (galleryEnabled || section.type !== 'gallery')
+        && (newsletterEnabled || section.type !== 'newsletter-signup')
+    );
+    return [
+      ...sections.filter((section) => section.placement !== 'footer'),
+      ...sections.filter((section) => section.placement === 'footer'),
+    ];
+  }, [brandsEnabled, galleryEnabled, newsletterEnabled, ordersEnabled, config.sections]);
   const visiblePromoBanners = useMemo(
     () => arr(config.promoBanners).filter(
       (promo) => brandsEnabled || !String(promo?.link || '').startsWith('/brands')
@@ -224,36 +235,47 @@ const HomeExperience = () => {
     () => visibleSections.filter((section) => needsProductData(section, { pricingEnabled })),
     [pricingEnabled, visibleSections],
   );
-  const needsCategories = visibleSections.some((section) => needsCategoryData(section, { hasConfiguredTiles: Boolean(arr(config.categoryTiles).length) }));
+  const needsCategories = visibleSections.some((section) => needsCategoryData(section));
   const [data, setData] = useState({ categories: [], products: {} });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let active = true;
     const productFetches = productSections.map((section) => fetchSectionData(section));
-    const categoryFetch = needsCategories ? getCategories() : Promise.resolve(null);
+    const categoryFetch = needsCategories ? getCategories({ hideEmpty: true }) : Promise.resolve(null);
 
     setLoading(true);
     Promise.allSettled([...productFetches, categoryFetch])
       .then((results) => {
+        if (!active) return;
         const productResults = results.slice(0, productFetches.length);
         const categoryResult = results[productFetches.length];
         const products = {};
 
         productSections.forEach((section, index) => {
-          products[section.id] = section.dataSourceSlug
+          products[section.id] = !usesProductRowSource(section)
             ? extractDataSourceArray(productResults[index], section, num(section.count, 8))
-            : extractArray(productResults[index], num(section.count, 8));
+            : extractArray(productResults[index], section.source === 'staffPicks' ? undefined : getProductParams(section).limit);
         });
 
         setData({ products, categories: extractArray(categoryResult) });
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
   }, [needsCategories, productSections]);
 
   const buildSectionData = (section) => buildSectionRendererData({
     section,
     homepage: { ...config, promoBanners: visiblePromoBanners },
-    resolvedData: data,
+    resolvedData: {
+      ...data,
+      products: {
+        ...data.products,
+        [section.id]: data.products[section.id]?.slice(0, section.source === 'staffPicks' ? undefined : num(section.count, 8)),
+      },
+    },
     brands: contextBrands,
     loading,
     brandsLoading,
@@ -263,11 +285,25 @@ const HomeExperience = () => {
   return (
     <Box sx={{ bgcolor: 'background.default' }}>
       <PageSEO
-        title={config.seoTitle || 'Home'}
+        title={config.seoTitle || settings?.seo?.defaultTitle || getStoreName(settings)}
         description={config.seoDescription || config.heroSlides?.[0]?.subtitle || settings?.seo?.defaultDescription}
       />
 
       {visibleSections.map((section, index) => {
+        const discoverySort = usesProductRowSource(section) && PRODUCT_SOURCE_PARAMS[section.source]?.discoveryRow
+          ? PRODUCT_SOURCE_PARAMS[section.source].sort : null;
+        const available = data.products[section.id]?.length || 0;
+        const campaignLabel = section.type === 'product-row' && section.source === 'sale' ? section.saleLabel : null;
+        if (campaignLabel && !pricingEnabled && !designerPreview) return null;
+        const sparse = !loading && ((discoverySort && available < (['arrivals', 'trending'].includes(discoverySort) ? 1 : 4))
+          || ((campaignLabel || section.source === 'staffPicks') && !available));
+        if (sparse && !designerPreview) return null;
+        const previewSection = designerPreview && (sparse || section.type === 'recently-viewed');
+        const renderedSection = campaignLabel
+          ? { ...section, viewAllLink: `/products?saleLabel=${encodeURIComponent(campaignLabel)}` }
+          : discoverySort && (!section.viewAllLink || section.viewAllLink === '/products?sort=newest')
+          ? { ...section, viewAllLink: `/products?sort=${discoverySort}` }
+          : section;
         const display = {
           xs: section.hideOnMobile ? 'none' : 'block',
           md: section.hideOnDesktop ? 'none' : 'block',
@@ -275,16 +311,19 @@ const HomeExperience = () => {
         const frameIndex = index === (visibleSections[0] && isHeroSection(visibleSections[0]) ? 1 : 0) ? 0 : index;
 
         return (
-          <Box key={section.id || index} sx={{ display }}>
+          <Box key={section.id || index} data-store-section={section.id} sx={{ display }}>
+            {designerPreview && <button type="button" hidden data-store-add-section="template"
+              data-store-anchor={section.id}>Add section here</button>}
             <SectionRenderer
-              section={section}
-              mode="live"
+              section={renderedSection}
+              mode={previewSection ? 'preview' : 'live'}
               data={buildSectionData(section)}
               index={frameIndex}
             />
           </Box>
         );
       })}
+      {designerPreview && <button type="button" hidden data-store-add-section="template">Add section to template</button>}
     </Box>
   );
 };

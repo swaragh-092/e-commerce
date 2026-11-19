@@ -1,13 +1,34 @@
 'use strict';
 
-const { sequelize, Setting, DesignDraft, DesignDraftVersion } = require('../index');
+const { createHash } = require('node:crypto');
+const { isDeepStrictEqual } = require('node:util');
+const { sequelize, Setting, DesignDraft, DesignDraftVersion, DesignDraftArchive } = require('../index');
 const SettingsService = require('./settings.service');
 const AuditService = require('../audit/audit.service');
 const AppError = require('../../utils/AppError');
 const { getPermissionsForUser, PERMISSIONS } = require('../../config/permissions');
 const { DESIGN_DRAFT_KEY, DESIGN_DRAFT_GROUPS, isDesignDraftTarget } = require('./designDraft');
 
-const valuesEqual = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+const { TEMPLATE_ASSIGNMENT_KEYS, buildAlternateTemplatesSchema } = require('./alternateTemplates');
+const { productBlockPlacementSchema, productDetailsOrderSchema } = require('../theme/theme.validation');
+
+const valuesEqual = isDeepStrictEqual;
+
+const alternateTemplateSchemas = Object.fromEntries(Object.entries(TEMPLATE_ASSIGNMENT_KEYS)
+  .map(([group, assignmentKey]) => [group, buildAlternateTemplatesSchema(assignmentKey).required()]));
+
+const validateProductBlockPlacements = (sections) => {
+  if (!Array.isArray(sections)) return;
+  for (const section of sections) {
+    if (section?.type !== 'product-info') continue;
+    const { error: orderError } = productDetailsOrderSchema.validate(section.detailsBlockOrder, { convert: false });
+    if (orderError) throw new AppError('VALIDATION_ERROR', 400, `Invalid product details order: ${orderError.details[0].message}`);
+    for (const block of Array.isArray(section.heroBlocks) ? section.heroBlocks : []) {
+      const { error } = productBlockPlacementSchema.validate(block?.productPlacement, { convert: false });
+      if (error) throw new AppError('VALIDATION_ERROR', 400, `Invalid product block placement: ${error.details[0].message}`);
+    }
+  }
+};
 
 const serializeDraft = (draft) => {
   if (!draft) return null;
@@ -23,6 +44,13 @@ const serializeVersion = (version, { includePayload = false } = {}) => {
   return value;
 };
 
+const serializeArchive = (archive) => {
+  const value = archive.toJSON();
+  delete value.payload;
+  delete value.baseSnapshot;
+  return value;
+};
+
 const buildPublishedVersion = (draft, userId, publishedAt = new Date()) => ({
   draftKey: DESIGN_DRAFT_KEY,
   revision: Number(draft.revision) || 1,
@@ -30,6 +58,14 @@ const buildPublishedVersion = (draft, userId, publishedAt = new Date()) => ({
   publishedAt,
   publishedBy: userId,
 });
+
+const archiveDraft = (draft, userId, transaction) => DesignDraftArchive.create({
+  draftKey: draft.draftKey,
+  revision: draft.revision,
+  payload: draft.payload,
+  baseSnapshot: draft.baseSnapshot,
+  archivedBy: userId,
+}, { transaction });
 
 const readLiveSnapshot = async (transaction = null, { lock = false } = {}) => {
   const options = { where: { group: DESIGN_DRAFT_GROUPS } };
@@ -60,6 +96,14 @@ const normalizePayload = (settings) => {
     const operation = entry.operation === 'delete' ? 'delete' : 'upsert';
     if (operation === 'upsert' && !Object.prototype.hasOwnProperty.call(entry, 'value')) {
       throw new AppError('VALIDATION_ERROR', 400, `Design draft setting '${group}.${key}' is missing a value.`);
+    }
+    const templateSchema = alternateTemplateSchemas[group];
+    if (operation === 'upsert' && key === 'alternateTemplates' && templateSchema) {
+      const { error } = templateSchema.validate(entry.value, { convert: false });
+      if (error) throw new AppError('VALIDATION_ERROR', 400, error.details[0].message);
+      if (group === 'productPage') entry.value.forEach(({ settings }) => validateProductBlockPlacements(settings.sections));
+    } else if (operation === 'upsert' && group === 'productPage' && key === 'sections') {
+      validateProductBlockPlacements(entry.value);
     }
     return operation === 'delete'
       ? { group, key, operation }
@@ -99,7 +143,12 @@ const assertRevision = (draft, expectedRevision) => {
 
 const getDraft = async () => {
   const draft = await findDraft();
-  return { draft: draft?.status === 'draft' ? serializeDraft(draft) : null };
+  if (draft?.status !== 'draft') return { draft: null, conflicts: [] };
+  const currentSnapshot = await readLiveSnapshot();
+  return {
+    draft: serializeDraft(draft),
+    conflicts: findPublishConflicts(draft.baseSnapshot || {}, currentSnapshot, draft.payload || []),
+  };
 };
 
 const getPublishedVersions = async ({ limit = 30 } = {}) => {
@@ -114,13 +163,24 @@ const getPublishedVersions = async ({ limit = 30 } = {}) => {
   return { versions: versions.map((version) => serializeVersion(version)) };
 };
 
-const saveDraft = async ({ settings, expectedRevision }, user) => {
-  const payload = normalizePayload(settings);
-  assertDraftPermissions(payload, user);
+const getArchivedDrafts = async ({ limit = 30 } = {}) => {
+  const safeLimit = Math.max(1, Math.min(100, Number.parseInt(limit, 10) || 30));
+  const archives = await DesignDraftArchive.findAll({
+    where: { draftKey: DESIGN_DRAFT_KEY }, order: [['createdAt', 'DESC']], limit: safeLimit,
+    attributes: { exclude: ['payload', 'baseSnapshot'] },
+  });
+  return { archives: archives.map(serializeArchive) };
+};
+
+const saveDraft = async ({ settings, expectedRevision }, user, { merge = false } = {}) => {
+  const writes = normalizePayload(settings);
 
   return sequelize.transaction(async (t) => {
     const draft = await findDraft(t, { lock: true });
-    if (draft?.status === 'draft') assertRevision(draft, expectedRevision);
+    if (draft?.status === 'draft' && !merge) assertRevision(draft, expectedRevision);
+
+    const payload = merge && draft?.status === 'draft' ? normalizePayload([...draft.payload, ...writes]) : writes;
+    assertDraftPermissions(payload, user);
 
     const baseSnapshot = draft?.status === 'draft'
       ? draft.baseSnapshot
@@ -165,11 +225,13 @@ const saveDraft = async ({ settings, expectedRevision }, user) => {
 
 const findPublishConflicts = (baseSnapshot, currentSnapshot, payload) => {
   const conflicts = [];
-  for (const { group, key } of payload) {
+  for (const { group, key, value, operation } of payload) {
     const baseKeys = baseSnapshot?.[group] || {};
     const currentKeys = currentSnapshot?.[group] || {};
     const hasBase = Object.prototype.hasOwnProperty.call(baseKeys, key);
     const hasCurrent = Object.prototype.hasOwnProperty.call(currentKeys, key);
+    // A concurrent change to the same desired result needs no overwrite.
+    if (operation === 'delete' ? !hasCurrent : hasCurrent && valuesEqual(value, currentKeys[key])) continue;
     if (hasBase !== hasCurrent || (hasBase && !valuesEqual(baseKeys[key], currentKeys[key]))) {
       conflicts.push({ group, key });
     }
@@ -177,7 +239,7 @@ const findPublishConflicts = (baseSnapshot, currentSnapshot, payload) => {
   return conflicts;
 };
 
-const publishDraft = async ({ expectedRevision }, user) => sequelize.transaction(async (t) => {
+const publishDraft = async ({ expectedRevision, conflictToken }, user) => sequelize.transaction(async (t) => {
   const draft = await findDraft(t, { lock: true });
   if (!draft || draft.status !== 'draft') {
     throw new AppError('NOT_FOUND', 404, 'No saved design draft is available to publish.');
@@ -187,12 +249,18 @@ const publishDraft = async ({ expectedRevision }, user) => sequelize.transaction
 
   const currentSnapshot = await readLiveSnapshot(t, { lock: true });
   const conflicts = findPublishConflicts(draft.baseSnapshot || {}, currentSnapshot, draft.payload || []);
-  if (conflicts.length) {
+  const reviewedToken = conflicts.length
+    ? createHash('sha256').update(JSON.stringify([
+      draft.revision,
+      conflicts.map(({ group, key }) => [group, key, currentSnapshot[group]?.[key]]),
+    ])).digest('hex')
+    : null;
+  if (conflicts.length && conflictToken !== reviewedToken) {
     throw new AppError(
       'DRAFT_CONFLICT',
       409,
       'The live design changed after this draft was started. Review the conflicting settings before publishing.',
-      { conflicts, currentRevision: draft.revision, draft: serializeDraft(draft) },
+      { conflicts, conflictToken: reviewedToken, currentRevision: draft.revision, draft: serializeDraft(draft) },
     );
   }
 
@@ -203,10 +271,20 @@ const publishDraft = async ({ expectedRevision }, user) => sequelize.transaction
     await Setting.destroy({ where: { group, key }, transaction: t });
   }
   const publishedAt = new Date();
-  const version = await DesignDraftVersion.create(buildPublishedVersion(draft, user.id, publishedAt), { transaction: t });
+  // Discarding a draft resets its counter, but published history survives.
+  // The locked draft serializes publishers while we allocate the next version.
+  const lastPublishedRevision = await DesignDraftVersion.max('revision', {
+    where: { draftKey: DESIGN_DRAFT_KEY },
+    transaction: t,
+  });
+  const publishedRevision = Math.max(Number(draft.revision) || 1, (Number(lastPublishedRevision) || 0) + 1);
+  const version = await DesignDraftVersion.create(buildPublishedVersion({
+    revision: publishedRevision,
+    payload: draft.payload,
+  }, user.id, publishedAt), { transaction: t });
   const published = await draft.update({
     status: 'published',
-    revision: (Number(draft.revision) || 0) + 1,
+    revision: publishedRevision + 1,
     updatedBy: user.id,
     publishedAt,
     publishedBy: user.id,
@@ -244,6 +322,7 @@ const restorePublishedVersion = async ({ versionId, expectedRevision }, user) =>
   const draft = await findDraft(t, { lock: true });
   if (draft?.status === 'draft') assertRevision(draft, expectedRevision);
 
+  if (draft?.status === 'draft') await archiveDraft(draft, user.id, t);
   const baseSnapshot = draft?.status === 'draft'
     ? draft.baseSnapshot
     : await readLiveSnapshot(t, { lock: true });
@@ -285,9 +364,14 @@ const restorePublishedVersion = async ({ versionId, expectedRevision }, user) =>
   };
 });
 
-const discardDraft = async (user) => sequelize.transaction(async (t) => {
+const discardDraft = async (user, expectedRevision) => sequelize.transaction(async (t) => {
   const draft = await findDraft(t, { lock: true });
   if (!draft || draft.status !== 'draft') return { discarded: false };
+  assertRevision(draft, expectedRevision);
+  await DesignDraftArchive.create({
+    draftKey: draft.draftKey, revision: draft.revision, payload: draft.payload,
+    baseSnapshot: draft.baseSnapshot, archivedBy: user.id,
+  }, { transaction: t });
   await draft.destroy({ transaction: t });
   try {
     await AuditService.log({
@@ -301,15 +385,44 @@ const discardDraft = async (user) => sequelize.transaction(async (t) => {
   return { discarded: true };
 });
 
+const restoreArchivedDraft = async ({ archiveId, expectedRevision }, user) => sequelize.transaction(async (t) => {
+  const archive = await DesignDraftArchive.findOne({
+    where: { id: archiveId, draftKey: DESIGN_DRAFT_KEY }, transaction: t,
+    lock: t.LOCK ? t.LOCK.UPDATE : 'UPDATE',
+  });
+  if (!archive) throw new AppError('NOT_FOUND', 404, 'Archived design draft not found.');
+  const payload = normalizePayload(archive.payload || []);
+  assertDraftPermissions(payload, user);
+  const draft = await findDraft(t, { lock: true });
+  if (draft?.status === 'draft') assertRevision(draft, expectedRevision);
+
+  if (draft?.status === 'draft') await archiveDraft(draft, user.id, t);
+  const baseSnapshot = await readLiveSnapshot(t, { lock: true });
+  const values = { revision: (Number(draft?.revision) || 0) + 1, status: 'draft', payload, baseSnapshot, updatedBy: user.id, publishedAt: null, publishedBy: null };
+  const restored = draft
+    ? await draft.update(values, { transaction: t })
+    : await DesignDraft.create({ draftKey: DESIGN_DRAFT_KEY, ...values, createdBy: user.id }, { transaction: t });
+  await AuditService.log({
+    userId: user.id,
+    action: 'UPDATE',
+    entity: 'DesignDraft',
+    entityId: restored.id,
+    changes: { action: 'restore-archive', archiveId: archive.id, archiveRevision: archive.revision, revision: restored.revision },
+  }, t);
+  return { draft: serializeDraft(restored) };
+});
+
 module.exports = {
   DESIGN_DRAFT_GROUPS,
   getDraft,
   getPublishedVersions,
+  getArchivedDrafts,
   saveDraft,
   publishDraft,
   restorePublishedVersion,
   buildPublishedVersion,
   discardDraft,
+  restoreArchivedDraft,
   findPublishConflicts,
   normalizePayload,
 };

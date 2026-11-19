@@ -1,3 +1,4 @@
+import { getDesignPageControlSchema } from '../../utils/designRegistry';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
@@ -73,8 +74,10 @@ import { formatOpenEndedDateRange } from '../../utils/dates';
 import ProductTagsInput from '../../components/admin/ProductTagsInput';
 import ProductCustomTabs from '../../components/admin/ProductCustomTabs';
 import ProductComboBuilder from '../../components/admin/ProductComboBuilder';
+import ProductRelatedPicker from '../../components/admin/ProductRelatedPicker';
 import TaxConfigSection from '../../components/admin/ProductTaxConfig';
 import VariantsPanel from '../../components/admin/ProductVariantsPanel';
+import InventoryStockSummary from '../../components/admin/InventoryStockSummary';
 import ProductAssistantPanel from '../../components/admin/ProductAssistantPanel';
 import UnitSelector from '../../components/admin/UnitSelector';
 import { toDateTimeLocal } from '../../utils/dates';
@@ -226,6 +229,7 @@ const ProductEditPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const inventoryVariantId = new URLSearchParams(location.search).get('variantId');
   const returnTo = location.state?.returnTo || '/admin/products';
   const { notify, confirm } = useNotification();
   const { settings } = useSettings();
@@ -257,14 +261,17 @@ const ProductEditPage = () => {
     sku: '',
     unit: '',
     price: '',
+    costPrice: '',
     salePrice: '',
     saleStartAt: '',
     saleEndAt: '',
     saleLabel: '',
     quantity: '',
     status: 'draft',
+    storefrontLayout: null,
     type: 'simple',
     isEnabled: true,
+    isFeatured: false,
     categoryIds: [],
     brandId: '',
     tags: [],
@@ -297,7 +304,7 @@ const ProductEditPage = () => {
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
   const [ogPickerOpen, setOgPickerOpen] = useState(false);
   const [dbProduct, setDbProduct] = useState(null);
-  const [hasVariants, setHasVariants] = useState(false);
+  const [inventoryVariants, setInventoryVariants] = useState([]);
   const [variantCount, setVariantCount] = useState(0);
   const [variantStockTotal, setVariantStockTotal] = useState(0);
   const [globalPrimaryVersion, setGlobalPrimaryVersion] = useState(0);
@@ -332,9 +339,8 @@ const ProductEditPage = () => {
             setDbProduct(p);
 
             const activeVariants = Array.isArray(p.variants) ? p.variants.filter((variant) => variant?.isActive !== false) : [];
-            const nextHasVariants = activeVariants.length > 0;
             const nextVariantStockTotal = activeVariants.reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0);
-            setHasVariants(nextHasVariants);
+            setInventoryVariants(p.variants || []);
             setVariantCount(Array.isArray(p.variants) ? p.variants.length : 0);
             setVariantStockTotal(nextVariantStockTotal);
 
@@ -346,14 +352,17 @@ const ProductEditPage = () => {
               sku: p.sku || '',
               unit: p.unit || '',
               price: p.price || '',
+              costPrice: p.costPrice ?? '',
               salePrice: p.salePrice || '',
               saleStartAt: toDateTimeLocal(p.saleStartAt),
               saleEndAt: toDateTimeLocal(p.saleEndAt),
               saleLabel: p.saleLabel || '',
-              quantity: nextHasVariants ? nextVariantStockTotal : (p.quantity || 0),
+              quantity: p.type === 'variable' ? nextVariantStockTotal : (p.quantity || 0),
               status: p.status || 'draft',
+              storefrontLayout: p.storefrontLayout ?? null,
               type: p.type || 'simple',
               isEnabled: p.isEnabled ?? true,
+              isFeatured: p.isFeatured ?? false,
               categoryIds: p.categories?.map((c) => c.id) || [],
               brandId: p.brandId || '',
               tags: p.tags?.map((tag) => tag.name) || [],
@@ -454,11 +463,11 @@ const ProductEditPage = () => {
   const discountAmount = hasValidDiscount ? priceNum - salePriceNum : 0;
   const discountPercent = hasValidDiscount ? Math.round(((priceNum - salePriceNum) / priceNum) * 100) : 0;
 
-  const handleVariantStockChange = useCallback((total, count, fallbackQuantity, totalCount) => {
+  const handleVariantStockChange = useCallback((total, count, fallbackQuantity, totalCount, rows) => {
     setVariantStockTotal(total);
     if (totalCount !== undefined) setVariantCount(totalCount);
-    setHasVariants(count > 0);
-    if (count > 0) {
+    if (rows) setInventoryVariants(rows);
+    if (count > 0 || totalCount > 0) {
       setFormData((prev) => ({ ...prev, quantity: total }));
       setErrors((prev) => ({ ...prev, quantity: undefined }));
     } else if (fallbackQuantity !== undefined) {
@@ -517,7 +526,7 @@ const ProductEditPage = () => {
       return;
     }
 
-    const effectiveQuantity = formData.type === 'variable' || hasVariants ? variantStockTotal : formData.quantity;
+    const effectiveQuantity = formData.type === 'variable' ? variantStockTotal : formData.quantity;
     const errs = validate({ ...formData, quantity: effectiveQuantity, _features: { pricing: pricingCapability, shipping: shippingCapability } });
 
     // Block type change if invariants are violated
@@ -538,8 +547,10 @@ const ProductEditPage = () => {
     }
 
     let confirmInventoryReset = false;
-    if (!isNew && dbProduct?.type === 'simple' && formData.type !== 'simple' && !variantCount && Number(dbProduct.quantity || 0) > 0) {
-      confirmInventoryReset = await confirm({ title: 'Change how stock is managed?', message: `This product has ${dbProduct.quantity} units of standalone stock. Switching type clears that total. Set stock on each variant or bundle component afterward; units are not distributed automatically.`, confirmText: 'Change type and clear stock', cancelText: 'Keep editing', severity: 'warning' });
+    if (!isNew && dbProduct?.type === 'simple' && formData.type !== 'simple' && (Number(dbProduct.quantity || 0) > 0 || (formData.type === 'variable' && variantCount > 0))) {
+      const standaloneStock = Number(dbProduct.quantity || 0);
+      const legacyVariantMessage = formData.type === 'variable' && variantCount > 0 ? ' Historical variant stock will also be cleared so sold Simple stock cannot become available again.' : '';
+      confirmInventoryReset = await confirm({ title: 'Change how stock is managed?', message: `This product has ${standaloneStock} units of standalone stock. Switching type clears that total.${legacyVariantMessage} Set stock on each variant or bundle component afterward; units are not distributed automatically.`, confirmText: 'Change type and clear stock', cancelText: 'Keep editing', severity: 'warning' });
       if (!confirmInventoryReset) return;
     }
     setSaving(true);
@@ -547,6 +558,7 @@ const ProductEditPage = () => {
       const payload = {
         ...formData,
         price: formData.price === '' ? null : Number(formData.price),
+        costPrice: formData.costPrice === "" ? null : Number(formData.costPrice),
         salePrice:
           formData.salePrice !== '' && formData.salePrice !== null && !isNaN(parseFloat(formData.salePrice))
             ? parseFloat(formData.salePrice)
@@ -585,7 +597,7 @@ const ProductEditPage = () => {
 
       // Variant and bundle stock is managed by their own editors.
       delete payload.quantity;
-      if (payload.type === 'simple' && variantCount === 0) {
+      if (payload.type === 'simple') {
         payload.quantity = parseInt(formData.quantity) || 0;
       }
       if (confirmInventoryReset) payload.confirmInventoryReset = true;
@@ -606,7 +618,10 @@ const ProductEditPage = () => {
         const res = await updateProduct(id, payload);
         if (res?.data) {
           setDbProduct(res.data);
-          if (payload.type === 'variable') {
+          // The mounted variant panel owns its draft snapshot during parent-only saves.
+          // Initialize from the response only when entering the Variable editor.
+          if (payload.type === 'variable' && dbProduct?.type !== 'variable') {
+            setInventoryVariants(res.data.variants || []);
             const active = (res.data.variants || []).filter((variant) => variant.isActive !== false);
             setVariantStockTotal(active.reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0));
             setVariantCount((res.data.variants || []).length);
@@ -931,6 +946,18 @@ const ProductEditPage = () => {
                       }}
                     />
                   </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Unit Cost"
+                      type="number"
+                      InputProps={{ startAdornment: <InputAdornment position="start">{symbol}</InputAdornment> }}
+                      inputProps={{ step: '0.01', min: 0 }}
+                      value={formData.costPrice}
+                      onChange={(e) => setField('costPrice', e.target.value)}
+                      helperText="Internal cost used for gross margin reports."
+                    />
+                  </Grid>
                   <Grid item xs={12}>
                     <FormControl fullWidth size="small" disabled={!formData.salePrice}>
                       <InputLabel id="sale-label-select">Sale Label</InputLabel>
@@ -1205,6 +1232,11 @@ const ProductEditPage = () => {
                 </Select>
                 <FormHelperText>{getProductStorefrontStateHelp(getProductStorefrontState(formData))}</FormHelperText>
               </FormControl>
+              <FormControlLabel
+                control={<Switch checked={formData.isFeatured} onChange={(event) => setField('isFeatured', event.target.checked)} />}
+                disabled={!canSaveProduct}
+                label="Featured product"
+              />
 
               <FormControl fullWidth margin="normal" error={Boolean(errors.type)}>
                 <InputLabel id="product-type-label">Product Type</InputLabel>
@@ -1215,7 +1247,7 @@ const ProductEditPage = () => {
                   label="Product Type"
                   onChange={(e) => {
                     const newType = e.target.value;
-                    if (newType !== 'variable' && variantCount > 0) { notify('Remove all variants, including inactive ones, before changing to Simple or Combo.', 'warning'); return; }
+                    if (newType !== 'variable' && variantCount > 0 && !(newType === 'simple' && dbProduct?.type === 'simple')) { notify('Remove all variants, including inactive ones, before changing to Simple or Combo.', 'warning'); return; }
                     if (newType !== 'combo' && dbProduct?.comboItems?.length > 0) { notify('Clear the bundle items before changing this product type.', 'warning'); return; }
                     setField('type', newType);
                   }}
@@ -1227,7 +1259,7 @@ const ProductEditPage = () => {
                 {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
                 <FormHelperText>{formData.type === 'variable' ? 'Customers choose a variant. Manage prices and stock per combination below.' : formData.type === 'combo' ? 'Bundle existing products. Stock depends on the included products.' : 'One version with its own price and stock quantity.'}</FormHelperText>
               </FormControl>
-              {formData.type === 'simple' && variantCount > 0 && <Alert severity="warning" action={<Button onClick={() => setField('type', 'variable')} disabled={!canSaveProduct}>Use Variable Product</Button>}>This product has existing variants. Images and product details can still be saved. Select Variable Product and save to manage variants.</Alert>}
+              {formData.type === 'simple' && variantCount > 0 && <Alert severity="info">This Simple product uses its own stock quantity. Older variant records are retained for existing orders and do not control current stock or alerts.</Alert>}
 
             </Paper>
 
@@ -1296,6 +1328,21 @@ const ProductEditPage = () => {
                 disableCloseOnSelect
                 sx={{ mt: 1 }}
               />
+
+              <FormControl fullWidth margin="normal">
+                <InputLabel id="storefront-layout-label">Storefront layout</InputLabel>
+                <Select
+                  labelId="storefront-layout-label"
+                  label="Storefront layout"
+                  value={formData.storefrontLayout || ''}
+                  onChange={(event) => setField('storefrontLayout', event.target.value || null)}
+                >
+                  <MenuItem value="">Use store default</MenuItem>
+                  {getDesignPageControlSchema('product').groups[0].fields[0].options.map(({ value, label }) => (
+                    <MenuItem key={value} value={value}>{label}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
 
               {tagsEnabled && canReadTags && <ProductTagsInput value={formData.tags} onChange={(tags) => setField('tags', tags)} disabled={!canSaveProduct || !canManageTags} error={errors.tags} />}
 
@@ -1366,10 +1413,19 @@ const ProductEditPage = () => {
                   margin="normal"
                   inputProps={{ min: 0 }}
                   value={formData.type === 'variable' ? variantStockTotal : formData.quantity}
-                  InputProps={{ readOnly: formData.type === 'variable' || variantCount > 0 }}
+                  InputProps={{ readOnly: formData.type === 'variable' }}
                   onChange={(e) => setField('quantity', e.target.value)}
                   error={Boolean(errors.quantity)}
-                  helperText={errors.quantity || (formData.type === 'variable' ? 'Calculated from active variants. Set each combination’s stock below; no variants means 0 stock.' : variantCount > 0 ? 'Existing variants manage stock. Save this product as Variable Product.' : 'Stock for this single product.')}
+                  helperText={errors.quantity || (formData.type === 'variable' ? 'Calculated from active variants. Set each combination’s stock below; no variants means 0 stock.' : 'Stock for this single product.')}
+                />
+                <InventoryStockSummary
+                  quantity={formData.quantity}
+                  reservedQty={dbProduct?.reservedQty}
+                  variants={formData.type === 'variable' ? inventoryVariants : []}
+                  selectedVariantId={inventoryVariantId}
+                  tracksVariants={formData.type === 'variable'}
+                  enabled={formData.isEnabled !== false}
+                  published={formData.status === 'published'}
                 />
               </Paper>
             )}
@@ -1513,7 +1569,7 @@ const ProductEditPage = () => {
         {!isNew && formData.type === 'variable' && dbProduct?.type === 'variable' && (
           <Box onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); e.stopPropagation(); } }}>
             <VariantsPanel 
-              pricingEnabled={pricingCapability}
+              pricingEnabled={pricingEnabled}
               productId={id}
               productName={formData.name}
               productSku={formData.sku}
@@ -1538,6 +1594,12 @@ const ProductEditPage = () => {
               canEdit={canUpdateProducts}
             />
           </Box>
+        )}
+
+        {!isNew && (
+          <Paper sx={{ p: 3, mt: 3 }} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}>
+            <ProductRelatedPicker key={id} productId={id} canEdit={canUpdateProducts} />
+          </Paper>
         )}
 
         {/* SEO Configuration — always last, even after Attributes and Variants */}

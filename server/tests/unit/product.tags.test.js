@@ -103,13 +103,27 @@ describe('shared dictionary and assignment', () => {
     expect(filter.val).toContain('canonical_tag.slug = t.name');
     expect(service.buildTagFilter(' , ')).toBeNull();
   });
+  it('filters usage before pagination and sorts by the same live product count', async () => {
+    const find = vi.spyOn(db.Tag, 'findAndCountAll').mockResolvedValue({ rows: [], count: 0 });
+    await service.listTags({ usage: 'unused', sortBy: 'products', sortDir: 'desc', page: 2 });
+    const query = find.mock.calls[0][0];
+    expect(query.offset).toBe(20);
+    expect(query.where[db.Sequelize.Op.and][0].val).toContain('= 0');
+    expect(query.order[0][0].val).toBe(query.attributes.include[0][0].val);
+    expect(query.order[0][1]).toBe('DESC');
+    await service.listTags({ usage: 'used' });
+    expect(find.mock.calls[1][0].where[db.Sequelize.Op.and][0].val).toContain('> 0');
+    expect(tagListSchema.validate({ usage: 'other' }).error).toBeDefined();
+    expect(tagListSchema.validate({ sortBy: 'name;drop' }).error).toBeDefined();
+    expect(tagListSchema.validate({ sortDir: 'other' }).error).toBeDefined();
+  });
   it('counts live products without joining or materializing the product collection', async () => {
     const find = vi.spyOn(db.Tag, 'findAndCountAll').mockResolvedValue({ rows: [], count: 0 });
     await service.listTags({ search: '50%', page: 2, limit: 20 });
     const query = find.mock.calls[0][0];
     expect(query.offset).toBe(20);
     expect(query.attributes.include[0][0].val).toContain('p.deleted_at IS NULL');
-    expect(query.include).toBeUndefined();
+    expect(query.include).toEqual([expect.objectContaining({ model: db.Media, as: 'image' })]);
     expect(query.where.name[db.Sequelize.Op.iLike]).toBe('%50\\%%');
   });
 });

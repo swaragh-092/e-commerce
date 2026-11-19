@@ -1,13 +1,14 @@
 'use strict';
 
-const { Category, Product, ProductCategory, ProductImage, ProductVariant, Media, Sequelize, sequelize } = require('../index');
+const { Category, Product, ProductCategory, ProductImage, ProductVariant, Media, Brand, Sequelize, sequelize } = require('../index');
 const { Op } = Sequelize;
 const { generateSlug } = require('../../utils/slugify');
 const AppError = require('../../utils/AppError');
 const SettingsService = require('../settings/settings.service');
 const { getSaleLabels } = require('../settings/saleLabel.service');
 const { serializeProductPricing } = require('../product/product.pricing');
-const { isBrandVisible, stripBrandFields } = require('../../utils/brandVisibility');
+const { isBrandVisible, stripBrandFields, assertBrandFilterAllowed } = require('../../utils/brandVisibility');
+const { getPopulatedCategoryIds } = require('./category.visibility');
 
 // ProductVariant has no salePrice column. Product-level sale rules are
 // applied by serializeProductPricing after the query returns.
@@ -83,11 +84,12 @@ exports.getCategoryAncestors = async (categoryId) => {
     return chain;
 };
 
-exports.getCategoryTree = async () => {
+exports.getCategoryTree = async ({ hideEmpty = false } = {}) => {
     const categories = await Category.findAll({
         order: [['sortOrder', 'ASC'], ['name', 'ASC']]
     });
-    return buildTree(categories);
+    const populatedIds = hideEmpty ? await getPopulatedCategoryIds(categories) : null;
+    return buildTree(populatedIds ? categories.filter(category => populatedIds.has(category.id)) : categories);
 };
 
 exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20, sortArg = 'newest', minPriceArg, maxPriceArg) => {
@@ -96,6 +98,7 @@ exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20,
     let sort = 'newest';
     let minPrice;
     let maxPrice;
+    let brand;
 
     let includeSubcategories = true;
 
@@ -105,6 +108,7 @@ exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20,
         sort = pageOrOptions.sort ?? 'newest';
         minPrice = pageOrOptions.minPrice;
         maxPrice = pageOrOptions.maxPrice;
+        brand = pageOrOptions.brand;
         if (pageOrOptions.includeSubcategories !== undefined) {
             const raw = pageOrOptions.includeSubcategories;
             if (typeof raw === 'boolean') {
@@ -132,9 +136,11 @@ exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20,
     });
     if (!category) throw new AppError('NOT_FOUND', 404, 'Category not found');
 
+    const populatedIds = pageOrOptions?.hideEmpty === true ? await getPopulatedCategoryIds() : null;
+
     // Direct subcategories for the subcategory rail on the category page
     const subcategories = await Category.findAll({
-        where: { parentId: category.id },
+        where: { parentId: category.id, ...(populatedIds && { id: { [Op.in]: [...populatedIds] } }) },
         order: [['sortOrder', 'ASC'], ['name', 'ASC']],
         attributes: ['id', 'name', 'slug', 'image', 'sortOrder'],
     });
@@ -156,6 +162,8 @@ exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20,
     const { getSqlEffectivePriceExpr } = require('../product/product.service');
     const labelPresets = await getLabelPresets();
     const { features } = await SettingsService.getFeatures();
+    const brandVisible = isBrandVisible(features);
+    if (brand && !brandVisible) assertBrandFilterAllowed(features);
 
     const now = new Date();
     const effectivePriceCol = getSqlEffectivePriceExpr(labelPresets, now, '"Product"');
@@ -217,6 +225,7 @@ exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20,
     const { count, rows: products } = await Product.findAndCountAll({
         where: productWhere,
         include: [
+            ...(brand && brandVisible ? [{ model: Brand, as: 'brand', where: { slug: brand }, required: true }] : []),
             {
                 model: ProductImage,
                 as: 'images',
@@ -237,7 +246,6 @@ exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20,
         order: [...productOrder, ['id', 'ASC']],
     });
 
-    const brandVisible = isBrandVisible(features);
     const serializedProducts = products.map((p) => {
         const product = serializeProductPricing(p, { adminView: false, features }, labelPresets);
         return brandVisible ? product : stripBrandFields(product);
@@ -264,7 +272,6 @@ exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20,
 };
 
 exports.CATEGORY_PRODUCT_VARIANT_ATTRIBUTES = CATEGORY_PRODUCT_VARIANT_ATTRIBUTES;
-
 
 /**
  * Check if a root category with the same name already exists.
@@ -399,6 +406,47 @@ exports.reorderCategory = async (id, direction) => {
 };
 
 /**
+ * Move a category under a new parent (or the root) at a given position among
+ * its siblings. Used by the admin drag-and-drop category tree.
+ * @param {string} id - category id
+ * @param {{parentId: string|null, position: number}} payload
+ */
+exports.moveCategory = async (id, payload) => {
+    const category = await Category.findByPk(id);
+    if (!category) throw new AppError('NOT_FOUND', 404, 'Category not found');
+
+    const parentId = payload.parentId ?? null;
+    if (parentId) {
+        if (parentId === id) {
+            throw new AppError('VALIDATION_ERROR', 400, 'Category cannot be its own parent');
+        }
+        const parent = await Category.findByPk(parentId);
+        if (!parent) throw new AppError('NOT_FOUND', 404, 'Parent category not found');
+        // F-09: full cycle guard (e.g. A→B→C and trying to move A under C)
+        if (await wouldCreateCycle(id, parentId)) {
+            throw new AppError('VALIDATION_ERROR', 400, 'Setting this parent would create a circular reference');
+        }
+    }
+
+    const siblings = (await Category.findAll({
+        where: { parentId: parentId ?? null },
+        order: [['sortOrder', 'ASC'], ['name', 'ASC'], ['id', 'ASC']]
+    })).filter(c => c.id !== id);
+
+    const position = Math.max(0, Math.min(payload.position, siblings.length));
+    siblings.splice(position, 0, category);
+
+    await Category.sequelize.transaction(async (transaction) => {
+        await category.update({ parentId }, { transaction });
+        for (let index = 0; index < siblings.length; index += 1) {
+            await siblings[index].update({ sortOrder: index * 10 }, { transaction });
+        }
+    });
+
+    return true;
+};
+
+/**
  * Update the sort order of products within a category.
  * @param {string} categoryId - category id
  * @param {string[]} productIds - ordered list of product ids
@@ -411,9 +459,9 @@ exports.reorderProducts = async (categoryId, productIds) => {
         for (let i = 0; i < productIds.length; i++) {
             await ProductCategory.update(
                 { sortOrder: i },
-                { 
+                {
                     where: { categoryId, productId: productIds[i] },
-                    transaction 
+                    transaction
                 }
             );
         }

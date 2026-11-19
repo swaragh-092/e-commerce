@@ -1,5 +1,6 @@
 'use strict';
 const Joi = require('joi');
+const { MAX_CHECKOUT_COUPONS } = require('../../config/constants');
 const CANCELLATION_REASONS = require('../../../../shared/cancellation-reasons.json');
 const { isGuestSessionId } = require('../../utils/guestSession');
 const {
@@ -13,12 +14,15 @@ const {
 
 const placeOrderSchema = Joi.object({
     shippingAddressId: Joi.string().uuid().optional().allow(null, ''),
-    couponCode: Joi.string().max(50).uppercase().optional().allow(null, ''),
-    couponCodes: Joi.array().items(Joi.string().max(50).uppercase()).optional().default([]),
+    couponCode: Joi.string().trim().max(50).uppercase().optional().allow(null, ''),
+    couponCodes: Joi.array().items(Joi.string().trim().max(50).uppercase()).max(MAX_CHECKOUT_COUPONS).optional().default([]),
     notes: Joi.string().allow(null, ''),
     paymentMethod: Joi.string().valid('razorpay', 'stripe', 'payu', 'cashfree', 'cod').default('razorpay'),
     shippingQuoteId: Joi.string().uuid().optional(),
     checkoutSessionId: Joi.string().uuid().optional(),
+    utmSource: Joi.string().trim().max(255).optional().allow(null, ''),
+    utmMedium: Joi.string().trim().max(255).optional().allow(null, ''),
+    utmCampaign: Joi.string().trim().max(255).optional().allow(null, ''),
     idempotencyKey: Joi.string().uuid().optional(),
     sessionId: Joi.string().custom((value, helpers) => isGuestSessionId(value) ? value : helpers.error('string.guid')).optional(),
     guestEmail: Joi.string().trim().email().max(255).optional(),

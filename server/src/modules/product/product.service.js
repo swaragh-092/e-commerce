@@ -15,10 +15,12 @@ const {
   Media,
   ProductTab,
   ProductComboItem,
+  ProductRelated,
   Sequelize,
   sequelize,
 } = require('../index');
 const { Op } = Sequelize;
+const discovery = require('./product.discovery');
 const salePriceIsDiscounted = Sequelize.where(Sequelize.col('Product.sale_price'), Op.lt, Sequelize.col('Product.price'));
 const { generateSlug } = require('../../utils/slugify');
 // Note: Although the ARCHITECTURE/STANDARDS refer to generateUniqueSlug(),
@@ -44,6 +46,7 @@ const SettingsService = require('../settings/settings.service');
 const inventoryService = require('../inventory/inventory.service');
 const { validateProductTypeChange } = require('./productType');
 const { normalizeSearchQuery, buildSearchPattern } = require('../search/search.utils');
+const { buildCategorySearchSql } = require('../search/search.category');
 const {
   isBrandVisible,
   stripBrandFields,
@@ -225,7 +228,7 @@ const ATTRIBUTE_TEMPLATE_FIELDS = ['id', 'name', 'slug', 'sortOrder', 'displayTy
 const ATTRIBUTE_VALUE_FIELDS = ['id', 'value', 'slug', 'sortOrder', 'displayLabel', 'swatchColor', 'imageUrl', 'unitLabel', 'metadata'];
 
 const getCommonAttributeIncludes = () => [
-  { model: AttributeTemplate, as: 'attribute', attributes: ATTRIBUTE_TEMPLATE_FIELDS },
+  { model: AttributeTemplate, as: 'attribute', attributes: ATTRIBUTE_TEMPLATE_FIELDS, paranoid: false },
   { model: AttributeValue, as: 'value', attributes: ATTRIBUTE_VALUE_FIELDS },
 ];
 
@@ -467,6 +470,8 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     where[Op.and] = [...(where[Op.and] || []), Sequelize.literal(`${hasVariants ? '' : 'NOT '}EXISTS (SELECT 1 FROM "product_variants" AS copy_variant WHERE copy_variant.product_id = "Product".id AND copy_variant.deleted_at IS NULL)`)];
   }
 
+  if (filters.ids) where.id = { [Op.in]: filters.ids };
+
   // Filter Logic
   if (typeof filters.search === 'string' && filters.search.length > 0) {
     const trimmed = normalizeSearchQuery(filters.search);
@@ -480,17 +485,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
         { shortDescription: { [Op.iLike]: searchPattern } },
         { sku: { [Op.iLike]: searchPattern } },
         Sequelize.literal(`"Product"."search_vector" @@ plainto_tsquery('simple', ${escapedQuery})`),
-        Sequelize.literal(`EXISTS (
-          SELECT 1
-          FROM "product_categories" AS "search_product_categories"
-          INNER JOIN "categories" AS "search_categories"
-            ON "search_categories"."id" = "search_product_categories"."category_id"
-          WHERE "search_product_categories"."product_id" = "Product"."id"
-            AND (
-              LOWER("search_categories"."name") LIKE LOWER(${escapedSearchPattern})
-              OR LOWER("search_categories"."slug") LIKE LOWER(${escapedSearchPattern})
-            )
-        )`),
+        Sequelize.literal(buildCategorySearchSql(escapedSearchPattern)),
         ...(brandsVisible ? [Sequelize.literal(`EXISTS (
           SELECT 1
           FROM "brands" AS "search_brands"
@@ -569,7 +564,14 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   if (tagFilter) where[Op.and] = [...(where[Op.and] || []), tagFilter];
 
   // sale: salePrice is set AND sale window is active (or no window defined)
-  if (filters.onSale === 'true' || filters.onSale === true || filters.sale === 'true' || filters.sale === true) {
+  if (filters.saleLabel) {
+    const labelExists = labelPresets.some((label) => label.id === filters.saleLabel);
+    where.saleLabel = filters.saleLabel;
+    if (!features.pricing || !labelExists) {
+      where[Op.and] = [...(where[Op.and] || []), Sequelize.literal('FALSE')];
+    }
+  }
+  if (filters.saleLabel || filters.onSale === 'true' || filters.onSale === true || filters.sale === 'true' || filters.sale === true) {
     where[Op.and] = [
       ...(where[Op.and] || []),
       Sequelize.literal(buildSqlSaleCondition(labelPresets, now, '"Product"')),
@@ -577,16 +579,25 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   }
 
   const SORTABLE_FIELDS = { price: 'price', quantity: 'quantity', name: 'name', createdAt: 'createdAt' };
-  if (filters.sort === 'best-selling') {
-    // Subquery: rank products by total units sold across all orders
-    order.push([
-      Sequelize.literal(`(
-        SELECT COALESCE(SUM(oi.quantity), 0)
-        FROM order_items oi
-        WHERE oi.product_id = "Product"."id"
-      )`),
-      'DESC',
-    ]);
+  const ranking = filters.sort === 'best-selling' ? discovery.bestSellers
+    : filters.sort === 'most-viewed' ? discovery.mostViewed
+    : filters.sort === 'trending' ? discovery.trending : null;
+  if (ranking) {
+    const minimum = filters.sort !== 'trending' && filters.discoveryRow ? (filters.sort === 'best-selling' ? 2 : 5) : 1;
+    const condition = filters.sort === 'best-selling' && !features.orders ? 'FALSE' : `${ranking} >= ${minimum}`;
+    where[Op.and] = [...(where[Op.and] || []), Sequelize.literal(condition)];
+    if (filters.sort === 'most-viewed') {
+      where[Op.and].push(Sequelize.literal(`EXISTS (
+        SELECT 1 FROM storefront_product_views
+        WHERE view_date <= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date - 6
+      )`));
+    }
+    order.push([Sequelize.literal(ranking), 'DESC'], ['id', 'ASC']);
+  } else if (filters.sort === 'arrivals') {
+    if (filters.discoveryRow) {
+      where[Op.and] = [...(where[Op.and] || []), Sequelize.literal(`${discovery.arrival} >= NOW() - INTERVAL '30 days'`)];
+    }
+    order.push([Sequelize.literal(discovery.arrival), 'DESC'], ['id', 'ASC']);
   } else if (filters.sortBy && SORTABLE_FIELDS[filters.sortBy]) {
     const dir = filters.sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
     order.push([SORTABLE_FIELDS[filters.sortBy], dir]);
@@ -995,14 +1006,20 @@ exports.updateProduct = async (id, data, auditContext = null) => {
 
     const variantsExist = await productHasVariants(id, transaction);
     const hasComboItems = await ProductComboItem.count({ where: { comboProductId: id }, transaction }) > 0;
-    const { nextType, resetInventory } = validateProductTypeChange(product, data, { hasVariants: variantsExist, hasComboItems });
+    const { nextType, resetInventory, resetVariantInventory } = validateProductTypeChange(product, data, { hasVariants: variantsExist, hasComboItems });
     if (variantsExist && data.variants !== undefined) throw new AppError('VALIDATION_ERROR', 400, 'Use the variant editor to update existing combinations. Product updates cannot replace variant history.');
     delete data.confirmInventoryReset;
-    if ((nextType !== 'simple' || variantsExist) && data.quantity !== undefined) {
+    if (nextType !== 'simple' && data.quantity !== undefined) {
       throw new AppError('VALIDATION_ERROR', 400, 'Stock is managed by variants or bundle items. Edit their stock instead.');
     }
     if (resetInventory) {
       await inventoryService.adjust({ productId: id, newQuantity: 0, reason: `Change inventory type from simple to ${nextType}`, createdBy: auditContext?.userId || null, transaction });
+    }
+    if (resetVariantInventory) {
+      const variantReserved = Number(await ProductVariant.sum('reservedQty', { where: { productId: id }, transaction }) || 0);
+      if (variantReserved > 0) {
+        throw new AppError('CONFLICT', 409, 'Finish or cancel orders reserving historical variants before switching this product to Variable.');
+      }
     }
     validateProductStock(data, product);
     validateSellingReadiness(data, product, updateFeatures.pricing);
@@ -1014,7 +1031,7 @@ exports.updateProduct = async (id, data, auditContext = null) => {
     const adjustmentReason = data.stockAdjustmentReason;
     delete data.stockAdjustmentReason;
 
-    if (stockChanged && !variantsExist) {
+    if (stockChanged && nextType === 'simple') {
       await inventoryService.adjust({
         productId: id,
         newQuantity: Number(data.quantity),
@@ -1037,6 +1054,9 @@ exports.updateProduct = async (id, data, auditContext = null) => {
       await replaceVariantsWithOptions(id, data.variants, transaction);
       await syncProductVariantStock(id, transaction);
     } else if (nextType === 'variable') {
+      if (resetVariantInventory) {
+        await ProductVariant.update({ stockQty: 0, reservedQty: 0 }, { where: { productId: id }, transaction });
+      }
       await syncProductVariantStock(id, transaction);
     }
 
@@ -1291,12 +1311,15 @@ exports.bulkUpdateSale = async (payload, actingUserId = null, auditContext = nul
   });
 };
 
+const MAX_RELATED_PRODUCTS = 12;
+
+// Storefront related products: admin-curated picks first (in their saved order),
+// then filled from the same categories, then the same brand.
 exports.getRelatedProducts = async (productId, limit = 6) => {
   const { features } = await SettingsService.getFeatures();
   const brandsVisible = isBrandVisible(features);
   const baseQuery = (extraWhere = {}, categoryInclude = null) => ({
     where: {
-      id: { [Op.ne]: productId },
       status: 'published',
       isEnabled: true,
       ...extraWhere,
@@ -1308,33 +1331,56 @@ exports.getRelatedProducts = async (productId, limit = 6) => {
       { model: Tag, as: 'tags', attributes: { exclude: ['description'] } },
     ],
     order: [['createdAt', 'DESC']],
-    limit,
     distinct: true,
   });
 
   const product = await Product.findByPk(productId, {
     include: [{ model: Category, as: 'categories', attributes: ['id'] }],
-    attributes: ['id'],
+    attributes: ['id', 'brandId'],
   });
   if (!product) return [];
 
-  const categoryIds = (product.categories || []).map((c) => c.id);
+  const rows = [];
+  const excludeIds = () => [productId, ...rows.map((r) => r.id)];
+  const remaining = () => limit - rows.length;
 
-  let rows;
-
-  if (categoryIds.length > 0) {
-    const result = await Product.findAndCountAll(baseQuery({}, {
-      model: Category,
-      as: 'categories',
-      where: { id: { [Op.in]: categoryIds } },
-      required: true,
-    }));
-    rows = result.rows;
+  const links = await ProductRelated.findAll({
+    where: { productId },
+    attributes: ['relatedProductId'],
+    order: [['sortOrder', 'ASC']],
+  });
+  const curatedIds = links.map((l) => l.relatedProductId).filter((rid) => rid !== productId);
+  if (curatedIds.length) {
+    const curated = await Product.findAll(baseQuery({ id: { [Op.in]: curatedIds } }));
+    const byId = new Map(curated.map((p) => [p.id, p]));
+    curatedIds.forEach((rid) => { if (byId.has(rid) && rows.length < limit) rows.push(byId.get(rid)); });
   }
 
-  if (!rows || rows.length === 0) {
-    const result = await Product.findAndCountAll(baseQuery());
-    rows = result.rows;
+  const categoryIds = (product.categories || []).map((c) => c.id);
+  if (remaining() > 0 && categoryIds.length > 0) {
+    const result = await Product.findAndCountAll({
+      ...baseQuery({ id: { [Op.notIn]: excludeIds() } }, {
+        model: Category,
+        as: 'categories',
+        where: { id: { [Op.in]: categoryIds } },
+        required: true,
+      }),
+      limit: remaining(),
+    });
+    rows.push(...result.rows);
+  }
+
+  if (remaining() > 0 && brandsVisible && product.brandId) {
+    const result = await Product.findAndCountAll({
+      ...baseQuery({ id: { [Op.notIn]: excludeIds() }, brandId: product.brandId }),
+      limit: remaining(),
+    });
+    rows.push(...result.rows);
+  }
+
+  if (rows.length === 0) {
+    const result = await Product.findAndCountAll({ ...baseQuery({ id: { [Op.ne]: productId } }), limit });
+    rows.push(...result.rows);
   }
 
   const labelPresets = await getLabelPresets();
@@ -1343,6 +1389,78 @@ exports.getRelatedProducts = async (productId, limit = 6) => {
     return brandsVisible ? serialized : stripBrandFields(serialized);
   });
 };
+
+// Admin view of the curated list; includes drafts/disabled items so staff can see why they are hidden.
+exports.getRelatedSelection = async (productId) => {
+  const product = await Product.findByPk(productId, { attributes: ['id'] });
+  if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
+  const links = await ProductRelated.findAll({
+    where: { productId },
+    order: [['sortOrder', 'ASC']],
+    include: [{
+      model: Product,
+      as: 'relatedProduct',
+      required: true,
+      attributes: ['id', 'name', 'slug', 'sku', 'status', 'isEnabled', 'type'],
+      include: [{ model: ProductImage, as: 'images', attributes: ['url', 'isPrimary', 'sortOrder'] }],
+    }],
+  });
+  return links.map(({ relatedProduct: p }) => {
+    const images = [...(p.images || [])].sort((a, b) => (Number(b.isPrimary) - Number(a.isPrimary)) || (a.sortOrder - b.sortOrder));
+    return {
+      id: p.id,
+      name: p.name,
+      slug: p.slug,
+      sku: p.sku,
+      status: p.status,
+      isEnabled: p.isEnabled,
+      type: p.type,
+      imageUrl: images[0]?.url || null,
+    };
+  });
+};
+
+exports.setRelatedProducts = async (productId, relatedProductIds, auditContext = null) => {
+  const ids = [...new Set(relatedProductIds)];
+  if (ids.includes(productId)) throw new AppError('VALIDATION_ERROR', 400, 'A product cannot be related to itself.');
+  if (ids.length > MAX_RELATED_PRODUCTS) {
+    throw new AppError('VALIDATION_ERROR', 400, `You can pick up to ${MAX_RELATED_PRODUCTS} related products.`);
+  }
+  const product = await Product.findByPk(productId, { attributes: ['id'] });
+  if (!product) throw new AppError('NOT_FOUND', 404, 'Product not found');
+  if (ids.length) {
+    const found = await Product.count({ where: { id: { [Op.in]: ids } } });
+    if (found !== ids.length) throw new AppError('VALIDATION_ERROR', 400, 'One or more selected products no longer exist.');
+  }
+
+  await sequelize.transaction(async (transaction) => {
+    await ProductRelated.destroy({ where: { productId }, transaction });
+    if (ids.length) {
+      await ProductRelated.bulkCreate(
+        ids.map((relatedProductId, sortOrder) => ({ productId, relatedProductId, sortOrder })),
+        { transaction }
+      );
+    }
+  });
+
+  try {
+    await AuditService.log({
+      userId: auditContext?.userId || null,
+      action: ACTIONS.UPDATE,
+      entity: ENTITIES.PRODUCT,
+      entityId: productId,
+      changes: { relatedProductIds: ids },
+      ipAddress: auditContext?.ip,
+      userAgent: auditContext?.userAgent,
+    });
+  } catch (e) {
+    logger.error('Failed to log audit for related products update:', e);
+  }
+
+  return exports.getRelatedSelection(productId);
+};
+
+exports.MAX_RELATED_PRODUCTS = MAX_RELATED_PRODUCTS;
 
 exports.buildSqlSaleCondition = buildSqlSaleCondition;
 exports.getSqlEffectivePriceExpr = getSqlEffectivePriceExpr;

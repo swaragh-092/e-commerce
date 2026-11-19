@@ -15,7 +15,7 @@ const filter = createFilterOptions({ stringify: (option) => option.name });
 const normalize = (text) => String(text || '').trim().replace(/\s+/g, ' ').toLowerCase();
 const emptyValue = { value: '', unitLabel: '', swatchColor: '' };
 
-const ProductAttributeDialog = ({ productId, templates, rows, initialTemplate, onSaved, onClose }) => {
+const ProductAttributeDialog = ({ productId, templates, rows, variants = [], initialTemplate, onSaved, onClose }) => {
   const { notify, confirm } = useNotification();
   const { units, loading: unitsLoading, error: unitsError, retry: retryUnits } = useUnitCatalog();
   const [selected, setSelected] = useState(initialTemplate || null);
@@ -32,12 +32,14 @@ const ProductAttributeDialog = ({ productId, templates, rows, initialTemplate, o
   const [entryError, setEntryError] = useState('');
   const [valueSearch, setValueSearch] = useState('');
   const [showEntry, setShowEntry] = useState(false);
-  const [isVariant, setIsVariant] = useState(false);
+  const [variantChoice, setVariantChoice] = useState(false);
   const [saving, setSaving] = useState(false);
   const category = selected ? getAttributeUnitCategory(selected, units) : '';
   const isColor = inferValueType(selected || {}) === 'color';
   const values = selected?.values || [];
   const assigned = new Set(rows.filter((row) => row.attributeId === selected?.id).map((row) => row.valueId));
+  const inheritsVariantUse = Boolean(selected?.id && rows.some((row) => row.attributeId === selected.id && row.isVariantAttr));
+  const isVariant = inheritsVariantUse || variantChoice;
   const options = [...new Map([...templates, ...results, ...(selected?.id ? [selected] : [])].map((item) => [item.id, item])).values()];
   const hasEntry = Object.values(entry).some(Boolean);
   const dirty = selected?._new || chosenIds.length > 0 || drafts.length > 0 || hasEntry;
@@ -79,7 +81,7 @@ const ProductAttributeDialog = ({ productId, templates, rows, initialTemplate, o
     if (typeof option === 'string') option = options.find((item) => normalize(item.name) === normalize(option)) || { _new: true, name: option.trim(), unitCategory: '', values: [] };
     if (dirty && !(await confirm({ title: 'Change attribute?', message: 'Discard the selected values and continue with another attribute?', confirmText: 'Change attribute', cancelText: 'Keep editing', severity: 'warning' }))) { setQuery(selected?.name || ''); return; }
     setSelected(option); setQuery(option?.name || ''); setChosenIds([]); setDrafts([]); setEntry(emptyValue);
-    setEntryError(''); setValueSearch(''); setIsVariant(false); setValueLoadError(false);
+    setEntryError(''); setValueSearch(''); setVariantChoice(false); setValueLoadError(false);
     setShowEntry(Boolean(option?._new));
   };
   const prepareEntry = () => {
@@ -181,8 +183,15 @@ const ProductAttributeDialog = ({ productId, templates, rows, initialTemplate, o
           </Stack>
         </Box>}
         <Box sx={{ mt: 2 }}>
-          <FormControlLabel sx={{ m: 0, display: 'flex' }} control={<Checkbox checked={isVariant} disabled={blocked} onChange={(_, checked) => setIsVariant(checked)} />} label="Use these values to create variants" />
-          <Typography variant="caption" color="text.secondary" display="block">Generate the variant matrix after assigning all variant attributes.</Typography>
+          {inheritsVariantUse ? <>
+            <Typography variant="body2">New values will also be used for variants.</Typography>
+            <Typography variant="caption" color="text.secondary" display="block">{variants.some((variant) => !variant.deletedAt)
+              ? 'Added values will appear under “Add missing variants”.'
+              : 'Create variants after adding all values.'}</Typography>
+          </> : <>
+            <FormControlLabel sx={{ m: 0, display: 'flex' }} control={<Checkbox checked={isVariant} disabled={blocked} onChange={(_, checked) => setVariantChoice(checked)} />} label="Use these values to create variants" />
+            <Typography variant="caption" color="text.secondary" display="block">Generate the variant matrix after assigning all variant attributes.</Typography>
+          </>}
         </Box>
       </>}
     </DialogContent>

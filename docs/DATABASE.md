@@ -270,34 +270,51 @@ CREATE TABLE cart_items (
 
 ```sql
 CREATE TABLE coupons (
-  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  code              VARCHAR(50) UNIQUE NOT NULL,        -- uppercase, e.g. 'SAVE20'
-  type              VARCHAR(20) NOT NULL,               -- 'percentage' | 'fixed_amount'
-  value             DECIMAL(10,2) NOT NULL,             -- e.g. 20 for 20% or $20
-  min_order_amount  DECIMAL(10,2) DEFAULT 0,            -- minimum cart subtotal
-  max_discount      DECIMAL(10,2),                      -- cap for percentage coupons
-  usage_limit       INTEGER,                            -- total max uses (NULL = unlimited)
-  used_count        INTEGER DEFAULT 0,
-  per_user_limit    INTEGER DEFAULT 1,                  -- max uses per customer
-  start_date        TIMESTAMP NOT NULL,
-  end_date          TIMESTAMP NOT NULL,
-  is_active         BOOLEAN DEFAULT TRUE,
-  applicable_to     VARCHAR(20) DEFAULT 'all',          -- 'all' | 'category' | 'product'
-  applicable_ids    JSONB,                              -- UUIDs of applicable categories/products
-  created_at        TIMESTAMP DEFAULT NOW(),
-  updated_at        TIMESTAMP DEFAULT NOW(),
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code                    VARCHAR(50) UNIQUE NOT NULL,        -- uppercase, trimmed, e.g. 'SAVE20'
+  name                    VARCHAR(255) NOT NULL,              -- display name
+  description             TEXT,                               -- optional promotional notes
+  type                    VARCHAR(20) NOT NULL,               -- 'percentage' | 'fixed_amount' | 'free_shipping'
+  value                   DECIMAL(10,2) NOT NULL,             -- e.g. 20 for 20% or $20 (0 for free_shipping)
+  min_order_amount        DECIMAL(10,2) DEFAULT 0,            -- minimum cart subtotal
+  max_discount            DECIMAL(10,2),                      -- cap for percentage coupons
+  usage_limit             INTEGER,                            -- total max uses (NULL = unlimited)
+  used_count              INTEGER DEFAULT 0,
+  per_user_limit          INTEGER DEFAULT 1,                  -- max uses per customer
+  start_date              TIMESTAMP NOT NULL,
+  end_date                TIMESTAMP NOT NULL,
+  is_active               BOOLEAN DEFAULT TRUE,
+  campaign_status         VARCHAR(20) DEFAULT 'active',       -- 'draft' | 'active' | 'paused' | 'archived'
+  application_mode        VARCHAR(20) DEFAULT 'manual',       -- 'manual' | 'suggest' | 'auto'
+  visibility              VARCHAR(20) DEFAULT 'private',      -- 'private' | 'public'
+  customer_eligibility    VARCHAR(20) DEFAULT 'all',          -- 'all' | 'authenticated' | 'first_order'
+  is_exclusive            BOOLEAN DEFAULT FALSE,              -- cannot be combined with other coupons
+  priority                INTEGER DEFAULT 0,                  -- precedence in combination algorithms
+  applicable_to           VARCHAR(20) DEFAULT 'all',          -- 'all' | 'category' | 'product' | 'brand'
+  applicable_ids          JSONB DEFAULT '[]',                 -- UUIDs of applicable targets
+  excluded_product_ids    JSONB DEFAULT '[]',                 -- UUIDs of explicitly excluded products
+  excluded_category_ids   JSONB DEFAULT '[]',                 -- UUIDs of explicitly excluded categories
+  excluded_brand_ids      JSONB DEFAULT '[]',                 -- UUIDs of explicitly excluded brands
+  exclude_sale_items      BOOLEAN DEFAULT FALSE,              -- skips products with active sales
+  stacking_rules          JSONB,                              -- { allowOrderDiscounts, allowShippingDiscounts, allowMultipleCoupons }
+  created_at              TIMESTAMP DEFAULT NOW(),
+  updated_at              TIMESTAMP DEFAULT NOW(),
 
-  CONSTRAINT chk_coupon_value CHECK (value > 0),
+  CONSTRAINT chk_coupon_value CHECK (
+    (type = 'free_shipping' AND value = 0)
+    OR (type IN ('percentage', 'fixed_amount') AND value > 0)
+  ),
   CONSTRAINT chk_coupon_dates CHECK (end_date > start_date),
   CONSTRAINT chk_coupon_percentage_limit CHECK (type != 'percentage' OR value <= 100)
 );
 
 CREATE TABLE coupon_usages (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  coupon_id       UUID REFERENCES coupons(id) ON DELETE CASCADE,
-  user_id         UUID REFERENCES users(id) ON DELETE CASCADE,
-  order_id        UUID REFERENCES orders(id) ON DELETE SET NULL,
-  created_at      TIMESTAMP DEFAULT NOW()
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  coupon_id         UUID REFERENCES coupons(id) ON DELETE CASCADE,
+  user_id           UUID REFERENCES users(id) ON DELETE CASCADE,
+  guest_session_id  VARCHAR(255),
+  order_id          UUID REFERENCES orders(id) ON DELETE SET NULL,
+  created_at        TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX idx_coupon_code ON coupons(code);
@@ -340,6 +357,7 @@ CREATE TABLE orders (
   discount_amount           DECIMAL(10,2) DEFAULT 0,       -- coupon discount
   total                     DECIMAL(10,2) NOT NULL,         -- subtotal + tax + shipping - discount
   coupon_id                 UUID REFERENCES coupons(id),
+  applied_discounts         JSONB DEFAULT '[]',             -- snapshot of all stacked coupon benefits
   shipping_address_snapshot JSONB,                          -- full address at time of order (immutable)
   notes                     TEXT,
   created_at                TIMESTAMP DEFAULT NOW(),

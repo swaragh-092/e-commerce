@@ -5,6 +5,7 @@ import { useFeatureVisible, useFeaturesResolved, useMode, useSettings } from '..
 import { Outlet } from 'react-router-dom';
 
 // Layouts
+const RoutedProductRows = lazy(() => import('../components/storefront/sections/PageProductRows').then((module) => ({ default: module.RoutedProductRows })));
 const StoreLayout = lazy(() => import('../layouts/StoreLayout'));
 const AdminLayout = lazy(() => import('../layouts/AdminLayout'));
 import { ProtectedRoute } from './ProtectedRoute';
@@ -55,6 +56,7 @@ const RegisterPage = lazy(() => import('../pages/storefront/RegisterPage'));
 const ForgotPasswordPage = lazy(() => import('../pages/storefront/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('../pages/storefront/ResetPasswordPage'));
 const VerifyEmailPage = lazy(() => import('../pages/storefront/VerifyEmailPage'));
+const VerifyEmailChangePage = lazy(() => import('../pages/storefront/VerifyEmailChangePage'));
 const OAuthCallbackPage = lazy(() => import('../pages/storefront/OAuthCallbackPage'));
 const AccountPage = lazy(() => import('../pages/storefront/AccountPage'));
 const AllOrdersPage = lazy(() => import('../pages/storefront/AllOrdersPage/index'));
@@ -149,25 +151,25 @@ const AppRoutes = () => (
       {/* Storefront Routes */}
       <Route path="/" element={<StoreLayout />}>
         <Route index element={<Home />} />
-        <Route path="products" element={<ProductListPage />} />
+        <Route path="products" element={<RoutedProductRows page="collection"><ProductListPage /></RoutedProductRows>} />
         <Route path="tags/:slug" element={<TagPage />} />
-        <Route path="products/:slug" element={<ProductDetailPage />} />
-        <Route path="product/:slug" element={<ProductDetailPage />} />
-        <Route path="category/:categorySlug" element={<CategoryPage />} />
+        <Route path="products/:slug" element={<RoutedProductRows page="product"><ProductDetailPage /></RoutedProductRows>} />
+        <Route path="product/:slug" element={<RoutedProductRows page="product"><ProductDetailPage /></RoutedProductRows>} />
+        <Route path="category/:categorySlug" element={<RoutedProductRows page="category"><CategoryPage /></RoutedProductRows>} />
         <Route element={<FeatureRoute feature="pages" />}>
           <Route path="p/:slug" element={<StaticPageView />} />
         </Route>
-        <Route path="search" element={<SearchResultsPage />} />
+        <Route path="search" element={<RoutedProductRows page="search"><SearchResultsPage /></RoutedProductRows>} />
         <Route element={<FeatureRoute feature="brands" />}>
-          <Route path="brands" element={<StoreBrandsPage />} />
-          <Route path="brands/:slug" element={<BrandDetailPage />} />
+          <Route path="brands" element={<RoutedProductRows page="brand"><StoreBrandsPage /></RoutedProductRows>} />
+          <Route path="brands/:slug" element={<RoutedProductRows page="brand"><BrandDetailPage /></RoutedProductRows>} />
         </Route>
         <Route element={<FeatureRoute feature="blogs" />}>
-          <Route path="blogs" element={<BlogsPage />} />
-          <Route path="blogs/:slug" element={<BlogDetailPage />} />
+          <Route path="blogs" element={<RoutedProductRows page="blog"><BlogsPage /></RoutedProductRows>} />
+          <Route path="blogs/:slug" element={<RoutedProductRows page="blog"><BlogDetailPage /></RoutedProductRows>} />
         </Route>
         <Route element={<FeatureRoute feature="wishlist" />}>
-          <Route path="wishlist" element={<WishlistPage />} />
+          <Route path="wishlist" element={<RoutedProductRows page="wishlist"><WishlistPage /></RoutedProductRows>} />
         </Route>
 
         {/* Auth */}
@@ -178,14 +180,15 @@ const AppRoutes = () => (
         <Route path="forgot-password" element={<ForgotPasswordPage />} />
         <Route path="reset-password" element={<ResetPasswordPage />} />
         <Route path="verify-email" element={<VerifyEmailPage />} />
+        <Route path="verify-email-change" element={<VerifyEmailChangePage />} />
         <Route path="oauth/callback" element={<OAuthCallbackPage />} />
 
         {/* Feature-gated: cart & checkout — hidden in catalog mode */}
         <Route element={<FeatureRoute feature="cart" />}>
-          <Route path="cart" element={<CartPage />} />
+          <Route path="cart" element={<RoutedProductRows page="cart"><CartPage /></RoutedProductRows>} />
         </Route>
         <Route element={<FeatureRoute feature="checkout" />}>
-          <Route path="checkout" element={<CheckoutPage />} />
+          <Route path="checkout" element={<RoutedProductRows page="checkout"><CheckoutPage /></RoutedProductRows>} />
           <Route path="payment/:orderId" element={<PaymentPage />} />
           <Route path="payment/success" element={<PaymentSuccessPage />} />
           <Route path="payment/failure" element={<PaymentFailurePage />} />
@@ -193,22 +196,24 @@ const AppRoutes = () => (
 
         {/* Protected Storefront */}
         <Route element={<ProtectedRoute />}>
-          <Route path="account" element={<AccountPage />} />
+          <Route path="account" element={<RoutedProductRows page="account"><AccountPage /></RoutedProductRows>} />
           <Route element={<FeatureRoute feature="orders" />}>
             <Route path="account/orders/link-guest" element={<LinkGuestOrdersPage />} />
             <Route path="account/orders/:id" element={<StoreOrderDetailPage />} />
             <Route path="account/orders/:id/invoice" element={<StorefrontOrderInvoicePage />} />
-            <Route path="orders" element={<AllOrdersPage />} />
+            <Route path="orders" element={<RoutedProductRows page="orders"><AllOrdersPage /></RoutedProductRows>} />
           </Route>
-          <Route path="profile" element={<AccountPage />} />
+          <Route path="profile" element={<RoutedProductRows page="account"><AccountPage /></RoutedProductRows>} />
         </Route>
 
         {/* 404 catch-all */}
-        <Route path="*" element={<NotFoundPage />} />
+        <Route path="*" element={<RoutedProductRows page="not-found"><NotFoundPage /></RoutedProductRows>} />
       </Route>
 
       {/* Admin Login Route */}
       <Route path="/admin/login" element={<AdminLoginPage />} />
+      <Route path="/admin/forgot-password" element={<ForgotPasswordPage admin />} />
+      <Route path="/admin/reset-password" element={<ResetPasswordPage admin />} />
 
       {/* Admin Routes — permission-gated foundation */}
       <Route path="/admin" element={<ProtectedRoute permissions={ADMIN_ACCESS_PERMISSIONS} />}>
@@ -220,8 +225,8 @@ const AppRoutes = () => (
         <Route element={<AdminLayout />}>
           <Route index element={<AdminIndex />} />
           <Route path="profile" element={<AdminProfilePage />} />
-          <Route element={<ModeRoute requiredMode="ecommerce" />}>
-            <Route element={<ProtectedRoute permissions={[PERMISSIONS.DASHBOARD_VIEW, PERMISSIONS.ORDERS_READ]} requireAllPermissions />}>
+          <Route element={<FeatureRoute feature="analytics" surface="admin" redirectTo="/admin" />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.DASHBOARD_VIEW} />}>
               <Route path="analytics" element={<AnalyticsPage />} />
             </Route>
           </Route>

@@ -1,11 +1,14 @@
+import { getPageSections, getPageSectionTypes, PAGE_TEMPLATE_ASSIGNMENT_KEYS } from '../../utils/designerSections';
 import { useState, useEffect, useCallback, useContext, useMemo, useRef } from 'react';
 import {
   Box, Button, Card, Container, Divider, IconButton, Stack, Switch,
   Typography, CircularProgress, ToggleButtonGroup, ToggleButton,
   TextField, FormControl, InputLabel, Select, MenuItem, Paper, Chip, Breadcrumbs,
   Popover, List, ListItemButton, ListItemText, Grid, Alert, Dialog, DialogTitle,
-  DialogContent, DialogActions,
+  DialogContent, DialogActions, useTheme, useMediaQuery, Menu, Tooltip,
 } from '@mui/material';
+import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import AddIcon from '@mui/icons-material/Add';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import EditIcon from '@mui/icons-material/Edit';
@@ -34,16 +37,21 @@ import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { useSearchParams } from 'react-router-dom';
+import { useDesignerPreviewPath } from '../../hooks/useDesignerPreviewPath';
 
-import { getDesignDraft, getDesignState, getDesignVersions, getSettingsGroup, publishDesignDraft, restoreDesignVersion, saveDesignDraft } from '../../services/settingsService';
+import { discardDesignDraft, getDesignDraft, getDesignState, getDesignVersions, getSettingsGroup, publishDesignDraft, restoreDesignVersion, saveDesignDraft } from '../../services/settingsService';
 import { useNotification } from '../../context/NotificationContext';
 import { SettingsContext } from '../../context/ThemeContext';
 import { getSectionLabel, SECTION_VARIANTS } from '../../components/storefront/sections/sectionRegistry';
 import { createDefaultSection } from '../../utils/sectionPresets';
 import AddSectionDialog from '../../components/admin/sections/AddSectionDialog';
+import { customDetailKey, getProductDetailsOrder, PRODUCT_DETAILS_LABELS } from '../../utils/productDetailsOrder';
 import SaveAsTemplateDialog from '../../components/admin/themes/SaveAsTemplateDialog';
+import DraftReviewDialog from '../../components/admin/themes/DraftReviewDialog';
+import DraftArchivesDialog from '../../components/admin/themes/DraftArchivesDialog';
 import DesignVersionHistoryDialog from '../../components/admin/themes/DesignVersionHistoryDialog';
 import StorefrontTemplatePreview from '../../components/admin/themes/StorefrontTemplatePreview';
+import PageTemplateControls from '../../components/admin/themes/designer/PageTemplateControls';
 import DesignerTreePanel from '../../components/admin/themes/designer/DesignerTreePanel';
 import DesignerSectionEditor from '../../components/admin/themes/designer/DesignerSectionEditor';
 import DesignerThemePanel from '../../components/admin/themes/designer/DesignerThemePanel';
@@ -61,6 +69,8 @@ const PRODUCT_SOURCES = [
   { value: 'featured', label: 'Featured' },
   { value: 'sale', label: 'On Sale' },
   { value: 'bestSellers', label: 'Best Sellers' },
+  { value: 'trending', label: 'Trending This Week' },
+  { value: 'mostViewed', label: 'Most Viewed' },
   { value: 'newest', label: 'Newest' },
   { value: 'recommended', label: 'Recommended' },
 ];
@@ -127,7 +137,6 @@ const SECTION_COMPONENT_MAP = {
   'category-shortcuts': 'categoryCard',
   'promo-banners': 'promoCard',
   'brand-showcase': 'brandCard',
-  'hero-carousel': 'headerLayout',
   'value-props': 'trustCard',
   'trust-badges': 'trustCard',
 };
@@ -150,13 +159,24 @@ const DESIGNER_PAGE_GROUP_MAP = {
 const SectionComposerPage = () => {
   const [searchParams] = useSearchParams();
   const [sections, setSections] = useState([]);
+  const sectionsRef = useRef(sections);
+  sectionsRef.current = sections;
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [draft, setDraft] = useState(null);
+  const [draftConflicts, setDraftConflicts] = useState([]);
+  const [useLiveOpen, setUseLiveOpen] = useState(false);
+  const [reviewDraftOpen, setReviewDraftOpen] = useState(false);
+  const [archivesOpen, setArchivesOpen] = useState(false);
+  const [usingLive, setUsingLive] = useState(false);
   const [draftDeletes, setDraftDeletes] = useState([]);
+  const [publishConflict, setPublishConflict] = useState(null);
   const [publishOpen, setPublishOpen] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [designVersions, setDesignVersions] = useState([]);
@@ -182,6 +202,7 @@ const SectionComposerPage = () => {
   
   // Unified page style settings state
   const [pageSettings, setPageSettings] = useState({});
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState({});
 
   // History state for Undo/Redo
   const [history, setHistory] = useState([]);
@@ -195,15 +216,72 @@ const SectionComposerPage = () => {
   const [activePage, setActivePage] = useState('home');
   const [pagePickerAnchor, setPagePickerAnchor] = useState(null);
   const [pageSearch, setPageSearch] = useState('');
+  const [actionsAnchor, setActionsAnchor] = useState(null);
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [mobileTab, setMobileTab] = useState('editor');
+  // A real iframe gives device previews their own responsive CSS viewport.
+  const devicePreview = viewportMode !== 'desktop' || isMobile;
+  const livePreview = previewRenderMode === 'live' || devicePreview;
+
+  const activePageConfig = DESIGNER_PAGES.find((page) => page.value === activePage) || DESIGNER_PAGES[0];
+  const previewTarget = useDesignerPreviewPath(activePage, activePageConfig.previewPath || '/');
 
   const { notify } = useNotification();
   const { hasPermission } = useAuth();
   const canManageAdvancedSettings = hasPermission(PERMISSIONS.SETTINGS_ADVANCED);
   const { settings, refreshSettings } = useContext(SettingsContext) || {};
+  const liveSettingsRef = useRef(settings);
+  liveSettingsRef.current = settings;
+
+  const getInheritedBlocksForSection = useCallback((sec) => {
+    if (!sec) return [];
+    if (sec.type === 'hero-carousel') {
+      const slides = settings?.homepage?.heroSlides?.length ? settings.homepage.heroSlides : null;
+      return Array.isArray(slides) && slides.length ? slides : [
+        {
+          eyebrow: 'Fresh drops, sharper prices',
+          title: 'Shop the Latest',
+          subtitle: 'Discover thousands of products at great prices.',
+          buttonText: 'Shop Now',
+          buttonLink: '/products',
+          image: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1800&q=80',
+          color: '#ffffff',
+        },
+      ];
+    }
+    if (sec.type === 'value-props' || sec.type === 'trust-badges') {
+      const items = settings?.homepage?.valueProps?.length ? settings.homepage.valueProps : null;
+      return Array.isArray(items) && items.length ? items : [
+        { icon: 'shipping', title: 'Fast Delivery', text: 'Reliable shipping on every order' },
+        { icon: 'offers', title: 'Daily Offers', text: 'Fresh deals across top categories' },
+        { icon: 'secure', title: 'Secure Payments', text: 'Protected checkout experience' },
+        { icon: 'support', title: 'Easy Support', text: 'Help when shoppers need it' },
+      ];
+    }
+    if (sec.type === 'promo-banners') {
+      const items = settings?.homepage?.promoBanners?.length ? settings.homepage.promoBanners : null;
+      return Array.isArray(items) && items.length ? items : [
+        { title: 'Limited Offer', subtitle: 'Fresh deals and curated picks.', ctaText: 'Shop Now', link: '/products', color: '#fff7ed', accentColor: '#f97316' },
+        { title: 'New Arrivals', subtitle: 'Browse what just landed.', ctaText: 'Explore', link: '/products?sort=newest', color: '#ecfeff', accentColor: '#0891b2' },
+        { title: 'Featured Edit', subtitle: 'Handpicked products for your shoppers.', ctaText: 'View Edit', link: '/products?featured=true', color: '#f0fdf4', accentColor: '#16a34a' },
+      ];
+    }
+    if (sec.type === 'category-shortcuts') {
+      return settings?.homepage?.categoryTiles?.length ? settings.homepage.categoryTiles : [];
+    }
+    return [];
+  }, [settings]);
 
   // FSM helper transitions
   const selectSection = (section) => {
     setPanelView({ mode: 'section-editor', sectionId: section?.id || null, componentKey: null, blockKey: null, blockIndex: null });
+  };
+
+  const openProductBlockPicker = (section, insertion) => {
+    setPanelView({ mode: 'section-editor', sectionId: section.id, componentKey: null,
+      blockInsertion: { ...insertion, anchorEl: isMobile ? null : insertion.anchorEl } });
   };
 
   const focusBlock = (blockKey, blockIndex) => {
@@ -227,14 +305,34 @@ const SectionComposerPage = () => {
   };
 
   // Derived properties from active FSM state
+  const assignmentKey = PAGE_TEMPLATE_ASSIGNMENT_KEYS[activePage];
+  const pageGroup = DESIGNER_PAGE_GROUP_MAP[activePage];
+  const currentPageSettings = pageSettings[activePage];
+  const { templates: alternateTemplates, defaults: defaultTemplate } = useMemo(() => {
+    const { alternateTemplates: templates, ...defaults } = currentPageSettings || {};
+    return { templates: Array.isArray(templates) ? templates : [], defaults };
+  }, [currentPageSettings]);
+  const selectedTemplate = alternateTemplates.find(({ id }) => id === selectedTemplateIds[activePage]);
+  const [previewProductSlug, setPreviewProductSlug] = useState('');
+  const assignedSlugs = (assignmentKey && selectedTemplate?.[assignmentKey]) || [];
+  const assignedPreviewSlug = activePage === 'product' && assignedSlugs.includes(previewProductSlug)
+    ? previewProductSlug : assignedSlugs[0];
+  const editablePageSettings = assignmentKey
+    ? selectedTemplate?.settings || defaultTemplate
+    : currentPageSettings;
+  const productSections = getPageSections({ productPage: editablePageSettings }, 'product');
+  const pageSections = editablePageSettings?.productRows || [];
+  const editableSections = activePage === 'home' ? sections
+    : activePage === 'product' ? [...productSections, ...pageSections] : pageSections;
   const editSection = panelView.mode === 'section-editor'
-    ? sections.find((s) => s.id === panelView.sectionId) || null
+    ? editableSections.find((s) => s.id === panelView.sectionId) || null
     : null;
 
   const activeComponent = panelView.mode === 'theme-settings' ? panelView.componentKey : null;
 
   const getBlockLabel = (section, blockKey, blockIndex) => {
     if (!section || blockKey == null || blockIndex == null) return null;
+    if (blockKey === 'detailsBlockOrder') return PRODUCT_DETAILS_LABELS[blockIndex];
     const blocks = section[blockKey];
     if (!Array.isArray(blocks) || !blocks[blockIndex]) return null;
     const block = blocks[blockIndex];
@@ -323,37 +421,45 @@ const SectionComposerPage = () => {
       return result;
     }, {});
     if (Object.keys(nextPages).length) setPageSettings(nextPages);
-    if (merged.homepage?.sections) setSections(merged.homepage.sections);
+    if (merged.homepage?.sections) {
+      sectionsRef.current = merged.homepage.sections;
+      setSections(merged.homepage.sections);
+    }
     return { groups: merged, resetTargets };
   }, []);
 
   const fetchSections = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [homepage, draftState, designState] = await Promise.all([
         getSettingsGroup('homepage'),
-        getDesignDraft().catch(() => ({ draft: null })),
+        getDesignDraft(),
         getDesignState().catch(() => ({ groups: {}, sources: {}, defaults: {} })),
       ]);
       setDesignSources(designState?.sources || {});
       setDesignDefaults(designState?.defaults || {});
       const existingDraft = draftState?.draft || null;
-      const draftResult = existingDraft
-        ? applyDraftPayload(existingDraft.payload || [], designState?.groups || {}, designState?.defaults || {})
-        : null;
+      const baseGroups = { ...liveSettingsRef.current, ...designState?.groups, homepage };
+      const draftResult = applyDraftPayload(existingDraft?.payload || [], baseGroups, designState?.defaults || {});
       const initialSections = draftResult?.groups?.homepage?.sections || homepage?.sections || [];
       if (existingDraft) {
         draftHydratedRef.current = true;
         setDraft(existingDraft);
         setDraftDeletes(draftResult?.resetTargets || []);
       } else {
+        setDraft(null);
         setDraftDeletes([]);
       }
       setSections(initialSections);
+      sectionsRef.current = initialSections;
       setHistory([initialSections]);
       setHistoryIndex(0);
-    } catch {
-      notify('Failed to load homepage sections', 'error');
+      setLoadError(null);
+    } catch (error) {
+      const message = error?.response?.data?.error?.message || error?.message || 'Failed to load homepage sections';
+      setLoadError(message);
+      notify(message, 'error');
     } finally {
       setLoading(false);
     }
@@ -363,11 +469,36 @@ const SectionComposerPage = () => {
     fetchSections();
   }, [fetchSections]);
 
+  const handleUseLive = async () => {
+    setUsingLive(true);
+    try {
+      await discardDesignDraft(draft.revision);
+      setDirty(false);
+      setUseLiveOpen(false);
+      setPanelView({ mode: 'tree', sectionId: null, componentKey: null, blockKey: null, blockIndex: null });
+      await fetchSections();
+    } catch (error) {
+      notify(error.response?.data?.error?.message || 'Could not load the live design. Please retry.', 'error');
+    } finally {
+      setUsingLive(false);
+    }
+  };
+
   const clearDraftDelete = (group, key = null) => {
     setDraftDeletes((current) => current.filter((target) => (
       target.group !== group || (key !== null && target.key !== null && target.key !== key)
     )));
   };
+
+  const stagedHomepage = useMemo(() => Object.fromEntries((draft?.payload || [])
+    .filter(({ group, key, operation }) => group === 'homepage' && key !== 'sections' && operation !== 'delete')
+    .map(({ key, value }) => [key, value])), [draft]);
+  const sectionPresets = useMemo(() => ({
+    ...settings?.sectionPresets,
+    ...Object.fromEntries((draft?.payload || [])
+      .filter(({ group, operation }) => group === 'sectionPresets' && operation !== 'delete')
+      .map(({ key, value }) => [key, value])),
+  }), [draft, settings?.sectionPresets]);
 
   const buildDraftPayload = (basePayload) => {
     const groupResets = new Set(draftDeletes.filter((target) => target.key === null).map((target) => target.group));
@@ -402,14 +533,20 @@ const SectionComposerPage = () => {
   };
 
   const handleSave = async () => {
+    if (loadError) {
+      notify('Cannot save: store sections failed to load. Please retry loading first.', 'error');
+      return;
+    }
     setSaving(true);
+    const sectionsToSave = sectionsRef.current;
     try {
       // Map unified pageSettings back to their API groups
       const pageEntries = Object.entries(pageSettings || {}).flatMap(([pg, vals]) =>
         Object.entries(vals || {}).map(([key, value]) => ({ key, value, group: DESIGNER_PAGE_GROUP_MAP[pg] || pg }))
       );
       const payload = buildDraftPayload([
-        { key: 'sections', value: sections, group: 'homepage' },
+        ...(draft?.payload || []).filter(({ group, operation }) => operation !== 'delete' && (group !== 'advanced' || canManageAdvancedSettings)),
+        { key: 'sections', value: sectionsToSave, group: 'homepage' },
         ...Object.entries(themeSettings || {}).map(([key, value]) => ({ key, value, group: 'theme' })),
         ...Object.entries(componentStyles || {}).map(([key, value]) => ({ key, value, group: 'componentStyles' })),
         ...Object.entries(navSettings || {}).map(([key, value]) => ({ key, value, group: 'nav' })),
@@ -421,11 +558,20 @@ const SectionComposerPage = () => {
       const savedDraft = await saveDesignDraft(payload, draft?.revision);
       setDraft(savedDraft);
       setDraftDeletes((savedDraft?.payload || []).filter((entry) => entry.operation === 'delete').map(({ group, key }) => ({ group, key })));
+      try {
+        const latestDraftState = await getDesignDraft();
+        setDraftConflicts(latestDraftState?.conflicts || []);
+      } catch (error) {
+        setLoadError('Draft saved, but conflict status could not be refreshed. Retry loading before publishing.');
+      }
       notify('Design draft saved. Publish it when the storefront is ready.', 'success');
-      setDirty(false);
-      // Reset history baseline to current state
-      setHistory([sections]);
-      setHistoryIndex(0);
+      if (sectionsRef.current === sectionsToSave) {
+        setDirty(false);
+        setHistory([sectionsRef.current]);
+        setHistoryIndex(0);
+      } else {
+        setDirty(true);
+      }
     } catch (error) {
       notify(error.response?.data?.error?.message || 'Failed to save design draft', 'error');
     } finally {
@@ -463,7 +609,7 @@ const SectionComposerPage = () => {
       }));
       const draftResult = applyDraftPayload(
         restored?.draft?.payload || [],
-        designState?.groups || {},
+        { ...settings, ...designState?.groups },
         designState?.defaults || {},
       );
       setDesignSources(designState?.sources || {});
@@ -484,11 +630,32 @@ const SectionComposerPage = () => {
     }
   };
 
+  const handleDiscard = async () => {
+    setDiscarding(true);
+    try {
+      await discardDesignDraft(draft.revision);
+      draftHydratedRef.current = false;
+      setDraft(null);
+      setDirty(false);
+      setDiscardOpen(false);
+      notify('Design draft discarded.', 'success');
+      await fetchSections();
+    } catch (error) {
+      notify(error.response?.data?.error?.message || 'Failed to discard the design draft.', 'error');
+    } finally {
+      setDiscarding(false);
+    }
+  };
+
   const handlePublish = async () => {
+    if (loadError) {
+      notify('Cannot publish: store sections failed to load. Please retry loading first.', 'error');
+      return;
+    }
     if (!draft || dirty) return;
     setPublishing(true);
     try {
-      await publishDesignDraft(draft.revision);
+      await publishDesignDraft(draft.revision, publishConflict?.conflictToken);
       draftHydratedRef.current = false;
       setDraft(null);
       setDraftDeletes([]);
@@ -499,13 +666,19 @@ const SectionComposerPage = () => {
       notify('Design draft published to the storefront.', 'success');
       setPublishOpen(false);
     } catch (error) {
-      notify(error.response?.data?.error?.message || 'Publish failed. Review the latest design changes and try again.', 'error');
+      const apiError = error.response?.data?.error;
+      if (apiError?.code === 'DRAFT_CONFLICT' && apiError.details?.conflictToken) {
+        setPublishConflict(apiError.details);
+        return;
+      }
+      notify(error.response?.data?.error?.message || error?.message || 'Publish failed. Review the latest design changes and try again.', 'error');
     } finally {
       setPublishing(false);
     }
   };
 
   const update = (next, skipHistory = false) => {
+    sectionsRef.current = next;
     setSections(next);
     clearDraftDelete('homepage');
     setDirty(true);
@@ -520,6 +693,7 @@ const SectionComposerPage = () => {
     if (historyIndex > 0) {
       const prevIndex = historyIndex - 1;
       setHistoryIndex(prevIndex);
+      sectionsRef.current = history[prevIndex];
       setSections(history[prevIndex]);
       setDirty(true);
       if (panelView.sectionId) {
@@ -533,6 +707,7 @@ const SectionComposerPage = () => {
     if (historyIndex < history.length - 1) {
       const nextIndex = historyIndex + 1;
       setHistoryIndex(nextIndex);
+      sectionsRef.current = history[nextIndex];
       setSections(history[nextIndex]);
       setDirty(true);
       if (panelView.sectionId) {
@@ -549,7 +724,7 @@ const SectionComposerPage = () => {
 
     const belongsToArea = (section) => {
       if (!area) return true;
-      return area === 'footer' ? section?.placement === 'footer' : section?.placement !== 'footer';
+      return (section?.placement || 'template') === area;
     };
 
     let target = index + dir;
@@ -568,7 +743,7 @@ const SectionComposerPage = () => {
 
     const belongsToArea = (section) => {
       if (!area) return true;
-      return area === 'footer' ? section?.placement === 'footer' : section?.placement !== 'footer';
+      return (section?.placement || 'template') === area;
     };
     if (!belongsToArea(moving)) return;
 
@@ -591,7 +766,8 @@ const SectionComposerPage = () => {
 
   const toggle = (index) => {
     const next = [...sections];
-    next[index] = { ...next[index], enabled: !next[index].enabled };
+    const isCurrentlyEnabled = next[index].enabled !== false;
+    next[index] = { ...next[index], enabled: !isCurrentlyEnabled };
     update(next);
   };
 
@@ -631,11 +807,47 @@ const SectionComposerPage = () => {
 
   const handlePageSettingChange = (page, value) => {
     clearDraftDelete(DESIGNER_PAGE_GROUP_MAP[page] || page);
+    setPageSettings((current) => {
+      const previous = current[page] || {};
+      const apply = (settings) => typeof value === 'function' ? value(settings) : value;
+      if (!PAGE_TEMPLATE_ASSIGNMENT_KEYS[page]) return { ...current, [page]: apply(previous) };
+
+      const { alternateTemplates: templates, ...defaults } = previous;
+      const selectedId = selectedTemplateIds[page];
+      const next = Array.isArray(templates) && templates.some(({ id }) => id === selectedId)
+        ? { ...previous, alternateTemplates: templates.map((template) => template.id === selectedId
+          ? { ...template, settings: apply(template.settings) } : template) }
+        : { ...apply(defaults), ...(Array.isArray(templates) && { alternateTemplates: templates }) };
+      return { ...current, [page]: next };
+    });
+    setDirty(true);
+  };
+
+  const changePageSections = (productRows) => {
+    handlePageSettingChange(activePage, (current) => ({ ...current, productRows }));
+  };
+
+  const updatePageTemplates = (templates) => {
+    clearDraftDelete(pageGroup);
     setPageSettings((current) => ({
       ...current,
-      [page]: value,
+      [activePage]: { ...current[activePage], alternateTemplates: templates },
     }));
     setDirty(true);
+  };
+
+  const removePageSection = () => {
+    changePageSections(pageSections.filter((section) => section.id !== editSection.id));
+    backToTree();
+  };
+
+  const duplicatePageSection = () => {
+    const index = pageSections.findIndex((section) => section.id === editSection.id);
+    const copy = { ...editSection, id: `page-section-${crypto.randomUUID()}` };
+    const next = [...pageSections];
+    next.splice(index + 1, 0, copy);
+    changePageSections(next);
+    selectSection(copy);
   };
 
   // Debounce live-preview updates from inline field edits. Color pickers
@@ -645,24 +857,69 @@ const SectionComposerPage = () => {
   // input remains responsive, but the downstream preview re-render is
   // coalesced to ~200ms.
   const livePreviewRef = useRef({ value: null, timer: null });
-  const handleInlineFieldChange = (key, value) => {
+  const changeProductInfo = (id, apply) => handlePageSettingChange('product', (current) => ({
+    ...current, sections: getPageSections({ productPage: current }, 'product').map((section) =>
+      section.id === id && section.type === 'product-info' ? apply(section) : section),
+  }));
+
+  const handleInlineFieldChange = (key, value, detailInsertion) => {
     if (!panelView.sectionId) return;
-    const next = sections.map((section) =>
+    if (pageSections.some((section) => section.id === panelView.sectionId)) {
+      handlePageSettingChange(activePage, (current) => ({
+        ...current,
+        productRows: current.productRows.map((section) =>
+          section.id === panelView.sectionId ? updateSectionField(section, key, value) : section),
+      }));
+      return;
+    }
+    if (activePage === 'product') {
+      if (editSection?.type === 'product-info' && key === 'heroBlocks') {
+        changeProductInfo(editSection.id, (section) => {
+          const next = { ...section, heroBlocks: value };
+          if (detailInsertion) {
+            const order = getProductDetailsOrder(section);
+            order.splice(detailInsertion.after === null ? 0 : order.indexOf(detailInsertion.after) + 1, 0, customDetailKey(detailInsertion.id));
+            next.detailsBlockOrder = getProductDetailsOrder({ ...next, detailsBlockOrder: order });
+          } else if (section.detailsBlockOrder) {
+            next.detailsBlockOrder = getProductDetailsOrder(next);
+          }
+          return next;
+        });
+        return;
+      }
+      handlePageSettingChange('product', (current) => ({ ...current, sections: getPageSections({ productPage: current }, 'product').map((section) =>
+        section.id === panelView.sectionId ? updateSectionField(section, key, value) : section) }));
+      return;
+    }
+    const next = sectionsRef.current.map((section) =>
       section.id === panelView.sectionId ? updateSectionField(section, key, value) : section
     );
     update(next, true);
   };
 
   const handleInlineFieldBlur = () => {
+    if (activePage !== 'home') return;
     // Commit the current state to the undo/redo history on input blur
+    const currentSections = sectionsRef.current;
+    const currentHead = history[historyIndex];
+    const currentHeadSections = Array.isArray(currentHead) ? currentHead : currentHead?.sections;
+    if (currentHead && JSON.stringify(currentHeadSections) === JSON.stringify(currentSections)) {
+      return;
+    }
     const nextHistory = history.slice(0, historyIndex + 1);
-    setHistory([...nextHistory, sections]);
+    setHistory([...nextHistory, currentSections]);
     setHistoryIndex(nextHistory.length);
   };
 
   const updateSectionField = (section, key, value) => {
     if (!String(key).includes('.')) {
-      return { ...section, [key]: value };
+      const next = { ...section };
+      if (value === undefined) {
+        delete next[key];
+      } else {
+        next[key] = value;
+      }
+      return next;
     }
 
     const parts = String(key).split('.').filter(Boolean);
@@ -675,7 +932,11 @@ const SectionComposerPage = () => {
       const shouldBeArray = nextPart !== undefined && /^\d+$/.test(nextPart);
 
       if (isLast) {
-        cursor[part] = value;
+        if (value === undefined) {
+          delete cursor[part];
+        } else {
+          cursor[part] = value;
+        }
         return;
       }
 
@@ -699,6 +960,7 @@ const SectionComposerPage = () => {
       const base = seedPatch && typeof seedPatch === 'object' ? { ...section, ...seedPatch } : section;
       return updateSectionField(base, key, value);
     });
+    sectionsRef.current = nextSections;
     setSections(nextSections);
     setDirty(true);
     const updated = nextSections.find((section) => section.id === sectionId);
@@ -719,14 +981,25 @@ const SectionComposerPage = () => {
     setPanelView({ mode: 'section-editor', sectionId: updated.id, componentKey: null });
   };
 
-  const openAddSection = (index = sections.length, area = 'template') => {
-    setAddTarget({ index, area });
+  const openAddSection = (index = sections.length, area = 'template', anchorEl = null) => {
+    setAddTarget({ index, area, anchorEl: isMobile ? null : anchorEl });
     setAddOpen(true);
   };
 
   const handleAdd = (newSection) => {
+    if (activePage !== 'home') {
+      if (activePage === 'checkout' || pageSections.length >= 6) return;
+      const section = { ...newSection, pagePosition: addTarget.area === 'above' ? 'above' : 'below' };
+      const next = [...pageSections];
+      next.splice(addTarget.index ?? next.length, 0, section);
+      changePageSections(next);
+      selectSection(section);
+      setAddOpen(false);
+      setAddTarget({ index: null, area: 'template' });
+      return;
+    }
     const insertIndex = Number.isInteger(addTarget.index) ? addTarget.index : sections.length;
-    const nextSection = addTarget.area === 'footer' ? { ...newSection, placement: 'footer' } : { ...newSection, placement: undefined };
+    const nextSection = { ...newSection, placement: addTarget.area === 'template' ? undefined : addTarget.area };
     const next = [...sections];
     next.splice(Math.max(0, Math.min(insertIndex, next.length)), 0, nextSection);
     update(next);
@@ -742,7 +1015,7 @@ const SectionComposerPage = () => {
         id: editSection.id,
         variant: editSection.variant,
         title: editSection.title,
-        sectionPresets: settings?.sectionPresets || {},
+        sectionPresets,
       }),
       enabled: editSection.enabled !== false,
     };
@@ -803,13 +1076,13 @@ const SectionComposerPage = () => {
       },
       demoContent: {
         announcementText: announcementSettings?.text || '',
-        heroSlides: extractLiveItems('hero-carousel', 'slides') || settings.homepage?.heroSlides || [],
-        valueProps: extractLiveItems('value-props', 'items') || settings.homepage?.valueProps || [],
-        promoBanners: extractLiveItems('promo-banners', 'items') || settings.homepage?.promoBanners || [],
+        heroSlides: extractLiveItems('hero-carousel', 'slides') || stagedHomepage.heroSlides || settings.homepage?.heroSlides || [],
+        valueProps: extractLiveItems('value-props', 'items') || stagedHomepage.valueProps || settings.homepage?.valueProps || [],
+        promoBanners: extractLiveItems('promo-banners', 'items') || stagedHomepage.promoBanners || settings.homepage?.promoBanners || [],
         categoryTiles: extractLiveItems('category-shortcuts', 'items') || settings.homepage?.categoryTiles || [],
       },
       componentStyles: componentStyles || settings.componentStyles || {},
-      sectionPresets: settings.sectionPresets || {},
+      sectionPresets,
       productPage: pageSettings.product || {},
       categoryPage: pageSettings.category || {},
       catalog: pageSettings.collection || {},
@@ -823,7 +1096,7 @@ const SectionComposerPage = () => {
       notFoundPage: pageSettings['not-found'] || {},
       ordersPage: pageSettings.orders || {},
     };
-  }, [settings, sections, themeSettings, componentStyles, navSettings, footerSettings, announcementSettings, pageSettings]);
+  }, [settings, sections, themeSettings, componentStyles, navSettings, footerSettings, announcementSettings, pageSettings, sectionPresets, stagedHomepage]);
 
   // Debounced live-preview derivation. The editor's local state updates
   // synchronously on every keystroke / color-picker pixel, but the
@@ -841,7 +1114,7 @@ const SectionComposerPage = () => {
     return {
       ...settings,
       theme: themeSettings || settings.theme || {},
-      homepage: { ...(settings.homepage || {}), sections },
+      homepage: { ...(settings.homepage || {}), ...stagedHomepage, sections },
       componentStyles: componentStyles || settings.componentStyles || {},
       nav: navSettings || {},
       footer: footerSettings || {},
@@ -862,7 +1135,13 @@ const SectionComposerPage = () => {
     };
   // Depend on `livePreviewTick` so the memo re-runs only after the 200ms debounce.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings, sections, themeSettings, componentStyles, navSettings, footerSettings, announcementSettings, pageSettings, advancedSettings, canManageAdvancedSettings, livePreviewTick]);
+  }, [settings, sections, themeSettings, componentStyles, navSettings, footerSettings, announcementSettings, pageSettings, advancedSettings, canManageAdvancedSettings, stagedHomepage, livePreviewTick]);
+
+  const templatePreviewSettings = useMemo(() =>
+    assignmentKey && livePreviewSettings
+      ? { ...livePreviewSettings, [pageGroup]: editablePageSettings }
+      : livePreviewSettings,
+  [assignmentKey, pageGroup, editablePageSettings, livePreviewSettings]);
 
   if (loading) {
     return (
@@ -897,7 +1176,6 @@ const SectionComposerPage = () => {
 
   const editMappedComponent = editSection ? SECTION_COMPONENT_MAP[editSection.type] : null;
   const editMappedComponentLabel = editMappedComponent ? DESIGNER_COMPONENTS.find((item) => item.value === editMappedComponent)?.label : null;
-  const activePageConfig = DESIGNER_PAGES.find((page) => page.value === activePage) || DESIGNER_PAGES[0];
   const activePageLabel = activePageConfig.label;
   const pagePickerOpen = Boolean(pagePickerAnchor);
   const pageSearchQuery = pageSearch.trim().toLowerCase();
@@ -910,59 +1188,125 @@ const SectionComposerPage = () => {
   const handleSelectDesignerPage = (page) => {
     if (page.status !== 'active') return;
     setActivePage(page.value);
+    if (page.value !== 'home') {
+      setPreviewRenderMode('live');
+    }
     backToTree();
     setPagePickerAnchor(null);
     setPageSearch('');
   };
   const blockLabel = editSection ? getBlockLabel(editSection, panelView.blockKey, panelView.blockIndex) : null;
-  const designerBreadcrumbs = activePage !== 'home'
-    ? [activePageLabel, 'Page Layout']
-    : editSection
+  const designerBreadcrumbs = assignmentKey
+    ? [activePageLabel, selectedTemplate?.name || 'Default template']
+    : activePage !== 'home'
+      ? [activePageLabel, 'Page Layout']
+      : editSection
       ? blockLabel
         ? [activePageLabel, 'Sections', getSectionLabel(editSection), blockLabel]
         : [activePageLabel, 'Sections', getSectionLabel(editSection)]
       : panelView.mode === 'theme-settings'
-        ? [activePageLabel, 'Components', activeComponentConfig.label]
+        ? panelView.componentKey ? [activePageLabel, 'Store styles', activeComponentConfig.label] : [activePageLabel, 'Store styles']
         : [activePageLabel, 'Sections'];
+  const publishDisabledReason = loadError
+    ? 'Publishing unavailable: reload the design.'
+    : draftConflicts.length > 0
+      ? 'Publishing unavailable: resolve design conflicts.'
+      : dirty
+        ? 'Save your changes before publishing.'
+        : !draft
+          ? 'No draft to publish.'
+          : null;
 
+
+  const treePanel = (
+    <DesignerTreePanel
+      sections={editableSections}
+      loadError={loadError}
+      onRetryLoad={fetchSections}
+      activePage={activePage}
+      pageSettings={assignmentKey ? { ...pageSettings, [activePage]: editablePageSettings } : pageSettings}
+      pageTemplateControls={assignmentKey && <PageTemplateControls
+        key={activePage}
+        page={activePage}
+        templates={alternateTemplates}
+        defaultSettings={defaultTemplate}
+        selectedTemplate={selectedTemplate}
+        onSelect={(id) => {
+          setSelectedTemplateIds((current) => ({ ...current, [activePage]: id }));
+          backToTree();
+        }}
+        onChange={updatePageTemplates}
+      />}
+      selectedSectionId={panelView.sectionId}
+      onSectionClick={selectSection}
+      onThemeSettingsClick={() => setPanelView({ mode: 'theme-settings', sectionId: null, componentKey: null })}
+      onAddSection={openAddSection}
+      onAddProductBlock={openProductBlockPicker}
+      onProductDetailsOrderChange={(section, detailsBlockOrder) => changeProductInfo(section.id, (current) => {
+        const next = { ...current };
+        if (detailsBlockOrder) next.detailsBlockOrder = detailsBlockOrder;
+        else delete next.detailsBlockOrder;
+        return next;
+      })}
+      onSelectProductBlock={(section, id, key = 'heroBlocks') => handleInlineBlockFocus(section.id, key, id)}
+      inheritedBlocksForSection={getInheritedBlocksForSection}
+      onAddSectionItem={(section, schema, items, index) => {
+        const next = [...items];
+        next.splice(index, 0, schema.create());
+        const replace = (item) => item.id === section.id ? { ...item, [schema.key]: next } : item;
+        if (activePage === 'home') update(sections.map(replace));
+        else changePageSections(pageSections.map(replace));
+        handleInlineBlockFocus(section.id, schema.key, index);
+      }}
+      onMoveSection={move}
+      onReorderSection={reorderSection}
+      onToggleSection={toggle}
+      onDeleteSection={remove}
+      onChangePageSections={changePageSections}
+      onPageSettingChange={handlePageSettingChange}
+      onHeaderClick={() => openComponentEditor('headerLayout')}
+      onHeaderPartClick={openComponentEditor}
+      onFooterClick={() => openComponentEditor('footer')}
+    />
+  );
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)', overflow: 'hidden', bgcolor: '#f6f6f7' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, flex: 1, overflow: 'hidden', bgcolor: '#f6f6f7' }}>
       
       {/* Top Action Bar */}
       <Paper elevation={0} variant="outlined" sx={{ px: 1.5, py: 1, borderTop: 'none', borderLeft: 'none', borderRight: 'none', borderRadius: 0, bgcolor: 'background.paper', zIndex: 10 }}>
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1fr) auto minmax(220px, 1fr)', alignItems: 'center', gap: 1.5 }}>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, '& .MuiButton-root': { minHeight: { xs: 40, md: 36 }, borderRadius: '6px', textTransform: 'none', fontWeight: 600, whiteSpace: 'nowrap', boxShadow: 'none' }, '& .MuiIconButton-root': { width: 40, height: 40, borderRadius: '6px' } }}>
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0, flex: { xs: '1 0 100%', md: '1 1 180px' } }}>
             <Typography variant="subtitle2" fontWeight={800} noWrap>
               Store Designer
             </Typography>
             <Chip
-              label={dirty ? 'Unsaved changes' : draft ? 'Draft saved' : 'Live'}
+              label={dirty ? 'Unsaved changes' : draft ? 'Draft saved' : 'Published design'}
               size="small"
               color={dirty ? 'warning' : draft ? 'info' : 'success'}
               variant={dirty ? 'outlined' : 'filled'}
-              sx={{ height: 22, fontWeight: 700 }}
+              sx={{ height: 22, fontWeight: 600, bgcolor: dirty ? '#fff7ed' : 'transparent', color: dirty ? '#9a3412' : 'text.secondary', border: '1px solid', borderColor: dirty ? '#fed7aa' : 'divider' }}
             />
           </Stack>
 
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'center', minWidth: 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'center', minWidth: 0, flex: { xs: '1 1 100px', md: '0 1 190px' } }}>
             <Button
               size="small"
               variant="outlined"
               onClick={(event) => setPagePickerAnchor(event.currentTarget)}
-              sx={{ minWidth: 190, justifyContent: 'space-between', textTransform: 'none', fontWeight: 700 }}
+              sx={{ minWidth: 0, width: '100%', justifyContent: 'space-between', color: 'text.primary', borderColor: 'divider' }}
             >
               {activePageLabel}
-              <Box component="span" sx={{ ml: 1, color: 'text.secondary' }}>v</Box>
+              <ExpandMoreIcon fontSize="small" sx={{ ml: 1 }} />
             </Button>
-            <Chip label={activePageConfig.status === 'active' ? 'Active' : 'Draft'} size="small" color="success" sx={{ height: 22, fontWeight: 700 }} />
+            <Chip label={activePageConfig.status === 'active' ? 'Active' : 'Draft'} size="small" color="success" sx={{ height: 22, fontWeight: 700, display: { xs: 'none', lg: 'flex' } }} />
             <Popover
               open={pagePickerOpen}
               anchorEl={pagePickerAnchor}
               onClose={() => setPagePickerAnchor(null)}
               anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
               transformOrigin={{ vertical: 'top', horizontal: 'center' }}
-              PaperProps={{ sx: { width: 340, mt: 1, borderRadius: 1.5, overflow: 'hidden' } }}
+              PaperProps={{ sx: { width: 340, maxWidth: 'calc(100vw - 24px)', mt: 1, borderRadius: 1.5, overflow: 'hidden' } }}
             >
               <Box sx={{ p: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
                 <TextField
@@ -1004,29 +1348,52 @@ const SectionComposerPage = () => {
             </Popover>
           </Box>
 
-          <Stack direction="row" spacing={0.75} alignItems="center" sx={{ justifyContent: 'flex-end', minWidth: 0 }}>
-            <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-            <IconButton size="small" onClick={handleUndo} disabled={historyIndex <= 0} title="Undo">
+          <Stack direction="row" spacing={0.75} alignItems="center" sx={{ ml: 'auto', flexShrink: 0 }}>
+            <IconButton size="small" onClick={handleUndo} disabled={historyIndex <= 0} title="Undo" aria-label="Undo section change" sx={{ display: { xs: 'none', md: 'inline-flex' } }}>
               <UndoIcon fontSize="small" />
             </IconButton>
-            <IconButton size="small" onClick={handleRedo} disabled={historyIndex >= history.length - 1} title="Redo">
+            <IconButton size="small" onClick={handleRedo} disabled={historyIndex >= history.length - 1} title="Redo" aria-label="Redo section change" sx={{ display: { xs: 'none', md: 'inline-flex' } }}>
               <RedoIcon fontSize="small" />
             </IconButton>
-            <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-            <Button size="small" variant="text" onClick={() => setSaveTemplateOpen(true)}>Save as Template</Button>
-            <Button size="small" variant="text" startIcon={<HistoryIcon />} onClick={openVersionHistory} disabled={saving || publishing}>
-              History
-            </Button>
-            <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={() => openAddSection(sections.length, 'template')}>Add Section</Button>
-            <Button size="small" variant="outlined" startIcon={<SaveIcon />} onClick={handleSave} disabled={!dirty || saving || publishing}>
+            <IconButton size="small" aria-label="More designer actions" aria-haspopup="menu"
+              aria-expanded={Boolean(actionsAnchor)} aria-controls={actionsAnchor ? 'designer-actions-menu' : undefined}
+              onClick={(event) => setActionsAnchor(event.currentTarget)}><MoreHorizIcon /></IconButton>
+            <Menu id="designer-actions-menu" anchorEl={actionsAnchor} open={Boolean(actionsAnchor)} onClose={() => setActionsAnchor(null)}>
+              <MenuItem disabled={activePage === 'checkout' || (activePage !== 'home' && pageSections.length >= 6)} onClick={() => { setActionsAnchor(null); openAddSection(activePage === 'home' ? sections.length : pageSections.length, 'template'); }}><AddIcon fontSize="small" sx={{ mr: 1.5 }} />Add section</MenuItem>
+              <MenuItem onClick={() => { setActionsAnchor(null); setSaveTemplateOpen(true); }}><SaveIcon fontSize="small" sx={{ mr: 1.5 }} />Save as template</MenuItem>
+              <MenuItem onClick={() => { setActionsAnchor(null); openVersionHistory(); }} disabled={saving || publishing}><HistoryIcon fontSize="small" sx={{ mr: 1.5 }} />Version history</MenuItem>
+              {draft && <MenuItem onClick={() => { setActionsAnchor(null); setDiscardOpen(true); }} disabled={saving || publishing || discarding}>Discard draft</MenuItem>}
+              {isMobile && <MenuItem onClick={() => { setActionsAnchor(null); handleUndo(); }} disabled={historyIndex <= 0}><UndoIcon fontSize="small" sx={{ mr: 1.5 }} />Undo section change</MenuItem>}
+              {isMobile && <MenuItem onClick={() => { setActionsAnchor(null); handleRedo(); }} disabled={historyIndex >= history.length - 1}><RedoIcon fontSize="small" sx={{ mr: 1.5 }} />Redo section change</MenuItem>}
+            </Menu>
+            <Button size="small" variant="outlined" color="inherit" startIcon={isMobile ? undefined : <SaveIcon />} onClick={handleSave} disabled={Boolean(loadError) || !dirty || saving || publishing}>
               {saving ? 'Saving...' : 'Save draft'}
             </Button>
-            <Button size="small" variant="contained" onClick={() => setPublishOpen(true)} disabled={!draft || dirty || saving || publishing}>
-              Publish
-            </Button>
+            <Tooltip title={dirty ? 'Save your draft before publishing' : !draft ? 'Save a draft to publish changes' : 'Publish your saved draft to the store'}>
+              <span><Button size="small" variant="contained" onClick={() => { setPublishConflict(null); setPublishOpen(true); }} disabled={Boolean(loadError) || !draft || dirty || saving || publishing}>Publish</Button></span>
+            </Tooltip>
           </Stack>
         </Box>
       </Paper>
+
+      {isMobile && (
+        <Box sx={{ px: 2, py: 0.75, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'center' }}>
+          <ToggleButtonGroup
+            size="small"
+            value={mobileTab}
+            exclusive
+            onChange={(_, v) => v && setMobileTab(v)}
+            fullWidth aria-label="Designer workspace" sx={{ minHeight: 44, '& .MuiToggleButton-root': { flex: 1, minHeight: 44 } }}
+          >
+            <ToggleButton value="editor" sx={{ px: 2, textTransform: 'none', fontWeight: 700, fontSize: '0.75rem' }}>
+              Controls & Settings
+            </ToggleButton>
+            <ToggleButton value="preview" sx={{ px: 2, textTransform: 'none', fontWeight: 700, fontSize: '0.75rem' }}>
+              Storefront Preview
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
+      )}
 
       <Box sx={{ px: 2, py: 0.75, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
         <Breadcrumbs aria-label="Store Designer location" separator="›" sx={{ fontSize: '0.78rem' }}>
@@ -1046,10 +1413,13 @@ const SectionComposerPage = () => {
               <Typography
                 key={`${item}-${index}`}
                 variant="caption"
+                component={isLast ? 'span' : 'button'}
+                type={isLast ? undefined : 'button'}
+                aria-label={isLast ? undefined : `Go to ${item} settings`}
                 color={isLast ? 'text.primary' : 'text.secondary'}
                 fontWeight={isLast ? 800 : 600}
                 onClick={handleClick}
-                sx={isLast ? {} : { cursor: 'pointer', '&:hover': { textDecoration: 'underline', color: 'primary.main' } }}
+                sx={isLast ? {} : { cursor: 'pointer', border: 0, bgcolor: 'transparent', p: 0, font: 'inherit', '&:hover': { textDecoration: 'underline', color: 'primary.main' } }}
               >
                 {item}
               </Typography>
@@ -1059,23 +1429,50 @@ const SectionComposerPage = () => {
       </Box>
 
       {/* Main Designer Grid */}
-      <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden', bgcolor: '#f6f6f7' }}>
+      <Box sx={{ display: 'flex', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden', bgcolor: '#f6f6f7' }}>
         
-        {/* Left Sidebar: Controls & Settings */}
-        <Box sx={{ width: 304, borderRight: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+        <Box sx={{
+          display: !isMobile || (mobileTab === 'editor' && !editSection && panelView.mode !== 'theme-settings') ? 'flex' : 'none',
+          width: isMobile ? '100%' : { md: 235, lg: 280 }, flexShrink: 0, flexDirection: 'column',
+          bgcolor: 'background.paper', borderRight: 1, borderColor: 'divider', minHeight: 0,
+        }}>
+          {treePanel}
+        </Box>
+
+        {/* Section and theme settings */}
+        <Box sx={{
+          width: isMobile ? '100%' : { md: 280, lg: 330 },
+          order: isMobile ? 0 : 2,
+          minWidth: 0,
+          flexShrink: 0,
+          display: (editSection || panelView.mode === 'theme-settings') && (!isMobile || mobileTab === 'editor') ? 'flex' : 'none',
+          borderLeft: isMobile ? 'none' : '1px solid',
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
+          flexDirection: 'column',
+          height: '100%',
+          overflow: 'hidden',
+        }}>
 
           {editSection ? (
             <DesignerSectionEditor
+              allowSharedPlacement={activePage === 'home'}
               section={editSection}
+              inheritedBlocks={getInheritedBlocksForSection(editSection)}
               onBack={backToTree}
               onChange={handleInlineFieldChange}
               onBlur={handleInlineFieldBlur}
-              onApplyPreset={applySmartPreset}
-              onDuplicate={duplicateSection}
-              onDelete={removeSectionById}
+              onApplyPreset={activePage === 'home' ? applySmartPreset : undefined}
+              onDuplicate={activePage === 'home' ? duplicateSection
+                : pageSections.includes(editSection) && pageSections.length < 6 ? duplicatePageSection : undefined}
+              onDelete={activePage === 'home' ? removeSectionById
+                : pageSections.includes(editSection) ? removePageSection : undefined}
+              pageSection={pageSections.includes(editSection)}
+              categoryPage={activePage === 'category'}
               onComponentEdit={openComponentEditor}
               activeBlockKey={panelView.blockKey}
               activeBlockIndex={panelView.blockIndex}
+              blockInsertion={panelView.blockInsertion}
               onBlockFocus={focusBlock}
               mappedComponent={editMappedComponent}
               mappedComponentLabel={editMappedComponentLabel}
@@ -1122,45 +1519,35 @@ const SectionComposerPage = () => {
               }}
               canManageAdvancedSettings={canManageAdvancedSettings}
             />
-          ) : (
-            <DesignerTreePanel
-              sections={sections}
-              activePage={activePage}
-              pageSettings={pageSettings}
-              selectedSectionId={panelView.sectionId}
-              onSectionClick={selectSection}
-              onThemeSettingsClick={() => setPanelView({ mode: 'theme-settings', sectionId: null, componentKey: null })}
-              onAddSection={openAddSection}
-              onMoveSection={move}
-              onToggleSection={toggle}
-              onDeleteSection={remove}
-              onPageSettingChange={handlePageSettingChange}
-              onHeaderClick={() => openComponentEditor('headerLayout')}
-              onHeaderPartClick={openComponentEditor}
-              onFooterClick={() => openComponentEditor('footer')}
-            />
-          )}
-
+          ) : null}
 
         </Box>
 
-        {/* Right Sidebar: Storefront Preview Container */}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+        {/* Mount device previews only when visible, rather than loading hidden iframes. */}
+        {(!isMobile || mobileTab === 'preview') && <Box sx={{
+          flex: 1,
+          minWidth: 0,
+          minHeight: 0,
+          display: isMobile && mobileTab !== 'preview' ? 'none' : 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          overflow: 'hidden',
+        }}>
           
           {/* Preview Toolbar */}
-          <Box sx={{ p: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
-            <Stack direction="row" spacing={1.5} alignItems="center">
-              <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          <Box sx={{ p: 1.5, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 1, flexShrink: 0, '& .MuiToggleButton-root': { minHeight: 40, px: 1.25, textTransform: 'none', fontWeight: 600 }, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
+            <Stack direction="row" spacing={1.5} alignItems="center" sx={{ minWidth: 0, flexWrap: 'wrap', rowGap: 1 }}>
+              <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ display: { xs: 'none', lg: 'block' } }}>
                 Storefront Preview
               </Typography>
               <ToggleButtonGroup
-                value={previewRenderMode}
+                value={devicePreview ? 'live' : previewRenderMode}
                 exclusive
                 onChange={(_, v) => v && setPreviewRenderMode(v)}
                 size="small"
               >
-                <ToggleButton value="mock" aria-label="Interactive editor preview">Editor Preview</ToggleButton>
-                <ToggleButton value="live" aria-label="Read-only live storefront preview">Live Storefront</ToggleButton>
+                <ToggleButton value="mock" disabled={devicePreview} aria-label="Interactive editor preview">Edit design</ToggleButton>
+                <ToggleButton value="live" aria-label="Interactive preview of the current design">Test design</ToggleButton>
               </ToggleButtonGroup>
             </Stack>
             <ToggleButtonGroup
@@ -1173,10 +1560,28 @@ const SectionComposerPage = () => {
               <ToggleButton value="tablet" aria-label="Tablet" title="Tablet View"><TabletMacIcon fontSize="small" /></ToggleButton>
               <ToggleButton value="mobile" aria-label="Mobile" title="Mobile View"><PhoneIphoneIcon fontSize="small" /></ToggleButton>
             </ToggleButtonGroup>
+            {activePage === 'product' && assignedSlugs.length > 1 && (
+              <TextField select size="small" label="Preview product" value={assignedPreviewSlug}
+                onChange={(event) => setPreviewProductSlug(event.target.value)}>
+                {assignedSlugs.map((slug) => <MenuItem key={slug} value={slug}>{slug}</MenuItem>)}
+              </TextField>
+            )}
           </Box>
 
           <Box sx={{ px: 1.5, py: 0.75, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
-            {previewRenderMode === 'live' ? (
+            {activePage !== 'home' ? (
+              <Alert
+                severity="info"
+                variant="outlined"
+                sx={{ py: 0, alignItems: 'center', '& .MuiAlert-message': { py: 0.5, fontSize: '0.78rem' } }}
+              >
+                Previewing <strong>{activePageLabel}</strong> on the live storefront. Configure page settings in the sidebar.
+              </Alert>
+            ) : devicePreview ? (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', py: 0.5 }}>
+                Device preview shows your draft as shoppers see it. {isMobile ? 'Use Controls & Settings to edit.' : 'Choose Desktop to edit sections in the preview.'}
+              </Typography>
+            ) : previewRenderMode === 'live' ? (
               <Alert
                 severity="info"
                 variant="outlined"
@@ -1189,47 +1594,142 @@ const SectionComposerPage = () => {
               >
                 Live Storefront is read-only. Switch to Editor Preview to select sections and components.
               </Alert>
-            ) : (
+            ) : loadError ? (
               <Alert
-                severity="success"
+                severity="error"
                 variant="outlined"
+                action={(
+                  <Button size="small" color="inherit" onClick={fetchSections} sx={{ whiteSpace: 'nowrap', fontWeight: 700 }}>
+                    Retry
+                  </Button>
+                )}
                 sx={{ py: 0, alignItems: 'center', '& .MuiAlert-message': { py: 0.5, fontSize: '0.78rem' } }}
               >
-                Select a section, header item, card, or footer in the preview to edit it. Changes stay in this draft until you save.
+                Failed to load homepage sections. Saving and publishing are disabled until reload succeeds.
+              </Alert>
+            ) : (
+              <Alert
+                severity="info"
+                variant="standard"
+                sx={{ py: 0, alignItems: 'center', '& .MuiAlert-message': { py: 0.5, fontSize: '0.78rem' } }}
+              >
+                Click any section to edit it. Save draft to keep your changes, then Publish to update your store.
               </Alert>
             )}
           </Box>
 
+          {draftConflicts.length > 0 && (
+            <Alert severity="warning" action={<Stack direction="row"><Button color="inherit" onClick={() => setReviewDraftOpen(true)}>Review differences</Button><Button color="inherit" onClick={() => setUseLiveOpen(true)} disabled={dirty || saving || publishing || usingLive}>Use live storefront</Button></Stack>}>
+              This saved draft differs from changes made to the live storefront, possibly by installing another template. The editor is showing your draft, not the live design. Publishing is blocked to protect those changes.
+            </Alert>
+          )}
+
           {/* Preview Canvas Area */}
-          <Box sx={{ flex: 1, p: viewportMode === 'desktop' ? 0 : 3, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', overflowY: 'auto', bgcolor: '#f6f6f7' }}>
+          <Box sx={{ flex: 1, minHeight: 0, minWidth: 0, p: viewportMode === 'desktop' ? 0 : { xs: 0, sm: 1.5 }, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden', bgcolor: '#f6f6f7' }}>
             <Box
               sx={{
                 width: PREVIEW_WIDTHS[viewportMode] || '100%',
                 maxWidth: '100%',
-                minHeight: '100%',
+                height: '100%',
+                minHeight: 0,
                 bgcolor: 'background.paper',
                 borderRadius: viewportMode === 'desktop' ? 0 : 3,
                 boxShadow: viewportMode === 'desktop' ? 'none' : '0 18px 44px rgba(0, 0, 0, 0.12)',
                 border: viewportMode === 'desktop' ? 'none' : '1px solid',
                 borderColor: 'divider',
                 overflow: 'hidden',
-                transition: 'width 0.2s ease-in-out',
                 display: 'flex',
                 flexDirection: 'column',
               }}
             >
-              <Box sx={{ width: '100%', overflowY: 'auto', maxHeight: 'calc(100vh - 210px)' }}>
-                {previewRenderMode === 'live' ? (
+              <Box sx={{ width: '100%', flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
+                {activePage !== 'home' ? (
+                  previewTarget.error && !assignedPreviewSlug ? (
+                    <Box sx={{ p: 4, textAlign: 'center' }}>
+                      <Alert severity="info" variant="outlined" sx={{ maxWidth: 480, mx: 'auto' }}>
+                        {previewTarget.error}
+                      </Alert>
+                    </Box>
+                  ) : previewTarget.loading && !assignedPreviewSlug ? (
+                    <Box sx={{ p: 4, textAlign: 'center' }}>
+                      <CircularProgress size={28} />
+                    </Box>
+                  ) : (
+                    <LiveStorefrontPreview
+                      settings={templatePreviewSettings}
+                      path={assignedPreviewSlug
+                        ? `/${activePage === 'category' ? 'category' : 'products'}/${encodeURIComponent(assignedPreviewSlug)}`
+                        : previewTarget.path || '/'}
+                      reloadOnSettingsChange
+                      selectedSectionId={panelView.sectionId}
+                       selectedBlockId={panelView.blockKey === 'detailsBlockOrder' ? `builtin:${panelView.blockIndex}`
+                         : panelView.blockKey === 'heroBlocks' ? panelView.blockIndex : undefined}
+                       onSelectBlock={!livePreview ? (owner, id) => id.startsWith('builtin:')
+                         ? handleInlineBlockFocus(owner, 'detailsBlockOrder', id.slice(8))
+                         : handleInlineBlockFocus(owner, 'heroBlocks', id) : undefined}
+                      onSelectSection={!livePreview ? (id) => {
+                        const section = editableSections.find((item) => item.id === id);
+                        if (section) selectSection(section);
+                      } : undefined}
+                      onInsertSection={!livePreview && activePage !== 'checkout' && pageSections.length < 6
+                        ? (position, anchor) => {
+                          const index = pageSections.findIndex(({ id }) => id === anchor);
+                          openAddSection(index < 0 ? pageSections.length : index, position);
+                        } : undefined}
+                       onInsertBlock={!livePreview ? (id, placement, afterId) => {
+                         const section = editableSections.find((item) => item.id === id);
+                        if (section && (section.heroBlocks?.length || 0) < 12) openProductBlockPicker(section, placement === 'details-order'
+                          ? { detailAfter: afterId || null } : { placement, atStart: !afterId, afterId });
+                      } : undefined}
+                      device={viewportMode}
+                      showToolbar={false}
+                      frameHeight="100%"
+                    />
+                  )
+                ) : loadError ? (
+                  <Box sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                    <Alert severity="error" sx={{ maxWidth: 500 }}>
+                      {loadError}
+                    </Alert>
+                    <Button variant="contained" onClick={fetchSections} sx={{ textTransform: 'none' }}>
+                      Retry Loading Sections
+                    </Button>
+                  </Box>
+                ) : livePreview ? (
                   livePreviewSettings && (
                     <LiveStorefrontPreview
                       settings={livePreviewSettings}
                       path={activePageConfig.previewPath || '/'}
-                      reloadOnSettingsChange
                       device={viewportMode}
                       showToolbar={false}
-                      frameHeight="calc(100vh - 210px)"
+                      frameHeight="100%"
                     />
                   )
+                ) : activePage === 'home' ? (
+                  <LiveStorefrontPreview
+                    settings={livePreviewSettings}
+                    path="/"
+                    device={viewportMode}
+                    showToolbar={false}
+                    frameHeight="100%"
+                    onSelectSection={(sectionId) => {
+                      const section = sections.find((item) => item.id === sectionId);
+                      if (section) selectSection(section);
+                    }}
+                    selectedSectionId={panelView.sectionId}
+                    selectedBlockId={panelView.blockKey === 'heroBlocks' ? panelView.blockIndex : undefined}
+                    onSelectBlock={(owner, id) => handleInlineBlockFocus(owner, 'heroBlocks', id)}
+                    onInsertBlock={(owner, _placement, afterId) => {
+                      const section = sections.find(({ id }) => id === owner);
+                      if (section && (section.heroBlocks?.length || 0) < 12) openProductBlockPicker(section, { atStart: !afterId, afterId });
+                    }}
+                    onInsertSection={(area, anchor) => {
+                      const index = sections.findIndex(({ id, placement }) => id === anchor
+                        || (area === 'footer' && !anchor && placement === 'footer'));
+                      openAddSection(index < 0 ? sections.length : index, area);
+                    }}
+                    onSelectComponent={openComponentEditor}
+                  />
                 ) : packageData && (
                   <StorefrontTemplatePreview
                     packageData={packageData}
@@ -1237,35 +1737,40 @@ const SectionComposerPage = () => {
                     activePage={activePage}
                     currentSettings={livePreviewSettings}
                     componentStyles={componentStyles}
-                    selectedSectionId={panelView.sectionId}
-                    onSelectSection={selectSection}
+                    selectedSectionId={activePage === 'home' ? panelView.sectionId : undefined}
+                    onSelectSection={activePage === 'home' ? selectSection : undefined}
                     onSelectComponent={(component) => openComponentEditor(component)}
-                    onInlineFieldChange={handlePreviewFieldChange}
-                    onInlineFieldCommit={handlePreviewFieldCommit}
-                    onInlineBlockFocus={handleInlineBlockFocus}
-                    onAddSectionAt={(index, area) => openAddSection(index, area)}
-                    onReorderSection={reorderSection}
+                    onInlineFieldChange={activePage === 'home' ? handlePreviewFieldChange : undefined}
+                    onInlineFieldCommit={activePage === 'home' ? handlePreviewFieldCommit : undefined}
+                    onInlineBlockFocus={activePage === 'home' ? handleInlineBlockFocus : undefined}
+                    onAddSectionAt={activePage === 'home' ? (index, area) => openAddSection(index, area) : undefined}
+                    onReorderSection={activePage === 'home' ? reorderSection : undefined}
                   />
                 )}
               </Box>
             </Box>
           </Box>
 
-        </Box>
+        </Box>}
 
       </Box>
 
       {/* Modals & Dialogs */}
       <AddSectionDialog
         open={addOpen}
+        anchorEl={addTarget.anchorEl}
         onClose={() => {
           setAddOpen(false);
           setAddTarget({ index: null, area: 'template' });
         }}
         onAdd={handleAdd}
-        existingIds={sections.map((s) => s.id)}
-        insertLabel={addTarget.area === 'footer' ? 'Footer' : 'this template'}
-        sectionPresets={settings?.sectionPresets || {}}
+        existingIds={editableSections.map((s) => s.id)}
+        allowedTypes={activePage !== 'home' ? getPageSectionTypes(activePage)
+          : ['header', 'footer'].includes(addTarget.area) ? ['composed-hero'] : undefined}
+        insertLabel={addTarget.area === 'header' ? 'Header' : addTarget.area === 'footer' ? 'Footer'
+          : activePage === 'home' ? 'this template'
+            : addTarget.area === 'above' ? 'above page content' : 'below page content'}
+        sectionPresets={sectionPresets}
       />
 
       <SaveAsTemplateDialog
@@ -1292,7 +1797,7 @@ const SectionComposerPage = () => {
         <DialogTitle>Restore version {pendingVersion?.revision}?</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary">
-            This replaces the current saved draft with the published version. It does not change the live storefront. Any unsaved editor changes will be discarded.
+            This archives the current saved draft before replacing it with the published version. It does not change the live storefront. Any unsaved editor changes will be discarded.
           </Typography>
         </DialogContent>
         <DialogActions>
@@ -1303,17 +1808,35 @@ const SectionComposerPage = () => {
         </DialogActions>
       </Dialog>
 
+      <Dialog open={discardOpen} onClose={() => !discarding && setDiscardOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Discard design draft?</DialogTitle>
+        <DialogContent>Discard the saved draft and any unsaved editor changes. Your published store stays as it is.</DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDiscardOpen(false)} disabled={discarding}>Cancel</Button>
+          <Button color="error" onClick={handleDiscard} disabled={discarding}>{discarding ? 'Discarding…' : 'Discard draft'}</Button>
+        </DialogActions>
+      </Dialog>
+
       <Dialog open={publishOpen} onClose={() => !publishing && setPublishOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>Publish design draft?</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary">
-            This will make the saved draft live across the storefront. The server will stop the publish if the live design changed since this draft was started.
+            {publishConflict
+              ? 'These live settings changed since this draft was started. Keeping the draft changes replaces the live values listed below.'
+              : 'This will make the saved draft live across the storefront.'}
           </Typography>
+          {publishConflict && (
+            <Box component="ul" sx={{ pl: 3, maxHeight: 220, overflow: 'auto' }}>
+              {publishConflict.conflicts.map(({ group, key }) => (
+                <li key={`${group}.${key}`}>{group} / {key}</li>
+              ))}
+            </Box>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPublishOpen(false)} disabled={publishing}>Cancel</Button>
           <Button variant="contained" onClick={handlePublish} disabled={publishing}>
-            {publishing ? 'Publishing...' : 'Publish design'}
+            {publishing ? 'Publishing...' : publishConflict ? 'Keep draft changes and publish' : 'Publish design'}
           </Button>
         </DialogActions>
       </Dialog>

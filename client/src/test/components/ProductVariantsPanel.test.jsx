@@ -15,7 +15,7 @@ vi.mock('../../hooks/useSKUGenerator', () => ({ default: () => ({ generateProduc
 vi.mock('../../components/common/MediaPicker', () => ({ default: () => null }));
 vi.mock('../../services/productService', () => ({ getProductById: vi.fn(), getProducts: vi.fn() }));
 vi.mock('../../services/settingsService', () => ({ default: { getSettingsGroup: vi.fn() } }));
-vi.mock('../../services/attributeService', () => ({ default: { getProductAttributes: vi.fn(), getProductVariants: vi.fn(), getAttributes: vi.fn(), getCategoryAttributes: vi.fn(), getAttributeById: vi.fn(), assignProductAttribute: vi.fn(), deleteProductVariant: vi.fn(), cloneVariants: vi.fn(), updateProductVariant: vi.fn() } }));
+vi.mock('../../services/attributeService', () => ({ default: { getProductAttributes: vi.fn(), getProductVariants: vi.fn(), getAttributes: vi.fn(), getCategoryAttributes: vi.fn(), getAttributeById: vi.fn(), assignProductAttribute: vi.fn(), updateProductAttributeGroup: vi.fn(), deleteProductAttributeGroup: vi.fn(), deleteProductVariant: vi.fn(), cloneVariants: vi.fn(), updateProductVariant: vi.fn(), previewVariantGeneration: vi.fn(), bulkGenerateVariants: vi.fn() } }));
 const height = { id: 'height', name: 'Height', unitCategory: 'Length', values: [{ id: 'ten', value: '10', unitLabel: 'cm' }] };
 const row = { id: 'row', attributeId: 'height', valueId: 'ten', attribute: height, value: height.values[0], isVariantAttr: false };
 const tree = (props = {}) => <MemoryRouter><NotificationProvider><UnitCatalogProvider><ProductVariantsPanel productId="product" canManageVariants {...props} /></UnitCatalogProvider></NotificationProvider></MemoryRouter>;
@@ -36,6 +36,62 @@ beforeEach(() => {
 });
 
 describe('product attributes and variant drafts', () => {
+  it('adds new values of an existing variant attribute directly to missing variants without another toggle', async () => {
+    const expandedHeight = { ...height, values: [...height.values, { id: 'twenty', value: '20', unitLabel: 'cm' }] };
+    const existingRow = { ...row, isVariantAttr: true };
+    const addedRow = { ...row, id: 'twenty-row', valueId: 'twenty', value: expandedHeight.values[1], isVariantAttr: true };
+    attributeService.getProductAttributes.mockResolvedValue({ data: { data: [existingRow] } });
+    attributeService.getAttributeById.mockResolvedValue({ data: { data: expandedHeight } });
+    attributeService.getProductVariants.mockResolvedValue({ data: { data: [{
+      id: 'variant', optionLabel: 'Height: 10cm', sku: 'HEIGHT-10', price: 100, stockQty: 2, isActive: true,
+      options: [{ attributeId: 'height', valueId: 'ten' }], images: [],
+    }] } });
+    attributeService.assignProductAttribute.mockResolvedValue({ data: { data: [existingRow, addedRow] } });
+    render(tree());
+    expect(await screen.findByRole('checkbox', { name: 'Use Height for variants' })).toBeChecked();
+    expect(screen.queryByRole('button', { name: 'Add missing variants' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Add values', exact: true }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Add attribute' }));
+    await waitFor(() => expect(dialog.getByRole('checkbox', { name: '20cm', exact: true })).toBeEnabled());
+    expect(dialog.queryByRole('checkbox', { name: 'Use these values to create variants' })).not.toBeInTheDocument();
+    fireEvent.click(dialog.getByRole('checkbox', { name: '20cm', exact: true }));
+    fireEvent.click(dialog.getByRole('button', { name: 'Add to product' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(attributeService.assignProductAttribute).toHaveBeenCalledWith('product', {
+      attributeId: 'height', values: [{ valueId: 'twenty' }], isVariantAttr: true,
+    });
+    expect(screen.getByRole('button', { name: 'Add missing variants' })).toBeEnabled();
+    expect(screen.getByRole('checkbox', { name: 'Use Height for variants' })).toBeChecked();
+    expect(screen.getByRole('button', { name: 'Height: 10cm', exact: true })).toBeInTheDocument();
+    expect(screen.getByText('1 variant · Total stock: 2')).toBeInTheDocument();
+    expect(attributeService.updateProductAttributeGroup).not.toHaveBeenCalled();
+    expect(attributeService.bulkGenerateVariants).not.toHaveBeenCalled();
+  });
+  it('unlocks attribute removal only after deleting the last dependent variant and disabling variant use', async () => {
+    attributeService.getProductAttributes.mockResolvedValue({ data: { data: [{ ...row, isVariantAttr: true }] } });
+    attributeService.getProductVariants.mockResolvedValue({ data: { data: [{ id: 'variant', optionLabel: 'Height option', price: 100, stockQty: 0, isActive: false, options: [{ attributeId: 'height', valueId: 'ten' }], images: [] }] } });
+    attributeService.updateProductAttributeGroup.mockResolvedValue({ data: { data: [row] } });
+    attributeService.deleteProductAttributeGroup.mockImplementation(async () => {
+      attributeService.getProductAttributes.mockResolvedValue({ data: { data: [] } });
+      return { data: { data: null } };
+    });
+    render(tree());
+    const toggle = await screen.findByRole('checkbox', { name: 'Use Height for variants' });
+    expect(toggle).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Remove Height attribute' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Height option', exact: true }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Delete variant?' })).getByRole('button', { name: 'Delete variant', exact: true }));
+    await waitFor(() => expect(toggle).toBeEnabled());
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Remove Height attribute' })).toBeDisabled();
+    fireEvent.click(toggle);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Remove Height attribute' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Height attribute' }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Remove attribute from product?' })).getByRole('button', { name: 'Remove attribute', exact: true }));
+    expect(await screen.findByText('No attributes assigned')).toBeInTheDocument();
+    expect(attributeService.updateProductAttributeGroup).toHaveBeenCalledWith('product', 'row', { isVariantAttr: false });
+    expect(attributeService.deleteProductAttributeGroup).toHaveBeenCalledWith('product', 'row');
+  });
   const pickCopySource = async () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Copy from product' }));
     fireEvent.change(screen.getByRole('combobox', { name: 'Search products' }), { target: { value: 'SOURCE' } });
@@ -177,6 +233,41 @@ describe('product attributes and variant drafts', () => {
     expect(screen.getByLabelText('MRP')).toHaveValue(175);
     expect(attributeService.getProductVariants).toHaveBeenCalledTimes(1);
   });
+  it('offers category suggestion retry without clearing unsaved variant edits', async () => {
+    attributeService.getCategoryAttributes.mockRejectedValueOnce(new Error('Connection lost.')).mockResolvedValueOnce({ data: { data: [height] } });
+    render(tree({ categoryIds: ['child'] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Variant SKU' }));
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'MRP', exact: true }), { target: { value: '175' } });
+    expect(screen.getByText(/Category suggestions could not be loaded/)).toBeInTheDocument();
+    expect(screen.queryByText(/No attributes are linked/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry suggestions' }));
+    expect(await screen.findByRole('button', { name: 'Height', exact: true })).toBeEnabled();
+    expect(screen.getByLabelText('MRP')).toHaveValue(175);
+    expect(attributeService.getProductVariants).toHaveBeenCalledTimes(1);
+    expect(attributeService.getProductAttributes).toHaveBeenCalledTimes(1);
+  });
+  it('opens an inherited suggestion outside the initial template page and assigns its values', async () => {
+    const maturity = { id: 'maturity', name: 'Maturity', values: [{ id: 'sixty', value: '60 days' }], sources: [{ id: 'parent', name: 'Vegetables', isDirect: false }] };
+    attributeService.getCategoryAttributes.mockResolvedValue({ data: { data: [maturity] } });
+    attributeService.getAttributeById.mockResolvedValue({ data: { data: maturity } });
+    attributeService.assignProductAttribute.mockResolvedValue({ data: { data: [{ id: 'maturity-row', attributeId: 'maturity', attribute: maturity, valueId: 'sixty', value: maturity.values[0], isVariantAttr: false }] } });
+    render(tree({ categoryIds: ['child'] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Maturity', exact: true }));
+    expect(screen.getByRole('combobox', { name: 'Attribute', exact: true })).toHaveValue('Maturity');
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: '60 days', exact: true })).toBeEnabled());
+    fireEvent.click(screen.getByRole('checkbox', { name: '60 days', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add to product' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByText('60 days')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Maturity', exact: true })).not.toBeInTheDocument();
+    expect(attributeService.assignProductAttribute).toHaveBeenCalledWith('product', expect.objectContaining({ attributeId: 'maturity', values: [{ valueId: 'sixty' }] }));
+  });
+  it('distinguishes categories without linked attributes from a request failure', async () => {
+    render(tree({ categoryIds: ['child'] }));
+    expect(await screen.findByText('No attributes are linked to the selected categories or their parents.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry suggestions' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add attribute', exact: true })).toBeEnabled();
+  });
   it('does not send requests for an unsaved product', async () => {
     render(tree({ productId: undefined }));
     expect(screen.getByText('Save the product before adding attributes or variants.')).toBeInTheDocument();
@@ -219,10 +310,27 @@ describe('product attributes and variant drafts', () => {
     render(tree({ pricingEnabled: false }));
     fireEvent.click(await screen.findByRole('button', { name: 'Variant SKU' }));
     expect(screen.queryByLabelText('MRP')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Set prices by attribute' })).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Stock Qty'), { target: { value: '3' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save variant changes' }));
     await waitFor(() => expect(attributeService.updateProductVariant).toHaveBeenCalled());
     expect(attributeService.updateProductVariant.mock.calls[0][2]).not.toHaveProperty('price');
+  });
+  it('passes admin pricing visibility into the variant creation review', async () => {
+    attributeService.getProductAttributes.mockResolvedValue({ data: { data: [{ ...row, isVariantAttr: true }] } });
+    attributeService.getProductVariants.mockResolvedValue({ data: { data: [] } });
+    attributeService.previewVariantGeneration.mockResolvedValue({ data: { data: {
+      token: 'a'.repeat(64), total: 1, addedCount: 1, keptCount: 0, removedCount: 0, blockedRemovalCount: 0,
+      combinations: [{ valueIds: ['ten'], label: '10 cm', isNew: true }], removals: [],
+    } } });
+    render(tree({ pricingEnabled: false }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Create 1 variant' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Create variants' }));
+    expect(dialog.queryByLabelText('Starting MRP')).not.toBeInTheDocument();
+    expect(dialog.queryByLabelText('MRP')).not.toBeInTheDocument();
+    expect(dialog.queryByRole('button', { name: 'Set prices by attribute' })).not.toBeInTheDocument();
+    expect(dialog.getByLabelText('Starting stock')).toBeInTheDocument();
+    expect(dialog.getByRole('button', { name: 'Create 1 variant' })).toBeEnabled();
   });
   it('deletes ordinary stock after confirmation and preserves edits on other variants', async () => {
     attributeService.getProductVariants.mockResolvedValue({ data: { data: [

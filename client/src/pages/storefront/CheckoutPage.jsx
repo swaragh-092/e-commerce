@@ -23,6 +23,7 @@ import { useNotification } from '../../context/NotificationContext';
 import { useSettings, useCurrency, useFeature, useFeatureVisible, useFeaturesResolved, useComponentStyles } from '../../hooks/useSettings';
 import { useCart } from '../../hooks/useCart';
 import { getSessionId } from '../../services/cartService';
+import api from '../../services/api';
 import { userService } from '../../services/userService';
 import { orderService } from '../../services/orderService';
 import paymentService from '../../services/paymentService';
@@ -35,6 +36,7 @@ import CenteredLoader from '../../components/common/CenteredLoader';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
 import { getStoreName } from '../../utils/store';
+import { getCampaignAttribution } from '../../utils/campaignAttribution';
 import { INDIAN_STATES } from '../../utils/indianStates';
 
 import { getBadgeChipProps, getFormControlSize, getFormControlSx } from '../../utils/componentStyles';
@@ -119,6 +121,9 @@ const createCheckoutSessionId = () => {
 const getOrderSubmissionKey = async (checkoutSessionId, orderPayload) => {
     const payloadForFingerprint = { ...orderPayload };
     delete payloadForFingerprint.checkoutSessionId;
+    delete payloadForFingerprint.utmSource;
+    delete payloadForFingerprint.utmMedium;
+    delete payloadForFingerprint.utmCampaign;
     delete payloadForFingerprint.idempotencyKey;
     const bytes = new TextEncoder().encode(JSON.stringify(payloadForFingerprint));
     const digest = await crypto.subtle.digest('SHA-256', bytes);
@@ -238,6 +243,7 @@ const CheckoutPage = () => {
     const location = useLocation();
     const { user } = useContext(AuthContext);
     const { settings } = useSettings();
+    const checkoutStyle = settings?.checkoutPage || {};
     const storeName = getStoreName(settings);
     const { formatPrice } = useCurrency();
     const { notify } = useNotification();
@@ -260,6 +266,11 @@ const CheckoutPage = () => {
     const buyNowItem = useMemo(() => {
         return location.state?.fromBuyNow ? normalizeBuyNowItem(location.state?.buyNowItem) : null;
     }, [location.state?.fromBuyNow, location.state?.buyNowItem]);
+    const couponBuyNowItem = useMemo(() => buyNowItem ? {
+        productId: buyNowItem.productId,
+        variantId: buyNowItem.variantId || null,
+        quantity: buyNowItem.quantity,
+    } : undefined, [buyNowItem]);
     const hasInvalidBuyNowState = Boolean(location.state?.fromBuyNow) && !buyNowItem;
 
     const checkoutEnabled = useFeatureVisible('checkout', 'storefront');
@@ -326,6 +337,10 @@ const CheckoutPage = () => {
     const [activeSection, setActiveSection] = useState(1);
     const [completedSections, setCompletedSections] = useState([]);
     const [checkoutSessionId] = useState(createCheckoutSessionId);
+
+    useEffect(() => {
+        api.post('/analytics/events/checkout-started', { checkoutSessionId }).catch(() => {});
+    }, [checkoutSessionId]);
 
     useEffect(() => {
         if (!hasPhysicalItems && activeSection === 1) {
@@ -466,7 +481,7 @@ const CheckoutPage = () => {
     const freeThreshold = parseFloat(settings?.shipping?.freeThreshold ?? 0);
     const shippingCost = hasPhysicalItems ? Number(shippingQuote?.shippingCost ?? 0) : 0;
 
-    const shippingDiscount = couponResult?.shippingDiscount || (couponResult?.freeShipping ? shippingCost : 0);
+    const shippingDiscount = couponResult?.freeShipping ? shippingCost : Number(couponResult?.shippingDiscount || 0);
     const effectiveShippingCost = Math.max(0, shippingCost - shippingDiscount);
     const taxSummary = useMemo(() => calculateTaxSummary({
         items,
@@ -482,8 +497,14 @@ const CheckoutPage = () => {
 
             const itemKey = item.variantId ? `${item.productId}:${item.variantId}` : item.productId;
             let itemDiscount = 0;
-            if (couponResult?.lineDiscounts && typeof couponResult.lineDiscounts[itemKey] === 'number') {
-                itemDiscount = couponResult.lineDiscounts[itemKey];
+            if (couponResult?.lineDiscounts) {
+                if (typeof couponResult.lineDiscounts[itemKey] === 'number') {
+                    itemDiscount = couponResult.lineDiscounts[itemKey];
+                } else if (typeof couponResult.lineDiscounts[item.productId] === 'number') {
+                    itemDiscount = couponResult.lineDiscounts[item.productId];
+                } else {
+                    itemDiscount = 0;
+                }
             } else if (orderDiscount > 0 && subtotal > 0) {
                 itemDiscount = (itemSubtotal / subtotal) * orderDiscount;
             }
@@ -632,21 +653,57 @@ const CheckoutPage = () => {
     useEffect(() => {
         if (activeSection === 2 && couponsEnabled && showAvailableCoupons) {
             setPublicCouponsLoading(true);
-            getEligibleCoupons({ subtotal, shippingCost })
+            const checkoutEmail = user?.email || (guestEmail ? guestEmail.trim() : undefined);
+            getEligibleCoupons({ subtotal, shippingCost, email: checkoutEmail, buyNowItem: couponBuyNowItem })
                 .then((res) => {
                     const data = res.data?.data || {};
                     setPublicCoupons(data.eligibleCoupons || []);
                     setEligibleCouponSummary(data);
-                    if (!couponResult && !couponCode && !userRemovedCouponRef.current && data.bestCombination?.appliedCoupons?.length) {
-                        const manualCoupon = data.bestCombination.appliedCoupons.find((c) => c.applicationMode !== 'auto');
-                        setCouponCode(manualCoupon?.code || data.bestCombination.appliedCoupons[0]?.code || '');
-                        setCouponResult(data.bestCombination);
+                    if (!couponCode && !userRemovedCouponRef.current) {
+                        const autoCoupon = data.bestCombination?.appliedCoupons?.find((c) => c.applicationMode === 'auto');
+                        if (autoCoupon) {
+                            setCouponResult(data.bestCombination);
+                        } else if (couponResult) {
+                            setCouponResult(null);
+                        }
                     }
                 })
                 .catch(() => {})
                 .finally(() => setPublicCouponsLoading(false));
         }
-    }, [activeSection, couponsEnabled, showAvailableCoupons, subtotal, shippingCost]);
+    }, [activeSection, couponsEnabled, showAvailableCoupons, subtotal, shippingCost, couponCode, user?.email, guestEmail, couponBuyNowItem]);
+
+    useEffect(() => {
+        if (couponResult && !couponResult.error && !couponLoading) {
+            const checkoutEmail = user?.email || (guestEmail ? guestEmail.trim() : undefined);
+            if (couponCode) {
+                validateCoupon({ code: couponCode, subtotal, shippingCost, email: checkoutEmail, buyNowItem: couponBuyNowItem })
+                    .then((res) => {
+                        setCouponResult(res.data?.data || null);
+                    })
+                    .catch((err) => {
+                        setCouponResult({
+                            orderDiscount: 0,
+                            totalDiscount: 0,
+                            message: getApiErrorMessage(err, 'Coupon is no longer valid for this order.'),
+                            error: true,
+                        });
+                    });
+            } else if (couponsEnabled && couponResult?.appliedCoupons?.some((c) => c.applicationMode === 'auto')) {
+                getEligibleCoupons({ subtotal, shippingCost, email: checkoutEmail, buyNowItem: couponBuyNowItem })
+                    .then((res) => {
+                        const data = res.data?.data || {};
+                        const autoCoupon = data.bestCombination?.appliedCoupons?.find((c) => c.applicationMode === 'auto');
+                        if (autoCoupon) {
+                            setCouponResult(data.bestCombination);
+                        } else {
+                            setCouponResult(null);
+                        }
+                    })
+                    .catch(() => {});
+            }
+        }
+    }, [subtotal, shippingCost, itemSignature, user?.email, guestEmail, couponCode, couponsEnabled, couponBuyNowItem]);
 
     const handleApplyCoupon = async (codeOverride) => {
         const code = codeOverride || couponCode;
@@ -655,7 +712,8 @@ const CheckoutPage = () => {
         setCouponLoading(true);
         setCouponResult(null);
         try {
-            const res = await validateCoupon({ code, subtotal, shippingCost });
+            const checkoutEmail = user?.email || (guestEmail ? guestEmail.trim() : undefined);
+            const res = await validateCoupon({ code, subtotal, shippingCost, email: checkoutEmail, buyNowItem: couponBuyNowItem });
             setCouponResult(res.data?.data || null);
         } catch (err) {
             setCouponResult({ orderDiscount: 0, totalDiscount: 0, message: getApiErrorMessage(err, 'Invalid coupon code.'), error: true });
@@ -787,9 +845,9 @@ const CheckoutPage = () => {
             return;
         }
         if (hasPhysicalItems && !selectedAddressId) { setError('Please select a shipping address.'); return; }
-        if (!user && hasPhysicalItems && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim())) {
+        if (!user && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim())) {
             setGuestEmailError(true);
-            setError('Enter a valid email address for delivery updates.');
+            setError('Enter a valid email address.');
             return;
         }
         if (!paymentMethod) { setError('No payment method is currently available.'); return; }
@@ -807,8 +865,9 @@ const CheckoutPage = () => {
                 ...(hasPhysicalItems && selectedAddressId ? { shippingAddressId: selectedAddressId } : {}),
                 ...(hasPhysicalItems && shippingQuote?.quoteId ? { shippingQuoteId: shippingQuote.quoteId } : {}),
                 checkoutSessionId,
+                ...getCampaignAttribution(),
                 sessionId: getSessionId(),
-                ...(!user && hasPhysicalItems ? { guestEmail: guestEmail.trim() } : {}),
+                ...(!user && guestEmail ? { guestEmail: guestEmail.trim() } : {}),
                 paymentMethod,
                 ...(couponCode && couponResult && !couponResult.error && { couponCode }),
                 ...(appliedCoupons.length > 0 && { couponCodes: appliedCoupons.map((c) => c.code) }),
@@ -945,7 +1004,7 @@ const CheckoutPage = () => {
                         </Alert>
                     )}
 
-                    {!user && hasPhysicalItems && guestCheckoutEnabled !== false && (
+                    {!user && guestCheckoutEnabled !== false && (
                         <Paper variant="outlined" sx={{ mb: 1.5, p: 2.5, borderRadius: blockRadius }}>
                             <TextField
                                 {...formFieldProps}
@@ -1301,7 +1360,7 @@ const CheckoutPage = () => {
                         radius={blockRadius}
                         activeSection={activeSection}
                         completedSections={completedSections}
-                        title="Payment Method"
+                        title={checkoutStyle.paymentHeading || 'Payment Method'}
                         onEdit={() => editSection(3)}
                         summary={
                             <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -1584,7 +1643,7 @@ const CheckoutPage = () => {
                                         <span>Updating Delivery Rates...</span>
                                     </Box>
                                 ) : paymentMethod === 'cod' ? (
-                                    'Place Order'
+                                    (checkoutStyle.placeOrderLabel || 'Place Order')
                                 ) : (
                                     'Proceed to Pay'
                                 )}

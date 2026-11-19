@@ -2,6 +2,12 @@ import api from './api';
 import { withQueryString } from '../utils/query';
 
 export const mediaService = {
+  replaceImage: async (id, file) => {
+    const form = new FormData();
+    form.append('file', file);
+    return (await api.put(`/media/${id}/image`, form)).data;
+  },
+  revertImage: async (id) => (await api.post(`/media/${id}/revert`)).data,
   listCropPresets: async (signal) => (await api.get('/media/crop-presets', { signal })).data,
   createCropPreset: async (data) => (await api.post('/media/crop-presets', data)).data,
   updateCropPreset: async (id, data) => (await api.patch(`/media/crop-presets/${id}`, data)).data,

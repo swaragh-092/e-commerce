@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import {
   Alert, Box, Button, Chip, Paper, Stack, Table, TableBody, TableCell,
-  TableHead, TablePagination, TableRow, TextField, Typography,
+  TableHead, TablePagination, TableRow, TableSortLabel, TextField, Typography,
 } from '@mui/material';
 import WarningIcon from '@mui/icons-material/Warning';
 import { useNavigate } from 'react-router-dom';
+import { getInventoryEditPath } from '../../../utils/inventoryNavigation';
 import { updateInventoryAlert } from '../../../services/adminService';
 import { useNotification } from '../../../context/NotificationContext';
 import { PERMISSIONS } from '../../../utils/permissions';
@@ -50,12 +51,15 @@ const InventoryAlertActions = ({ alert, canUpdate, onUpdated, draft, onDraftChan
 
 const InventoryAlertsWidget = ({ lowStock = [], inventoryAlerts, loading, spacing, stats, hasAnyPermission, onInventoryAlertUpdated }) => {
   const navigate = useNavigate();
+  const [direction, setDirection] = useState(null);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [followUpDrafts, setFollowUpDrafts] = useState({});
   const rows = inventoryAlerts?.rows || lowStock;
   const currentPage = Math.min(page, Math.max(0, Math.ceil(rows.length / rowsPerPage) - 1));
-  const visibleRows = rows.slice(currentPage * rowsPerPage, (currentPage + 1) * rowsPerPage);
+  const sortedRows = direction ? [...rows].sort((a, b) =>
+    (Number(a.quantity ?? 0) - Number(b.quantity ?? 0)) * (direction === "asc" ? 1 : -1)) : rows;
+  const visibleRows = sortedRows.slice(currentPage * rowsPerPage, (currentPage + 1) * rowsPerPage);
   const totalAtRisk = Number(inventoryAlerts?.totalCount ?? stats?.inventory?.totalAtRisk ?? stats?.lowStockCount ?? rows.length);
   const outOfStockCount = Number(inventoryAlerts?.outOfStockCount ?? stats?.inventory?.outOfStockCount ?? stats?.outOfStockCount ?? rows.filter((item) => item.availableQty <= 0).length);
   const canUpdate = typeof hasAnyPermission === 'function' && hasAnyPermission([PERMISSIONS.PRODUCTS_UPDATE]);
@@ -70,12 +74,18 @@ const InventoryAlertsWidget = ({ lowStock = [], inventoryAlerts, loading, spacin
         <WarningIcon color="warning" />
         <Typography variant="h6" fontWeight={600}>Inventory Alerts ({totalAtRisk})</Typography>
       </Box>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Each active variant is checked separately. Available = on hand − reserved for orders. Disabled products and variants are excluded.</Typography>
       {outOfStockCount > 0 && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>{outOfStockCount} item{outOfStockCount === 1 ? '' : 's'} out of stock.</Alert>}
       {inventoryAlerts && rows.length < totalAtRisk && <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>Showing the first {rows.length} of {totalAtRisk} inventory alerts.</Alert>}
       <Box sx={{ overflowX: 'auto' }}>
         <Table size="small" aria-label="Inventory alerts" sx={{ minWidth: inventoryAlerts ? 820 : 400 }}>
           <TableHead><TableRow>
-            <TableCell>Product / SKU</TableCell><TableCell align="right">Total Qty</TableCell>
+            <TableCell>Product / SKU</TableCell><TableCell align="right" sortDirection={direction || false}>
+              <TableSortLabel active={Boolean(direction)} direction={direction || 'asc'} onClick={() => {
+                setDirection(direction === 'asc' ? 'desc' : 'asc');
+                setPage(0);
+              }}>On hand</TableSortLabel>
+            </TableCell>
             <TableCell align="right">Reserved</TableCell><TableCell align="right">Available / Threshold</TableCell>
             {inventoryAlerts && <TableCell>Follow-up</TableCell>}
           </TableRow></TableHead>
@@ -86,9 +96,10 @@ const InventoryAlertsWidget = ({ lowStock = [], inventoryAlerts, loading, spacin
               const availableQty = Number(alert.availableQty) || 0;
               const outOfStock = alert.severity === 'out_of_stock' || availableQty <= 0;
               return (
-                <TableRow key={alert.inventoryKey || alert.id} hover onClick={() => navigate(`/admin/products/${productId}/edit`)} sx={{ cursor: 'pointer' }}>
+                <TableRow key={alert.inventoryKey || alert.id} hover onClick={() => navigate(getInventoryEditPath(productId, alert.variantId || alert.variant?.id))} sx={{ cursor: 'pointer' }}>
                   <TableCell>
                     <Typography variant="body2" fontWeight={600}>{product.name || alert.name}</Typography>
+                    <Typography variant="caption" color="text.secondary" display="block">{alert.variantId ? 'Variant stock' : 'Product stock'}</Typography>
                     {(alert.sku || alert.variant?.sku || product.sku) && <Typography variant="caption" color="text.secondary">SKU: {alert.sku || alert.variant?.sku || product.sku}</Typography>}
                   </TableCell>
                   <TableCell align="right">{alert.quantity}</TableCell><TableCell align="right">{alert.reservedQty}</TableCell>

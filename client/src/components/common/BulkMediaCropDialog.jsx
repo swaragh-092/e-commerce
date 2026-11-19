@@ -14,7 +14,7 @@ const finished = (row) => ['Saved', 'Reused'].includes(row.status);
 const editable = (file) => ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimeType) || (!file.mimeType && !/\.gif$/i.test(file.filename || file.originalName || ''));
 const fileName = (file) => file.originalName || file.filename || 'Image';
 
-export default function BulkMediaCropDialog({ files, onClose, onResults }) {
+export default function BulkMediaCropDialog({ files, onClose, onResults, replaceExisting = false, allowManagePresets = true }) {
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const presetStore = useCropPresets();
@@ -36,7 +36,7 @@ export default function BulkMediaCropDialog({ files, onClose, onResults }) {
     if (!current()) return;
     patch(row.file.id, { status: 'Loading', preview: null, output: null, settings: null, error: '' });
     try {
-      const image = await loadImage(getMediaUrl(row.file.url));
+      const image = await loadImage(getMediaUrl(row.file.url, row.file.updatedAt));
       if (!current()) return;
       const edit = settings || presetEdit({ width: image.naturalWidth, height: image.naturalHeight }, presetId, presetStore.presets);
       const result = editPreview(image, edit);
@@ -84,12 +84,12 @@ export default function BulkMediaCropDialog({ files, onClose, onResults }) {
       if (stop.current || !alive.current) break;
       patch(row.file.id, { status: 'Saving', error: '' });
       try {
-        const image = await loadImage(getMediaUrl(row.file.url));
+        const image = await loadImage(getMediaUrl(row.file.url, row.file.updatedAt));
         if (!alive.current) break;
         const file = await exportEditedImage(image, row.settings.rotation, row.settings.crop, row.settings.width, fileName(row.file));
         if (!alive.current) break;
         let reusedExisting = false;
-        try { await mediaService.uploadMedia(file, row.file.type || 'image'); }
+        try { if (replaceExisting) await mediaService.replaceImage(row.file.id, file); else await mediaService.uploadMedia(file, row.file.type || 'image'); }
         catch (error) {
           const detail = error.response?.data?.error;
           if (detail?.code !== 'DUPLICATE_MEDIA' || !detail.details?.media) throw error;
@@ -123,16 +123,16 @@ export default function BulkMediaCropDialog({ files, onClose, onResults }) {
   const complete = rows.filter(finished).length;
   const busy = preparing || saving;
   return <><Dialog open fullScreen={fullScreen} maxWidth="lg" fullWidth onClose={() => !saving && onClose()} aria-labelledby="bulk-crop-title">
-    <DialogTitle id="bulk-crop-title">Bulk crop images<Typography variant="body2" color="text.secondary">Apply a preset, review every preview, then save new images.</Typography></DialogTitle>
+    <DialogTitle id="bulk-crop-title">Bulk crop images<Typography variant="body2" color="text.secondary">{replaceExisting ? 'Apply a preset, review every preview, then update these images.' : 'Apply a preset, review every preview, then save new images.'}</Typography></DialogTitle>
     <DialogContent dividers sx={{ p: { xs: 2, sm: 3 } }}>
-      <Alert severity="info" sx={{ mb: 2 }}>Original images and their product or page placements are kept. Crops start at the center; adjust any image whose subject is cut off.</Alert>
+      <Alert severity="info" sx={{ mb: 2 }}>{replaceExisting ? 'Saving updates each image everywhere it is used. Names and positions stay the same; each original is retained for restoration. Review every crop before saving.' : 'Original images and their product or page placements are kept. Crops start at the center; adjust any image whose subject is cut off.'}</Alert>
       {files.length > MAX_BULK_CROP && <Alert severity="warning" sx={{ mb: 2 }}>Only the first {MAX_BULK_CROP} images are included. Process the remaining images in another batch.</Alert>}
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }} sx={{ mb: 1 }}>
         <FormControl disabled={busy} sx={{ minWidth: 220 }}><InputLabel id="bulk-preset-label">Batch preset</InputLabel><Select labelId="bulk-preset-label" label="Batch preset" value={presetStore.presets.some(item => item.id === preset) ? preset : 'product'} onChange={(event) => setPreset(event.target.value)}>
           {presetStore.presets.filter((item) => item.id !== 'free').map((item) => <MenuItem key={item.id} value={item.id}>{item.custom ? `${item.label} (${item.width} × ${item.height})` : item.label}</MenuItem>)}
         </Select></FormControl>
         <Button variant="outlined" disabled={busy || rows.every((row) => finished(row) || row.status === 'Unsupported')} onClick={applyAll}>Apply to all unfinished images</Button>
-        <Button disabled={busy} onClick={() => setManagingPresets(true)}>Manage custom presets</Button>
+        {allowManagePresets && <Button disabled={busy} onClick={() => setManagingPresets(true)}>Manage custom presets</Button>}
         <Typography variant="body2" role="status" sx={{ ml: { sm: 'auto' } }}>{complete} of {rows.length} saved or reused</Typography>
       </Stack>
       {presetStore.error && <Alert severity="warning" sx={{ my: 2 }} action={<Button onClick={presetStore.reload}>Retry</Button>}>Custom presets unavailable. Built-in presets still work.</Alert>}
@@ -158,7 +158,7 @@ export default function BulkMediaCropDialog({ files, onClose, onResults }) {
       <Button variant="contained" disabled={busy || !pending.length} onClick={save}>{saving ? 'Saving…' : `Save ${pending.length} ${pending.length === 1 ? 'image' : 'images'}`}</Button>
     </DialogActions>
   </Dialog>
-    {editing && <Suspense fallback={<CircularProgress aria-label="Loading crop adjustment" />}><MediaImageEditor key={editing.file.id} source={getMediaUrl(editing.file.url)} name={fileName(editing.file)} initialSettings={editing.settings} saveLabel="Apply crop" onClose={() => setEditing(null)} onApplySettings={async (settings) => { await prepare(editing, preset, settings); if (alive.current) setEditing(null); }} /></Suspense>}
+    {editing && <Suspense fallback={<CircularProgress aria-label="Loading crop adjustment" />}><MediaImageEditor key={editing.file.id} source={getMediaUrl(editing.file.url, editing.file.updatedAt)} name={fileName(editing.file)} allowManagePresets={allowManagePresets} initialSettings={editing.settings} saveLabel="Apply crop" onClose={() => setEditing(null)} onApplySettings={async (settings) => { await prepare(editing, preset, settings); if (alive.current) setEditing(null); }} /></Suspense>}
     {managingPresets && <CropPresetManager store={presetStore} onClose={() => setManagingPresets(false)} />}
     <DuplicateMediaDialog media={duplicate} onCancel={() => chooseDuplicate('stop')} onSkip={() => chooseDuplicate('skip')} onCopy={() => chooseDuplicate('copy')} onReuse={() => chooseDuplicate('reuse')} />
   </>;

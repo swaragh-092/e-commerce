@@ -48,7 +48,10 @@ const createEnquirySchema = Joi.object({
     .min(1)
     .max(100)
     .optional()
-    .allow(null)
+    .allow(null),
+  utmSource: Joi.string().trim().max(255).optional().allow(null, ''),
+  utmMedium: Joi.string().trim().max(255).optional().allow(null, ''),
+  utmCampaign: Joi.string().trim().max(255).optional().allow(null, '')
 }).custom((value, helpers) => {
   if (!value.productId && !value.cartItems) {
     return helpers.error('any.custom', { message: 'Either productId or cartItems is required' });
@@ -63,7 +66,7 @@ const createEnquirySchema = Joi.object({
 });
 
 const updateEnquiryStatusSchema = Joi.object({
-  status: Joi.string().valid('pending', 'responded', 'closed').required()
+  status: Joi.string().valid('pending', 'responded', 'closed', 'closed_converted', 'closed_lost').required()
 });
 
 const replyEnquirySchema = Joi.object({
@@ -71,7 +74,7 @@ const replyEnquirySchema = Joi.object({
 });
 
 const queryEnquiriesSchema = Joi.object({
-  status: Joi.string().valid('pending', 'responded', 'closed').allow(''),
+  status: Joi.string().valid('pending', 'responded', 'closed', 'closed_converted', 'closed_lost').allow(''),
   search: Joi.string().trim().allow(''),
   sortBy: Joi.string().valid('createdAt', 'name', 'email', 'status', 'subject').default('createdAt'),
   sortDir: Joi.string().valid('asc', 'desc', 'ASC', 'DESC').default('desc'),

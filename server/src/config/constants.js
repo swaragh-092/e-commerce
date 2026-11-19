@@ -63,5 +63,6 @@ module.exports = {
     PASSWORD_RESET_TTL_MS: 15 * 60 * 1000,
   }),
   
+  MAX_CHECKOUT_COUPONS: 5,
   LOW_STOCK_THRESHOLD: 10,
 };

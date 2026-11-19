@@ -15,7 +15,7 @@ const { idParamSchema, paginationQuerySchema } = require('../../utils/common.val
 
 // Public / Customer routes: gated by 'coupons' (and 'showAvailableCoupons' where applicable)
 router.get('/public', authenticate, featureGate('coupons'), featureGate('showAvailableCoupons'), couponController.listPublic);
-router.post('/eligible', authenticate, featureGate('coupons'), featureGate('showAvailableCoupons'), validate(eligibleCouponsSchema), couponController.getEligibleCoupons);
+router.post('/eligible', optionalAuth, featureGate('coupons'), featureGate('showAvailableCoupons'), validate(eligibleCouponsSchema), couponController.getEligibleCoupons);
 
 // Admin routes: staff can view and manage existing coupons regardless of feature flag state
 router.get('/', authenticate, authorizePermissions(PERMISSIONS.COUPONS_READ), validate(paginationQuerySchema, 'query'), couponController.list);

@@ -12,6 +12,7 @@ const { errorHandler } = require('./middleware/errorHandler.middleware');
 const { globalLimiter } = require('./middleware/rateLimiter.middleware');
 const { success, error } = require('./utils/response');
 const logger = require('./utils/logger');
+const seoController = require('./modules/seo/seo.controller');
 
 const app = express();
 
@@ -125,10 +126,12 @@ const UPLOADS_SERVE_DIR = !process.env.UPLOAD_DIR
     : path.resolve(SERVER_ROOT, process.env.UPLOAD_DIR);
 logger.info(`Serving uploads from: ${UPLOADS_SERVE_DIR}`);
 app.use('/uploads', express.static(UPLOADS_SERVE_DIR, {
-  maxAge: '1y',
-  immutable: true,
+  maxAge: 0,
+  immutable: false,
+  dotfiles: 'deny',
   setHeaders: (res) => {
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Cache-Control', 'no-cache');
   }
 }));
 
@@ -141,7 +144,12 @@ app.use('/uploads', (req, res) => {
   res.status(404).sendFile(path.join(__dirname, '../public/no-image.png'));
 });
 
-// Serve public statically for robots.txt
+// Serve crawler discovery files from their standard public URLs. Keep these
+// ahead of express.static so the generated robots file and sitemap stay current.
+app.get('/sitemap.xml', seoController.getSitemap);
+app.get('/robots.txt', seoController.getRobots);
+
+// Serve remaining public assets.
 app.use(express.static(path.join(__dirname, '../public'), {
   setHeaders: (res) => {
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
@@ -201,6 +209,7 @@ app.use('/api/tags', require('./modules/product/tag.routes'));
 app.use('/api/brands', brandRoutes);
 app.use('/api/media', mediaRoutes);
 app.use('/api/cart', cartRoutes);
+app.use('/api/analytics/events', require('./modules/analytics/analyticsEvent.routes'));
 app.use('/api/coupons', couponRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/payments', paymentRoutes);
@@ -229,6 +238,7 @@ app.use('/api/pages', pageRoutes);
 app.use('/api/menus', menuRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/enquiries', enquiryRoutes);
+app.use('/api/contact', require('./modules/contact/contact.routes'));
 app.use('/api/search', searchRoutes);
 app.use('/api/api-builder', apiBuilderRoutes);
 app.use('/api/blogs', blogRoutes);

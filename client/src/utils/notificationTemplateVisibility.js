@@ -24,6 +24,8 @@ const TEMPLATE_FEATURES = Object.freeze({
   new_enquiry_admin: 'enquiry',
   new_enquiry_customer: 'enquiry',
   enquiry_reply_customer: 'enquiry',
+  enquiry_closed_converted_customer: 'enquiry',
+  enquiry_closed_lost_customer: 'enquiry',
   newsletter_confirmation: 'newsletter',
   newsletter_campaign: 'newsletter',
   email_verification: 'emailVerification',

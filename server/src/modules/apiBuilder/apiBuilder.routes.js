@@ -10,6 +10,7 @@ const { featureGate } = require('../../middleware/featureGate.middleware');
 const { publicApiLimiter } = require('../../middleware/rateLimiter.middleware');
 const { auditLog } = require('../audit/audit.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
+const { hideEmptyQuerySchema } = require('../../utils/common.validation');
 
 const router = express.Router();
 
@@ -18,6 +19,7 @@ router.get(
   publicApiLimiter,
   featureGate('apiBuilder'),
   validate(validation.slugParamSchema, 'params'),
+  validate(hideEmptyQuerySchema.unknown(true), 'query'),
   controller.executeBySlug
 );
 

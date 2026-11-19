@@ -8,8 +8,7 @@
  *  2. The iframe loads /?previewMode=1.
  *  3. ThemeContext detects previewMode=1 and reads settings from localStorage['storePreviewTheme']
  *     instead of the API, giving an isolated preview without touching production data.
- *  4. Every time the form changes, we postMessage the updated preview data to the iframe,
- *     which applies the new CSS vars instantly (no reload needed for colours/fonts).
+ *  4. The iframe receives the latest draft settings when it loads and whenever they change.
  *
  * Device frames:
  *   mobile  → 375px wide
@@ -19,6 +18,7 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import {
   Box,
+  Button,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
@@ -31,7 +31,6 @@ import TabletIcon from '@mui/icons-material/Tablet';
 import DesktopWindowsIcon from '@mui/icons-material/DesktopWindows';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import { buildStorefrontCssVariables } from '../../../utils/theme';
 
 // ─── Device configuration ─────────────────────────────────────────────────────
 
@@ -61,88 +60,104 @@ const formToNestedSettings = (form) => {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function LiveStorefrontPreview({ form, settings, path = '/', reloadOnSettingsChange = false, reloadDelay = 450, device: controlledDevice, showToolbar = true, showStatusText = showToolbar, frameHeight }) {
+export default function LiveStorefrontPreview({ form, settings, path = '/', device: controlledDevice, showToolbar = true, showStatusText = showToolbar, frameHeight, onSelectSection, onSelectComponent, onInsertSection, onInsertBlock, onSelectBlock, selectedSectionId, selectedBlockId }) {
   const iframeRef  = useRef(null);
-  const lastSnapshotRef = useRef('');
+  const inspectorCleanup = useRef(() => {});
+  const selectionCallbacks = useRef({ onSelectSection, onSelectComponent, onInsertSection, onInsertBlock, onSelectBlock, selectedSectionId, selectedBlockId });
+  selectionCallbacks.current = { onSelectSection, onSelectComponent, onInsertSection, onInsertBlock, onSelectBlock };
+  const canInsertSection = Boolean(onInsertSection);
+  const canInsertBlock = Boolean(onInsertBlock);
+  const inspecting = Boolean(onSelectSection || onSelectComponent || onInsertSection || onInsertBlock || onSelectBlock);
+
+  const attachInspector = useCallback(() => {
+    inspectorCleanup.current();
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc?.head || !inspecting) return;
+    const style = doc.createElement('style');
+    style.textContent = '[data-store-section]:hover,[data-store-component]:hover,[data-store-block]:hover{outline:2px solid #4f46e5;outline-offset:-2px;cursor:pointer}';
+    if (selectedSectionId) {
+      const selected = JSON.stringify(String(selectedBlockId || selectedSectionId));
+      const attribute = selectedBlockId ? 'data-store-block' : 'data-store-section';
+      style.textContent += `[${attribute}=${selected}]{outline:2px solid #4f46e5;outline-offset:-2px}`;
+    }
+    const insertionSelectors = [
+      canInsertSection && '[data-store-add-section]',
+      canInsertBlock && '[data-store-add-block]',
+    ].filter(Boolean);
+    if (insertionSelectors.length) {
+      style.textContent += `${insertionSelectors.join(',')}{display:block!important;margin:8px auto;padding:5px 12px;border:1px dashed #4f46e5;border-radius:6px;background:white;color:#3730a3;cursor:pointer;font:inherit}`;
+    }
+    doc.head.appendChild(style);
+    const select = (event) => {
+      const target = event.target?.closest?.('[data-store-add-section],[data-store-add-block],[data-store-block],[data-store-section],[data-store-component]');
+      // Edit mode must not follow links or submit storefront forms.
+      event.preventDefault();
+      event.stopPropagation();
+      if (!target) return;
+      if (target.dataset.storeAddSection) selectionCallbacks.current.onInsertSection?.(target.dataset.storeAddSection, target.dataset.storeAnchor);
+      else if (target.dataset.storeAddBlock) selectionCallbacks.current.onInsertBlock?.(target.dataset.storeOwner, target.dataset.storeAddBlock, target.dataset.storeAnchor);
+      else if (target.dataset.storeBlock) selectionCallbacks.current.onSelectBlock?.(target.dataset.storeOwner, target.dataset.storeBlock);
+      else if (target.dataset.storeSection) selectionCallbacks.current.onSelectSection?.(target.dataset.storeSection);
+      else selectionCallbacks.current.onSelectComponent?.(target.dataset.storeComponent);
+    };
+    doc.addEventListener('click', select, true);
+    doc.addEventListener('submit', select, true);
+    inspectorCleanup.current = () => {
+      doc.removeEventListener('click', select, true);
+      doc.removeEventListener('submit', select, true);
+      style.remove();
+    };
+  }, [inspecting, canInsertSection, canInsertBlock, selectedSectionId, selectedBlockId]);
+
+  useEffect(() => {
+    attachInspector();
+    return () => inspectorCleanup.current();
+  }, [attachInspector]);
   const [localDevice, setLocalDevice] = useState('desktop');
-  const [iframeKey, setIframeKey] = useState(0); // bump to force iframe reload
+  const [iframeKey, setIframeKey] = useState(() => Date.now()); // cache-bust each preview load
   const [ready, setReady]       = useState(false);
+  const [loadTimedOut, setLoadTimedOut] = useState(false);
+
+  useEffect(() => {
+    setLoadTimedOut(false);
+    if (ready) return undefined;
+    const timer = window.setTimeout(() => setLoadTimedOut(true), 10000);
+    return () => window.clearTimeout(timer);
+  }, [ready, iframeKey, path]);
 
   const device = controlledDevice || localDevice;
   const cfg = DEVICES[device] || DEVICES.desktop;
 
-  // ── Write preview settings to localStorage whenever form/settings changes ─
-  useEffect(() => {
+  const syncSettings = useCallback(() => {
     const nested = settings || formToNestedSettings(form);
-    if (!nested || Object.keys(nested).length === 0) return;
+    if (!Object.keys(nested).length) return;
+
     try {
       localStorage.setItem(PREVIEW_KEY, JSON.stringify(nested));
     } catch {
-      // localStorage quota exceeded — degrade gracefully
+      // The iframe can still receive settings through postMessage.
     }
-
-    // If iframe is already mounted, postMessage the new CSS vars so colours/fonts
-    // update instantly without a full reload.
-    const iframe = iframeRef.current;
-    if (iframe && ready) {
-      const vars = buildStorefrontCssVariables(nested, null);
-      iframe.contentWindow?.postMessage(
-        { type: 'PREVIEW_THEME_UPDATE', vars },
-        window.location.origin,
-      );
-    }
-  }, [form, settings, ready]);
-
-
-  // Layout/page settings are read by the iframe at boot. When Store Designer
-  // changes those values, reload after a short debounce so the real route picks
-  // up the new localStorage snapshot without saving production settings.
-  useEffect(() => {
-    if (!reloadOnSettingsChange) return undefined;
-    const nested = settings || formToNestedSettings(form);
-    if (!nested || Object.keys(nested).length === 0) return undefined;
-
-    let snapshot;
-    try {
-      snapshot = JSON.stringify({ path, settings: nested });
-    } catch {
-      return undefined;
-    }
-
-    if (!lastSnapshotRef.current) {
-      lastSnapshotRef.current = snapshot;
-      return undefined;
-    }
-
-    if (lastSnapshotRef.current === snapshot) return undefined;
-    lastSnapshotRef.current = snapshot;
-
-    const timer = window.setTimeout(() => {
-      setReady(false);
-      setIframeKey((k) => k + 1);
-    }, reloadDelay);
-
-    return () => window.clearTimeout(timer);
-  }, [form, settings, path, reloadOnSettingsChange, reloadDelay]);
-
-  // ── Cleanup: remove preview key when admin unmounts the panel ────────────
-  useEffect(() => {
-    return () => {
-      localStorage.removeItem(PREVIEW_KEY);
-    };
-  }, []);
-
-  const handleLoad = useCallback(() => {
-    setReady(true);
-    // Re-send current vars after iframe reload
-    const nested = settings || formToNestedSettings(form);
-    if (!nested || Object.keys(nested).length === 0) return;
-    const vars = buildStorefrontCssVariables(nested, null);
     iframeRef.current?.contentWindow?.postMessage(
-      { type: 'PREVIEW_THEME_UPDATE', vars },
+      { type: 'PREVIEW_SETTINGS_UPDATE', settings: nested },
       window.location.origin,
     );
   }, [form, settings]);
+
+  useEffect(syncSettings, [syncSettings]);
+
+  useEffect(() => () => {
+    try {
+      localStorage.removeItem(PREVIEW_KEY);
+    } catch {
+      // Storage is optional for the embedded preview.
+    }
+  }, []);
+
+  const handleLoad = () => {
+    syncSettings();
+    attachInspector();
+    setReady(true);
+  };
 
   const handleRefresh = () => {
     setReady(false);
@@ -150,8 +165,10 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', relo
   };
 
   const normalizedPath = path && path !== '/home' ? path : '/';
-  const separator = normalizedPath.includes('?') ? '&' : '?';
-  const iframeSrc = `${window.location.origin}${normalizedPath}${separator}previewMode=1`;
+  const previewUrl = new URL(normalizedPath, window.location.origin);
+  previewUrl.searchParams.set('previewMode', '1');
+  previewUrl.searchParams.set('designerPreview', String(iframeKey));
+  const iframeSrc = previewUrl.toString();
 
   // ── Outer container width ─────────────────────────────────────────────────
   const outerWidth   = cfg.width  ? `${cfg.width}px`  : '100%';
@@ -160,7 +177,7 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', relo
   const needsScale   = cfg.width !== null;
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, height: frameHeight === '100%' ? '100%' : undefined, minHeight: 0 }}>
       {/* ── Toolbar ── */}
       {showToolbar && (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
@@ -205,7 +222,9 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', relo
       <Box
         sx={{
           width: '100%',
-          overflowX: 'auto',
+          overflowX: 'hidden',
+          flex: frameHeight === '100%' ? 1 : undefined,
+          minHeight: 0,
           borderRadius: 2,
           border: '1px solid',
           borderColor: 'divider',
@@ -217,14 +236,13 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', relo
           sx={{
             mx: needsScale ? 'auto' : 0,
             width: outerWidth,
-            maxWidth: needsScale ? outerWidth : '100%',
+            maxWidth: '100%',
             height: outerHeight,
             position: 'relative',
             overflow: 'hidden',
             borderRadius: needsScale ? 3 : 0,
             boxShadow: needsScale ? '0 4px 24px rgba(0,0,0,0.12)' : 'none',
-            my: needsScale ? 1.5 : 0,
-            transition: 'width 0.3s ease, height 0.3s ease',
+            my: needsScale && frameHeight !== '100%' ? 1.5 : 0,
           }}
         >
           {!ready && (
@@ -240,14 +258,22 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', relo
                 borderRadius: 2,
               }}
             >
-              <Typography variant="caption" color="text.secondary">Loading storefront…</Typography>
+              <Box sx={{ p: 2, textAlign: 'center', maxWidth: 320 }}>
+                <Typography variant="body2" color="text.secondary">
+                  {loadTimedOut ? 'The preview is taking longer than expected.' : 'Loading storefront…'}
+                </Typography>
+                {loadTimedOut && <Box sx={{ mt: 1.5, display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 1 }}>
+                  <Button size="small" variant="outlined" onClick={handleRefresh}>Retry preview</Button>
+                  <Button size="small" component="a" href={iframeSrc} target="_blank" rel="noopener noreferrer">Open preview</Button>
+                </Box>}
+              </Box>
             </Box>
           )}
           <iframe
             key={iframeKey}
             ref={iframeRef}
             src={iframeSrc}
-            title="Live storefront preview"
+            title="Storefront design preview"
             onLoad={handleLoad}
             style={{
               width: '100%',
@@ -262,7 +288,7 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', relo
 
       {showStatusText && (
         <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center' }}>
-          Colours and fonts update instantly. Layout changes refresh on next reload.
+          Draft design changes update in the preview as you edit.
         </Typography>
       )}
     </Box>

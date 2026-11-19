@@ -3,6 +3,8 @@ import { withQueryString } from '../utils/query';
 
 export const galleryService = {
   list: async (params = {}) => (await api.get(withQueryString('/galleries', params))).data,
+  listPublic: async (params = {}, config = {}) => (await api.get(withQueryString('/galleries/public', params), config)).data,
+  getPublic: async (slug, params = {}, config = {}) => (await api.get(withQueryString(`/galleries/public/${encodeURIComponent(slug)}`, params), config)).data,
   create: async (data) => (await api.post('/galleries', data)).data,
   update: async (id, data) => (await api.patch(`/galleries/${id}`, data)).data,
   remove: async (id) => (await api.delete(`/galleries/${id}`)).data,

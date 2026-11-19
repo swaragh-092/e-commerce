@@ -26,6 +26,7 @@ describe('product type inventory lifecycle', () => {
     vi.spyOn(db.ProductVariant, 'findAll').mockResolvedValue([]);
     vi.spyOn(db.ProductVariant, 'count').mockResolvedValue(0);
     vi.spyOn(db.ProductVariant, 'sum').mockResolvedValue(0);
+    vi.spyOn(db.ProductVariant, 'update').mockResolvedValue([0]);
     vi.spyOn(db.ProductVariant, 'create').mockResolvedValue({ id: 'variant' });
     vi.spyOn(db.ProductComboItem, 'count').mockResolvedValue(0);
     vi.spyOn(inventory, 'adjust').mockResolvedValue({ changed: true });
@@ -59,12 +60,39 @@ describe('product type inventory lifecycle', () => {
     expect(db.Product.update).toHaveBeenCalledWith({ quantity: 0, reservedQty: 0 }, { where: { id: 'product' }, transaction: tx });
     expect(tx.commit).toHaveBeenCalled();
   });
-  it('preserves legacy variants while correcting Simple to Variable', async () => {
+  it('requires confirmation before replacing Simple stock with historical variant totals', async () => {
+    db.ProductVariant.count.mockResolvedValue(2);
+    await expect(productService.updateProduct('product', { type: 'variable' })).rejects.toThrow('Confirm clearing');
+    expect(product.update).not.toHaveBeenCalled();
+  });
+  it('clears historical variant stock when explicitly converting Simple inventory to Variable', async () => {
     db.ProductVariant.count.mockResolvedValue(2);
     db.ProductVariant.sum.mockImplementation(async (field) => field === 'stockQty' ? 17 : 0);
-    await productService.updateProduct('product', { type: 'variable' });
-    expect(inventory.adjust).not.toHaveBeenCalled();
-    expect(db.Product.update).toHaveBeenCalledWith({ quantity: 17, reservedQty: 0 }, expect.anything());
+    db.ProductVariant.update.mockImplementation(async () => {
+      db.ProductVariant.sum.mockResolvedValue(0);
+      return [2];
+    });
+    await productService.updateProduct('product', { type: 'variable', confirmInventoryReset: true });
+    expect(inventory.adjust).toHaveBeenCalledWith(expect.objectContaining({ newQuantity: 0 }));
+    expect(db.ProductVariant.update).toHaveBeenCalledWith({ stockQty: 0, reservedQty: 0 }, { where: { productId: 'product' }, transaction: tx });
+    expect(db.Product.update).toHaveBeenCalledWith({ quantity: 0, reservedQty: 0 }, expect.anything());
+  });
+  it('requires confirmation and clears historical variant stock even after Simple stock reaches zero', async () => {
+    product.quantity = 0;
+    db.ProductVariant.count.mockResolvedValue(2);
+    await expect(productService.updateProduct('product', { type: 'variable' })).rejects.toThrow('Confirm clearing');
+    expect(product.update).not.toHaveBeenCalled();
+    await productService.updateProduct('product', { type: 'variable', confirmInventoryReset: true });
+    expect(db.ProductVariant.update).toHaveBeenCalledWith({ stockQty: 0, reservedQty: 0 }, { where: { productId: 'product' }, transaction: tx });
+    expect(db.Product.update).toHaveBeenCalledWith({ quantity: 0, reservedQty: 0 }, expect.anything());
+  });
+  it('blocks converting historical variants with outstanding reservations', async () => {
+    product.quantity = 0;
+    db.ProductVariant.count.mockResolvedValue(2);
+    db.ProductVariant.sum.mockImplementation(async (field) => field === 'reservedQty' ? 1 : 0);
+    await expect(productService.updateProduct('product', { type: 'variable', confirmInventoryReset: true })).rejects.toThrow('orders reserving historical variants');
+    expect(db.ProductVariant.update).not.toHaveBeenCalled();
+    expect(tx.rollback).toHaveBeenCalled();
   });
   it.each([undefined, 'simple'])('saves images on a legacy Simple product without changing its type or inventory (type=%s)', async (type) => {
     product.reservedQty = 2;
@@ -93,11 +121,11 @@ describe('product type inventory lifecycle', () => {
     await expect(productService.updateProduct('product', { type: 'combo' })).rejects.toThrow('remove all variants');
     expect(product.update).not.toHaveBeenCalled();
   });
-  it('blocks manual parent stock edits on a legacy Simple product with variants', async () => {
+  it('adjusts Simple product stock even when historical variants exist', async () => {
     db.ProductVariant.count.mockResolvedValue(1);
-    await expect(productService.updateProduct('product', { type: 'simple', quantity: 12 })).rejects.toThrow('Edit their stock');
-    expect(product.update).not.toHaveBeenCalled();
-    expect(inventory.adjust).not.toHaveBeenCalled();
+    await productService.updateProduct('product', { type: 'simple', quantity: 12 });
+    expect(inventory.adjust).toHaveBeenCalledWith(expect.objectContaining({ productId: 'product', newQuantity: 12 }));
+    expect(db.Product.update).not.toHaveBeenCalled();
   });
   it.each(['simple', 'combo'])('blocks converting existing variants to %s', async (type) => {
     product.type = 'variable'; db.ProductVariant.count.mockResolvedValue(1);
@@ -135,6 +163,11 @@ describe('product type inventory lifecycle', () => {
     await expect(variantService.addProductVariant('product', { options: [] })).rejects.toThrow('Save the product as Variable');
     expect(db.ProductVariant.create).not.toHaveBeenCalled();
   });
+  it('prevents editing historical variant stock while the product is Simple', async () => {
+    const update = vi.spyOn(db.ProductVariant, 'findOne');
+    await expect(variantService.updateProductVariant('product', 'old', { stockQty: 20 })).rejects.toThrow('Save the product as Variable');
+    expect(update).not.toHaveBeenCalled();
+  });
   it('requires correct type when replacing variants through the product API', () => {
     expect(() => validateProductTypeChange(product, { variants: [{ stockQty: 1 }] })).toThrow('Keep Variable Product');
   });
@@ -153,7 +186,7 @@ describe('inventory and cart type safeguards', () => {
     vi.spyOn(db.Cart, 'findOne').mockResolvedValue({ id: 'cart' });
     vi.spyOn(db.Cart, 'findByPk').mockResolvedValue({ id: 'cart' });
     vi.spyOn(db.ProductVariant, 'count').mockResolvedValue(0);
-    vi.spyOn(db.Product, 'findByPk').mockResolvedValue({ id: 'product', type: 'variable', quantity: 50, reservedQty: 0, isEnabled: true, deletedAt: null });
+    vi.spyOn(db.Product, 'findByPk').mockResolvedValue({ id: 'product', type: 'variable', quantity: 50, reservedQty: 0, isEnabled: true, status: 'published', deletedAt: null });
     vi.spyOn(db.CartItem, 'create').mockResolvedValue({});
   });
   it('rejects adding an empty Variable product even if its old parent stock is positive', async () => {
@@ -166,9 +199,13 @@ describe('inventory and cart type safeguards', () => {
     await expect(inventory.adjust({ productId: 'product', newQuantity: 12, transaction: tx })).rejects.toThrow('variant or bundle component');
     expect(update).not.toHaveBeenCalled();
   });
-  it('rejects manual parent stock on legacy Simple products that have variants', async () => {
-    db.Product.findByPk.mockResolvedValue({ type: 'simple', quantity: 10, reservedQty: 0 });
+  it('permits Simple stock edits with historical variants and preserves reservations', async () => {
+    const product = { id: 'product', type: 'simple', quantity: 10, reservedQty: 3, update: vi.fn() };
+    db.Product.findByPk.mockResolvedValue(product);
     db.ProductVariant.count.mockResolvedValue(1);
-    await expect(inventory.adjust({ productId: 'product', newQuantity: 12, transaction: tx })).rejects.toThrow('Change its type');
+    vi.spyOn(db.InventoryTransaction, 'create').mockResolvedValue({});
+    await inventory.adjust({ productId: 'product', newQuantity: 12, transaction: tx });
+    expect(product.update).toHaveBeenCalledWith({ quantity: 12 }, expect.anything());
+    await expect(inventory.adjust({ productId: 'product', newQuantity: 2, transaction: tx })).rejects.toThrow('reserved quantity');
   });
 });

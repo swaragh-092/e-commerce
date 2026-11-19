@@ -17,6 +17,10 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false,
             defaultValue: '',
         },
+        imageId: {
+            type: DataTypes.UUID,
+            allowNull: true,
+        },
         slug: {
             type: DataTypes.STRING(100),
             unique: true,
@@ -30,6 +34,7 @@ module.exports = (sequelize, DataTypes) => {
     });
 
     Tag.associate = (models) => {
+        Tag.belongsTo(models.Media, { foreignKey: 'imageId', as: 'image', onDelete: 'SET NULL' });
         Tag.belongsToMany(models.Product, { through: models.ProductTag, foreignKey: 'tagId', otherKey: 'productId' });
     };
 

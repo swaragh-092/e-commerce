@@ -35,8 +35,10 @@ Variable stock from active variants, deducting reservations.
   inventory adjustment ledger. Existing units are not assigned to combinations
   automatically; review and enter the desired stock per variant/component.
 - A Simple product already containing legacy variants can be corrected using
-  Use Variable Product and Save Product. Its variants and their stock stay intact.
-  No database migration or automatic conversion is performed by this code change.
+  Variable Product and Save Product. Confirm the type change; stale historical
+  variant quantities are cleared before the variants become purchasable again.
+  Outstanding variant reservations block the change. Variant records remain for
+  existing orders, and standalone stock is not distributed to them.
 - Remove all variants, including inactive ones, before changing Variable to Simple
   or Combo. Clear bundle items before changing away from Combo. Active product
   reservations block type changes.
@@ -46,6 +48,9 @@ Variable stock from active variants, deducting reservations.
 
 Type changes serialize with variant generation and bundle editing. No records in
 the running store were changed while implementing these rules.
+
+For the complete alert, reservation, historical-order, and disabled-item rules,
+see [Inventory stock and availability](inventory/stock-and-availability.md).
 
 ## Changed files for this task
 

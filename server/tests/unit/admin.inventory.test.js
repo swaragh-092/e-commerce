@@ -30,6 +30,7 @@ describe('Admin inventory health', () => {
       },
       {
         id: 'variant-out',
+        type: 'variable',
         name: 'Variant out',
         quantity: 99,
         reservedQty: 0,

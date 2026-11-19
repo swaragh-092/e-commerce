@@ -30,7 +30,11 @@ describe('media utils and placeholder defaults', () => {
     });
 
     it('prepends / to uploads/ path', () => {
-      expect(getMediaUrl('uploads/products/item.png')).toBe('/uploads/products/item.png');
+      expect(getMediaUrl('uploads/products/item.png')).toBe('/uploads/products/item.png?mediaVersion=editable1');
+    });
+
+    it('adds revision hints without duplicating query separators', () => {
+      expect(getMediaUrl('/uploads/image.png', 'changed')).toBe('/uploads/image.png?mediaVersion=editable1&v=changed');
     });
 
     it('returns root paths as-is', () => {
@@ -38,8 +42,8 @@ describe('media utils and placeholder defaults', () => {
     });
 
     it('routes single filename or thumbnail directory into /uploads/', () => {
-      expect(getMediaUrl('sample.png')).toBe('/uploads/sample.png');
-      expect(getMediaUrl('thumbnails/sample.png')).toBe('/uploads/thumbnails/sample.png');
+      expect(getMediaUrl('sample.png')).toBe('/uploads/sample.png?mediaVersion=editable1');
+      expect(getMediaUrl('thumbnails/sample.png')).toBe('/uploads/thumbnails/sample.png?mediaVersion=editable1');
     });
   });
 

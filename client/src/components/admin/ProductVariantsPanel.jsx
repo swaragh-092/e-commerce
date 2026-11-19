@@ -31,6 +31,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { Link } from 'react-router-dom';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import useCategoryAttributes from '../../hooks/useCategoryAttributes';
 
 const EMPTY_LIST = [];
 const validPrice = (value) => value !== '' && value != null && /^\d+(\.\d{0,2})?$/.test(String(value)) && Number(value) <= 99999999.99;
@@ -77,7 +78,7 @@ const VariantsPanel = ({
   const [cloneCatProducts, setCloneCatProducts] = useState([]);
   const [cloneCatProductsLoading, setCloneCatProductsLoading] = useState(false);
   const [cloneCatSelectedProduct, setCloneCatSelectedProduct] = useState(null);
-  const [suggestedAttributes, setSuggestedAttributes] = useState([]);
+  const categorySuggestions = useCategoryAttributes(categoryIds, Boolean(productId && canManageAttributes));
   const cloneSearchTimer = useRef(null);
   const cloneRequests = useRef({ search: 0, category: 0 });
   useEffect(() => () => { clearTimeout(cloneSearchTimer.current); cloneRequests.current.search++; cloneRequests.current.category++; }, []);
@@ -115,7 +116,7 @@ const VariantsPanel = ({
       })));
       setAttributes(attrData);
       setProductBasePrice(getProductBasePrice(product));
-      onStockTotalChange?.(stockTotal, activeVariantRows.length, Number(product?.quantity || 0), varData.length);
+      onStockTotalChange?.(stockTotal, activeVariantRows.length, Number(product?.quantity || 0), varData.length, varData);
 
     } catch (error) {
       setLoadError(true);
@@ -127,21 +128,10 @@ const VariantsPanel = ({
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
-  const categoryKey = categoryIds.join(',');
-  useEffect(() => {
-    if (!categoryKey) { setSuggestedAttributes([]); return; }
-    let active = true;
-    attributeService.getCategoryAttributes(categoryKey.split(','), true)
-      .then((response) => { if (active) setSuggestedAttributes(response?.data?.data || []); })
-      .catch(() => { if (active) setSuggestedAttributes([]); });
-    return () => { active = false; };
-  }, [categoryKey]);
-
-
   useEffect(() => {
     const activeVariantRows = variants.filter((variant) => variant?.isActive !== false);
     const stockTotal = activeVariantRows.reduce((sum, variant) => sum + Number(variant.stockQty || 0), 0);
-    onStockTotalChange?.(stockTotal, activeVariantRows.length, undefined, variants.length);
+    onStockTotalChange?.(stockTotal, activeVariantRows.length, undefined, variants.length, variants);
   }, [variants, onStockTotalChange]);
 
   useEffect(() => {
@@ -223,7 +213,8 @@ const VariantsPanel = ({
   const hasVariantChanges = variants.some((variant) => variant._dirty);
   const skuCounts = variants.reduce((counts, variant) => { const sku = variant.sku?.trim(); if (sku) counts.set(sku, (counts.get(sku) || 0) + 1); return counts; }, new Map());
   const duplicateSku = (variant) => (skuCounts.get(variant.sku?.trim()) || 0) > 1;
-  const hasInvalidChanges = variants.some((variant) => variant._dirty && ((pricingEnabled && !validPrice(variant.price)) || !validStock(variant) || duplicateSku(variant)));
+  const validCost = (value) => value == null || value === "" || validPrice(value);
+  const hasInvalidChanges = variants.some((variant) => variant._dirty && ((pricingEnabled && (!validPrice(variant.price) || !validCost(variant.costPrice))) || !validStock(variant) || duplicateSku(variant)));
   const variantBusy = saving || generating || cloning || deleting;
   const canEditVariants = canManageVariants && !variantBusy && !loading && !loadError;
 
@@ -246,6 +237,7 @@ const VariantsPanel = ({
         await attributeService.updateProductVariant(productId, variant.id, {
           sku: variant.sku?.trim() || null,
           ...(pricingEnabled ? { price: Number(variant.price || 0) } : {}),
+          ...(pricingEnabled ? { costPrice: variant.costPrice == null || variant.costPrice === "" ? null : Number(variant.costPrice) } : {}),
           stockQty: Number(variant.stockQty || 0),
           weightGrams: variant.weightGrams !== '' && variant.weightGrams != null ? Number(variant.weightGrams) : null,
           lengthCm: variant.lengthCm !== '' && variant.lengthCm != null ? Number(variant.lengthCm) : null,
@@ -390,8 +382,8 @@ const VariantsPanel = ({
 
       <Grid container spacing={3}>
         <Grid item xs={12} lg={5} sx={{ minWidth: 0 }}>
-          <ProductAttributesSection productId={productId} rows={productAttributes} templates={attributes}
-            suggestions={suggestedAttributes} loading={loading} error={loadError} canManage={canManageAttributes && !variantBusy}
+          <ProductAttributesSection productId={productId} rows={productAttributes} templates={attributes} variants={variants}
+            categorySuggestions={categorySuggestions} loading={loading} error={loadError} canManage={canManageAttributes && !variantBusy}
             onRowsChange={setProductAttributes} onRetry={loadAll} onBusyChange={setAttributesBusy} />
         </Grid>
 
@@ -404,11 +396,11 @@ const VariantsPanel = ({
               </Button>
             </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Manage stock quantity and SKU{pricingEnabled ? ', plus a price,' : ''} for each option combination.</Typography>
-            {!loading && !loadError && <VariantSetup productId={productId} rows={productAttributes} variants={variants} basePrice={productBasePrice}
+            {!loading && !loadError && <VariantSetup productId={productId} rows={productAttributes} variants={variants} basePrice={productBasePrice} pricingEnabled={pricingEnabled}
               disabled={saving || cloning || deleting || attributesBusy} canManage={canManageVariants} hasUnsavedChanges={hasVariantChanges}
               onBusyChange={setGenerating} onCreated={loadAll} />}
 
-            {!loading && !loadError && variants.length > 0 && <VariantPriceGroups rows={productAttributes} entries={variants}
+            {pricingEnabled && !loading && !loadError && variants.length > 0 && <VariantPriceGroups rows={productAttributes} entries={variants}
               disabled={!canEditVariants || attributesBusy} saveHint="Includes available and unavailable variants. Apply, review the variants, then click Save variant changes."
               onApply={(prices) => {
                 setVariants((current) => current.map((variant) => prices.has(variant.id) ? { ...variant, price: prices.get(variant.id), _dirty: true } : variant));
@@ -457,7 +449,7 @@ const VariantsPanel = ({
                     >
                       <Box sx={{ minWidth: 0, flex: 1, py: 0.5 }}>
                         <Typography variant="body2" fontWeight={600} sx={{ overflowWrap: 'anywhere' }}>{getVariantOptionLabel(variant) || 'Variant SKU'}</Typography>
-                        <Typography variant="caption" color="text.secondary">{pricingEnabled ? `MRP: ${Number(variant.price || 0).toLocaleString()} · ` : ''}Stock: {variant.stockQty || 0} · {variant.isActive === false ? 'Hidden' : 'Available'}{variant._dirty ? ' · Unsaved' : ''}</Typography>
+                        <Typography variant="caption" color="text.secondary">{pricingEnabled ? `MRP: ${Number(variant.price || 0).toLocaleString()} · ` : ''}On hand: {variant.stockQty || 0} · Reserved: {variant.reservedQty || 0} · Available: {variant.isActive === false ? 0 : Math.max(Number(variant.stockQty || 0) - Number(variant.reservedQty || 0), 0)} · {variant.isActive === false ? 'Disabled' : 'Active'}{variant._dirty ? ' · Unsaved' : ''}</Typography>
                       </Box>
                       <IconButton
                         size="small"
@@ -562,6 +554,16 @@ const VariantsPanel = ({
                           </Box>
                         </Grid>
                         {pricingEnabled && <Grid item xs={12} sm={6}>
+                          <TextField fullWidth size="small" label="Unit cost" type="number"
+                            value={variant.costPrice ?? ''}
+                            onChange={(e) => handleVariantChange(index, 'costPrice', e.target.value)}
+                            disabled={!canEditVariants}
+                            inputProps={{ min: 0, step: '0.01', max: 99999999.99 }}
+                            error={!validCost(variant.costPrice)}
+                            helperText={validCost(variant.costPrice) ? "Blank uses the product unit cost." : "Enter a nonnegative cost with up to 2 decimals."}
+                          />
+                        </Grid>}
+                        {pricingEnabled && <Grid item xs={12} sm={6}>
                           <TextField
                             fullWidth
                             size="small"
@@ -586,7 +588,7 @@ const VariantsPanel = ({
                             disabled={!canEditVariants}
                             inputProps={{ min: 0 }}
                             error={variant._dirty && !validStock(variant)}
-                            helperText={variant._dirty && !validStock(variant) ? `Enter a whole number, at least ${variant.reservedQty || 0}.` : Number(variant.reservedQty || 0) > 0 ? `${variant.reservedQty} reserved` : undefined}
+                            helperText={variant._dirty && !validStock(variant) ? `Enter a whole number, at least ${variant.reservedQty || 0}.` : `${variant.reservedQty || 0} reserved · ${variant.isActive === false ? 0 : Math.max(Number(variant.stockQty || 0) - Number(variant.reservedQty || 0), 0)} available${variant.isActive === false ? ' · Disabled; stock and reservations retained' : ''}`}
                           />
                         </Grid>
                         <Grid item xs={12} sm={8}>

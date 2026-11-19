@@ -17,6 +17,7 @@ const ThemeImportDialog = ({ open, onClose, onImport, onPreview, loading }) => {
   const handleFileChange = (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
+    e.target.value = '';
     setFile(f);
     setError('');
     setParsed(null);
@@ -36,22 +37,11 @@ const ThemeImportDialog = ({ open, onClose, onImport, onPreview, loading }) => {
           setParsed(data);
           setStep(STEPS.SUMMARY);
         } catch (err) {
-          console.error('[ThemeImport] Validation error:', err);
-          const rawMessage = err.response?.data?.message || err.message || '';
-          let userMessage = 'An error occurred while importing the theme';
-          if (rawMessage) {
-            const rawLower = rawMessage.toLowerCase();
-            if (rawLower.includes('format') || rawLower.includes('invalid file')) {
-              userMessage = 'Invalid file format';
-            } else if (rawLower.includes('upload') || rawLower.includes('failed')) {
-              userMessage = 'Upload failed';
-            } else if (rawLower.includes('validation') || rawLower.includes('schema')) {
-              userMessage = 'Validation failed';
-            } else {
-              userMessage = rawMessage;
-            }
-          }
-          setError(userMessage);
+          setError(
+            err.response?.data?.error?.message ||
+            err.response?.data?.message ||
+            'The template could not be validated. Please try again.'
+          );
         } finally {
           setValidating(false);
         }
@@ -93,9 +83,10 @@ const ThemeImportDialog = ({ open, onClose, onImport, onPreview, loading }) => {
               Upload a <code>.theme.json</code> file. It will be validated before you can preview or save it.
             </Typography>
             <Button variant="outlined" component="label" startIcon={<UploadFileIcon />} disabled={validating}>
-              {validating ? 'Validating...' : file ? file.name : 'Choose File'}
+              {validating ? 'Validating...' : file ? 'Choose another file' : 'Choose File'}
               <input type="file" accept=".json" hidden onChange={handleFileChange} />
             </Button>
+            {file && <Typography variant="body2" sx={{ mt: 1 }}>{file.name}</Typography>}
             {error && <Alert severity="error" sx={{ mt: 2, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{error}</Alert>}
           </>
         )}

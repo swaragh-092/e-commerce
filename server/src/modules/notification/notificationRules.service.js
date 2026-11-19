@@ -203,6 +203,10 @@ const customerContext = async ({ event, orderId, variables, transaction, custome
       context.occurrence = [enquiry.id, variables.notification_event_id || variables.replyMessage || ''];
     }
   }
+  if (event.key === 'contact_form_submitted' && variables.contact_email) {
+    context.customer = { id: null, name: variables.contact_name, email: variables.contact_email, phone: variables.contact_phone || '' };
+    context.occurrence = variables.notification_event_id || null;
+  }
   // Only explicit customer call sites may provide a fallback; admin recipients are never inferred as customers.
   if (!context.customer && !orderId && customer) context.customer = customer;
   if (context.customer) Object.assign(context.variables, { customer_name: context.customer.name, customer_email: context.customer.email,

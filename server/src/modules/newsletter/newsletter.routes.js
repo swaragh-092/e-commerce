@@ -6,20 +6,12 @@ const { authorizePermissions } = require('../../middleware/role.middleware');
 const { featureGate } = require('../../middleware/featureGate.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
 const controller = require('./newsletter.controller');
-const rateLimit = require('express-rate-limit');
 const { validate } = require('../../middleware/validate.middleware');
 const { idParamSchema } = require('../../utils/common.validation');
-
-const limiter = (max, message) => rateLimit({
-  windowMs: 60000,
-  max,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message } },
-});
-const subscribeLimiter = limiter(5, 'Too many subscribe attempts. Try again later.');
-const unsubscribeLimiter = limiter(3, 'Too many unsubscribe attempts. Try again later.');
-const confirmLimiter = limiter(5, 'Too many confirmation attempts. Try again later.');
+const { createLimiter } = require('../../middleware/rateLimiter.middleware');
+const subscribeLimiter = createLimiter(1, 5, 'Too many subscribe attempts. Try again later.', { prefix: 'newsletter-subscribe' });
+const unsubscribeLimiter = createLimiter(1, 3, 'Too many unsubscribe attempts. Try again later.', { prefix: 'newsletter-unsubscribe' });
+const confirmLimiter = createLimiter(1, 5, 'Too many confirmation attempts. Try again later.', { prefix: 'newsletter-confirm' });
 
 // Public
 router.post('/subscribe', featureGate('newsletter'), subscribeLimiter, controller.subscribe);

@@ -255,7 +255,7 @@ const FeaturesPage = () => {
             can still access historical records through the API.
           </Typography>
           <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
-            {platformFeatures.optional.map(({ key: featureKey, label, description: desc, defaults }) => ({
+            {platformFeatures.optional.filter(({ key }) => key !== 'showPrice').map(({ key: featureKey, label, description: desc, defaults }) => ({
               key: `features.${featureKey}`, label, desc,
               defaultE: defaults.ecommerce, defaultC: defaults.catalog,
             })).map(({ key, label, desc, defaultE, defaultC }) => {

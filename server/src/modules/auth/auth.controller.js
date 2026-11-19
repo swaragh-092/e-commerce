@@ -9,14 +9,18 @@ const {
   getAccessToken,
   getRefreshToken,
   setAuthCookies,
-  setTrustedDeviceCookie,
   stripAuthTokens,
+  setRememberedDeviceCookie,
+  clearRememberedDeviceCookie,
+  clearTrustedDeviceCookie,
+  setTrustedDeviceCookie,
 } = require('./authCookies');
 
 const sendAuthSuccess = (res, result, message, options = {}) => {
   if (result?.tokens) {
-    setAuthCookies(res, result.tokens, options);
+    setAuthCookies(res, result.tokens, { ...options, adminSessionExpiresAt: result.adminSessionExpiresAt });
   }
+  if (result?.rememberedDeviceToken) setRememberedDeviceCookie(res, result.rememberedDeviceToken);
   return success(res, stripAuthTokens(result), message);
 };
 
@@ -37,9 +41,10 @@ const register = async (req, res, next) => {
 const login = async (req, res, next) => {
   try {
     const { email, password, rememberMe } = req.validated;
-    const trustedDevice = req.cookies?.trusted_device;
-    const result = await AuthService.login(email, password, req.ip, rememberMe, req.headers['user-agent'], trustedDevice);
-    return sendAuthSuccess(res, result, 'Login successful', { rememberMe });
+    const rememberedDeviceToken = req.cookies?.remembered_device;
+    const result = await AuthService.login(email, password, req.ip, rememberMe, req.headers['user-agent'], rememberedDeviceToken, req.validated.reauthContext, req.cookies?.trusted_device);
+    if (result.requiresTwoFactor || result.requiresMfaEnrollment) res.setHeader('Cache-Control', 'no-store');
+    return sendAuthSuccess(res, result, 'Login successful', { rememberMe: result.rememberMe ?? rememberMe });
   } catch (err) {
     next(err);
   }
@@ -54,7 +59,7 @@ const refresh = async (req, res, next) => {
     const normalized = result?.tokens ? result : { tokens: result, rememberMe: false };
     return sendAuthSuccess(res, normalized, 'Token refreshed', { rememberMe: normalized.rememberMe === true });
   } catch (err) {
-    if (err.code === 'UNAUTHORIZED' || err.statusCode === 401) clearAuthCookies(res);
+    if (err.code !== 'ADMIN_SESSION_EXPIRED' && (err.code === 'UNAUTHORIZED' || err.statusCode === 401)) clearAuthCookies(res);
     next(err);
   }
 };
@@ -63,16 +68,35 @@ const logout = async (req, res, next) => {
   try {
     const refreshToken = getRefreshToken(req);
     if (refreshToken) await AuthService.logout(refreshToken, req.user?.id);
-    // Blocklist the current access token for its remaining lifetime, and kill
-    // its session id so any sibling access token for the session dies too.
+    await require('./rememberedDevice').revoke(req.cookies?.remembered_device);
+    await require('./rememberedDevice').revoke(req.cookies?.trusted_device);
+    clearRememberedDeviceCookie(res);
+    // Persist the session revocation so every worker rejects this access token
+    // and any sibling access token from the same session.
     const accessToken = getAccessToken(req);
     if (accessToken) {
-      tokenBlocklist.add(accessToken);
       try {
         const jwt = require('jsonwebtoken');
-        const decoded = jwt.decode(accessToken);
-        if (decoded?.sid) tokenBlocklist.revokeSession(decoded.sid);
-      } catch { /* decode-only, never throws logout */ }
+        const decoded = jwt.verify(accessToken, process.env.JWT_ACCESS_SECRET, {
+          algorithms: ['HS256'],
+          issuer: process.env.JWT_ISSUER || 'ecommerce-pro',
+          audience: process.env.JWT_AUDIENCE || 'ecommerce-pro-client',
+        });
+        if (decoded.sid) {
+          const { RefreshToken } = require('../index');
+          await RefreshToken.update(
+            { revokedAt: new Date() },
+            { where: { id: decoded.sid, revokedAt: null } },
+          );
+          tokenBlocklist.revokeSession(decoded.sid);
+        } else {
+          tokenBlocklist.add(accessToken);
+        }
+      } catch (error) {
+        // Invalid/expired JWTs are already unusable. Persistence failures must
+        // reach the caller rather than report success with a live session.
+        if (!['JsonWebTokenError', 'TokenExpiredError', 'NotBeforeError'].includes(error.name)) throw error;
+      }
     }
     clearAuthCookies(res);
     return success(res, null, 'Logged out successfully');
@@ -80,6 +104,7 @@ const logout = async (req, res, next) => {
     next(err);
   } finally {
     clearAuthCookies(res);
+    clearTrustedDeviceCookie(res);
   }
 };
 
@@ -127,13 +152,11 @@ const verifyTwoFactor = async (req, res, next) => {
     const { tempToken, code, trustDevice } = req.validated;
     const ipAddress = req.ip;
     const result = await AuthService.verifyTwoFactor(tempToken, code, ipAddress);
-
-    // Set trusted device cookie if requested (30 days, signed JWT — not forgeable)
-    if (trustDevice) {
-      setTrustedDeviceCookie(res, result.user.id);
+    if (trustDevice && result.user && !require('../../config/permissions').isAdminUser(result.user)) {
+      await setTrustedDeviceCookie(res, result.user.id);
     }
 
-    return sendAuthSuccess(res, result, 'Login successful');
+    return sendAuthSuccess(res, result, 'Login successful', { rememberMe: result.rememberMe });
   } catch (err) {
     next(err);
   }

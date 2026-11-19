@@ -5,7 +5,7 @@ const { success, error } = require('../../utils/response');
 
 exports.getTree = async (req, res, next) => {
     try {
-        const tree = await categoryService.getCategoryTree();
+        const tree = await categoryService.getCategoryTree({ hideEmpty: req.query.hideEmpty });
         return success(res, tree);
     } catch (err) {
         next(err);
@@ -14,14 +14,16 @@ exports.getTree = async (req, res, next) => {
 
 exports.getBySlug = async (req, res, next) => {
     try {
-        const { page = 1, limit = 20, sort = 'newest', minPrice, maxPrice, includeSubcategories } = req.query;
+        const { page = 1, limit = 20, sort = 'newest', minPrice, maxPrice, brand, includeSubcategories, hideEmpty } = req.query;
         const result = await categoryService.getCategoryWithProducts(req.params.slug, {
             page: parseInt(page, 10) || 1,
             limit: parseInt(limit, 10) || 20,
             sort,
             minPrice,
             maxPrice,
+            brand,
             includeSubcategories,
+            hideEmpty,
         });
         return success(res, result);
     } catch (err) {
@@ -45,6 +47,21 @@ exports.reorder = async (req, res, next) => {
         return success(res, null, 'Category reordered');
     } catch (err) {
         if (err.message === 'Already at the top' || err.message === 'Already at the bottom') {
+            return error(res, err.message, 400, 'VALIDATION_ERROR');
+        }
+        next(err);
+    }
+};
+
+exports.move = async (req, res, next) => {
+    try {
+        await categoryService.moveCategory(req.params.id, req.body);
+        return success(res, null, 'Category moved');
+    } catch (err) {
+        if (err.message === 'Category not found' || err.message === 'Parent category not found') {
+            return error(res, err.message, 404, 'NOT_FOUND');
+        }
+        if (err.message === 'Category cannot be its own parent' || err.message === 'Setting this parent would create a circular reference') {
             return error(res, err.message, 400, 'VALIDATION_ERROR');
         }
         next(err);

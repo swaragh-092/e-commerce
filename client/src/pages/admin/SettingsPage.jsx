@@ -1,5 +1,4 @@
 import { useState, useEffect, useContext } from 'react';
-import { Link } from 'react-router-dom';
 import {
   Alert,
   Box,
@@ -20,7 +19,7 @@ import {
   InputAdornment,
 } from '@mui/material';
 import InventoryAlertSettingsPanel from '../../components/admin/settings/InventoryAlertSettingsPanel';
-import { updateSettings, getEmailTemplates, updateEmailTemplate, sendTestEmail as sendTestEmailApi } from '../../services/adminService';
+import { updateSettings, sendTestReport as sendAnalyticsTestReport } from '../../services/adminService';
 import { getAllSettings } from '../../services/settingsService';
 import { useNotification } from '../../context/NotificationContext';
 import { SettingsContext } from '../../context/ThemeContext';
@@ -33,11 +32,11 @@ import { DASHBOARD_PROFILES } from '../../components/admin/dashboard/dashboardWi
 import MessagingSettingsPanel from '../../components/admin/settings/MessagingSettingsPanel';
 import MediaPicker from '../../components/common/MediaPicker';
 import buildSettingsPanels from '../../components/admin/settings/buildSettingsPanels';
+import MfaSecurityPanel from '../../components/admin/settings/MfaSecurityPanel';
 import { getMediaUrl } from '../../utils/media';
 import { DEFAULT_STORE_NAME } from '../../utils/store';
 import { INDIAN_STATES } from '../../utils/indianStates';
 import { isDesignerOwnedSetting } from '../../utils/storeDesign';
-import { isNotificationTemplateVisible } from '../../utils/notificationTemplateVisibility';
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$',  name: 'US Dollar' },
@@ -88,6 +87,8 @@ const HOMEPAGE_PRODUCT_SOURCES = [
   { value: 'featured', label: 'Featured Products' },
   { value: 'sale', label: 'Deals / On Sale' },
   { value: 'bestSellers', label: 'Best Sellers' },
+  { value: 'trending', label: 'Trending This Week' },
+  { value: 'mostViewed', label: 'Most Viewed' },
   { value: 'newest', label: 'New Arrivals' },
   { value: 'recommended', label: 'Recommended' },
 ];
@@ -119,10 +120,6 @@ const SettingsPage = () => {
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [emailTemplates, setEmailTemplates] = useState([]);
-  const [templateSaving, setTemplateSaving] = useState({});
-  const [templateTestEmail, setTemplateTestEmail] = useState('');
-  const [templateTesting, setTemplateTesting] = useState({});
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
   const [mediaPickerKey, setMediaPickerKey] = useState(null);
   const { notify } = useNotification();
@@ -178,10 +175,6 @@ const SettingsPage = () => {
         ),
       }));
     });
-    // Load email templates
-    getEmailTemplates()
-      .then((res) => setEmailTemplates(res.data?.data || []))
-      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -252,6 +245,8 @@ const SettingsPage = () => {
         group !== 'shipping'
         && !['features', 'visibility'].includes(group)
         && !(group === 'general' && key === 'mode')
+        && !(group === 'auth' && key === 'mfaPolicy')
+        && !(group === 'messaging' && (['eventRecipientUserIds', 'enquiryCustomerAcknowledgementEnabled'].includes(key) || key.startsWith('notificationRules_')))
         && (isSuperAdmin || !isSuperAdminOnlySettingsKey(group, key))
         && !isDesignerOwnedSetting(group, key)
         && !isMaskedSecret(value)
@@ -272,7 +267,18 @@ const SettingsPage = () => {
 
 
 
-  const allTabs = ['Store', 'SEO', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Advanced', 'Notifications'];
+  const handleSendAnalyticsReport = async () => {
+    try {
+      const response = await sendAnalyticsTestReport();
+      const payload = response?.data?.data;
+      if (payload?.sent) notify(`Report sent to ${payload.sent} recipient(s).`, 'success');
+      else notify(response?.data?.message || 'No report was sent. Check that reports are enabled and recipients are configured.', 'info');
+    } catch (error) {
+      notify(error?.response?.data?.message || 'Could not send the analytics report.', 'error');
+    }
+  };
+
+  const allTabs = ['Store', 'SEO', 'Branding', 'Layout', 'Homepage', 'Catalog', 'Checkout', 'Promotions', 'Invoice', 'Advanced', 'Notifications', 'Analytics Reports', 'Security'];
 
   // Current currency symbol — used in shipping adornments
   const currSymbol = getCurrencySymbol(form['general.currency']);
@@ -476,6 +482,7 @@ const SettingsPage = () => {
     updateHomepagePromo, removeHomepagePromo, addHomepagePromo,
     updateValueProp, removeValueProp, addValueProp,
     enableCGST, enableSGST, enableIGST,
+    onSendAnalyticsReport: handleSendAnalyticsReport,
     adminVisibility,
     features: resolvedFeatures,
     hasPermission,
@@ -486,9 +493,10 @@ const SettingsPage = () => {
     if (appMode !== 'ecommerce' && ['Checkout', 'Promotions', 'Invoice'].includes(name)) return false;
     if (name === 'Checkout' && !adminCart && !adminCheckout && !adminPayments && !adminShipping) return false;
     if (name === 'Promotions' && !adminPricing) return false;
+    if (name === 'Analytics Reports' && (!resolvedFeatures?.analytics || !adminOrders)) return false;
     if (name === 'Invoice' && !adminOrders) return false;
     if (name === 'Advanced' && !canManageAdvancedSettings) return false;
-    return name === 'Notifications' || panels[index]?.length > 0;
+    return ['Notifications', 'Security'].includes(name) || panels[index]?.length > 0;
   });
   const safeTabIndex = Math.max(visibleTabs.indexOf(tab), 0);
   const currentTab = visibleTabs[safeTabIndex];
@@ -501,9 +509,9 @@ const SettingsPage = () => {
         <Typography variant="h5" component="h1" fontWeight={700}>
           Settings
         </Typography>
-        <Button variant="contained" onClick={handleSave} disabled={saving || !canManageSettings}>
+        {currentTab !== 'Security' && <Button variant="contained" onClick={handleSave} disabled={saving || !canManageSettings}>
           {saving ? 'Saving…' : 'Save All'}
-        </Button>
+        </Button>}
       </Box>
 
       {!canManageSettings && (
@@ -601,51 +609,12 @@ const SettingsPage = () => {
             </Tabs>
             <Divider />
             <Box sx={{ p: 3 }}>
-              {isMessagingTab ? (
+              {currentTab === 'Security' ? <MfaSecurityPanel /> : isMessagingTab ? (
                 <Box>
                   <Box sx={{ pointerEvents: canManageSettings ? 'auto' : 'none', opacity: canManageSettings ? 1 : 0.75 }}>
                     <MessagingSettingsPanel form={form} set={set} />
                   </Box>
-                  <Divider sx={{ my: 4 }} />
-                  {adminCart && <InventoryAlertSettingsPanel />}
-                  <Divider sx={{ my: 4 }} />
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 2 }}>
-                    <Box>
-                      <Typography variant="h6" fontWeight={700} sx={{ mb: 0.5 }}>Event notifications</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Choose who receives each event and write separate Email, SMS, and WhatsApp messages for customers, people, and roles. Preview messages before activating them.
-                      </Typography>
-                    </Box>
-                    <Button
-                      variant="contained"
-                      component={Link}
-                      to="/admin/email-templates"
-                      startIcon={<span style={{ fontSize: 18 }}>✉️</span>}
-                      sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
-                    >
-                      Manage notifications
-                    </Button>
-                  </Box>
-                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>
-                    {[
-                      { name: 'order_placed', icon: '🛍️', label: 'Order Placed' },
-                      { name: 'order_shipped', icon: '📦', label: 'Order Shipped' },
-                      { name: 'order_delivered', icon: '✅', label: 'Order Delivered' },
-                      { name: 'order_cancelled', icon: '❌', label: 'Order Cancelled' },
-                      { name: 'order_refunded', icon: '💳', label: 'Order Refunded' },
-                      { name: 'welcome', icon: '👋', label: 'Welcome' },
-                      { name: 'email_verification', icon: '✉️', label: 'Email Verification' },
-                      { name: 'password_reset', icon: '🔑', label: 'Password Reset' },
-                      { name: 'low_stock_alert', icon: '⚠️', label: 'Low Stock Alert' },
-                      { name: 'new_enquiry_admin', icon: '📬', label: 'New Enquiry — Staff' },
-                      { name: 'new_enquiry_customer', icon: '✉️', label: 'Enquiry Received — Customer' },
-                    ].filter(({ name }) => isNotificationTemplateVisible(name, resolvedFeatures)).map(({ icon, label }) => (
-                      <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-                        <Typography fontSize={20}>{icon}</Typography>
-                        <Typography variant="body2" fontWeight={500}>{label}</Typography>
-                      </Box>
-                    ))}
-                  </Box>
+                  {adminCart && <><Divider sx={{ my: 4 }} /><InventoryAlertSettingsPanel /></>}
                 </Box>
               ) : (
                 <Box sx={{ pointerEvents: canManageSettings ? 'auto' : 'none', opacity: canManageSettings ? 1 : 0.75 }}>

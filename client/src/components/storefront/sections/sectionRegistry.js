@@ -1,13 +1,17 @@
 export const SECTION_TYPES = Object.freeze({
+  COMPOSED_HERO: 'composed-hero',
   HERO_CAROUSEL: 'hero-carousel',
   VALUE_PROPS: 'value-props',
   CATEGORY_SHORTCUTS: 'category-shortcuts',
   PROMO_BANNERS: 'promo-banners',
   PRODUCT_ROW: 'product-row',
   BRAND_SHOWCASE: 'brand-showcase',
+  TAG_SHOWCASE: 'tag-showcase',
+  GALLERY_GRID: 'gallery-grid',
   EDITORIAL_IMAGE_TEXT: 'editorial-image-text',
   TESTIMONIALS: 'testimonials',
   LOGO_CLOUD: 'logo-cloud',
+  GALLERY: 'gallery',
   NEWSLETTER_SIGNUP: 'newsletter-signup',
   COUNTDOWN_SALE: 'countdown-sale',
   FEATURED_COLLECTION_GRID: 'featured-collection-grid',
@@ -58,6 +62,7 @@ export const SECTION_BLOCK_SCHEMAS = Object.freeze({
 });
 
 export const SECTION_DEFINITIONS = Object.freeze({
+  [SECTION_TYPES.COMPOSED_HERO]: { label: 'Composable hero', family: 'hero', data: 'content', live: true, preview: true, defaultVariant: null },
   [SECTION_TYPES.HERO_CAROUSEL]: { label: 'Hero carousel', family: 'hero', data: 'content', live: true, preview: true, defaultVariant: 'overlay' },
   [SECTION_TYPES.VALUE_PROPS]: { label: 'Value props', family: 'trust', data: 'content', live: true, preview: true, defaultVariant: 'icon-row' },
   [SECTION_TYPES.CATEGORY_SHORTCUTS]: { label: 'Category shortcuts', family: 'merchandising', data: 'categories', live: true, preview: true, defaultVariant: 'image-tiles' },
@@ -67,6 +72,7 @@ export const SECTION_DEFINITIONS = Object.freeze({
   [SECTION_TYPES.EDITORIAL_IMAGE_TEXT]: { label: 'Editorial image and text', family: 'story', data: 'content', live: true, preview: true, defaultVariant: 'image-right' },
   [SECTION_TYPES.TESTIMONIALS]: { label: 'Testimonials', family: 'trust', data: 'content', live: true, preview: true, defaultVariant: 'cards' },
   [SECTION_TYPES.LOGO_CLOUD]: { label: 'Logo cloud', family: 'trust', data: 'content', live: true, preview: true, defaultVariant: null },
+  [SECTION_TYPES.GALLERY]: { label: 'Gallery', family: 'story', data: 'content', live: true, preview: true, defaultVariant: null },
   [SECTION_TYPES.NEWSLETTER_SIGNUP]: { label: 'Newsletter signup', family: 'conversion', data: 'content', live: true, preview: true, defaultVariant: 'banner' },
   [SECTION_TYPES.COUNTDOWN_SALE]: { label: 'Countdown sale', family: 'campaign', data: 'content', live: true, preview: true, defaultVariant: 'bar' },
   [SECTION_TYPES.FEATURED_COLLECTION_GRID]: { label: 'Featured collection grid', family: 'merchandising', data: 'categories', live: true, preview: true, defaultVariant: 'image-tiles' },

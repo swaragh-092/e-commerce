@@ -45,7 +45,7 @@ export default function NotificationRecipients({ rule, options, disabled, onChan
         <FormControlLabel control={<Checkbox checked={includesCustomer(rule)} disabled={disabled} size="small" onChange={event => update({}, event.target.checked)} />} label="Customer involved in this event" />
         <FormControlLabel control={<Checkbox size="small" checked={recipients.defaultAdmins} disabled={disabled} onChange={event => update({ defaultAdmins: event.target.checked })} />} label="Store administrators" />
       </Stack>
-      {includesCustomer(rule) && <Typography variant="caption" color="text.secondary" component="p" sx={{ mb: 2 }}>Only the customer from this order or enquiry is included. Other customers will not receive it.</Typography>}
+      {includesCustomer(rule) && <Typography variant="caption" color="text.secondary" component="p" sx={{ mb: 2 }}>Only the customer involved in this event is included. Other customers will not receive it.</Typography>}
       <Box sx={{ display: 'grid', gap: 2, mt: 1 }}>
         <Grid container spacing={2}>
           <Grid item xs={12} sm={6}>

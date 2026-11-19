@@ -187,7 +187,7 @@ const AttributesPage = () => {
     if (!canManageAttributes) return;
     const confirmed = await confirm(
       'Delete Attribute Template',
-      'Are you sure you want to delete this attribute template? This will remove all its values and category links. Templates in use by products or variant options cannot be deleted.',
+      'Sure with deleting with Attribute?',
       'error'
     );
     if (!confirmed) return;

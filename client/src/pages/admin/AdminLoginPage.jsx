@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-import { Box, Typography, TextField, Button, Alert, useTheme, Paper, IconButton, InputAdornment, CircularProgress } from '@mui/material';
+import { Box, Typography, TextField, Button, Alert, useTheme, IconButton, InputAdornment, CircularProgress, Checkbox, FormControlLabel } from '@mui/material';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import { useNavigate, useLocation, Navigate, Link as RouterLink } from 'react-router-dom';
@@ -10,25 +10,31 @@ import { getFirstAccessibleAdminPath } from '../../utils/permissions';
 import { validateEmail, validateRequired } from '../../utils/authValidation';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { EmailOutlined, LockOutlined } from '@mui/icons-material';
+import EmailMfaStep from '../../components/auth/EmailMfaStep';
 import AuthPageShell from '../../components/storefront/AuthPageShell';
+import MfaEnrollmentStep from '../../components/auth/MfaEnrollmentStep';
 
 const AdminLoginPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, verifyTwoFactor, isAuthenticated, user, hasRole } = useAuth();
+  const { login, verifyTwoFactor, finalizeAuthenticatedSession, isAuthenticated, user } = useAuth();
   
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberDevice, setRememberDevice] = useState(false);
 
   // 2FA state
   const [twoFactorStep, setTwoFactorStep] = useState(false);
+  const [emailChallenge, setEmailChallenge] = useState('');
+  const [emailStep, setEmailStep] = useState(false);
   const [tempToken, setTempToken] = useState('');
   const [totpCode, setTotpCode] = useState('');
   const [useBackupCode, setUseBackupCode] = useState(false);
+  const [enrollmentToken, setEnrollmentToken] = useState('');
 
   // If already logged in and has admin access, redirect them directly to the admin area
   if (isAuthenticated) {
@@ -83,12 +89,19 @@ const AdminLoginPage = () => {
     setLoading(true);
 
     try {
-      const data = await login(formData.email, formData.password);
+      const data = await login(formData.email, formData.password, rememberDevice);
+
+      if (data.requiresMfaEnrollment) {
+        setEnrollmentToken(data.enrollmentToken);
+        setLoading(false);
+        return;
+      }
 
       // Handle 2FA requirement
       if (data.requiresTwoFactor) {
         setTwoFactorStep(true);
         setTempToken(data.tempToken);
+        setEmailChallenge(data.emailChallenge || '');
         setLoading(false);
         return;
       }
@@ -139,31 +152,57 @@ const AdminLoginPage = () => {
 
   return (
     <AuthPageShell type="admin" fullHeight>
+        {location.state?.mfaEnrollmentRequired && !enrollmentToken && (
+          <Alert severity="info" sx={{ mb: 2 }}>Sign in here to set up your staff authenticator.</Alert>
+        )}
+        {location.state?.sessionExpired && !twoFactorStep && (
+          <Alert severity="info" sx={{ mb: 3 }}>Your admin session expired. Sign in again to continue.</Alert>
+        )}
         {error && (
           <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>
         )}
 
-        {twoFactorStep ? (
+        {enrollmentToken ? (
+          <MfaEnrollmentStep
+            enrollmentToken={enrollmentToken}
+            onComplete={async () => {
+              const signedInUser = await finalizeAuthenticatedSession();
+              const adminPath = getFirstAccessibleAdminPath(signedInUser);
+              if (!adminPath) throw new Error('Your account does not have admin access.');
+              const fromPath = location.state?.from?.pathname;
+              navigate(fromPath?.startsWith('/admin') ? fromPath : adminPath, { replace: true });
+            }}
+            onBack={() => { setEnrollmentToken(''); setFormData(current => ({ ...current, password: '' })); setError(''); }}
+          />
+        ) : emailStep ? (
+          <EmailMfaStep challenge={emailChallenge} onBack={() => setEmailStep(false)} onComplete={async () => {
+            const signedInUser = await finalizeAuthenticatedSession();
+            const adminPath = getFirstAccessibleAdminPath(signedInUser);
+            if (!adminPath) throw new Error('Your account does not have admin access.');
+            const fromPath = location.state?.from?.pathname;
+            navigate(fromPath?.startsWith('/admin') ? fromPath : adminPath, { replace: true });
+          }} />
+        ) : twoFactorStep ? (
           <Box component="form" onSubmit={handleTwoFactorSubmit}>
             <Typography sx={{ mb: 2, fontSize: 14, color: '#475569' }}>
-              {useBackupCode ? 'Enter one of your 8-character backup codes.' : 'Enter the 6-digit code from your authenticator app.'}
+              {useBackupCode ? 'Enter a backup code. New codes contain 32 characters; existing 8-character codes still work.' : 'Enter the 6-digit code from your authenticator app.'}
             </Typography>
             <TextField
               fullWidth
               autoFocus
-              placeholder={useBackupCode ? 'e.g. b2ef58fb' : '000000'}
+              placeholder={useBackupCode ? 'Enter your backup code' : '000000'}
               value={totpCode}
               onChange={(e) => {
-                if (useBackupCode) setTotpCode(e.target.value.replace(/[^a-f0-9]/gi, '').toLowerCase().slice(0, 8));
+                if (useBackupCode) setTotpCode(e.target.value.replace(/[^a-f0-9]/gi, '').toLowerCase().slice(0, 32));
                 else setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6));
               }}
-              inputProps={{ maxLength: useBackupCode ? 8 : 6, autoComplete: 'one-time-code' }}
+              inputProps={{ maxLength: useBackupCode ? 32 : 6, autoComplete: 'one-time-code' }}
               sx={inputSx}
             />
             <Button
               fullWidth type="submit" variant="contained" size="large"
               sx={{ mt: 1, mb: 1, py: 1.45, borderRadius: '8px', fontWeight: 800 }}
-              disabled={loading || totpCode.length !== (useBackupCode ? 8 : 6)}
+              disabled={loading || (useBackupCode ? ![8, 32].includes(totpCode.length) : totpCode.length !== 6)}
             >
               {loading ? <CircularProgress size={18} color="inherit" /> : 'Verify'}
             </Button>
@@ -174,6 +213,24 @@ const AdminLoginPage = () => {
             >
               {useBackupCode ? 'Use authenticator code instead' : 'Lost your device? Use a backup code'}
             </Button>
+            {emailChallenge && (
+              <Button type="button" fullWidth disabled={loading} onClick={() => { setError(''); setEmailStep(true); }}>
+                Use an email code
+              </Button>
+            )}
+            {emailChallenge && (
+              <Button type="button" fullWidth disabled={loading} onClick={() => {
+                setTwoFactorStep(false);
+                setTempToken('');
+                setEmailChallenge('');
+                setTotpCode('');
+                setUseBackupCode(false);
+                setError('');
+                setFormData(current => ({ ...current, password: '' }));
+              }}>
+                Back to sign in
+              </Button>
+            )}
           </Box>
         ) : (
         <Box component="form" onSubmit={handleSubmit}>
@@ -242,8 +299,12 @@ const AdminLoginPage = () => {
             }}
           />
 
+          <FormControlLabel control={<Checkbox checked={rememberDevice} onChange={event => setRememberDevice(event.target.checked)} />} label="Remember this device for 30 days" />
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+            Device recognition does not keep admin access open. Sign in again after 30 minutes idle or 12 hours; required MFA still applies.
+          </Typography>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-            <Typography variant="body2" component={RouterLink} to="/forgot-password" sx={{ textDecoration: 'none', color: theme.palette.primary.main }}>
+            <Typography variant="body2" component={RouterLink} to="/admin/forgot-password" sx={{ textDecoration: 'none', color: theme.palette.primary.main }}>
               Forgot password?
             </Typography>
           </Box>

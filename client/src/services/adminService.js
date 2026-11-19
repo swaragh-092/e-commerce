@@ -27,6 +27,7 @@ const createAccessRole = (data) => api.post(`/${A}/access-control/roles`, data);
 const updateAccessRole = (id, data) => api.put(`/${A}/access-control/roles/${id}`, data);
 const deleteAccessRole = (id, replacementRoleId = null) => api.delete(`/${A}/access-control/roles/${id}`, { data: { replacementRoleId } });
 const updateAccessUserRole = (id, roleId) => api.put(`/${A}/access-control/users/${id}/role`, { roleId });
+const updateAccessUserStatus = (id, status, reason) => api.put(`/${A}/access-control/users/${id}/status`, { status, reason });
 const createAccessUser = (data) => api.post(`/${A}/access-control/users`, data);
 const deleteAccessUser = (id) => api.delete(`/${A}/access-control/users/${id}`);
 
@@ -122,19 +123,37 @@ const deleteSaleLabel = (id) => api.delete(`/settings/sale-labels/${id}`);
 const reorderSaleLabels = (labels) => api.put('/settings/sale-labels', { labels });
 
 // Analytics
+const getCatalogOverview = (params = {}) => api.get(withQueryString(`/${A}/analytics/catalog-overview`, params, { omitEmpty: true }));
 const getTopProducts = (params = {}) => api.get(withQueryString(`/${A}/analytics/top-products`, params, { omitEmpty: true }));
+const getProductProfitability = (params = {}) => api.get(withQueryString(`/${A}/analytics/product-profitability`, params, { omitEmpty: true }));
+const getVariantPerformance = (params = {}) => api.get(withQueryString(`/${A}/analytics/variant-performance`, params, { omitEmpty: true }));
+const getInventoryPerformance = (params = {}) => api.get(withQueryString(`/${A}/analytics/inventory-performance`, params, { omitEmpty: true }));
+const getStockoutHistory = (params = {}) => api.get(withQueryString(`/${A}/analytics/stockout-history`, params, { omitEmpty: true }));
 const getAovTrend = (params = {}) => api.get(withQueryString(`/${A}/analytics/aov-trend`, params, { omitEmpty: true }));
 const getAbandonedCarts = (params = {}) => api.get(withQueryString(`/${A}/analytics/abandoned-carts`, params, { omitEmpty: true }));
 const getRevenueByCategory = (params = {}) => api.get(withQueryString(`/${A}/analytics/revenue-by-category`, params, { omitEmpty: true }));
+const getTaxReport = (params = {}) => api.get(withQueryString(`/${A}/analytics/tax-report`, params, { omitEmpty: true }));
+const getTaxByState = (params = {}) => api.get(withQueryString(`/${A}/analytics/tax-by-state`, params, { omitEmpty: true }));
+const getReturnReasons = (params = {}) => api.get(withQueryString(`/${A}/analytics/return-reasons`, params, { omitEmpty: true }));
+const getOrderStatusReport = (params = {}) => api.get(withQueryString(`/${A}/analytics/order-status`, params, { omitEmpty: true }));
+const getCustomerTypeSales = (params = {}) => api.get(withQueryString(`/${A}/analytics/customer-type-sales`, params, { omitEmpty: true }));
+const getProductReturnRates = (params = {}) => api.get(withQueryString(`/${A}/analytics/product-return-rates`, params, { omitEmpty: true }));
+const getShippingPerformance = (params = {}) => api.get(withQueryString(`/${A}/analytics/shipping-performance`, params, { omitEmpty: true }));
+const getSalesReconciliation = (params = {}) => api.get(withQueryString(`/${A}/analytics/sales-reconciliation`, params, { omitEmpty: true }));
 const getRepeatCustomers = (params = {}) => api.get(withQueryString(`/${A}/analytics/repeat-customers`, params, { omitEmpty: true }));
 const getRefundRate = (params = {}) => api.get(withQueryString(`/${A}/analytics/refund-rate`, params, { omitEmpty: true }));
 const getGeographicSales = (params = {}) => api.get(withQueryString(`/${A}/analytics/geographic-sales`, params, { omitEmpty: true }));
 const getRevenueByPaymentMethod = (params = {}) => api.get(withQueryString(`/${A}/analytics/revenue-by-payment`, params, { omitEmpty: true }));
 const getCustomerLifetimeValue = (params = {}) => api.get(withQueryString(`/${A}/analytics/customer-lifetime-value`, params, { omitEmpty: true }));
+export const getSessionAnalytics = (params) => api.get(withQueryString(`/${A}/analytics/sessions`, params, { omitEmpty: true }));
 const getConversionRate = (params = {}) => api.get(withQueryString(`/${A}/analytics/conversion-rate`, params, { omitEmpty: true }));
 const getTrafficSources = (params = {}) => api.get(withQueryString(`/${A}/analytics/traffic-sources`, params, { omitEmpty: true }));
+const getLandingPagePerformance = (params = {}) => api.get(withQueryString(`/${A}/analytics/landing-pages`, params, { omitEmpty: true }));
+const getDevicePerformance = (params = {}) => api.get(withQueryString(`/${A}/analytics/devices`, params, { omitEmpty: true }));
 const getProductFunnel = (params = {}) => api.get(withQueryString(`/${A}/analytics/product-funnel`, params, { omitEmpty: true }));
+const getCheckoutFunnel = (params = {}) => api.get(withQueryString(`/${A}/analytics/checkout-funnel`, params, { omitEmpty: true }));
 const getUtmAttribution = (params = {}) => api.get(withQueryString(`/${A}/analytics/utm-attribution`, params, { omitEmpty: true }));
+const saveCampaignSpend = (data) => api.post(`/${A}/analytics/campaign-spend`, data);
 const getCouponPerformance = (params = {}) => api.get(withQueryString(`/${A}/analytics/coupon-performance`, params, { omitEmpty: true }));
 const getCohortRetention = (params = {}) => api.get(withQueryString(`/${A}/analytics/cohort-retention`, params, { omitEmpty: true }));
 const getRfmSegmentation = (params = {}) => api.get(withQueryString(`/${A}/analytics/rfm-segmentation`, params, { omitEmpty: true }));
@@ -145,19 +164,24 @@ const sendTestReport = () => api.post(`/${A}/analytics/send-test-report`);
 const exportAnalyticsCsv = (metric, params = {}) => {
   const query = buildQueryString(params, { omitEmpty: true });
   return api.get(`/${A}/analytics/export/${metric}?${query}`, { responseType: 'blob' }).then((res) => {
-    const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/csv' }));
+    if (!res.data.size) return false;
+    const url = window.URL.createObjectURL(res.data);
     const a = document.createElement('a');
     a.href = url;
     a.download = `${metric}-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
     a.click();
-    window.URL.revokeObjectURL(url);
+    a.remove();
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+    return true;
   });
 };
 
 export {
+  getCatalogOverview,
   getStats, getSalesChart, getLowStock, getInventoryAlerts, updateInventoryAlert, getRecentOrders,
   getInventoryAlertConfig, saveInventoryAlertConfig, testInventoryAlertEmail,
-  getAccessRoles, getAccessPermissions, getAccessUsers, createAccessRole, updateAccessRole, deleteAccessRole, updateAccessUserRole, createAccessUser, deleteAccessUser,
+  getAccessRoles, getAccessPermissions, getAccessUsers, createAccessRole, updateAccessRole, deleteAccessRole, updateAccessUserRole, updateAccessUserStatus, createAccessUser, deleteAccessUser,
   getAuditLogs,
   getUsers, getUserById, updateUserStatus,
   getAdminReviews, updateReviewStatus, deleteReview,
@@ -172,8 +196,8 @@ export {
   validateCoupon, getPublicCoupons, getEligibleCoupons,
   getAddresses, createAddress, updateAddress, deleteAddress, setDefaultAddress,
   getSaleLabels, createSaleLabel, updateSaleLabel, deleteSaleLabel, reorderSaleLabels,
-  getTopProducts, getAovTrend, getAbandonedCarts, getRevenueByCategory, getRepeatCustomers, getRefundRate,
+  getTopProducts, getProductProfitability, getVariantPerformance, getInventoryPerformance, getStockoutHistory, getAovTrend, getAbandonedCarts, getRevenueByCategory, getTaxReport, getTaxByState, getReturnReasons, getOrderStatusReport, getCustomerTypeSales, getProductReturnRates, getShippingPerformance, getSalesReconciliation, getRepeatCustomers, getRefundRate,
   getGeographicSales, getRevenueByPaymentMethod, getCustomerLifetimeValue, getConversionRate, getTrafficSources,
-  getProductFunnel, getUtmAttribution, getCouponPerformance, exportAnalyticsCsv,
+  getProductFunnel, getCheckoutFunnel, getLandingPagePerformance, getDevicePerformance, getUtmAttribution, saveCampaignSpend, getCouponPerformance, exportAnalyticsCsv,
   getCohortRetention, getRfmSegmentation, getOrderHeatmap, getRevenueForecast, getDrillDown, sendTestReport,
 };

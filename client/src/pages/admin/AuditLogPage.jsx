@@ -19,6 +19,7 @@ import {
   useTheme,
   Divider,
   Drawer,
+  Toolbar,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import InfoIcon from '@mui/icons-material/InfoOutlined';
@@ -349,6 +350,7 @@ const AuditLogPage = () => {
       </Box>
 
       <Drawer anchor="right" open={Boolean(diff)} onClose={() => setDiff(null)} PaperProps={{ sx: { width: { xs: '100%', sm: 480 }, p: 0 } }}>
+        <Toolbar aria-hidden="true" sx={{ flexShrink: 0 }} />
         <DialogTitle component="div" sx={{ p: 3, pb: 2 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
             <Box>

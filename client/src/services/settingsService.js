@@ -53,8 +53,8 @@ export const saveDesignDraft = async (settings, expectedRevision = undefined) =>
   return response.data.data;
 };
 
-export const publishDesignDraft = async (expectedRevision = undefined) => {
-  const response = await api.post('/settings/design-draft/publish', expectedRevision == null ? {} : { expectedRevision });
+export const publishDesignDraft = async (expectedRevision = undefined, conflictToken = undefined) => {
+  const response = await api.post('/settings/design-draft/publish', { expectedRevision, conflictToken });
   return response.data.data;
 };
 
@@ -63,8 +63,18 @@ export const restoreDesignVersion = async (versionId, expectedRevision = undefin
   return response.data.data;
 };
 
-export const discardDesignDraft = async () => {
-  const response = await api.delete('/settings/design-draft');
+export const getDraftArchives = async () => {
+  const response = await api.get('/settings/design-draft/archives');
+  return response.data.data;
+};
+
+export const restoreDraftArchive = async (archiveId, expectedRevision) => {
+  const response = await api.post(`/settings/design-draft/archives/${archiveId}/restore`, { expectedRevision });
+  return response.data.data;
+};
+
+export const discardDesignDraft = async (expectedRevision) => {
+  const response = await api.delete('/settings/design-draft', { data: { expectedRevision } });
   return response.data.data;
 };
 

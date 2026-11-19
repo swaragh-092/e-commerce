@@ -1,6 +1,7 @@
 'use strict';
 
 const Joi = require('joi');
+const { TEMPLATE_ASSIGNMENT_KEYS, buildAlternateTemplatesSchema } = require('../settings/alternateTemplates');
 
 const hexColor = Joi.string().pattern(/^#[0-9a-fA-F]{3,8}$/).max(9).messages({
   'string.pattern.base': '{{#label}} must be a valid hex color (e.g. #ff0000)',
@@ -14,16 +15,22 @@ const internalLink = Joi.string().pattern(/^\/(?!\/)/).max(500).messages({
 const dataUri = Joi.string().pattern(/^data:image\//).max(100000);
 const previewImageUrl = Joi.alternatives().try(safeUrl, dataUri).allow('', null);
 const linkUrl = Joi.alternatives().try(safeUrl, internalLink).allow('', null);
+const sectionImageUrl = Joi.alternatives().try(
+  safeUrl,
+  Joi.string().pattern(/^\/(?!\/)[^\\\s"']*$/).max(2000),
+).allow('', null);
+const fontDataUri = Joi.string().pattern(/^data:font\//).max(100000);
+const fontUrl = Joi.alternatives().try(safeUrl, internalLink, fontDataUri).allow('', null);
 const safeText = Joi.string().max(500).allow('', null);
 
 const THEME_MODES = ['light', 'dark'];
 const HEADER_STYLES = ['gradient', 'solid', 'glass'];
-const BUTTON_STYLES = ['solid', 'soft', 'outline'];
+const BUTTON_STYLES = ['solid', 'soft', 'outline', 'pill'];
 const CARD_STYLES = ['elevated', 'outlined', 'flat'];
 const BG_STYLES = ['softGradient', 'solid'];
 const FONT_WEIGHTS = ['300', '400', '500', '600', '700', '800', '900'];
-const SECTION_TYPES = ['hero-carousel', 'value-props', 'category-shortcuts', 'promo-banners', 'product-row', 'brand-showcase', 'editorial-image-text', 'testimonials', 'logo-cloud', 'newsletter-signup', 'countdown-sale', 'featured-collection-grid', 'faq', 'trust-badges', 'recently-viewed'];
-const PRODUCT_SOURCES = ['featured', 'sale', 'bestSellers', 'newest', 'recommended'];
+const SECTION_TYPES = ['tag-showcase', 'gallery-grid', 'composed-hero', 'hero-carousel', 'value-props', 'category-shortcuts', 'promo-banners', 'product-row', 'brand-showcase', 'editorial-image-text', 'testimonials', 'logo-cloud', 'newsletter-signup', 'countdown-sale', 'featured-collection-grid', 'faq', 'trust-badges', 'recently-viewed', 'gallery'];
+const PRODUCT_SOURCES = ['featured', 'sale', 'bestSellers', 'mostViewed', 'trending', 'staffPicks', 'newest', 'recommended'];
 const DATA_SOURCE_TYPES = ['apiBuilder'];
 const API_BUILDER_RESOURCES = ['products', 'categories', 'brands', 'productImages', 'tags', 'media', 'pages'];
 const API_BUILDER_OPERATORS = ['equals', 'contains', 'in', 'gte', 'lte', 'between'];
@@ -34,7 +41,74 @@ const darkPaletteSchema = Joi.object({
   backgroundColor: hexColor,
   surfaceColor: hexColor,
   textColor: hexColor,
+  errorColor: hexColor,
+  cancelButtonColor: hexColor,
+  warningColor: hexColor,
+  successColor: hexColor,
+  infoColor: hexColor,
 }).unknown(false);
+
+const typographyScaleSchema = Joi.object({
+  preset: Joi.string().valid('compact', 'default', 'editorial', 'display', 'goldenRatio', 'minorThird', 'custom'),
+  fluid: Joi.boolean(),
+  h1: Joi.string().max(50).allow('', null),
+  h2: Joi.string().max(50).allow('', null),
+  h3: Joi.string().max(50).allow('', null),
+  h4: Joi.string().max(50).allow('', null),
+  h5: Joi.string().max(50).allow('', null),
+  h6: Joi.string().max(50).allow('', null),
+  body1: Joi.string().max(50).allow('', null),
+  body2: Joi.string().max(50).allow('', null),
+  fluidConfig: Joi.object({
+    bodyMin: Joi.string().max(20).allow('', null),
+    bodyMax: Joi.string().max(20).allow('', null),
+    h1Min: Joi.string().max(20).allow('', null),
+    h1Max: Joi.string().max(20).allow('', null),
+    h2Min: Joi.string().max(20).allow('', null),
+    h2Max: Joi.string().max(20).allow('', null),
+    h3Min: Joi.string().max(20).allow('', null),
+    h3Max: Joi.string().max(20).allow('', null),
+    h4Min: Joi.string().max(20).allow('', null),
+    h4Max: Joi.string().max(20).allow('', null),
+    h5Min: Joi.string().max(20).allow('', null),
+    h5Max: Joi.string().max(20).allow('', null),
+    h6Min: Joi.string().max(20).allow('', null),
+    h6Max: Joi.string().max(20).allow('', null),
+    minVw: Joi.alternatives().try(Joi.string().max(20), Joi.number()).allow('', null),
+    maxVw: Joi.alternatives().try(Joi.string().max(20), Joi.number()).allow('', null),
+  }).unknown(false),
+}).unknown(false);
+
+const mobileOverridesSchema = Joi.object({
+  primaryColor: hexColor.allow(''),
+  backgroundColor: hexColor.allow(''),
+  surfaceColor: hexColor.allow(''),
+  textColor: hexColor.allow(''),
+  bodyFontSize: Joi.string().max(30).allow('', null),
+  headingScale: Joi.string().max(20).allow('', null),
+  sectionPadding: Joi.string().max(30).allow('', null),
+  containerPadding: Joi.string().max(30).allow('', null),
+}).unknown(false);
+
+const customFontsSchema = Joi.object({
+  bodyUrl: fontUrl,
+  bodyFamily: Joi.string().max(100).allow('', null),
+  bodyFormat: Joi.string().valid('woff2', 'woff', 'ttf', 'otf'),
+  headingUrl: fontUrl,
+  headingFamily: Joi.string().max(100).allow('', null),
+  headingFormat: Joi.string().valid('woff2', 'woff', 'ttf', 'otf'),
+}).unknown(false);
+
+const variableFontAxesSchema = Joi.object().pattern(
+  Joi.string().max(10),
+  Joi.object({
+    enabled: Joi.boolean(),
+    value: Joi.number(),
+    default: Joi.number(),
+    min: Joi.number(),
+    max: Joi.number(),
+  }).unknown(false)
+).max(20);
 
 const themeDesignSchema = Joi.object({
   mode: Joi.string().valid(...THEME_MODES),
@@ -48,39 +122,150 @@ const themeDesignSchema = Joi.object({
   headingFont: Joi.string().max(100).allow('', null),
   headingWeight: Joi.string().valid(...FONT_WEIGHTS).allow('', null),
   bodyWeight: Joi.string().valid(...FONT_WEIGHTS).allow('', null),
+  errorColor: hexColor,
+  cancelButtonColor: hexColor,
+  warningColor: hexColor,
+  successColor: hexColor,
+  infoColor: hexColor,
   lineHeight: Joi.string().max(10).allow('', null),
+  lineHeightH1: Joi.string().max(10).allow('', null),
+  lineHeightH2: Joi.string().max(10).allow('', null),
+  lineHeightH3: Joi.string().max(10).allow('', null),
+  lineHeightH4: Joi.string().max(10).allow('', null),
+  lineHeightH5: Joi.string().max(10).allow('', null),
+  lineHeightH6: Joi.string().max(10).allow('', null),
   letterSpacing: Joi.string().max(10).allow('', null),
   headingLetterSpacing: Joi.string().max(10).allow('', null),
+  fontVariationSettings: Joi.string().max(200).allow('', null),
   borderRadius: Joi.string().max(10).allow('', null),
   headerStyle: Joi.string().valid(...HEADER_STYLES),
   buttonStyle: Joi.string().valid(...BUTTON_STYLES),
   cardStyle: Joi.string().valid(...CARD_STYLES),
   backgroundStyle: Joi.string().valid(...BG_STYLES),
+  typographyScale: typographyScaleSchema,
+  mobileOverrides: mobileOverridesSchema,
+  customFonts: customFontsSchema,
+  variableFontAxes: variableFontAxesSchema,
 }).unknown(false);
 
 const navSchema = Joi.object({
   sticky: Joi.boolean(),
   showCategoryBar: Joi.boolean(),
+  bgColor: hexColor.allow('', null),
+  fgColor: hexColor.allow('', null),
+  logoText: safeText,
+  logoUrl: sectionImageUrl,
+  logoMaxWidth: Joi.string().max(30).allow('', null),
+  showStoreName: Joi.boolean(),
+  menuItems: safeText,
+  showMenu: Joi.boolean(),
+  showSearch: Joi.boolean(),
+  showCart: Joi.boolean(),
+  showWishlist: Joi.boolean(),
+  showAccount: Joi.boolean(),
+  actionsOrder: Joi.array().items(Joi.string().valid('search', 'cart', 'wishlist', 'account')).unique().max(4),
 }).unknown(false);
 
 const footerStyleSchema = Joi.object({
-  bgColor: hexColor,
-  fgColor: hexColor,
+  bgColor: hexColor.allow(''),
+  fgColor: hexColor.allow(''),
 }).unknown(false);
 
 const announcementStyleSchema = Joi.object({
-  bgColor: hexColor,
-  fgColor: hexColor,
+  bgColor: hexColor.allow(''),
+  fgColor: hexColor.allow(''),
   dismissible: Joi.boolean(),
 }).unknown(false);
 
+const imageFocus = Joi.string().valid('left', 'center', 'right', 'top', 'bottom');
+const heroSlideSchema = Joi.object({
+  eyebrow: safeText,
+  title: safeText,
+  subtitle: Joi.string().max(1000).allow('', null),
+  buttonText: safeText,
+  buttonLink: linkUrl,
+  secondaryButtonText: safeText,
+  secondaryButtonLink: linkUrl,
+  image: sectionImageUrl,
+  position: imageFocus.allow('', null),
+  color: hexColor.allow('', null),
+}).unknown(false);
+
+const padding = Joi.number().integer().min(0).max(240);
+const margin = Joi.number().integer().min(-240).max(240);
+
+const productBlockPlacementSchema = Joi.string().valid('before-options', 'before-specifications', 'after-details');
+const productDetailsOrderSchema = Joi.array().items(Joi.alternatives().try(
+  Joi.string().valid('title', 'metadata', 'price', 'summary', 'variants', 'purchase', 'specifications', 'description'),
+  Joi.string().pattern(/^custom:.{1,50}$/),
+)).min(1).max(20).unique();
+
+const heroBlockSchema = (depth = 0) => Joi.object({
+  id: Joi.string().max(50).required(),
+  type: Joi.string().valid('group', 'heading', 'text', 'button', 'media', 'collection', 'brand', 'tag', 'product', 'product-attribute', 'product-rating', 'availability', 'fulfillment', 'enquiry', 'newsletter', 'blog', 'page', 'gallery').required(),
+  text: Joi.string().max(1500).allow(''),
+  productPlacement: depth === 0 ? productBlockPlacementSchema : Joi.forbidden(),
+  href: linkUrl,
+  url: sectionImageUrl,
+  mobileUrl: sectionImageUrl,
+  mediaType: Joi.string().valid('image', 'video'),
+  mobileMediaType: Joi.string().valid('image', 'video'),
+  alt: safeText,
+  direction: Joi.string().valid('row', 'column'),
+  categorySlug: Joi.when('type', {
+    is: 'collection',
+    then: Joi.string().max(255).pattern(/^[^/\\?#\s]+$/u).allow(''),
+    otherwise: Joi.forbidden(),
+  }),
+  brandSlug: Joi.when('type', {
+    is: 'brand',
+    then: Joi.string().max(255).pattern(/^[^/\\?#\s]+$/u).allow(''),
+    otherwise: Joi.forbidden(),
+  }),
+  attributeName: Joi.when('type', {
+    is: 'product-attribute',
+    then: safeText,
+    otherwise: Joi.forbidden(),
+  }),
+  prefix: Joi.when('type', { is: 'product-attribute', then: Joi.string().max(100).allow(''), otherwise: Joi.forbidden() }),
+  suffix: Joi.when('type', { is: 'product-attribute', then: Joi.string().max(100).allow(''), otherwise: Joi.forbidden() }),
+  pageSlug: Joi.when('type', { is: 'page', then: Joi.string().max(255).pattern(/^[^/\\?#\s]+$/u).allow(''), otherwise: Joi.forbidden() }),
+  gallerySlug: Joi.when('type', { is: 'gallery', then: Joi.string().max(255).pattern(/^[^/\\?#\s]+$/u).allow(''), otherwise: Joi.forbidden() }),
+  blogSlug: Joi.when('type', {
+    is: 'blog',
+    then: Joi.string().max(255).pattern(/^[^/\\?#\s]+$/u).allow(''),
+    otherwise: Joi.forbidden(),
+  }),
+  productSlug: Joi.when('type', {
+    is: 'product',
+    then: Joi.string().max(255).pattern(/^[^/\\?#\s]+$/u).allow(''),
+    otherwise: Joi.forbidden(),
+  }),
+  tagSlug: Joi.when('type', {
+    is: 'tag',
+    then: Joi.string().max(255).pattern(/^[^/\\?#\s]+$/u).allow(''),
+    otherwise: Joi.forbidden(),
+  }),
+  children: depth < 3
+    ? Joi.when('type', { is: 'group', then: Joi.array().items(heroBlockSchema(depth + 1)).max(12).unique('id'), otherwise: Joi.forbidden() })
+    : Joi.forbidden(),
+}).unknown(false);
+
 const homepageSectionSchema = Joi.object({
+  tagSlugs: Joi.array().items(Joi.string().pattern(/^[a-z0-9-]+$/).max(140)).unique().max(12),
+  gallerySlug: Joi.string().pattern(/^[a-z0-9-]+$/).max(140).allow(''),
   id: Joi.string().max(50).required(),
   type: Joi.string().valid(...SECTION_TYPES).required(),
   enabled: Joi.boolean().required(),
+  heroBlocks: Joi.when('type', { is: Joi.valid('composed-hero', 'product-info', 'editorial-image-text'), then: Joi.array().items(heroBlockSchema()).max(12).unique('id'), otherwise: Joi.forbidden() }),
+  detailsBlockOrder: Joi.when('type', { is: 'product-info', then: productDetailsOrderSchema, otherwise: Joi.forbidden() }),
   title: safeText,
   subtitle: safeText,
   source: Joi.string().valid(...PRODUCT_SOURCES),
+  productIds: Joi.array().items(Joi.string().uuid()).unique().max(12),
+  pagePosition: Joi.string().valid('above', 'below'),
+  productScope: Joi.string().valid('category', 'store'),
+  saleLabel: Joi.string().trim().max(100).allow('', null),
   dataSourceKey: Joi.string().max(80).allow('', null),
   dataSourceSlug: Joi.string().max(140).allow('', null),
   count: Joi.number().integer().min(1).max(50),
@@ -91,32 +276,59 @@ const homepageSectionSchema = Joi.object({
   interval: Joi.number().integer().min(1000).max(30000),
   dynamic: Joi.boolean(),
   variant: Joi.string().max(50),
-  image: safeUrl,
+  image: sectionImageUrl,
+  imageFocus,
   imagePosition: Joi.string().valid('left', 'right', 'top', 'background'),
+  eyebrow: safeText,
   ctaText: safeText,
   ctaLink: linkUrl,
+  endDate: Joi.string().isoDate().allow('', null),
+  placement: Joi.string().valid('header', 'footer'),
+  textAlign: Joi.string().valid('left', 'center', 'right'),
+  verticalAlign: Joi.string().valid('top', 'center', 'bottom'),
+  widthMode: Joi.string().valid('container', 'narrow', 'full', 'custom'),
+  customMaxWidth: Joi.number().integer().min(320).max(3840),
+  minHeight: Joi.number().integer().min(0).max(1200),
+  paddingTop: padding,
+  paddingBottom: padding,
+  paddingLeft: padding,
+  paddingRight: padding,
+  marginTop: margin,
+  marginBottom: margin,
+  marginLeft: margin,
+  marginRight: margin,
+  backgroundColor: hexColor,
+  backgroundImage: sectionImageUrl,
+  backgroundSize: Joi.string().valid('cover', 'contain', 'auto', '100% 100%'),
+  backgroundPosition: Joi.string().valid('center', 'top', 'bottom', 'left', 'right', 'top left', 'top right', 'bottom left', 'bottom right'),
+  backgroundRepeat: Joi.string().valid('no-repeat', 'repeat', 'repeat-x', 'repeat-y'),
+  backgroundAttachment: Joi.string().valid('scroll', 'fixed', 'local'),
+  borderStyle: Joi.string().valid('none', 'solid', 'dashed', 'dotted', 'double'),
+  borderWidth: Joi.number().integer().min(0).max(24),
+  borderColor: hexColor,
+  borderRadius: Joi.number().integer().min(0).max(96),
+  boxShadow: Joi.string().valid('none', 'sm', 'md', 'lg', 'xl', '2xl', 'inner'),
+  hideOnMobile: Joi.boolean(),
+  hideOnDesktop: Joi.boolean(),
+  anchorId: Joi.string().max(100),
+  customClassName: Joi.string().max(200),
   mobileLayout: Joi.string().valid('stack', 'carousel', 'compact'),
+  slides: Joi.array().items(heroSlideSchema).max(12),
   items: Joi.array().items(Joi.object({
     title: safeText,
+    subtitle: Joi.string().max(1000).allow('', null),
     text: Joi.string().max(1000).allow('', null),
     author: safeText,
     role: safeText,
-    image: safeUrl,
+    image: sectionImageUrl,
     link: linkUrl,
+    kicker: safeText,
+    ctaText: safeText,
+    icon: Joi.string().max(50).allow('', null),
+    color: hexColor.allow('', null),
+    backgroundColor: hexColor.allow('', null),
+    accentColor: hexColor.allow('', null),
   }).unknown(false)).max(12),
-}).unknown(false);
-
-const heroSlideSchema = Joi.object({
-  eyebrow: safeText,
-  title: safeText,
-  subtitle: Joi.string().max(1000).allow('', null),
-  buttonText: safeText,
-  buttonLink: linkUrl,
-  secondaryButtonText: safeText,
-  secondaryButtonLink: linkUrl,
-  image: safeUrl.label('image'),
-  position: Joi.string().valid('left', 'center', 'right').allow('', null),
-  color: hexColor.allow('', null),
 }).unknown(false);
 
 const valuePropSchema = Joi.object({
@@ -126,6 +338,8 @@ const valuePropSchema = Joi.object({
 }).unknown(false);
 
 const promoBannerSchema = Joi.object({
+  id: Joi.string().max(100),
+  image: sectionImageUrl,
   kicker: safeText,
   title: safeText,
   subtitle: safeText,
@@ -150,18 +364,61 @@ const metaSchema = Joi.object({
   platformCompatibility: Joi.string().max(20).allow('', null),
 }).unknown(false);
 
+const pageLayoutSectionsSchema = (...types) => Joi.array().items(
+  homepageSectionSchema.keys({
+    type: Joi.string().valid('product-row', ...types).required(),
+    layout: Joi.string().valid('grid', 'grid-compact', 'carousel'),
+  }),
+).max(6);
+
+const pageProductRowsSchema = pageLayoutSectionsSchema();
+const contentPageLayoutSchema = pageLayoutSectionsSchema('editorial-image-text', 'faq', 'promo-banners');
+
+const pageSectionsSchema = (systemTypes) => Joi.array().items(
+  homepageSectionSchema.keys({ type: Joi.string().valid(...SECTION_TYPES, ...systemTypes).required() }),
+).max(20);
+
 const pageTemplateSchema = Joi.object({
+  productRows: contentPageLayoutSchema,
   layout: Joi.string().max(80).required(),
+  imageAlignment: Joi.string().valid('horizontal', 'vertical'),
+  showSKU: Joi.boolean(),
+  showStockBadge: Joi.boolean(),
   showTrustBadges: Joi.boolean(),
   showRelatedProducts: Joi.boolean(),
   showRecentlyViewed: Joi.boolean(),
   showStickyAddToCart: Joi.boolean(),
   showBreadcrumbs: Joi.boolean(),
+  addToCartLabel: safeText,
+  showBuyNowButton: Joi.boolean(),
+  buyNowLabel: safeText,
   productsPerRow: Joi.number().integer().min(1).max(6),
   filterLayout: Joi.string().valid('sidebar', 'drawer', 'topbar'),
 }).unknown(false);
 
+const alternatePageTemplates = (group, systemTypes) => buildAlternateTemplatesSchema(
+  TEMPLATE_ASSIGNMENT_KEYS[group],
+  Joi.object({
+    productRows: contentPageLayoutSchema,
+    sections: pageSectionsSchema(systemTypes),
+  }).unknown(true),
+);
+
+const productSectionTypes = ['product-info', 'product-reviews'];
+const categorySectionTypes = ['category-header', 'category-products'];
+
+const categoryPageTemplateSchema = Joi.object({
+  productRows: contentPageLayoutSchema,
+  sections: pageSectionsSchema(categorySectionTypes),
+  alternateTemplates: alternatePageTemplates('categoryPage', categorySectionTypes),
+  heroTitle: safeText,
+  headerLayout: Joi.string().valid('standard', 'cover', 'split'),
+  showSubcategories: Joi.boolean(),
+}).unknown(false);
+
 const brandPageTemplateSchema = Joi.object({
+  productRows: pageProductRowsSchema,
+  sections: pageSectionsSchema(['brands-header', 'brands-list']),
   layout: Joi.string().valid('standard', 'overlay', 'minimal').required(),
   title: safeText,
   subtitle: safeText,
@@ -178,6 +435,8 @@ const brandPageTemplateSchema = Joi.object({
 }).unknown(false);
 
 const cartPageTemplateSchema = Joi.object({
+  productRows: pageProductRowsSchema,
+  sections: pageSectionsSchema(['cart-main']),
   layout: Joi.string().valid('standard', 'compact').required(),
   showCrossSells: Joi.boolean(),
   showTrustBadges: Joi.boolean(),
@@ -185,12 +444,16 @@ const cartPageTemplateSchema = Joi.object({
 }).unknown(false);
 
 const accountPageTemplateSchema = Joi.object({
+  productRows: pageProductRowsSchema,
+  sections: pageSectionsSchema(['account-main']),
   layout: Joi.string().valid('tabs', 'sidebar').required(),
   orderCardStyle: Joi.string().valid('detailed', 'compact'),
   showSupportInfo: Joi.boolean(),
 }).unknown(false);
 
 const blogPageTemplateSchema = Joi.object({
+  productRows: contentPageLayoutSchema,
+  sections: pageSectionsSchema(['blog-header', 'blog-posts']),
   listLayout: Joi.string().valid('grid', 'list', 'masonry').required(),
   articleLayout: Joi.string().valid('standard', 'cover'),
   showAuthor: Joi.boolean(),
@@ -200,11 +463,26 @@ const blogPageTemplateSchema = Joi.object({
 const componentStyleSchema = Joi.object({
   variant: Joi.string().max(80).allow('', null),
   imageRatio: Joi.string().valid('1/1', '4/5', '4/3', '3/4', '16/9').allow('', null),
+  contentAlign: Joi.string().valid('left', 'center', 'right'),
+  imagePadding: Joi.string().valid('none', 'comfortable', 'spacious'),
+  titleLines: Joi.number().integer().min(1).max(4),
+  wishlistPosition: Joi.string().valid('top-left', 'top-right', 'bottom-left', 'bottom-right'),
+  actionPlacement: Joi.string().valid('footer', 'image-overlay'),
+  headerStyle: Joi.string().valid('stripe', 'plain', 'accent'),
+  fill: Joi.string().valid('paper', 'muted', 'transparent'),
+  focusStyle: Joi.string().valid('brand', 'glow', 'underline'),
+  labelStyle: Joi.string().valid('floating', 'placeholder'),
+  size: Joi.string().valid('small', 'medium'),
+  weight: Joi.string().valid('regular', 'bold', 'black'),
+  textTransform: Joi.string().valid('uppercase', 'none'),
+  letterSpacing: Joi.string().max(20).allow('', null),
   imageFit: Joi.string().valid('cover', 'contain').allow('', null),
   showBrand: Joi.boolean(),
   showCategory: Joi.boolean(),
   showRating: Joi.boolean(),
   showWishlist: Joi.boolean(),
+  showShare: Joi.boolean(),
+  showVariantPill: Joi.boolean(),
   showSaleCountdown: Joi.boolean(),
   showSubtitle: Joi.boolean(),
   showProductCount: Joi.boolean(),
@@ -216,7 +494,7 @@ const componentStyleSchema = Joi.object({
   radius: Joi.string().valid('none', 'small', 'medium', 'large', 'pill').allow('', null),
   shadow: Joi.string().valid('none', 'soft', 'medium', 'strong').allow('', null),
   density: Joi.string().valid('compact', 'comfortable', 'spacious').allow('', null),
-  ctaStyle: Joi.string().valid('button', 'text-link', 'hidden').allow('', null),
+  ctaStyle: Joi.string().valid('button', 'text-link', 'hidden', 'solid', 'soft', 'outline').allow('', null),
   imagePlacement: Joi.string().valid('left', 'right', 'top', 'background').allow('', null),
   titleSize: Joi.string().valid('small', 'medium', 'large').allow('', null),
 }).unknown(false);
@@ -229,6 +507,10 @@ const componentStylesSchema = Joi.object({
   trustCard: componentStyleSchema,
   reviewCard: componentStyleSchema,
   contentCard: componentStyleSchema,
+  cartItem: componentStyleSchema,
+  checkoutBlock: componentStyleSchema,
+  formControl: componentStyleSchema,
+  badgeChip: componentStyleSchema,
 }).unknown(false);
 
 const sectionPresetsSchema = Joi.object().pattern(
@@ -320,12 +602,27 @@ const packageSchema = Joi.object({
   }).unknown(false),
   dataSources: Joi.array().items(dataSourceSchema).max(12),
   pageTemplates: Joi.object({
-    product: pageTemplateSchema,
-    collection: pageTemplateSchema,
+    product: pageTemplateSchema.keys({
+      sections: pageSectionsSchema(productSectionTypes),
+      alternateTemplates: alternatePageTemplates('productPage', productSectionTypes),
+    }),
+    category: categoryPageTemplateSchema,
+    collection: pageTemplateSchema.keys({
+      sections: pageSectionsSchema(['catalog-header', 'catalog-products']),
+      showFilters: Joi.boolean(),
+      categoryDepth: Joi.number().integer().min(1).max(5),
+      showCategoryIcon: Joi.boolean(),
+    }),
     brand: brandPageTemplateSchema,
     cart: cartPageTemplateSchema,
     account: accountPageTemplateSchema,
     blog: blogPageTemplateSchema,
+    'checkout': Joi.object({ productRows: pageProductRowsSchema }).unknown(false),
+    'wishlist': Joi.object({ productRows: pageProductRowsSchema }).unknown(false),
+    'search': Joi.object({ productRows: pageProductRowsSchema }).unknown(false),
+    'not-found': Joi.object({ productRows: pageProductRowsSchema }).unknown(false),
+    'orders': Joi.object({ productRows: pageProductRowsSchema }).unknown(false),
+
     page: pageTemplateSchema,
   }).unknown(false),
   componentStyles: componentStylesSchema,
@@ -357,6 +654,8 @@ const idParamSchema = Joi.object({
 });
 
 module.exports = {
+  productBlockPlacementSchema,
+  productDetailsOrderSchema,
   packageSchema,
   applyRequestSchema,
   previewRequestSchema,

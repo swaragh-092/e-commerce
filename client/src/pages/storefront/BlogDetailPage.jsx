@@ -68,14 +68,17 @@ const BlogDetailPage = () => {
 
   const heroImage = post?.featuredImage?.url ? getMediaUrl(post.featuredImage.url) : '';
   const authorName = [post?.author?.firstName, post?.author?.lastName].filter(Boolean).join(' ');
+  const contentSummary = DOMPurify.sanitize(post?.content || '', { ALLOWED_TAGS: [], ALLOWED_ATTR: [] }).replace(/\s+/g, ' ').trim();
+  const seoDescription = post?.metaDescription || post?.summary || (contentSummary.length > 160 ? `${contentSummary.slice(0, 157)}...` : contentSummary) || 'Read this blog post.';
 
   return (
     <Container maxWidth={useCoverLayout ? 'xl' : 'lg'} sx={{ py: { xs: 4, md: 6 } }}>
       <PageSEO
         title={post?.metaTitle || post?.title || 'Blog'}
-        description={post?.metaDescription || post?.summary || 'Read this blog post.'}
+        description={seoDescription}
         image={heroImage || undefined}
-        url={typeof window !== 'undefined' ? window.location.href : undefined}
+        type="article"
+        articlePublishedTime={post?.publishedAt}
       />
 
       <Breadcrumbs sx={{ mb: 3 }}>

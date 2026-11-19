@@ -1,7 +1,7 @@
 import api from './api';
 
-export const getCategoryTree = async () => {
-    const response = await api.get('/categories');
+export const getCategoryTree = async (params) => {
+    const response = await api.get('/categories', { params });
     return response.data;
 };
 
@@ -37,8 +37,8 @@ export const deleteCategory = async (id) => {
 };
 
 // Alias used by storefront components (returns flat root-level categories or tree)
-export const getCategories = async () => {
-    const response = await api.get('/categories');
+export const getCategories = async (params) => {
+    const response = await api.get('/categories', { params });
     return response.data?.data || [];
 };
 

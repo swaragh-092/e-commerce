@@ -18,19 +18,21 @@ vi.mock('../../../services/adminService', () => ({ getSaleLabels: vi.fn() }));
 vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () => true }) }));
 vi.mock('../../../hooks/useSKUGenerator', () => ({ default: () => ({ generateProductSKU: () => 'SKU', generateVariantSKU: () => 'VSKU' }) }));
 const disabledFeatures = vi.hoisted(() => new Set());
-vi.mock('../../../hooks/useSettings', () => ({ useSettings: () => ({ settings: { features: { seo: false } } }), useCurrency: () => ({ symbol: '$', currency: 'USD', formatPrice: (value) => `$${value}` }), useFeature: (name) => !['productAssistant', 'seo'].includes(name) && !disabledFeatures.has(name), useFeatureVisible: (name) => !disabledFeatures.has(name), useFeaturesResolved: () => true }));
+const hiddenFeatures = vi.hoisted(() => new Set());
+vi.mock('../../../hooks/useSettings', () => ({ useSettings: () => ({ settings: { features: { seo: false } } }), useCurrency: () => ({ symbol: '$', currency: 'USD', formatPrice: (value) => `$${value}` }), useFeature: (name) => !['productAssistant', 'seo'].includes(name) && !disabledFeatures.has(name), useFeatureVisible: (name) => !disabledFeatures.has(name) && !hiddenFeatures.has(name), useFeaturesResolved: () => true }));
 vi.mock('../../../components/common/MediaPicker', () => ({ default: ({ open, onSelect, onClose }) => open ? <button type="button" onClick={() => {
   onSelect([{ id: 'media-1', url: '/uploads/product.jpg', originalName: 'Product photo' }]);
   onClose();
 }}>Choose product photo</button> : null }));
 vi.mock('../../../components/admin/UnitSelector', () => ({ default: () => null }));
 vi.mock('../../../components/admin/ProductCustomTabs', () => ({ default: () => null }));
+vi.mock('../../../components/admin/ProductRelatedPicker', () => ({ default: () => null }));
 vi.mock('../../../components/admin/ProductTaxConfig', () => ({ default: () => null }));
 vi.mock('../../../components/admin/ProductComboBuilder', () => ({ default: () => <div>Bundle builder</div> }));
-vi.mock('../../../components/admin/ProductVariantsPanel', () => ({ default: ({ onStockTotalChange }) => <div>Variant editor<button type="button" onClick={() => onStockTotalChange(14, 2, undefined, 2)}>Update variant stock</button></div> }));
+vi.mock('../../../components/admin/ProductVariantsPanel', () => ({ default: ({ onStockTotalChange, pricingEnabled }) => <div data-testid="variant-editor" data-pricing-enabled={pricingEnabled}>Variant editor<button type="button" onClick={() => onStockTotalChange(14, 2, undefined, 2)}>Update variant stock</button><button type="button" onClick={() => onStockTotalChange(14, 1, undefined, 1, [{ id: 'v', stockQty: 14, reservedQty: 2, isActive: true, _dirty: true }])}>Draft variant stock</button><button type="button" onClick={() => onStockTotalChange(0, 0, undefined, 1, [{ id: 'v', stockQty: 5, reservedQty: 2, isActive: false, _dirty: true }])}>Draft variant disabled</button></div> }));
 
 const product = { id: 'product', name: 'Test product', slug: 'test-product', type: 'simple', price: 200, quantity: 10, requiresShipping: false, status: 'draft', variants: [], comboItems: [], categories: [], images: [] };
-const mount = (id = 'product') => render(<MemoryRouter initialEntries={[`/admin/products/${id}/edit`]}><NotificationProvider><Routes><Route path="/admin/products/:id/edit" element={<ProductEditPage />} /></Routes></NotificationProvider></MemoryRouter>);
+const mount = (id = 'product', search = '') => render(<MemoryRouter initialEntries={[`/admin/products/${id}/edit${search}`]}><NotificationProvider><Routes><Route path="/admin/products/:id/edit" element={<ProductEditPage />} /></Routes></NotificationProvider></MemoryRouter>);
 const type = async (label) => {
   fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Product Type' }));
   fireEvent.click(screen.getByRole('option', { name: label, exact: true }));
@@ -40,6 +42,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   getTags.mockResolvedValue({ data: [] });
   disabledFeatures.clear();
+  hiddenFeatures.clear();
   getCategoryTree.mockResolvedValue({ data: [] });
   brandService.getBrands.mockResolvedValue({ data: { data: [] } });
   getSaleLabels.mockResolvedValue({ data: { data: [] } });
@@ -49,6 +52,51 @@ beforeEach(() => {
 });
 
 describe('product type and inventory editor', () => {
+  it.each([
+    { pricing: false, showPrices: false },
+    { pricing: true, showPrices: false },
+    { pricing: true, showPrices: true },
+  ])('respects admin price visibility in variant editing (pricing=$pricing, showPrices=$showPrices)', async ({ pricing, showPrices }) => {
+    if (!pricing) disabledFeatures.add('pricing');
+    if (!showPrices) hiddenFeatures.add('pricing');
+    getProductById.mockResolvedValue({ data: { ...product, type: 'variable' } });
+    mount(); await loaded();
+    expect(screen.getByTestId('variant-editor')).toHaveAttribute('data-pricing-enabled', String(pricing && showPrices));
+  });
+
+  it('uses standalone stock for a Simple product with old variant rows and an old alert link', async () => {
+    getProductById.mockResolvedValue({ data: { ...product, quantity: 50, reservedQty: 27, variants: [
+      { id: 'warned', sku: 'IGA-LOW', stockQty: 22, reservedQty: 19 },
+      { id: 'other', sku: 'IGA-OTHER', stockQty: 28, reservedQty: 8 },
+    ] } });
+    mount('product', '?variantId=warned'); await loaded();
+    expect(screen.queryByTestId('variant-editor')).not.toBeInTheDocument();
+    expect(screen.getByText(/On hand:/)).toHaveTextContent('On hand: 50 · Reserved: 27 · Available to sell: 23');
+    expect(screen.queryByRole('table', { name: 'Variant inventory stock' })).not.toBeInTheDocument();
+    expect(screen.getByRole('spinbutton', { name: /Stock Quantity/ })).not.toHaveAttribute('readonly');
+    expect(screen.getByText(/previous variant alert no longer applies/)).toBeInTheDocument();
+  });
+  it('shows available stock after reservations for a simple product', async () => {
+    getProductById.mockResolvedValue({ data: { ...product, quantity: 30, reservedQty: 26 } });
+    mount(); await loaded();
+    expect(screen.getByLabelText('Inventory stock breakdown')).toHaveTextContent('On hand: 30');
+    expect(screen.getByLabelText('Inventory stock breakdown')).toHaveTextContent('Reserved: 26');
+    expect(screen.getByLabelText('Inventory stock breakdown')).toHaveTextContent('Available to sell: 4');
+  });
+  it('keeps Simple product stock independent when every old variant is disabled', async () => {
+    getProductById.mockResolvedValue({ data: { ...product, quantity: 50, variants: [{ stockQty: 22, reservedQty: 19, isActive: false }] } });
+    mount(); await loaded();
+    expect(screen.getByLabelText('Stock Quantity *')).toHaveValue(50);
+    const summary = screen.getByLabelText('Inventory stock breakdown');
+    expect(summary).toHaveTextContent('Available to sell: 50');
+    expect(summary).not.toHaveTextContent('Disabled variants:');
+  });
+  it('explains that disabling a product retains its inventory and reservations', async () => {
+    getProductById.mockResolvedValue({ data: { ...product, isEnabled: false, quantity: 30, reservedQty: 26 } });
+    mount(); await loaded();
+    expect(screen.getByLabelText('Inventory stock breakdown')).toHaveTextContent('Disabled product');
+    expect(screen.getByLabelText('Inventory stock breakdown')).toHaveTextContent('Reserved: 26');
+  });
   it('creates a catalog product without price or shipping measurements', async () => {
     disabledFeatures.add('pricing');
     disabledFeatures.add('shipping');
@@ -107,6 +155,25 @@ describe('product type and inventory editor', () => {
     await waitFor(() => expect(updateProduct).toHaveBeenCalled());
     expect(updateProduct.mock.calls[0][1]).not.toHaveProperty('quantity');
   });
+  it.each([
+    ['Draft variant stock', 14, 'Available to sell: 12'],
+    ['Draft variant disabled', 0, 'Disabled variants: 5 on hand, 2 reserved'],
+  ])('preserves %s in the summary after saving parent details', async (action, total, text) => {
+    const persisted = { ...product, type: 'variable', variants: [{ id: 'v', stockQty: 5, reservedQty: 2, isActive: true }] };
+    getProductById.mockResolvedValue({ data: persisted });
+    updateProduct.mockResolvedValue({ data: persisted });
+    mount(); await loaded();
+    fireEvent.click(screen.getByRole('button', { name: action }));
+    const summary = screen.getByLabelText('Inventory stock breakdown');
+    expect(summary).toHaveTextContent(text);
+    expect(summary).toHaveTextContent('Includes unsaved variant changes');
+    fireEvent.change(screen.getByRole('textbox', { name: /Product Name/ }), { target: { value: 'Updated details' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
+    await screen.findByText('Product updated successfully.');
+    expect(summary).toHaveTextContent(text);
+    expect(summary).toHaveTextContent('Includes unsaved variant changes');
+    expect(screen.getByLabelText('Total variant stock')).toHaveValue(total);
+  });
   it('requires saving the Variable type before allowing variant operations', async () => {
     getProductById.mockResolvedValue({ data: { ...product, quantity: 0 } });
     mount(); await loaded(); await type('Variable Product');
@@ -127,6 +194,17 @@ describe('product type and inventory editor', () => {
     await waitFor(() => expect(updateProduct).toHaveBeenCalledWith('product', expect.objectContaining({ type: 'variable', confirmInventoryReset: true })));
     expect(updateProduct.mock.calls[0][1]).not.toHaveProperty('quantity');
   });
+  it('confirms clearing historical variant stock when Simple stock is already zero', async () => {
+    getProductById.mockResolvedValue({ data: { ...product, quantity: 0, variants: [{ id: 'old', stockQty: 50, isActive: true }] } });
+    updateProduct.mockResolvedValue({ data: { ...product, type: 'variable', quantity: 0, variants: [{ id: 'old', stockQty: 0, isActive: true }] } });
+    mount(); await loaded(); await type('Variable Product');
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Change how stock is managed?' }));
+    expect(dialog.getByText(/Historical variant stock will also be cleared/)).toBeInTheDocument();
+    fireEvent.click(dialog.getByRole('button', { name: 'Change type and clear stock' }));
+    await waitFor(() => expect(updateProduct).toHaveBeenCalledWith('product', expect.objectContaining({ type: 'variable', confirmInventoryReset: true })));
+    expect(await screen.findByLabelText('Total variant stock')).toHaveValue(0);
+  });
   it('blocks switching away from Variable while inactive variants still exist', async () => {
     getProductById.mockResolvedValue({ data: { ...product, type: 'variable', variants: [{ stockQty: 10, isActive: false }] } });
     mount(); await loaded(); await type('Simple Product');
@@ -134,15 +212,25 @@ describe('product type and inventory editor', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('including inactive');
     expect(screen.getByLabelText('Total variant stock')).toHaveValue(0);
   });
+  it('can revert an unsaved Variable selection back to the saved Simple type with historical rows', async () => {
+    getProductById.mockResolvedValue({ data: { ...product, variants: [{ id: 'old', stockQty: 5 }] } });
+    mount(); await loaded();
+    await type('Variable Product');
+    await type('Simple Product');
+    expect(screen.getByRole('combobox', { name: 'Product Type' })).toHaveTextContent('Simple Product');
+    expect(screen.getByLabelText('Stock Quantity *')).toHaveValue(10);
+    expect(updateProduct).not.toHaveBeenCalled();
+  });
   it('lets legacy Simple products with variants be corrected without discarding them', async () => {
     getProductById.mockResolvedValue({ data: { ...product, variants: [{ stockQty: 10 }] } });
-    updateProduct.mockResolvedValue({ data: { ...product, type: 'variable', variants: [{ stockQty: 10 }] } });
+    updateProduct.mockResolvedValue({ data: { ...product, type: 'variable', variants: [{ stockQty: 0 }] } });
     mount(); await loaded();
-    fireEvent.click(screen.getByRole('button', { name: 'Use Variable Product' }));
+    await type('Variable Product');
     fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Change type and clear stock' }));
     expect(await screen.findByText('Variant editor')).toBeInTheDocument();
-    expect(screen.getByLabelText('Total variant stock')).toHaveValue(10);
-    expect(updateProduct.mock.calls[0][1]).not.toHaveProperty('confirmInventoryReset');
+    expect(screen.getByLabelText('Total variant stock')).toHaveValue(0);
+    expect(updateProduct.mock.calls[0][1]).toHaveProperty('confirmInventoryReset', true);
   });
   it.each([
     ['no', []],
@@ -151,15 +239,14 @@ describe('product type and inventory editor', () => {
   ])('saves a photo on a Simple product with %s variants without changing type or stock', async (_, variants) => {
     getProductById.mockResolvedValue({ data: { ...product, variants } });
     mount(); await loaded();
-    if (variants.length) expect(screen.getByLabelText('Stock Quantity *')).toHaveAttribute('readonly');
+    expect(screen.getByLabelText('Stock Quantity *')).not.toHaveAttribute('readonly');
     fireEvent.click(screen.getByRole('button', { name: 'Add Product Media' }));
     fireEvent.click(screen.getByRole('button', { name: 'Choose product photo' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
     await waitFor(() => expect(updateProduct).toHaveBeenCalled());
     const payload = updateProduct.mock.calls[0][1];
     expect(payload).toMatchObject({ type: 'simple', images: [expect.objectContaining({ mediaId: 'media-1', url: '/uploads/product.jpg' })] });
-    if (variants.length) expect(payload).not.toHaveProperty('quantity');
-    else expect(payload.quantity).toBe(product.quantity);
+    expect(payload.quantity).toBe(product.quantity);
     expect(payload).not.toHaveProperty('variants');
     expect(screen.queryByText('Variant editor')).not.toBeInTheDocument();
   });

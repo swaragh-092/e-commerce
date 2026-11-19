@@ -1,7 +1,8 @@
+import { fetchStaffPicks, PRODUCT_SOURCE_PARAMS, usesProductRowSource } from '../../../utils/productRowSources';
 import { useContext, useEffect, useMemo, useState } from 'react';
 import {
   Box, Typography, Button, Grid, Stack, Badge, IconButton,
-  AppBar, Toolbar, ThemeProvider, CssBaseline, createTheme,
+  AppBar, Toolbar, ThemeProvider, createTheme, Alert,
 } from '@mui/material';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import SearchIcon from '@mui/icons-material/Search';
@@ -10,9 +11,11 @@ import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { SettingsContext } from '../../../context/ThemeContext';
+import { DesignTokensContext, SettingsContext } from '../../../context/ThemeContext';
 import { buildStorefrontCssVariables, buildStorefrontTheme } from '../../../utils/theme';
+import { resolveDesignTokens } from '../../../utils/designTokens';
 import { getStoreName } from '../../../utils/store';
+import { getPageSections, getPageProductRows, PAGE_SETTINGS_GROUPS } from '../../../utils/designerSections';
 import SectionRenderer from '../../storefront/sections/SectionRenderer';
 import StorefrontFooter from '../../layout/StorefrontFooter';
 import api from '../../../services/api';
@@ -20,6 +23,7 @@ import { getProducts } from '../../../services/productService';
 import { getCategories } from '../../../services/categoryService';
 import MenuService from '../../../services/menuService';
 import PageService from '../../../services/pageService';
+import StoreHeaderLogo from '../../../components/layout/StoreHeaderLogo';
 import { useBrands } from '../../../context/BrandContext';
 import { needsCategoryData, needsProductData } from '../../storefront/sections/sectionRegistry';
 import { buildSectionRendererData } from '../../storefront/sections/sectionData';
@@ -44,15 +48,15 @@ const useMockRenderers = () => {
 };
 
 const PREVIEW_WIDTHS = { desktop: '100%', tablet: 768, mobile: 375 };
+const createPreviewTheme = (design) => {
+  const theme = createTheme(buildStorefrontTheme(design));
+  const viewportUp = theme.breakpoints.up;
+  theme.breakpoints.up = (key) => viewportUp(key).replace('@media', '@container store-preview');
+  return theme;
+};
+
 const API_BUILDER_TIMEOUT_MS = 5000;
 
-const PRODUCT_SOURCE_PARAMS = {
-  newest: { sort: 'newest' },
-  featured: { featured: true },
-  bestSellers: { sort: 'best-selling' },
-  sale: { sale: true },
-  recommended: { sort: 'recommended' },
-};
 
 const num = (value, fallback = 8) => {
   const parsed = Number.parseInt(value, 10);
@@ -235,99 +239,32 @@ const extractDataSourceArray = (res, section, count) => {
   return count ? rows.slice(0, count) : rows;
 };
 
-const fetchPreviewProducts = (section) => {
-  if (section.dataSourceSlug) {
+const fetchPreviewProducts = (section, category) => {
+  if (section.source === 'staffPicks') return fetchStaffPicks(section, getProducts);
+  if (!usesProductRowSource(section)) {
     return api.get('/api-builder/public/' + section.dataSourceSlug, { timeout: API_BUILDER_TIMEOUT_MS });
   }
-  return getProducts(getProductParams(section));
+  return getProducts({ ...getProductParams(section), ...(category && { category }) });
 };
 
 const getProductParams = (section) => ({
   ...(PRODUCT_SOURCE_PARAMS[section.source] || {}),
   ...(section.query || {}),
+  ...(section.source === 'sale' && section.saleLabel && { saleLabel: section.saleLabel }),
   limit: num(section.count, 8),
   status: 'published',
 });
 
-const getPageSections = (settingsObj, activePg, defaultLayoutSections) => {
-  if (activePg === 'home') {
-    return settingsObj?.homepage?.sections || defaultLayoutSections || [];
-  }
-  if (activePg === 'product') {
-    return settingsObj?.productPage?.sections || [
-      { id: 'prod-info',    type: 'product-info',    enabled: true },
-      { id: 'prod-trust',   type: 'value-props',     enabled: true },
-      { id: 'prod-reviews', type: 'product-reviews', enabled: true },
-      { id: 'prod-row',     type: 'product-row',     enabled: true, title: 'You May Also Like', source: 'featured', count: 3 },
-      { id: 'prod-recent',  type: 'recently-viewed', enabled: true },
-    ];
-  }
-  if (activePg === 'category') {
-    return settingsObj?.categoryPage?.sections || [
-      { id: 'cat-header',   type: 'category-header',   enabled: true },
-      { id: 'cat-products', type: 'category-products', enabled: true },
-      { id: 'cat-recent',   type: 'recently-viewed',   enabled: true },
-    ];
-  }
-  if (activePg === 'collection') {
-    return settingsObj?.catalog?.sections || [
-      { id: 'catalog-header',   type: 'catalog-header',   enabled: true },
-      { id: 'catalog-products', type: 'catalog-products', enabled: true },
-      { id: 'catalog-recent',   type: 'recently-viewed',  enabled: true },
-    ];
-  }
-  if (activePg === 'brand') {
-    return settingsObj?.brandsPage?.sections || [
-      { id: 'brands-header', type: 'brands-header', enabled: true },
-      { id: 'brands-list',   type: 'brands-list',   enabled: true },
-    ];
-  }
-  if (activePg === 'blog') {
-    return settingsObj?.blogPage?.sections || [
-      { id: 'blog-header', type: 'blog-header', enabled: true },
-      { id: 'blog-posts',  type: 'blog-posts',  enabled: true },
-    ];
-  }
-  if (activePg === 'account') {
-    return settingsObj?.accountPage?.sections || [
-      { id: 'account-main', type: 'account-main', enabled: true },
-    ];
-  }
-  if (activePg === 'cart') {
-    return settingsObj?.cartPage?.sections || [
-      { id: 'cart-main',   type: 'cart-main',       enabled: true },
-      { id: 'cart-recent', type: 'recently-viewed', enabled: true },
-    ];
-  }
-  if (activePg === 'checkout') {
-    return settingsObj?.checkoutPage?.sections || [
-      { id: 'checkout-main', type: 'checkout-main', enabled: true },
-    ];
-  }
-  if (activePg === 'wishlist') {
-    return settingsObj?.wishlistPage?.sections || [
-      { id: 'wishlist-main', type: 'wishlist-main', enabled: true },
-    ];
-  }
-  if (activePg === 'search') {
-    return settingsObj?.searchPage?.sections || [
-      { id: 'search-main', type: 'search-main', enabled: true },
-    ];
-  }
-  if (activePg === 'not-found') {
-    return settingsObj?.notFoundPage?.sections || [
-      { id: 'not-found-main', type: 'not-found-main', enabled: true },
-    ];
-  }
-  if (activePg === 'orders') {
-    return settingsObj?.ordersPage?.sections || [
-      { id: 'orders-main', type: 'orders-main', enabled: true },
-    ];
-  }
-  return [];
-};
-
 // ─── Main Component ──────────────────────────────────────────────────────────
+
+const getTemplatePreviewSections = (settings, page) => {
+  const rows = getPageProductRows(settings, page).map((row) => ({ ...row, pageProductRow: true }));
+  return [
+    ...rows.filter(({ pagePosition }) => pagePosition === 'above'),
+    ...getPageSections(settings, page),
+    ...rows.filter(({ pagePosition }) => pagePosition !== 'above'),
+  ];
+};
 
 const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSettings, componentStyles: liveComponentStyles, selectedSectionId, onSelectSection, onSelectComponent, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus, onAddSectionAt, onReorderSection, activePage = "home", compareMode = false }) => {
   const design = packageData?.design?.theme || {};
@@ -336,17 +273,34 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
   const parentSettingsContext = useContext(SettingsContext) || {};
   const mockRenderers = useMockRenderers();
   const sections = useMemo(() => {
-    return getPageSections(currentSettings || parentSettingsContext.settings, activePage, layout.homepageSections);
-  }, [layout.homepageSections, activePage, currentSettings, parentSettingsContext.settings]);
+    if (activePage === 'home' && Array.isArray(layout.homepageSections)) {
+      return layout.homepageSections;
+    }
+    const pageGroup = PAGE_SETTINGS_GROUPS[activePage];
+    const templatePage = packageData?.pageTemplates?.[activePage];
+    const settings = templatePage ? { [pageGroup]: templatePage } : currentSettings || parentSettingsContext.settings;
+    return getTemplatePreviewSections(settings, activePage);
+  }, [layout.homepageSections, packageData?.pageTemplates, activePage, currentSettings, parentSettingsContext.settings]);
   const { brands: contextBrands = [], loading: brandsLoading = false } = useBrands();
   const [resolvedData, setResolvedData] = useState({ categories: [], products: {} });
   const [navigationData, setNavigationData] = useState({ headerMenu: null, topLinks: [], categories: [] });
   const [dataLoading, setDataLoading] = useState(false);
   const [dragState, setDragState] = useState(null);
+  const previewCategory = activePage === 'category'
+    ? navigationData.categories.find(({ slug }) => slug)?.slug
+    : undefined;
 
-  const previewTheme = useMemo(() => createTheme(buildStorefrontTheme(design)), [design]);
+  const previewTheme = useMemo(() => createPreviewTheme(design), [design]);
 
   const width = PREVIEW_WIDTHS[mode] || '100%';
+  const isSectionVisible = (section, productPage) => {
+    if (section.enabled === false) return false;
+    if (activePage !== 'product') return true;
+    if (section.type === 'value-props') return productPage?.showTrustBadges !== false;
+    if (section.type === 'product-row') return section.pageProductRow || productPage?.showRelatedProducts !== false;
+    if (section.type === 'recently-viewed') return productPage?.showRecentlyViewed !== false;
+    return true;
+  };
   const visibleSections = useMemo(() => sections.filter((section) => section.enabled !== false), [sections]);
   const productSections = useMemo(() => visibleSections.filter((section) => needsProductData(section) || section.type === 'product-info'), [visibleSections]);
   const needsCategories = useMemo(() => visibleSections.some((section) => needsCategoryData(section)), [visibleSections]);
@@ -382,7 +336,9 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
         return;
       }
       setDataLoading(true);
-      const productFetches = productSections.map((section) => fetchPreviewProducts(section));
+      const productFetches = productSections.map((section) => fetchPreviewProducts(
+        section, section.productScope !== 'store' ? previewCategory : undefined,
+      ));
       const categoryFetch = needsCategories ? getCategories() : Promise.resolve(null);
       const results = await Promise.allSettled([...productFetches, categoryFetch]);
       if (cancelled) return;
@@ -390,9 +346,9 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
       const categoryResult = results[productFetches.length];
       const products = {};
       productSections.forEach((section, index) => {
-        products[section.id] = section.dataSourceSlug
+        products[section.id] = !usesProductRowSource(section)
           ? extractDataSourceArray(productResults[index], section, num(section.count, 8))
-          : extractArray(productResults[index], num(section.count, 8));
+          : extractArray(productResults[index], section.source === 'staffPicks' ? undefined : num(section.count, 8));
       });
       setResolvedData({ products, categories: extractArray(categoryResult) });
       setDataLoading(false);
@@ -404,7 +360,7 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
       }
     });
     return () => { cancelled = true; };
-  }, [needsCategories, productSections]);
+  }, [needsCategories, previewCategory, productSections]);
 
   const buildSectionData = (section, demoData, settingsSnapshot = null) => {
     const baseData = buildSectionRendererData({
@@ -428,6 +384,7 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
       baseData.render = () => mockRenderer(scopedSettings, {
         section,
         products: resolvedData.products?.[section.id] || [],
+        previewMode: mode,
         onSelectSection,
         onSelectComponent,
       });
@@ -445,9 +402,16 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
       ...(settingsSnapshot || {}),
     };
     const cssVariables = buildStorefrontCssVariables(scopedSettings.theme || scopedSettings);
+    const previewTokens = resolveDesignTokens(scopedSettings.theme || scopedSettings);
     const scopedContext = {
       ...parentSettingsContext,
       settings: scopedSettings,
+    };
+    const scopedDesignTokens = {
+      tokens: previewTokens,
+      themeObj: scopedSettings.theme || scopedSettings,
+      cssVariables,
+      isAdminRoute: false,
     };
 
     const announcementSettings = { ...(scopedSettings.announcement || {}), ...announcementStyle };
@@ -463,7 +427,7 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
     const announcementText = announcementSettings.text || demoData.announcementText;
     const showAnnouncement = announcementText && announcementSettings.enabled !== false && announcementSettings.enabled !== 'false';
     const sectionRows = sectionList.map((section, originalIndex) => ({ section, originalIndex }));
-    const templateSectionRows = sectionRows.filter(({ section }) => section.enabled !== false && section.placement !== 'footer');
+    const templateSectionRows = sectionRows.filter(({ section }) => section.enabled !== false && !['footer', 'header'].includes(section.placement));
     const footerSectionRows = sectionRows.filter(({ section }) => section.enabled !== false && section.placement === 'footer');
     const firstFooterIndex = sectionList.findIndex((section) => section.placement === 'footer');
     const footerStartIndex = firstFooterIndex === -1 ? sectionList.length : firstFooterIndex;
@@ -505,10 +469,11 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
     const handleCanvasDragEnd = () => setDragState(null);
 
     return (
+    <DesignTokensContext.Provider value={scopedDesignTokens}>
     <SettingsContext.Provider value={scopedContext}>
       <ThemeProvider theme={themeObj}>
-        <CssBaseline enableColorScheme />
-        <Box style={cssVariables} sx={{ bgcolor: 'background.default', minHeight: 400, overflow: 'hidden' }}>
+
+        <Box style={cssVariables} sx={{ containerType: 'inline-size', containerName: 'store-preview', bgcolor: 'background.default', minHeight: 400, overflow: 'hidden' }}>
         {/* Announcement Bar */}
         {showAnnouncement && (
           <Box
@@ -554,12 +519,7 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
               onClick={(event) => { event.stopPropagation(); onSelectComponent?.('headerLogo'); }}
               sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, minWidth: 0, cursor: onSelectComponent ? 'pointer' : 'default', px: 0.5, borderRadius: 1, '&:hover': onSelectComponent ? { outline: '2px dashed #ffffff' } : undefined }}
             >
-              {logoUrl ? (
-                <Box component="img" src={logoUrl} alt={storeName} sx={{ maxWidth: navSettings.logoMaxWidth || 140, maxHeight: 36, objectFit: 'contain' }} />
-              ) : null}
-              {navSettings.showStoreName !== false && (
-                <Typography variant="h6" fontWeight={700} color="inherit" noWrap sx={{ maxWidth: 180 }}>{storeName}</Typography>
-              )}
+              <StoreHeaderLogo src={logoUrl} name={storeName} maxWidth={navSettings.logoMaxWidth} showName={navSettings.showStoreName !== false} />
             </Box>
             {navSettings.showMenu !== false && (
               <Stack
@@ -618,6 +578,11 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
             </Box>
           )}
         </AppBar>
+        {sectionRows.filter(({ section }) => section.placement === 'header' && section.enabled !== false).map(({ section }) => (
+          <SectionRenderer key={section.id} section={section} lazy={false}
+            mode={onSelectSection ? 'preview' : 'live'} onSelect={() => onSelectSection?.(section)}
+            onInlineBlockFocus={onInlineBlockFocus} />
+        ))}
         
         {/* Page Content */}
         {onAddSectionAt && (
@@ -639,6 +604,10 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
             onDrop={handleCanvasDrop}
             onDragEnd={handleCanvasDragEnd}
           >
+            {onSelectSection && section.type === 'product-row' && !dataLoading
+              && resolvedData.products[section.id]?.length === 0 && (
+                <Alert severity="warning">No products were returned for this section. Check the selected product source.</Alert>
+              )}
             <SectionRenderer
               section={section}
               mode={onSelectSection ? 'preview' : 'live'}
@@ -727,6 +696,7 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
         </Box>
       </ThemeProvider>
     </SettingsContext.Provider>
+    </DesignTokensContext.Provider>
     );
   };
 
@@ -743,17 +713,23 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
       valueProps: demo.valueProps || [],
       promoBanners: demo.promoBanners || [],
     },
-    productPage: packageData?.productPage || {},
+    productPage: packageData?.pageTemplates?.product || packageData?.productPage || {},
     categoryPage: packageData?.categoryPage || {},
     catalog: packageData?.catalog || {},
     blogPage: packageData?.blogPage || {},
     brandsPage: packageData?.brandsPage || {},
     accountPage: packageData?.accountPage || {},
+    cartPage: packageData?.cartPage || {},
+    checkoutPage: packageData?.checkoutPage || {},
+    wishlistPage: packageData?.wishlistPage || {},
+    searchPage: packageData?.searchPage || {},
+    notFoundPage: packageData?.notFoundPage || {},
+    ordersPage: packageData?.ordersPage || {},
   };
 
   if (compareMode && currentSettings) {
-    const currentTheme = createTheme(buildStorefrontTheme(currentSettings.theme || {}));
-    const currentSections = getPageSections(currentSettings, activePage, sections);
+    const currentTheme = createPreviewTheme(currentSettings.theme || {});
+    const currentSections = getTemplatePreviewSections(currentSettings, activePage);
     const currentDemo = {
       announcementText: currentSettings.announcement?.text || '',
       heroSlides: currentSettings.homepage?.heroSlides || [],
@@ -766,12 +742,12 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
     };
 
     return (
-      <Box sx={{ display: 'flex', gap: 1, overflow: 'auto' }}>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
+      <Box sx={{ display: 'flex', gap: 1, overflow: 'auto', justifyContent: 'safe center' }}>
+        <Box sx={{ flex: mode === 'desktop' ? 1 : '0 0 auto', width, minWidth: 0 }}>
           <Typography variant="caption" fontWeight={700} sx={{ display: 'block', textAlign: 'center', py: 0.5, bgcolor: 'action.hover' }}>Current</Typography>
           {previewContent(currentTheme, currentSections, currentDemo, 'Current', currentLayout, currentSettings)}
         </Box>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box sx={{ flex: mode === 'desktop' ? 1 : '0 0 auto', width, minWidth: 0 }}>
           <Typography variant="caption" fontWeight={700} sx={{ display: 'block', textAlign: 'center', py: 0.5, bgcolor: 'action.hover' }}>Template</Typography>
           {previewContent(previewTheme, sections, demo, 'Template', layout, templateSettings)}
         </Box>
@@ -780,7 +756,7 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
   }
 
   return (
-    <Box sx={{ width, mx: 'auto', transition: 'width 0.3s ease', overflow: 'hidden', border: mode !== 'desktop' ? '1px solid' : 'none', borderColor: 'divider', borderRadius: mode !== 'desktop' ? 2 : 0 }}>
+    <Box sx={{ width, maxWidth: '100%', mx: 'auto', overflow: 'hidden', border: mode !== 'desktop' ? '1px solid' : 'none', borderColor: 'divider', borderRadius: mode !== 'desktop' ? 2 : 0 }}>
       {previewContent(previewTheme, sections, demo, 'Preview', layout, templateSettings)}
     </Box>
   );

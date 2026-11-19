@@ -1,6 +1,6 @@
 'use strict';
 
-const { Op } = require('sequelize');
+const { Op, QueryTypes } = require('sequelize');
 const { sequelize, NewsletterCampaign, NewsletterSubscriber, NotificationQueue } = require('../index');
 const NotificationService = require('../notification/notification.service');
 const AppError = require('../../utils/AppError');
@@ -62,15 +62,29 @@ const cancel = async (id) => sequelize.transaction(async (transaction) => {
 
 const list = async () => {
   const campaigns = await NewsletterCampaign.findAll({ order: [['createdAt', 'DESC']], limit: 30 });
-  const results = [];
-  for (const campaign of campaigns) {
-    const counts = await NotificationQueue.findAll({
-      where: { dedupeKey: { [Op.like]: `newsletter:${campaign.id}:%` } },
-      attributes: ['status', [sequelize.fn('COUNT', sequelize.col('id')), 'count']], group: ['status'], raw: true,
-    });
-    results.push({ ...campaign.toJSON(), delivery: Object.fromEntries(counts.map((row) => [row.status, Number(row.count)])) });
+  if (!campaigns.length) return [];
+
+  const replacements = Object.fromEntries(campaigns.map((campaign, index) => [`campaignId${index}`, campaign.id]));
+  const campaignParams = Object.keys(replacements).map((name) => `:${name}`).join(', ');
+  const counts = await sequelize.query(`
+    SELECT split_part(dedupe_key, ':', 2) AS campaign_id, status, COUNT(*) AS count
+    FROM notification_queue
+    WHERE dedupe_key LIKE 'newsletter:%'
+      AND split_part(dedupe_key, ':', 2) IN (${campaignParams})
+    GROUP BY split_part(dedupe_key, ':', 2), status
+  `, { replacements, type: QueryTypes.SELECT });
+
+  const deliveryByCampaign = new Map();
+  for (const row of counts) {
+    const delivery = deliveryByCampaign.get(row.campaign_id) || {};
+    delivery[row.status] = Number(row.count);
+    deliveryByCampaign.set(row.campaign_id, delivery);
   }
-  return results;
+
+  return campaigns.map((campaign) => ({
+    ...campaign.toJSON(),
+    delivery: deliveryByCampaign.get(String(campaign.id)) || {},
+  }));
 };
 
 // A campaign interrupted mid-queue (crash/deploy) sits in 'sending'. Dedupe

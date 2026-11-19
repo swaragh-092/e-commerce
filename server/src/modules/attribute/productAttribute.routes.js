@@ -9,6 +9,7 @@ const { authorizePermissions } = require('../../middleware/role.middleware');
 const {
     addProductAttributeSchema,
     updateProductAttributeSchema,
+    updateProductAttributeGroupSchema,
     assignProductAttributeSchema,
     reorderProductAttributesSchema,
 } = require('./productAttribute.validation');
@@ -34,6 +35,9 @@ router.put('/:id/attributes/:attrId', ...attrManage, validate(idAndAttrIdParamSc
 
 // DELETE /api/products/:id/attributes/:attrId
 router.delete('/:id/attributes/:attrId', ...attrManage, validate(idAndAttrIdParamSchema, 'params'), controller.deleteProductAttribute);
+// Remove all values of the attribute represented by this product assignment.
+router.delete('/:id/attributes/:attrId/group', ...attrManage, validate(idAndAttrIdParamSchema, 'params'), controller.deleteProductAttributeGroup);
+router.put('/:id/attributes/:attrId/group', ...attrManage, validate(idAndAttrIdParamSchema, 'params'), validate(updateProductAttributeGroupSchema), controller.updateProductAttributeGroup);
 
 
 module.exports = router;

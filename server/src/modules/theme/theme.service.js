@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { sequelize, ThemePackage, ThemeActivation, Setting, ApiDefinition, Order, Product } = require('../index');
 const SettingsService = require('../settings/settings.service');
+const DesignDraftService = require('../settings/designDraft.service');
 const AuditService = require('../audit/audit.service');
 const { packageSchema } = require('./theme.validation');
 const AppError = require('../../utils/AppError');
@@ -142,18 +143,69 @@ const pushDefinedSetting = (rows, group, key, value) => {
   if (value !== undefined && value !== null) rows.push({ group, key, value });
 };
 
+const PAGE_TEMPLATE_GROUPS = {
+  product: 'productPage',
+  category: 'categoryPage',
+  collection: 'catalog',
+  brand: 'brandsPage',
+  cart: 'cartPage',
+  account: 'accountPage',
+  blog: 'blogPage',
+  'checkout': 'checkoutPage',
+  'wishlist': 'wishlistPage',
+  'search': 'searchPage',
+  'not-found': 'notFoundPage',
+  'orders': 'ordersPage',
+
+};
+
+const withoutStoreDataSource = (section) => {
+  const { dataSourceSlug, dataSourceKey, enabled = true, ...portableSection } = section;
+  return { ...portableSection, enabled };
+};
+
+const portableAlternateTemplates = (templates) => templates.map((template) => {
+  const settings = { ...template.settings };
+  for (const key of ['productRows', 'sections']) {
+    if (Array.isArray(settings[key])) settings[key] = settings[key].map(withoutStoreDataSource);
+  }
+  return { ...template, settings };
+});
+
 const buildPageTemplateRows = (pkg, scopes) => {
   const rows = [];
   if (!scopes.includes('pageTemplates') || !pkg.pageTemplates) return rows;
 
+  for (const [page, group] of Object.entries(PAGE_TEMPLATE_GROUPS)) {
+    const productRows = pkg.pageTemplates[page]?.productRows;
+    if (productRows) pushDefinedSetting(rows, group, 'productRows', productRows.map(withoutStoreDataSource));
+    const sections = pkg.pageTemplates[page]?.sections;
+    if (sections) pushDefinedSetting(rows, group, 'sections', sections.map(withoutStoreDataSource));
+    const alternates = pkg.pageTemplates[page]?.alternateTemplates;
+    if (alternates) pushDefinedSetting(rows, group, 'alternateTemplates', portableAlternateTemplates(alternates));
+  }
+
   const product = pkg.pageTemplates.product;
   if (product) {
     pushDefinedSetting(rows, 'productPage', 'templateLayout', product.layout);
+    pushDefinedSetting(rows, 'productPage', 'imageAlignment', product.imageAlignment);
+    pushDefinedSetting(rows, 'productPage', 'showSKU', product.showSKU);
+    pushDefinedSetting(rows, 'productPage', 'showStockBadge', product.showStockBadge);
     pushDefinedSetting(rows, 'productPage', 'showTrustBadges', product.showTrustBadges);
     pushDefinedSetting(rows, 'productPage', 'showRelatedProducts', product.showRelatedProducts);
     pushDefinedSetting(rows, 'productPage', 'showRecentlyViewed', product.showRecentlyViewed);
     pushDefinedSetting(rows, 'productPage', 'showStickyAddToCart', product.showStickyAddToCart);
     pushDefinedSetting(rows, 'productPage', 'showBreadcrumbs', product.showBreadcrumbs);
+    pushDefinedSetting(rows, 'productPage', 'addToCartLabel', product.addToCartLabel);
+    pushDefinedSetting(rows, 'productPage', 'showBuyNowButton', product.showBuyNowButton);
+    pushDefinedSetting(rows, 'productPage', 'buyNowLabel', product.buyNowLabel);
+  }
+
+  const category = pkg.pageTemplates.category;
+  if (category) {
+    pushDefinedSetting(rows, 'categoryPage', 'heroTitle', category.heroTitle);
+    pushDefinedSetting(rows, 'categoryPage', 'headerLayout', category.headerLayout);
+    pushDefinedSetting(rows, 'categoryPage', 'showSubcategories', category.showSubcategories);
   }
 
   const collection = pkg.pageTemplates.collection;
@@ -162,6 +214,9 @@ const buildPageTemplateRows = (pkg, scopes) => {
     pushDefinedSetting(rows, 'catalog', 'gridColumns', collection.productsPerRow);
     pushDefinedSetting(rows, 'catalog', 'filterLayout', collection.filterLayout);
     pushDefinedSetting(rows, 'catalog', 'showBreadcrumbs', collection.showBreadcrumbs);
+    pushDefinedSetting(rows, 'catalog', 'showFilters', collection.showFilters);
+    pushDefinedSetting(rows, 'catalog', 'categoryDepth', collection.categoryDepth);
+    pushDefinedSetting(rows, 'catalog', 'showCategoryIcon', collection.showCategoryIcon);
   }
 
   const brand = pkg.pageTemplates.brand;
@@ -380,7 +435,9 @@ const affectedGroups = (scopes, replaceDemoContent) => {
   if (scopes.includes('layoutStyle')) { groups.add('nav'); groups.add('footer'); groups.add('announcement'); }
   if (scopes.includes('homepageSections')) groups.add('homepage');
   if (replaceDemoContent && scopes.includes('demoContent')) { groups.add('announcement'); groups.add('homepage'); }
-  if (scopes.includes('pageTemplates')) { groups.add('productPage'); groups.add('catalog'); groups.add('brandsPage'); groups.add('cartPage'); groups.add('accountPage'); groups.add('blogPage'); }
+  if (scopes.includes('pageTemplates')) {
+    for (const group of Object.values(PAGE_TEMPLATE_GROUPS)) groups.add(group);
+  }
   return [...groups];
 };
 
@@ -677,7 +734,7 @@ const importToLibrary = async (packageData, userId) => {
 
 const exportCurrent = async (options = {}) => {
   const { includeHomepageSections = true, includeDemoContent = true, includeComponentStyles = true, includeSectionPresets = true } = options;
-  const groups = ['theme', 'componentStyles', 'sectionPresets', 'nav', 'footer', 'announcement', 'homepage', 'productPage', 'catalog', 'brandsPage', 'cartPage', 'accountPage', 'blogPage'];
+  const groups = ['theme', 'componentStyles', 'sectionPresets', 'nav', 'footer', 'announcement', 'homepage', 'productPage', 'categoryPage', 'catalog', 'brandsPage', 'cartPage', 'accountPage', 'blogPage'];
   const snapshot = await readCurrentSettings(groups);
 
   const pkg = {
@@ -709,26 +766,37 @@ const exportCurrent = async (options = {}) => {
   }
 
   if (includeHomepageSections) {
-    pkg.layout.homepageSections = (snapshot.homepage?.sections || []).map((section) => {
-      const { dataSourceKey, dataSourceSlug, ...exportableSection } = section;
-      return exportableSection;
-    });
+    pkg.layout.homepageSections = (snapshot.homepage?.sections || []).map(withoutStoreDataSource);
   }
 
   pkg.pageTemplates = {
     product: {
       layout: snapshot.productPage?.templateLayout || 'media-left-details-right',
+      imageAlignment: snapshot.productPage?.imageAlignment,
+      showSKU: snapshot.productPage?.showSKU,
+      showStockBadge: snapshot.productPage?.showStockBadge,
       showTrustBadges: snapshot.productPage?.showTrustBadges,
       showRelatedProducts: snapshot.productPage?.showRelatedProducts,
       showRecentlyViewed: snapshot.productPage?.showRecentlyViewed,
       showStickyAddToCart: snapshot.productPage?.showStickyAddToCart,
       showBreadcrumbs: snapshot.productPage?.showBreadcrumbs,
+      addToCartLabel: snapshot.productPage?.addToCartLabel,
+      showBuyNowButton: snapshot.productPage?.showBuyNowButton,
+      buyNowLabel: snapshot.productPage?.buyNowLabel,
+    },
+    category: {
+      heroTitle: snapshot.categoryPage?.heroTitle,
+      headerLayout: snapshot.categoryPage?.headerLayout,
+      showSubcategories: snapshot.categoryPage?.showSubcategories,
     },
     collection: {
       layout: snapshot.catalog?.templateLayout || 'sidebar-filters-grid',
       productsPerRow: snapshot.catalog?.gridColumns,
       filterLayout: snapshot.catalog?.filterLayout || 'sidebar',
       showBreadcrumbs: snapshot.catalog?.showBreadcrumbs,
+      showFilters: snapshot.catalog?.showFilters,
+      categoryDepth: snapshot.catalog?.categoryDepth,
+      showCategoryIcon: snapshot.catalog?.showCategoryIcon,
     },
     brand: {
       layout: snapshot.brandsPage?.cardLayout || 'standard',
@@ -764,6 +832,18 @@ const exportCurrent = async (options = {}) => {
     },
   };
 
+  for (const [page, group] of Object.entries(PAGE_TEMPLATE_GROUPS)) {
+    const productRows = snapshot[group]?.productRows;
+    if (Array.isArray(productRows)) {
+      pkg.pageTemplates[page] = { ...pkg.pageTemplates[page], productRows: productRows.map(withoutStoreDataSource) };
+    }
+    const sections = snapshot[group]?.sections;
+    if (Array.isArray(sections) && pkg.pageTemplates[page]) pkg.pageTemplates[page].sections = sections.map(withoutStoreDataSource);
+    if (['product', 'category'].includes(page) && Array.isArray(snapshot[group]?.alternateTemplates)) {
+      pkg.pageTemplates[page].alternateTemplates = portableAlternateTemplates(snapshot[group].alternateTemplates);
+    }
+  }
+
   if (includeDemoContent) {
     pkg.demoContent = {
       announcementText: snapshot.announcement?.text || '',
@@ -774,6 +854,17 @@ const exportCurrent = async (options = {}) => {
   }
 
   return pkg;
+};
+
+const stageDraft = async (packageData, { scopes, replaceDemoContent }, user) => {
+  const pkg = validatePackage(packageData);
+  if (scopes.includes('dataSources')) {
+    throw new AppError('VALIDATION_ERROR', 400, 'API data sources cannot be staged in a design draft.');
+  }
+  const rows = buildSettingsRows(pkg, scopes, replaceDemoContent);
+  if (!rows.length) throw new AppError('VALIDATION_ERROR', 400, 'No design settings to stage for the selected scopes.');
+
+  return DesignDraftService.saveDraft({ settings: rows }, user, { merge: true });
 };
 
 const apply = async (packageData, applyOptions, user) => {
@@ -968,6 +1059,7 @@ module.exports = {
   importToLibrary,
   exportCurrent,
   apply,
+  stageDraft,
   listActivations,
   rollback,
   buildRollbackPlan,

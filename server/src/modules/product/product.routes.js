@@ -11,6 +11,12 @@ const { PERMISSIONS, getPermissionsForUser } = require('../../config/permissions
 const { error } = require('../../utils/response');
 const { idParamSchema } = require('../../utils/common.validation');
 const settingsService = require('../settings/settings.service');
+const Joi = require('joi');
+const { recordView } = require('./product.discovery');
+const { publicApiLimiter } = require('../../middleware/rateLimiter.middleware');
+const relatedProductsSchema = Joi.object({ productIds: Joi.array().items(Joi.string().uuid()).max(12).unique().required() });
+const productViewSchema = Joi.object({ browserId: Joi.string().uuid({ version: 'uuidv4' }).required() });
+
 
 const requireTagPermission = async (req, res, next) => {
   if (req.body?.tags === undefined) return next();
@@ -48,8 +54,21 @@ router.get('/id/:id', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_RE
 router.post('/bulk-sale', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_BULK_SALE), validate(bulkSaleSchema), auditLog('Product'), productController.bulkSale);
 router.delete('/bulk', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_DELETE), validate(bulkDeleteSchema), auditLog('Product'), productController.bulkDelete);
 router.patch('/bulk', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_UPDATE), validate(bulkUpdateSchema), auditLog('Product'), productController.bulkUpdate);
-router.get('/id/:id/related', optionalAuth, productController.getRelated);
+router.get('/id/:id/related', optionalAuth, validate(idParamSchema, 'params'), productController.getRelated);
+router.get('/id/:id/related-products', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_READ), validate(idParamSchema, 'params'), productController.getRelatedSelection);
+router.put('/id/:id/related-products', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_UPDATE), validate(idParamSchema, 'params'), validate(relatedProductsSchema), auditLog('Product'), productController.setRelatedProducts);
 router.get('/id/:id/stock-history', authenticate, authorizePermissions(PERMISSIONS.PRODUCTS_READ), validate(idParamSchema, 'params'), productController.getStockHistory);
+
+router.post('/id/:id/view', publicApiLimiter, optionalAuth, validate(idParamSchema, 'params'), validate(productViewSchema), async (req, res, next) => {
+  try {
+    const staff = getPermissionsForUser(req.user).includes(PERMISSIONS.PRODUCTS_READ);
+    const bot = /bot|crawl|spider|slurp/i.test(req.get('User-Agent') || '');
+    if (!staff && !bot) await recordView(req.params.id, req.body.browserId);
+    return res.sendStatus(204);
+  } catch (err) {
+    return next(err);
+  }
+});
 
 router.get('/:slug', optionalAuth, productController.getBySlug);
 

@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Box, Typography, TextField, Button, Alert } from '@mui/material';
 import { useNavigate, useSearchParams, Link as RouterLink } from 'react-router-dom';
+import PasswordRecoveryLayout from '../../components/common/PasswordRecoveryLayout';
 import authService from '../../services/authService';
 import { validatePassword } from '../../utils/authValidation';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 
-const ResetPasswordPage = () => {
+const ResetPasswordPage = ({ admin = false }) => {
+  const loginPath = admin ? '/admin/login' : '/login';
+  const recoveryPath = admin ? '/admin/forgot-password' : '/forgot-password';
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
   const navigate = useNavigate();
@@ -51,9 +54,9 @@ const ResetPasswordPage = () => {
     try {
       await authService.resetPassword(token, formData.newPassword);
       setStatus({ type: 'success', message: 'Password has been reset successfully.' });
-      setTimeout(() => navigate('/login'), 3000); // Redirect to login after 3 seconds
+      setTimeout(() => navigate(loginPath), 3000); // Redirect to login after 3 seconds
     } catch (err) {
-      setStatus({ type: 'error', message: getApiErrorMessage(err, 'Failed to reset password. The token may be expired.') });
+      setStatus({ type: 'error', message: getApiErrorMessage(err, 'Failed to reset password. The token may be expired.'), canRequestLink: true });
     } finally {
       setLoading(false);
     }
@@ -61,66 +64,78 @@ const ResetPasswordPage = () => {
 
   if (!token) {
       return (
-          <Box sx={{ maxWidth: 400, mx: 'auto', mt: 8 }}>
-              <Alert severity="error">Invalid link. Please request a new password reset.</Alert>
-          </Box>
+          <PasswordRecoveryLayout admin={admin}>
+            <Box sx={{ maxWidth: 400, mx: 'auto', mt: admin ? 0 : 8 }}>
+                <Alert severity="error">Invalid link. Please request a new password reset.</Alert>
+                <Button fullWidth component={RouterLink} to={recoveryPath} sx={{ mt: 2 }}>
+                    Request a new reset link
+                </Button>
+            </Box>
+          </PasswordRecoveryLayout>
       );
   }
 
   return (
-    <Box sx={{ maxWidth: 400, mx: 'auto', mt: 8 }}>
-      <Typography variant="h4" component="h1" gutterBottom textAlign="center" fontWeight={600}>
-        Create New Password
-      </Typography>
+    <PasswordRecoveryLayout admin={admin}>
+      <Box sx={{ maxWidth: 400, mx: 'auto', mt: admin ? 0 : 8 }}>
+        <Typography variant="h4" component="h1" gutterBottom textAlign="center" fontWeight={600}>
+          Create New Password
+        </Typography>
       
-      {status.message && <Alert severity={status.type} sx={{ mb: 3 }}>{status.message}</Alert>}
-
-      {status.type !== 'success' && (
-        <Box component="form" onSubmit={handleSubmit}>
-            <TextField
-            fullWidth
-            margin="normal"
-            label="New Password"
-            name="newPassword"
-            type="password"
-            value={formData.newPassword}
-            onChange={handleChange}
-            error={Boolean(fieldErrors.newPassword)}
-            helperText={fieldErrors.newPassword || 'Minimum 8 characters, with uppercase, lowercase, number and special character (!@#$%^&*)'}
-            required
-            />
-            <TextField
-            fullWidth
-            margin="normal"
-            label="Confirm New Password"
-            name="confirmPassword"
-            type="password"
-            value={formData.confirmPassword}
-            onChange={handleChange}
-            error={Boolean(fieldErrors.confirmPassword)}
-            helperText={fieldErrors.confirmPassword}
-            required
-            />
-
-            <Button
-            fullWidth
-            type="submit"
-            variant="contained"
-            size="large"
-            sx={{ mt: 3, mb: 2 }}
-            disabled={loading}
-            >
-            {loading ? 'Resetting...' : 'Reset Password'}
+        {status.message && <Alert severity={status.type} sx={{ mb: 3 }}>{status.message}</Alert>}
+        {status.canRequestLink && (
+            <Button component={RouterLink} to={recoveryPath} sx={{ mb: 2 }}>
+                Request a new reset link
             </Button>
-        </Box>
-      )}
+        )}
+
+        {status.type !== 'success' && (
+          <Box component="form" onSubmit={handleSubmit}>
+              <TextField
+              fullWidth
+              margin="normal"
+              label="New Password"
+              name="newPassword"
+              type="password"
+              value={formData.newPassword}
+              onChange={handleChange}
+              error={Boolean(fieldErrors.newPassword)}
+              helperText={fieldErrors.newPassword || 'Minimum 8 characters, with uppercase, lowercase, number and special character (!@#$%^&*)'}
+              required
+              />
+              <TextField
+              fullWidth
+              margin="normal"
+              label="Confirm New Password"
+              name="confirmPassword"
+              type="password"
+              value={formData.confirmPassword}
+              onChange={handleChange}
+              error={Boolean(fieldErrors.confirmPassword)}
+              helperText={fieldErrors.confirmPassword}
+              required
+              />
+
+              <Button
+              fullWidth
+              type="submit"
+              variant="contained"
+              size="large"
+              sx={{ mt: 3, mb: 2 }}
+              disabled={loading}
+              >
+              {loading ? 'Resetting...' : 'Reset Password'}
+              </Button>
+          </Box>
+        )}
       
-      {status.type === 'success' && (
-          <Button fullWidth component={RouterLink} to="/login" variant="contained">
-              Go to Login
-          </Button>
-      )}
-    </Box>
+        {status.type === 'success' && (
+            <Button fullWidth component={RouterLink} to={loginPath} variant="contained">
+                Go to Login
+            </Button>
+        )}
+      </Box>
+    </PasswordRecoveryLayout>
   );
 };
 

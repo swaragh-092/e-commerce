@@ -2,6 +2,7 @@ module.exports = (sequelize, DataTypes) => {
   const Enquiry = sequelize.define(
     'Enquiry',
     {
+      replies: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
       assignedUserId: { type: DataTypes.UUID, allowNull: true },
       id: {
         type: DataTypes.UUID,
@@ -30,7 +31,7 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: 1,
       },
       status: {
-        type: DataTypes.ENUM('pending', 'responded', 'closed'),
+        type: DataTypes.ENUM('pending', 'responded', 'closed', 'closed_converted', 'closed_lost'),
         allowNull: false,
         defaultValue: 'pending',
       }, 
@@ -49,6 +50,9 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         field: 'cart_items',
       },
+      utmSource: { type: DataTypes.STRING(255), allowNull: true, field: 'utm_source' },
+      utmMedium: { type: DataTypes.STRING(255), allowNull: true, field: 'utm_medium' },
+      utmCampaign: { type: DataTypes.STRING(255), allowNull: true, field: 'utm_campaign' },
     },
     {
       tableName: 'enquiries',

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button,
   TextField, FormControl, InputLabel, Select, MenuItem, Stack,
@@ -18,7 +18,8 @@ const slugify = (text) => {
   return slug || 'template-' + Date.now();
 };
 
-const SaveAsTemplateDialog = ({ open, onClose, onSaved }) => {
+const SaveAsTemplateDialog = ({ open, onClose, onSaved, publishedOnly = false }) => {
+  const categoryLabelId = useId();
   const { user } = useAuth();
   const authorName = user?.name || user?.email || 'Unknown User';
   const [name, setName] = useState('');
@@ -65,14 +66,15 @@ const SaveAsTemplateDialog = ({ open, onClose, onSaved }) => {
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Save Current Store as Template</DialogTitle>
+    <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>{publishedOnly ? 'Save Published Store as Template' : 'Save Current Store as Template'}</DialogTitle>
       <DialogContent>
         <Stack spacing={2.5} sx={{ mt: 1 }}>
+          {publishedOnly && <Alert severity="info">This template uses your published store. Draft changes are not included.</Alert>}
           <TextField label="Template Name" value={name} onChange={(e) => setName(e.target.value)} size="small" fullWidth required placeholder="My Custom Template" />
           <FormControl size="small" fullWidth>
-            <InputLabel>Category</InputLabel>
-            <Select value={category} label="Category" onChange={(e) => setCategory(e.target.value)}>
+            <InputLabel id={categoryLabelId}>Category</InputLabel>
+            <Select labelId={categoryLabelId} value={category} label="Category" onChange={(e) => setCategory(e.target.value)}>
               {CATEGORIES.map((c) => <MenuItem key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</MenuItem>)}
             </Select>
           </FormControl>
@@ -85,7 +87,7 @@ const SaveAsTemplateDialog = ({ open, onClose, onSaved }) => {
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button color="error" onClick={onClose}>Cancel</Button>
+        <Button color="inherit" onClick={onClose} disabled={saving}>Cancel</Button>
         <Button variant="contained" startIcon={saving ? <CircularProgress size={16} /> : <SaveIcon />} onClick={handleSave} disabled={saving}>
           {saving ? 'Saving...' : 'Save to Library'}
         </Button>

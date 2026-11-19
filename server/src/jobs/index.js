@@ -11,6 +11,7 @@ const trackingReconciliationJob = require('./trackingReconciliation.job');
 const authCleanupJob = require('./authCleanup.job');
 const analyticsReportJob = require('./analyticsReport.job');
 const refundReconciliationJob = require('./refundReconciliation.job');
+const productRankingsJob = require('./productRankings.job');
 const logger = require('../utils/logger');
 
 const startJobs = () => {
@@ -27,6 +28,7 @@ const startJobs = () => {
   authCleanupJob.run();
   analyticsReportJob.run();
   refundReconciliationJob.run();
+  productRankingsJob.run();
 };
 
 module.exports = startJobs;

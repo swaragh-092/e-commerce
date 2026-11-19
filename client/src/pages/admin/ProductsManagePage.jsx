@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Typography, Button, Chip, IconButton, TextField,
   FormControl, InputLabel, Select, MenuItem, Stack, Tooltip,
@@ -20,6 +20,7 @@ import { getProducts, getProductById, deleteProduct, updateProduct, bulkUpdateSa
 import attributeService from '../../services/attributeService';
 import BulkProductTagsDialog from '../../components/admin/BulkProductTagsDialog';
 import ProductTagFilter from '../../components/admin/ProductTagFilter';
+import { getBrands } from '../../services/brandService';
 import { getCategoryTree } from '../../services/categoryService';
 import { getSaleLabels } from '../../services/adminService';
 import { getMediaUrl } from '../../utils/media';
@@ -120,6 +121,7 @@ const ProductsManagePage = () => {
   const isTabletScreen = useMediaQuery('(max-width: 1024px)');
   const isSmallScreen = useMediaQuery((theme) => theme.breakpoints.down('sm'));
   const pricingEnabled = useFeatureVisible('pricing', 'admin');
+  const brandsEnabled = useFeatureVisible('brands', 'admin');
   const pricingCapability = useFeature('pricing');
   // Stock tracking is only meaningful in ecommerce mode (cart Tier-1 feature).
   // In catalog mode cart=false, so we hide stock column + stepper entirely.
@@ -138,29 +140,47 @@ const ProductsManagePage = () => {
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
 
   // Filters – initialise from URL query params so dashboard cards can pre-apply filters
+  const urlSearch = searchParams.get('search') || '';
+  const urlStatus = searchParams.get('status') || '';
+  const urlCategory = searchParams.get('category') || '';
+  const urlLowStockOnly = searchParams.get('stock') === 'low';
+  const lastUrlSearch = useRef(urlSearch);
+  const requestVersion = useRef(0);
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [searchInput, setSearchInput] = useState(() => searchParams.get('search') || '');
   const [status, setStatus] = useState(() => searchParams.get('status') || '');
   const [saleFilter, setSaleFilter] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState(() => searchParams.get('category') || '');
+  const [selectedBrand, setSelectedBrand] = useState('');
+  const [brands, setBrands] = useState([]);
+  const brandFilter = brandsEnabled ? selectedBrand : '';
   const tagFilter = searchParams.get('tags') || '';
   const [flatCategories, setFlatCategories] = useState([]);
   const [saleLabels, setSaleLabels] = useState([]);
   // ?stock=low from dashboard → show only items with qty ≤ lowStockThreshold
   const [lowStockOnly, setLowStockOnly] = useState(() => searchParams.get('stock') === 'low');
 
-  // Keep dashboard deep links in sync when the product route stays mounted
-  // while its query string changes (for example, switching dashboard filters).
+  // Sync each URL field independently: unrelated filter changes must not
+  // restore the previous URL query over a draft the user is still editing.
   useEffect(() => {
-    const nextStatus = searchParams.get('status') || '';
-    const nextLowStockOnly = searchParams.get('stock') === 'low';
-    const nextSearch = searchParams.get('search') || '';
-    setStatus((current) => current === nextStatus ? current : nextStatus);
-    setLowStockOnly((current) => current === nextLowStockOnly ? current : nextLowStockOnly);
-    setSearch((current) => current === nextSearch ? current : nextSearch);
-    setSearchInput((current) => current === nextSearch ? current : nextSearch);
+    setStatus((current) => current === urlStatus ? current : urlStatus);
     setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
-  }, [searchParams]);
+  }, [urlStatus]);
+  useEffect(() => {
+    setCategoryFilter((current) => current === urlCategory ? current : urlCategory);
+    setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
+  }, [urlCategory]);
+  useEffect(() => {
+    setLowStockOnly((current) => current === urlLowStockOnly ? current : urlLowStockOnly);
+    setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
+  }, [urlLowStockOnly]);
+  useEffect(() => {
+    if (lastUrlSearch.current === urlSearch) return;
+    lastUrlSearch.current = urlSearch;
+    setSearch(urlSearch);
+    setSearchInput(urlSearch);
+    setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
+  }, [urlSearch]);
 
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState([]);
@@ -202,7 +222,7 @@ const ProductsManagePage = () => {
     saving: false,
   });
   const [counts, setCounts] = useState({ published: 0, paused: 0, draft: 0, archived: 0 });
-  const hasActiveFilters = Boolean(search || status || saleFilter || categoryFilter || tagFilter || lowStockOnly);
+  const hasActiveFilters = Boolean(search || status || saleFilter || categoryFilter || brandFilter || tagFilter || lowStockOnly);
 
   // Step amount for the stock stepper — persists between quick-edit opens
   // Stock history dialog
@@ -451,7 +471,33 @@ const ProductsManagePage = () => {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (!brandsEnabled) return;
+    let cancelled = false;
+
+    const loadBrands = async () => {
+      const limit = 1000;
+      const brands = [];
+      let page = 1;
+      let totalPages;
+      do {
+        const { data } = await getBrands({ page, limit });
+        if (cancelled) return;
+        brands.push(...(data?.data || []));
+        totalPages = data?.meta?.totalPages || 1;
+        page += 1;
+      } while (page <= totalPages);
+      setBrands(brands);
+    };
+
+    loadBrands().catch(() => {
+      if (!cancelled) setBrands([]);
+    });
+    return () => { cancelled = true; };
+  }, [brandsEnabled]);
+
   const fetchProducts = useCallback(() => {
+    const version = ++requestVersion.current;
     setLoading(true);
     const params = {
       page: paginationModel.page + 1,
@@ -461,6 +507,7 @@ const ProductsManagePage = () => {
       ...(status && { status }),
       ...(saleFilter && { saleStatus: saleFilter }),
       ...(categoryFilter && { categoryId: categoryFilter }),
+      ...(brandFilter && { brand: brandFilter }),
       ...(tagFilter && { tags: tagFilter }),
       ...(sortModel[0] && { sortBy: sortModel[0].field, sortOrder: sortModel[0].sort }),
       // Low-stock filter: pass maxQty=lowStockThreshold so the server returns only low-stock items
@@ -468,37 +515,55 @@ const ProductsManagePage = () => {
     };
     getProducts(params)
       .then((res) => {
+        if (version !== requestVersion.current) return;
         setRows(res?.data || []);
         setTotal(res?.meta?.total || 0);
         setCounts(res?.counts || res?.meta?.counts || { published: 0, paused: 0, draft: 0, archived: 0 });
       })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [paginationModel, search, status, saleFilter, categoryFilter, tagFilter, sortModel, lowStockOnly, lowStockThreshold]);
+      .catch((error) => { if (version === requestVersion.current) console.error(error); })
+      .finally(() => { if (version === requestVersion.current) setLoading(false); });
+  }, [paginationModel, search, status, saleFilter, categoryFilter, brandFilter, tagFilter, sortModel, lowStockOnly, lowStockThreshold]);
 
   useEffect(() => {
     fetchProducts();
+    return () => { requestVersion.current += 1; };
   }, [fetchProducts]);
 
-  // Debounce search: only fire when user stops typing
+  const applySearch = useCallback((value) => {
+    const query = value.trim();
+    const nextParams = new URLSearchParams(searchParams);
+    if (query) nextParams.set('search', query);
+    else nextParams.delete('search');
+    // Mark our own navigation so URL synchronization cannot restore stale text.
+    lastUrlSearch.current = query;
+    setSearchInput(value);
+    setSearch(query);
+    setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
+    if (nextParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
   useEffect(() => {
-    const t = setTimeout(() => {
-      setPaginationModel((prev) => ({ ...prev, page: 0 }));
-      setSearch(searchInput);
-      const nextParams = new URLSearchParams(searchParams);
-      const trimmedSearch = searchInput.trim();
-      if (trimmedSearch) nextParams.set('search', trimmedSearch);
-      else nextParams.delete('search');
-      if (nextParams.toString() !== searchParams.toString()) {
-        setSearchParams(nextParams, { replace: true });
-      }
-    }, 400);
-    return () => clearTimeout(t);
-  }, [searchInput, searchParams, setSearchParams]);
+    if (searchInput.trim() === search) return;
+    const timer = setTimeout(() => applySearch(searchInput), 400);
+    return () => clearTimeout(timer);
+  }, [searchInput, search, applySearch]);
 
   const handleStatusChange = (val) => {
     setStatus(val);
     setPaginationModel((prev) => ({ ...prev, page: 0 }));
+  };
+
+  const handleCategoryChange = (value) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (value) nextParams.set('category', value);
+    else nextParams.delete('category');
+    setCategoryFilter(value);
+    setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
+    if (nextParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextParams, { replace: true });
+    }
   };
 
   // ── Actions ─────────────────────────────────────────────────
@@ -956,6 +1021,7 @@ const ProductsManagePage = () => {
             setStatus('');
             setSaleFilter('');
             setCategoryFilter('');
+            setSelectedBrand('');
             setSearchParams({});
             setLowStockOnly(false);
             setPaginationModel((p) => ({ ...p, page: 0 }));
@@ -1099,7 +1165,7 @@ const ProductsManagePage = () => {
           InputProps={{
             endAdornment: searchInput ? (
               <InputAdornment position="end">
-                <IconButton size="small" onClick={() => { setSearchInput(''); setSearch(''); }}>
+                <IconButton size="small" aria-label="Clear search" onClick={() => applySearch('')}>
                   <ClearIcon fontSize="small" />
                 </IconButton>
               </InputAdornment>
@@ -1138,11 +1204,12 @@ const ProductsManagePage = () => {
           </FormControl>
         )}
         <FormControl size="small" sx={{ minWidth: 220 }}>
-          <InputLabel>Category</InputLabel>
+          <InputLabel id="category-filter-label">Category</InputLabel>
           <Select
             value={categoryFilter}
+            labelId="category-filter-label"
             label="Category"
-            onChange={(e) => { setCategoryFilter(e.target.value); setPaginationModel((p) => ({ ...p, page: 0 })); }}
+            onChange={(e) => handleCategoryChange(e.target.value)}
           >
             <MenuItem value="">All Categories</MenuItem>
             {flatCategories.map((c) => (
@@ -1150,6 +1217,26 @@ const ProductsManagePage = () => {
             ))}
           </Select>
         </FormControl>
+        {brandsEnabled && (
+          <FormControl size="small" sx={{ minWidth: 180 }}>
+            <InputLabel id="product-brand-filter-label" shrink>Brand</InputLabel>
+            <Select
+              labelId="product-brand-filter-label"
+              label="Brand"
+              value={brandFilter}
+              displayEmpty
+              onChange={(event) => {
+                setSelectedBrand(event.target.value);
+                setPaginationModel((current) => ({ ...current, page: 0 }));
+              }}
+            >
+              <MenuItem value="">All Brands</MenuItem>
+              {brands.map((brand) => (
+                <MenuItem key={brand.id} value={brand.id}>{brand.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
         <ProductTagFilter value={tagFilter} onChange={(value) => {
           const next = new URLSearchParams(searchParams);
           if (value) next.set('tags', value); else next.delete('tags');

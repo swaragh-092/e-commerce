@@ -5,6 +5,7 @@ const { getPermissionsForUser, PERMISSIONS } = require('../../config/permissions
 const AppError = require('../../utils/AppError');
 
 const CATEGORIES = {
+  contact: { label: 'Contact form messages', permission: PERMISSIONS.NOTIFICATIONS_MANAGE, templates: ['contact_form_admin'] },
   orders: { label: 'Order alerts', permission: PERMISSIONS.ORDERS_READ, templates: ['admin_new_order', 'admin_order_cancelled'] },
   payments: { label: 'Payment failures', permission: PERMISSIONS.ORDERS_READ, templates: ['admin_order_failed'] },
   returns: { label: 'Returns and replacements', permission: PERMISSIONS.ORDERS_READ, templates: ['admin_return_requested'] },

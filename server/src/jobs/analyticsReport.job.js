@@ -9,7 +9,7 @@ const run = () => {
   cron.schedule('0 8 * * *', async () => {
     logger.info('Running daily analytics report job...');
     try {
-      await analyticsReportService.sendReport();
+      await analyticsReportService.sendReport('daily');
     } catch (error) {
       logger.error('Error in analyticsReport job:', error);
     }
@@ -19,7 +19,7 @@ const run = () => {
   cron.schedule('0 8 * * 1', async () => {
     logger.info('Running weekly analytics report job...');
     try {
-      await analyticsReportService.sendReport();
+      await analyticsReportService.sendReport('weekly');
     } catch (error) {
       logger.error('Error in weekly analyticsReport job:', error);
     }

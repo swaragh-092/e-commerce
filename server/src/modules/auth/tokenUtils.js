@@ -10,9 +10,9 @@ const getIssAud = () => ({
 
 const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
-const generateTokens = (user, sessionId = null) => {
+const generateTokens = (user, sessionId = null, { mfaVerified = false, mfaMethod, mfaBinding } = {}) => {
   const { issuer, audience } = getIssAud();
-  const payload = { id: user.id, role: user.role, ...(sessionId ? { sid: sessionId } : {}) };
+  const payload = { id: user.id, role: user.role, ...(mfaVerified ? { mfa: true, ...(mfaMethod ? { mfaMethod } : {}), ...(mfaBinding ? { mfaBinding } : {}) } : {}), ...(sessionId ? { sid: sessionId } : {}) };
   return {
     accessToken: jwt.sign(payload, process.env.JWT_ACCESS_SECRET, {
       expiresIn: process.env.JWT_ACCESS_EXPIRY || '15m',
@@ -27,13 +27,30 @@ const generateTokens = (user, sessionId = null) => {
   };
 };
 
-const signTempTwoFactorToken = (userId) => {
+const signTempTwoFactorToken = (userId, passwordBinding, context = {}) => {
   const { issuer, audience } = getIssAud();
-  return jwt.sign({ id: userId, purpose: '2fa' }, process.env.JWT_ACCESS_SECRET, {
+  return jwt.sign({ id: userId, purpose: '2fa', ...(passwordBinding ? { passwordBinding } : {}), ...context }, process.env.JWT_ACCESS_SECRET, {
     expiresIn: '5m',
     issuer,
     audience,
   });
 };
 
-module.exports = { getIssAud, hashToken, generateTokens, signTempTwoFactorToken };
+// This is deliberately not an access token: it can only start and complete
+// authenticator enrollment after a successful password sign-in.
+const signMfaEnrollmentToken = (userId) => {
+  const { issuer, audience } = getIssAud();
+  return jwt.sign({ id: userId, purpose: 'mfa_enrollment' }, process.env.JWT_ACCESS_SECRET, {
+    expiresIn: '10m',
+    issuer,
+    audience,
+  });
+};
+const verifyMfaEnrollmentToken = (token) => {
+  const { issuer, audience } = getIssAud();
+  const claims = jwt.verify(token, process.env.JWT_ACCESS_SECRET, { algorithms: ['HS256'], issuer, audience });
+  if (claims.purpose !== 'mfa_enrollment' || !claims.id) throw new jwt.JsonWebTokenError('Invalid MFA enrollment token');
+  return claims;
+};
+
+module.exports = { getIssAud, hashToken, generateTokens, signTempTwoFactorToken, signMfaEnrollmentToken, verifyMfaEnrollmentToken };

@@ -77,7 +77,7 @@ describe('Store mode preview', () => {
     expect(screen.getByText('Unsaved mode change')).toBeInTheDocument();
     expect(screen.getByText(/Your live store changes only after you save/)).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'Show in Admin UI: Pricing' })).toBeDisabled();
-    expect(screen.getByRole('checkbox', { name: 'Show Product Prices', exact: true })).toBeDisabled();
+    expect(screen.queryByRole('checkbox', { name: 'Show Product Prices', exact: true })).not.toBeInTheDocument();
     expect(updateSettings).not.toHaveBeenCalled();
   });
 });

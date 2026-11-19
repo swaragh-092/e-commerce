@@ -52,3 +52,21 @@ exports.deleteProductAttribute = async (req, res, next) => {
         next(err);
     }
 };
+
+exports.deleteProductAttributeGroup = async (req, res, next) => {
+    try {
+        await productAttributeService.deleteProductAttributeGroup(req.params.id, req.params.attrId);
+        return success(res, null, 'Product attribute and its values removed');
+    } catch (err) {
+        next(err);
+    }
+};
+
+exports.updateProductAttributeGroup = async (req, res, next) => {
+    try {
+        const result = await productAttributeService.updateProductAttributeGroup(req.params.id, req.params.attrId, req.body);
+        return success(res, result, 'Product attribute updated');
+    } catch (err) {
+        next(err);
+    }
+};

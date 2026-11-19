@@ -2,6 +2,7 @@
 const path = require('path');
 const fs = require('fs').promises;
 const logger = require('../logger');
+const { randomUUID } = require('node:crypto');
 
 const SERVER_ROOT = path.resolve(__dirname, '../../..');
 const DEFAULT_UPLOADS_DIR = path.resolve(SERVER_ROOT, 'uploads');
@@ -41,6 +42,39 @@ class LocalStorage {
             throw new Error('Invalid storage filename');
         }
         return fs.readFile(path.join(this.getUploadsDir(), filename));
+    }
+
+    checkedFilename(filename) {
+        if (!filename || path.basename(filename) !== filename || filename.startsWith('.')) throw new Error('Invalid storage filename');
+        return filename;
+    }
+
+    async retainOriginal(filename, buffer) {
+        this.checkedFilename(filename);
+        const folder = path.join(this.getUploadsDir(), '.originals');
+        await fs.mkdir(folder, { recursive: true, mode: 0o700 });
+        const temporary = path.join(folder, `.${randomUUID()}.tmp`);
+        try {
+            const handle = await fs.open(temporary, 'wx', 0o600);
+            try { await handle.writeFile(buffer); await handle.sync(); } finally { await handle.close(); }
+            // Publish only a complete backup, without ever replacing the first original.
+            try { await fs.link(temporary, path.join(folder, filename)); }
+            catch (error) { if (error.code !== 'EEXIST') throw error; }
+        } finally { await fs.unlink(temporary).catch(error => { if (error.code !== 'ENOENT') throw error; }); }
+    }
+
+    async readOriginal(filename) {
+        return fs.readFile(path.join(this.getUploadsDir(), '.originals', this.checkedFilename(filename)));
+    }
+
+    async saveAtomic(buffer, filename, folder = '') {
+        this.checkedFilename(filename);
+        if (!['', 'thumbnails', 'medium', 'large'].includes(folder)) throw new Error('Invalid storage folder');
+        const target = path.join(this.getUploadsDir(), folder, filename);
+        const temporary = path.join(path.dirname(target), `.${randomUUID()}.tmp`);
+        try { await fs.writeFile(temporary, buffer); await fs.rename(temporary, target); }
+        finally { await fs.unlink(temporary).catch(error => { if (error.code !== 'ENOENT') throw error; }); }
+        return `/uploads/${folder ? folder + '/' : ''}${filename}`;
     }
 
     async delete(filename, folder = '') {

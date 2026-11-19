@@ -2,6 +2,7 @@
 
 const AdminService = require('./admin.service');
 const AnalyticsService = require('./analytics.service');
+const CatalogAnalyticsService = require('./catalogAnalytics.service');
 const AnalyticsReportService = require('./analyticsReport.service');
 const InventoryAlertService = require('../inventory/inventoryAlert.service');
 const AppError = require('../../utils/AppError');
@@ -111,13 +112,14 @@ const deleteAccessRole = async (req, res, next) => {
 
 const getAccessUsers = async (req, res, next) => {
   try {
-    const { page = 1, limit = 20, search, roleId, includeCustomers } = req.query;
+    const { page = 1, limit = 20, search, roleId, status, includeCustomers } = req.query;
     const result = await AdminService.listAccessUsers({
       page,
       limit,
       search,
       roleId,
-      includeCustomers: includeCustomers === 'true',
+      status,
+      includeCustomers: includeCustomers === true || includeCustomers === 'true',
     }, req.user);
     return paginated(res, result.rows, result.count, page, limit);
   } catch (err) {
@@ -129,6 +131,16 @@ const updateUserRole = async (req, res, next) => {
   try {
     const user = await AdminService.updateUserRole(req.params.id, req.validated.roleId, req.user);
     return success(res, user, 'User role updated successfully');
+  } catch (err) {
+    next(err);
+  }
+};
+
+const updateStaffStatus = async (req, res, next) => {
+  try {
+    const { status, reason } = req.validated;
+    const user = await AdminService.updateStaffStatus(req.params.id, status, reason, req.user);
+    return success(res, user, status === 'active' ? 'Staff account reactivated successfully' : 'Staff account suspended successfully');
   } catch (err) {
     next(err);
   }
@@ -160,9 +172,42 @@ const analyticsWithCompare = async (methodName, query) => {
   return AnalyticsService[methodName](query);
 };
 
+const getCatalogOverview = async (req, res, next) => {
+  try { return success(res, await CatalogAnalyticsService.getCatalogOverview(req.query)); }
+  catch (err) { next(err); }
+};
+
 const getTopProducts = async (req, res, next) => {
   try {
     const data = await analyticsWithCompare('getTopProducts', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getProductProfitability = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getProductProfitability', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getVariantPerformance = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getVariantPerformance', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getInventoryPerformance = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getInventoryPerformance', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getStockoutHistory = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getStockoutHistory', req.query);
     return success(res, data);
   } catch (err) { next(err); }
 };
@@ -184,6 +229,62 @@ const getAbandonedCarts = async (req, res, next) => {
 const getRevenueByCategory = async (req, res, next) => {
   try {
     const data = await analyticsWithCompare('getRevenueByCategory', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getTaxReport = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getTaxReport', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getTaxByState = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getTaxByState', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getReturnReasons = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getReturnReasons', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getOrderStatusReport = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getOrderStatusReport', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getCustomerTypeSales = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getCustomerTypeSales', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getProductReturnRates = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getProductReturnRates', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getShippingPerformance = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getShippingPerformance', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getSalesReconciliation = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getSalesReconciliation', req.query);
     return success(res, data);
   } catch (err) { next(err); }
 };
@@ -223,6 +324,11 @@ const getCustomerLifetimeValue = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const getSessionAnalytics = async (req, res, next) => {
+  try { return success(res, await AnalyticsService.getSessionAnalytics(req.query)); }
+  catch (error) { return next(error); }
+};
+
 const getConversionRate = async (req, res, next) => {
   try {
     const data = await analyticsWithCompare('getConversionRate', req.query);
@@ -237,9 +343,30 @@ const getTrafficSources = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const getLandingPagePerformance = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getLandingPagePerformance', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getDevicePerformance = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getDevicePerformance', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
 const getProductFunnel = async (req, res, next) => {
   try {
     const data = await analyticsWithCompare('getProductFunnel', req.query);
+    return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const getCheckoutFunnel = async (req, res, next) => {
+  try {
+    const data = await analyticsWithCompare('getCheckoutFunnel', req.query);
     return success(res, data);
   } catch (err) { next(err); }
 };
@@ -248,6 +375,13 @@ const getUtmAttribution = async (req, res, next) => {
   try {
     const data = await analyticsWithCompare('getUtmAttribution', req.query);
     return success(res, data);
+  } catch (err) { next(err); }
+};
+
+const saveCampaignSpend = async (req, res, next) => {
+  try {
+    const data = await AnalyticsService.saveCampaignSpend(req.validated);
+    return success(res, data, 'Campaign spend saved.');
   } catch (err) { next(err); }
 };
 
@@ -263,17 +397,33 @@ const exportAnalyticsCsv = async (req, res, next) => {
     const { metric } = req.params;
     const methodMap = {
       'top-products': 'getTopProducts',
+      'product-profitability': 'getProductProfitability',
+      'variant-performance': 'getVariantPerformance',
+      'inventory-performance': 'getInventoryPerformance',
+      'stockout-history': 'getStockoutHistory',
       'aov-trend': 'getAovTrend',
       'abandoned-carts': 'getAbandonedCarts',
       'revenue-by-category': 'getRevenueByCategory',
+      'tax-report': 'getTaxReport',
+      'tax-by-state': 'getTaxByState',
+      'return-reasons': 'getReturnReasons',
+      'order-status': 'getOrderStatusReport',
+      'customer-type-sales': 'getCustomerTypeSales',
+      'product-return-rates': 'getProductReturnRates',
+      'shipping-performance': 'getShippingPerformance',
+      'sales-reconciliation': 'getSalesReconciliation',
       'repeat-customers': 'getRepeatCustomers',
       'refund-rate': 'getRefundRate',
       'geographic-sales': 'getGeographicSales',
       'revenue-by-payment': 'getRevenueByPaymentMethod',
       'customer-lifetime-value': 'getCustomerLifetimeValue',
+      sessions: 'getSessionAnalytics',
       'conversion-rate': 'getConversionRate',
       'traffic-sources': 'getTrafficSources',
+      'landing-pages': 'getLandingPagePerformance',
+      devices: 'getDevicePerformance',
       'product-funnel': 'getProductFunnel',
+      'checkout-funnel': 'getCheckoutFunnel',
       'utm-attribution': 'getUtmAttribution',
       'coupon-performance': 'getCouponPerformance',
       'cohort-retention': 'getCohortRetention',
@@ -302,9 +452,15 @@ const exportAnalyticsCsv = async (req, res, next) => {
     if (rows.length === 0) return res.status(200).send('');
 
     const headers = Object.keys(rows[0]);
+    const encodeCell = (value) => {
+      if (typeof value === 'number') return String(value);
+      const text = value == null ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value);
+      const safe = /^\s*[=+@-]|^[\t\r\n]/.test(text) ? "'" + text : text;
+      return '"' + safe.replace(/"/g, '""') + '"';
+    };
     const csv = [
       headers.join(','),
-      ...rows.map(r => headers.map(h => JSON.stringify(r[h] ?? '')).join(','))
+      ...rows.map(r => headers.map(h => encodeCell(r[h])).join(','))
     ].join('\n');
 
     res.setHeader('Content-Type', 'text/csv');
@@ -343,20 +499,30 @@ const getRevenueForecast = async (req, res, next) => {
 
 const getDrillDown = async (req, res, next) => {
   try {
-    const { metric, filterKey, filterValue, period, page, limit } = req.query;
-    const data = await AnalyticsService.getDrillDown({ metric, filterKey, filterValue, period, page, limit });
+    const { metric, filterKey, filterValue, period, startDate, endDate, page, limit } = req.query;
+    const data = await AnalyticsService.getDrillDown({ metric, filterKey, filterValue, period, startDate, endDate, page, limit });
     return success(res, data);
   } catch (err) { next(err); }
 };
 
 const sendTestReport = async (req, res, next) => {
   try {
-    await AnalyticsReportService.sendReport();
-    return success(res, null, 'Test report sent successfully');
+    const result = await AnalyticsReportService.sendReport();
+    if (!result.sent) {
+      const messages = {
+        'feature-disabled': 'Enable Analytics and Orders before sending a report.',
+        disabled: 'Enable scheduled reports before sending a test report.',
+        'no-recipients': 'Add at least one recipient before sending a test report.',
+        'invalid-recipients': 'Check recipient addresses; one or more email addresses are invalid.',
+      };
+      return success(res, result, messages[result.reason] || 'No report was sent.');
+    }
+    return success(res, result, `Report sent to ${result.sent} recipient(s).`);
   } catch (err) { next(err); }
 };
 
 module.exports = {
+  getCatalogOverview,
   getStats,
   getSalesChart,
   getLowStock,
@@ -373,21 +539,39 @@ module.exports = {
   deleteAccessRole,
   getAccessUsers,
   updateUserRole,
+  updateStaffStatus,
   createStaffUser,
   deleteStaffUser,
   getTopProducts,
+  getProductProfitability,
+  getVariantPerformance,
+  getInventoryPerformance,
+  getStockoutHistory,
   getAovTrend,
   getAbandonedCarts,
   getRevenueByCategory,
+  getTaxReport,
+  getTaxByState,
+  getReturnReasons,
+  getOrderStatusReport,
+  getCustomerTypeSales,
+  getProductReturnRates,
+  getShippingPerformance,
+  getSalesReconciliation,
   getRepeatCustomers,
   getRefundRate,
   getGeographicSales,
   getRevenueByPaymentMethod,
   getCustomerLifetimeValue,
   getConversionRate,
+  getSessionAnalytics,
   getTrafficSources,
+  getLandingPagePerformance,
+  getDevicePerformance,
   getProductFunnel,
+  getCheckoutFunnel,
   getUtmAttribution,
+  saveCampaignSpend,
   getCouponPerformance,
   exportAnalyticsCsv,
   getCohortRetention,

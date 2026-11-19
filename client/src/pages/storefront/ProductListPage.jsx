@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Chip, Box, Breadcrumbs, Container, Grid, Link as MuiLink, Typography, Pagination, Drawer, IconButton, useTheme, useMediaQuery, FormControl, Select, MenuItem, alpha } from '@mui/material';
 import { FilterList as FilterIcon, Sort as SortIcon } from '@mui/icons-material';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
+import { getMediaUrl, onImageError } from '../../utils/media';
 import ProductGrid from '../../components/product/ProductGrid';
 import ProductFilters from '../../components/product/ProductFilters';
 import StorefrontSidebarMenu from '../../components/layout/StorefrontSidebarMenu';
@@ -25,17 +26,19 @@ const ProductListPage = ({ tag = null }) => {
     const { settings } = useSettings();
     const catalog      = settings?.catalog || {};
     const defaultSort  = catalog.defaultSort  || 'newest';
-    const defaultLimit = parseInt(catalog.defaultPageSize) || 20;
-    const gridCols     = parseInt(catalog.gridColumns) || 4;
+    const defaultLimit = Math.min(100, Math.max(1, Number.parseInt(catalog.defaultPageSize, 10) || 20));
+    const gridCols     = Math.min(6, Math.max(2, Number.parseInt(catalog.gridColumns, 10) || 4));
     const showFilters  = catalog.showFilters !== false;
     const collectionLayout = catalog.templateLayout || 'sidebar-filters-grid';
     const filterLayout = catalog.filterLayout || (collectionLayout.includes('top') ? 'topbar' : 'sidebar');
     const isCompactCatalog = collectionLayout.includes('compact') || collectionLayout.includes('table') || collectionLayout.includes('b2b');
     const isEditorialCatalog = collectionLayout.includes('editorial') || collectionLayout.includes('image-led');
-    const showSidebarFilters = showFilters && !isMobile && filterLayout !== 'topbar';
+    const useFilterDrawer = isMobile || filterLayout === 'drawer';
+    const showSidebarFilters = showFilters && !useFilterDrawer && filterLayout !== 'topbar';
     const showTopbarFilters = showFilters && !isMobile && filterLayout === 'topbar';
     const showCatalogBreadcrumbs = catalog.showBreadcrumbs !== false;
     const pricingEnabled = useFeatureVisible('pricing', 'storefront');
+    const ordersEnabled = useFeature('orders');
     const showPrice = useFeature('showPrice');
     const brandsEnabled = useFeature('brands');
 
@@ -50,7 +53,9 @@ const ProductListPage = ({ tag = null }) => {
         sort: searchParams.get('sort') || defaultSort,
         minPrice: searchParams.get('minPrice') || '',
         maxPrice: searchParams.get('maxPrice') || '',
-        ...(searchParams.get('onSale') === 'true' && { saleStatus: 'active' }),
+        ...(searchParams.get('onSale') === 'true' && { onSale: true }),
+        ...(searchParams.get('featured') === 'true' && { featured: true }),
+        ...(searchParams.get('saleLabel') && { saleLabel: searchParams.get('saleLabel') }),
         status: 'published',
         limit: defaultLimit,
     };
@@ -78,7 +83,7 @@ const ProductListPage = ({ tag = null }) => {
         fetchProducts();
         return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchParams.toString(), brandsEnabled, tag?.slug]);
+    }, [searchParams.toString(), brandsEnabled, tag?.slug, defaultLimit, defaultSort]);
 
     // Resolve the category slug → full breadcrumb path for the contextual breadcrumb on PDP
     // e.g. "vegetable" slug → "Vegetable > Roots > Beetroot" when filtering by beetroot
@@ -100,7 +105,7 @@ const ProductListPage = ({ tag = null }) => {
             return null;
         };
 
-        getCategoryTree().then((res) => {
+        getCategoryTree({ hideEmpty: true }).then((res) => {
             const path = findPathInTree(res?.data || [], categorySlug);
             setCategoryName(path || '');
         }).catch(() => setCategoryName(''));
@@ -122,6 +127,8 @@ const ProductListPage = ({ tag = null }) => {
         || filters.brand
         || filters.minPrice
         || filters.maxPrice
+        || filters.featured
+        || filters.onSale
     );
 
     const tagPath = tag ? `/tags/${encodeURIComponent(tag.slug)}` : '';
@@ -177,13 +184,16 @@ const ProductListPage = ({ tag = null }) => {
                 borderColor: 'divider',
                 background: isEditorialCatalog ? (theme) => `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.10)}, ${alpha(theme.palette.secondary.main, 0.06)})` : 'transparent',
             }}>
-                <Box sx={{ maxWidth: '65ch', minWidth: 0 }}>
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', minWidth: 0, maxWidth: '65ch' }}>
+                  {tag?.image?.url && <Box component="img" src={getMediaUrl(tag.image.url)} alt={tag.image.alt || tag.name} onError={onImageError()} sx={{ width: { xs: 72, sm: 112 }, height: { xs: 72, sm: 112 }, objectFit: 'cover', borderRadius: 2, flexShrink: 0 }} />}
+                  <Box sx={{ minWidth: 0 }}>
                     <Typography variant="h4" component="h1" fontWeight="bold">{tag?.name || 'Our Products'}</Typography>
                     {tag?.description && <Typography color="text.secondary" sx={{ mt: 1, whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>{tag.description}</Typography>}
+                  </Box>
                 </Box>
 
                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                    {showFilters && isMobile && (
+                    {showFilters && useFilterDrawer && (
                         <IconButton 
                             onClick={() => setMobileFilterOpen(true)} 
                             color="primary"
@@ -201,7 +211,11 @@ const ProductListPage = ({ tag = null }) => {
                             startAdornment={<SortIcon fontSize="small" sx={{ mr: 0.5, color: 'text.secondary' }} />}
                             sx={{ borderRadius: 1.5, bgcolor: 'background.paper' }}
                         >
-                            <MenuItem value="newest">Newest Arrivals</MenuItem>
+                            <MenuItem value="newest">Newest Added</MenuItem>
+                            <MenuItem value="arrivals">New Arrivals</MenuItem>
+                            {ordersEnabled && <MenuItem value="best-selling">Best Sellers</MenuItem>}
+                            <MenuItem value="trending">Trending This Week</MenuItem>
+                            <MenuItem value="most-viewed">Most Viewed</MenuItem>
                             {pricingEnabled && showPrice && <MenuItem value="price_asc">Price: Low to High</MenuItem>}
                             {pricingEnabled && showPrice && <MenuItem value="price_desc">Price: High to Low</MenuItem>}
                             <MenuItem value="name_asc">Name: A to Z</MenuItem>
@@ -249,7 +263,7 @@ const ProductListPage = ({ tag = null }) => {
                 </Grid>
             </Grid>
 
-            <Drawer anchor="left" open={mobileFilterOpen} onClose={() => setMobileFilterOpen(false)}>
+            <Drawer anchor="left" open={showFilters && useFilterDrawer && mobileFilterOpen} onClose={() => setMobileFilterOpen(false)}>
                 <Box sx={{ width: { xs: '85vw', sm: 320 }, maxWidth: 380, p: 3 }}>
                     <StorefrontSidebarMenu onNavigate={() => setMobileFilterOpen(false)} />
                     <ProductFilters filters={filters} onFilterChange={(f) => { handleFilterChange(f); setMobileFilterOpen(false); }} priceRange={priceRange} />

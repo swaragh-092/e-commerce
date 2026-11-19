@@ -22,6 +22,7 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.DECIMAL(10, 2),
             allowNull: false,
         },
+        snapshotCostPrice: { type: DataTypes.DECIMAL(10, 2), allowNull: true, field: 'snapshot_cost_price' },
         snapshotImage: {
             type: DataTypes.STRING(500),
         },
@@ -81,6 +82,7 @@ module.exports = (sequelize, DataTypes) => {
         },
     }, {
         tableName: 'order_items',
+        defaultScope: { attributes: { exclude: ['snapshotCostPrice'] } },
         timestamps: true,
         updatedAt: false,
         underscored: true,

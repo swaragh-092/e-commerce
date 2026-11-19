@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { createDefaultSection, getSectionPresetGallery } from '../../../client/src/utils/sectionPresets';
 
 const require = createRequire(import.meta.url);
 const path = require('path');
@@ -23,6 +24,15 @@ describe('Theme package schema validation', () => {
       const { error } = packageSchema.validate(content, { abortEarly: false, stripUnknown: false });
       expect(error).toBeUndefined();
     });
+  });
+
+  it('validates every addable section preset as a reusable package section', () => {
+    const homepageSections = getSectionPresetGallery().map(({ type }) => createDefaultSection(type, { id: type }));
+    expect(homepageSections.map(({ type }) => type).sort()).toEqual(
+      [...require('../../src/modules/theme/theme.validation').SECTION_TYPES].sort(),
+    );
+    const pkg = buildMinimalPackage({ layout: { homepageSections } });
+    expect(packageSchema.validate(pkg, { abortEarly: false }).error).toBeUndefined();
   });
 
   it('rejects packages with customCSS', () => {
@@ -53,11 +63,494 @@ describe('Theme package schema validation', () => {
     expect(error).toBeDefined();
   });
 
+  it('preserves Designer product and category controls through theme export, library import, and scoped preview', async () => {
+    const { Setting, ThemePackage } = require('../../src/modules');
+    const ThemeService = require('../../src/modules/theme/theme.service');
+    const designerSettings = [
+      { group: 'productPage', key: 'templateLayout', value: 'gallery-top-details-below' },
+      { group: 'productPage', key: 'imageAlignment', value: 'vertical' },
+      { group: 'productPage', key: 'showSKU', value: false },
+      { group: 'productPage', key: 'showStockBadge', value: false },
+      { group: 'productPage', key: 'addToCartLabel', value: 'Add to basket' },
+      { group: 'productPage', key: 'showBuyNowButton', value: false },
+      { group: 'productPage', key: 'buyNowLabel', value: 'Buy it now' },
+      { group: 'categoryPage', key: 'heroTitle', value: 'Browse our departments' },
+      { group: 'categoryPage', key: 'headerLayout', value: 'split' },
+      { group: 'categoryPage', key: 'showSubcategories', value: false },
+    ];
+    const readSettings = vi.spyOn(Setting, 'findAll')
+      .mockResolvedValueOnce(designerSettings)
+      .mockResolvedValueOnce([]);
+    const findTemplate = vi.spyOn(ThemePackage, 'findOne').mockResolvedValue(null);
+    const createTemplate = vi.spyOn(ThemePackage, 'create').mockImplementation(async (record) => record);
+
+    try {
+      const pkg = await ThemeService.exportCurrent({ includeDemoContent: false });
+      const saved = await ThemeService.importToLibrary(JSON.parse(JSON.stringify(pkg)), 'manager');
+      const preview = await ThemeService.preview(saved.packageData, ['pageTemplates']);
+
+      expect(pkg.pageTemplates.product).toMatchObject({
+        imageAlignment: 'vertical',
+        showSKU: false,
+        showStockBadge: false,
+        addToCartLabel: 'Add to basket',
+        showBuyNowButton: false,
+        buyNowLabel: 'Buy it now',
+      });
+      expect(pkg.pageTemplates.category).toEqual({
+        heroTitle: 'Browse our departments',
+        headerLayout: 'split',
+        showSubcategories: false,
+      });
+      expect(preview.mergedSettings.productPage).toMatchObject({
+        imageAlignment: 'vertical',
+        showSKU: false,
+        showStockBadge: false,
+        addToCartLabel: 'Add to basket',
+        showBuyNowButton: false,
+        buyNowLabel: 'Buy it now',
+      });
+      expect(preview.mergedSettings.categoryPage).toMatchObject({
+        heroTitle: 'Browse our departments',
+        headerLayout: 'split',
+        showSubcategories: false,
+      });
+    } finally {
+      readSettings.mockRestore();
+      findTemplate.mockRestore();
+      createTemplate.mockRestore();
+    }
+  });
+
   it('rejects unknown section types', () => {
     const pkg = buildMinimalPackage();
     pkg.layout = { homepageSections: [{ id: 'x', type: 'malicious-widget', enabled: true }] };
     const { error } = packageSchema.validate(pkg, { abortEarly: false });
     expect(error).toBeDefined();
+  });
+
+  it('validates exported blank announcement colors and promo banner media', async () => {
+    const { Setting } = require('../../src/modules');
+    const ThemeService = require('../../src/modules/theme/theme.service');
+    const banner = { id: 'summer-sale', title: 'Summer sale', image: '/uploads/promo.jpg' };
+    const readSettings = vi.spyOn(Setting, 'findAll').mockResolvedValueOnce([
+      { group: 'announcement', key: 'bgColor', value: '' },
+      { group: 'announcement', key: 'fgColor', value: '' },
+      { group: 'homepage', key: 'promoBanners', value: [banner] },
+    ]);
+    try {
+      const exported = await ThemeService.exportCurrent();
+      const validated = ThemeService.validatePackage(JSON.parse(JSON.stringify(exported)));
+
+      expect(validated.layout.announcementStyle).toEqual({ bgColor: '', fgColor: '' });
+      expect(validated.demoContent.promoBanners).toEqual([banner]);
+    } finally {
+      readSettings.mockRestore();
+    }
+  });
+
+  it('preserves composed hero blocks and mobile media through export and preview', async () => {
+    const { Setting } = require('../../src/modules');
+    const ThemeService = require('../../src/modules/theme/theme.service');
+    const section = {
+      id: 'hero', type: 'composed-hero', enabled: true,
+      heroBlocks: [{
+        id: 'group', type: 'group', direction: 'row', children: [
+          { id: 'title', type: 'heading', text: 'Grow your own' },
+          { id: 'card', type: 'collection', categorySlug: 'seeds', href: '/category/seeds', url: '/uploads/seeds.jpg',
+            mobileUrl: '/uploads/seeds-mobile.mp4', mobileMediaType: 'video' },
+        ],
+      }],
+    };
+    const readSettings = vi.spyOn(Setting, 'findAll')
+      .mockResolvedValueOnce([{ group: 'homepage', key: 'sections', value: [section] }])
+      .mockResolvedValue([]);
+    try {
+      const pkg = JSON.parse(JSON.stringify(await ThemeService.exportCurrent()));
+      expect((await ThemeService.preview(pkg, ['homepageSections'])).mergedSettings.homepage.sections).toEqual([section]);
+      section.heroBlocks[0].children[1].href = 'javascript:alert(1)';
+      pkg.layout.homepageSections = [section];
+      expect(() => ThemeService.validatePackage(pkg)).toThrow(/href/);
+    } finally {
+      readSettings.mockRestore();
+    }
+  });
+
+  it('round-trips reusable blocks, shared placements and collection controls through template preview', async () => {
+    const { Setting } = require('../../src/modules');
+    const ThemeService = require('../../src/modules/theme/theme.service');
+    const sections = [
+      { id: 'info', type: 'product-info', enabled: true, heroBlocks: [
+        { id: 'attribute', type: 'product-attribute', attributeName: 'Germination' },
+        { id: 'enquiry', type: 'enquiry' },
+      ] },
+      { id: 'recent', type: 'recently-viewed', enabled: false, dataSourceSlug: 'local-only' },
+    ];
+    const homeSections = [
+      { id: 'header', type: 'composed-hero', placement: 'header', enabled: true,
+        heroBlocks: [{ id: 'notice', type: 'text', text: 'Seasonal collection' }] },
+      { id: 'story', type: 'editorial-image-text', enabled: true,
+        heroBlocks: [{ id: 'guide', type: 'blog', blogSlug: 'planting-guide' }] },
+      { id: 'footer', type: 'composed-hero', placement: 'footer', enabled: true,
+        heroBlocks: [{ id: 'signup', type: 'newsletter' }] },
+    ];
+    const readSettings = vi.spyOn(Setting, 'findAll')
+      .mockResolvedValueOnce([
+        { group: 'homepage', key: 'sections', value: homeSections },
+        { group: 'productPage', key: 'sections', value: sections },
+        { group: 'blogPage', key: 'sections', value: [] },
+        { group: 'catalog', key: 'showFilters', value: false },
+        { group: 'catalog', key: 'categoryDepth', value: 2 },
+      ])
+      .mockResolvedValue([]);
+    try {
+      const exported = await ThemeService.exportCurrent();
+      const pkg = JSON.parse(JSON.stringify(exported));
+      const preview = await ThemeService.preview(pkg, ['pageTemplates', 'homepageSections']);
+      expect(preview.mergedSettings.homepage.sections).toEqual(homeSections);
+      expect(preview.mergedSettings.productPage.sections).toEqual([
+        sections[0], { id: 'recent', type: 'recently-viewed', enabled: false },
+      ]);
+      expect(preview.mergedSettings.blogPage.sections).toEqual([]);
+      expect(preview.mergedSettings.catalog).toMatchObject({ showFilters: false, categoryDepth: 2 });
+      expect((await ThemeService.preview(pkg, ['design'])).mergedSettings.productPage).toBeUndefined();
+    } finally {
+      readSettings.mockRestore();
+    }
+  });
+
+  it('exports published section design and content and previews it for installation', async () => {
+    const { Setting } = require('../../src/modules');
+    const ThemeService = require('../../src/modules/theme/theme.service');
+    const homepageSections = [
+      {
+        id: 'newsletter', type: 'newsletter-signup', enabled: true,
+        placement: 'footer', variant: 'inline-form', title: 'Get updates', ctaText: 'Sign up',
+        textAlign: 'center', paddingTop: 24, marginBottom: -8, hideOnMobile: true,
+        backgroundColor: '#f5f5f5', backgroundImage: '/uploads/banner.jpg',
+        widthMode: 'custom', customMaxWidth: 640, boxShadow: 'sm',
+      },
+      {
+        id: 'hero', type: 'hero-carousel',
+        slides: [{ title: 'New arrivals', image: '/uploads/hero.jpg', position: 'top', buttonLink: '/products' }],
+      },
+      {
+        id: 'promo', type: 'promo-banners', enabled: true,
+        items: [{ title: 'Summer sale', subtitle: 'This weekend', image: '/uploads/promo.jpg', color: '#ffeeee', link: '/sale' }],
+      },
+      {
+        id: 'trust', type: 'trust-badges', enabled: true,
+        items: [{ title: 'Delivery', icon: 'shipping', backgroundColor: '', accentColor: '#002233' }],
+      },
+      { id: 'countdown', type: 'countdown-sale', enabled: false, endDate: '2027-07-01T00:00:00.000Z' },
+    ];
+    const readSettings = vi.spyOn(Setting, 'findAll')
+      .mockResolvedValueOnce([{ group: 'homepage', key: 'sections', value: homepageSections }])
+      .mockResolvedValueOnce([]);
+    try {
+      const pkg = await ThemeService.exportCurrent({ includeDemoContent: false });
+      const preview = await ThemeService.preview(JSON.parse(JSON.stringify(pkg)), ['homepageSections']);
+
+      expect(preview.mergedSettings.homepage.sections).toEqual(
+        homepageSections.map((section) => ({ enabled: true, ...section })),
+      );
+    } finally {
+      readSettings.mockRestore();
+    }
+  });
+
+  it('preserves mixed page section order and settings through theme export and preview', async () => {
+    const { Setting } = require('../../src/modules');
+    const ThemeService = require('../../src/modules/theme/theme.service');
+    const rows = [
+      { id: 'trending', type: 'product-row', enabled: true, source: 'trending', pagePosition: 'above', productScope: 'category' },
+      { id: 'picks', type: 'product-row', enabled: true, source: 'staffPicks', pagePosition: 'below', layout: 'grid-compact',
+        productIds: ['d0c29777-e701-4e40-ab97-bd600e1dddfd', '093643c4-aec2-4b45-a494-3cfcacc37ee0'] },
+      { id: 'faq', type: 'faq', enabled: true, pagePosition: 'below', items: [
+        { title: 'When will it ship?', text: 'Within two business days.' },
+        { title: 'Can I collect it?', text: 'Yes, at the store.' },
+      ] },
+    ];
+    const readSettings = vi.spyOn(Setting, 'findAll')
+      .mockResolvedValueOnce([{ group: 'categoryPage', key: 'productRows', value: rows }])
+      .mockResolvedValueOnce([]);
+    try {
+      const pkg = await ThemeService.exportCurrent();
+      const { mergedSettings } = await ThemeService.preview(JSON.parse(JSON.stringify(pkg)), ['pageTemplates']);
+      expect(mergedSettings.categoryPage.productRows).toEqual(rows);
+    } finally {
+      readSettings.mockRestore();
+    }
+  });
+
+  it('round-trips and applies named Product and Category templates with their assignments and section order', async () => {
+    const { sequelize, Setting, ThemePackage, ThemeActivation } = require('../../src/modules');
+    const ThemeService = require('../../src/modules/theme/theme.service');
+    const SettingsService = require('../../src/modules/settings/settings.service');
+    const AuditService = require('../../src/modules/audit/audit.service');
+    const productRows = [
+      { id: 'featured', type: 'product-row', source: 'featured', enabled: true },
+      { id: 'care', type: 'faq', enabled: true, items: [{ title: 'How deep should I sow?', text: 'Just below the surface.' }] },
+    ];
+    const product = {
+      id: 'd0c29777-e701-4e40-ab97-bd600e1dddfd', name: 'Seeds', productSlugs: ['basil-seeds'],
+      settings: { templateLayout: 'sticky-purchase-panel', productRows },
+    };
+    const category = {
+      id: '093643c4-aec2-4b45-a494-3cfcacc37ee0', name: 'Herbs', categorySlugs: ['herbs'],
+      settings: { gridColumns: 4, productRows },
+    };
+    const transaction = { LOCK: { UPDATE: 'UPDATE' } };
+    const readSettings = vi.spyOn(Setting, 'findAll').mockResolvedValueOnce([
+        { group: 'productPage', key: 'alternateTemplates', value: [product] },
+        { group: 'categoryPage', key: 'alternateTemplates', value: [category] },
+      ]).mockResolvedValue([]);
+    const writeSettings = vi.spyOn(SettingsService, 'bulkUpdate').mockResolvedValue(undefined);
+    const mocks = [
+      readSettings,
+      writeSettings,
+      vi.spyOn(sequelize, 'transaction').mockImplementation((callback) => callback(transaction)),
+      vi.spyOn(ThemePackage, 'findOne').mockResolvedValue(null),
+      vi.spyOn(ThemeActivation, 'create').mockResolvedValue({ id: 'activation' }),
+      vi.spyOn(AuditService, 'log').mockResolvedValue(undefined),
+    ];
+    try {
+      const pkg = JSON.parse(JSON.stringify(await ThemeService.exportCurrent()));
+      const { mergedSettings } = await ThemeService.preview(pkg, ['pageTemplates']);
+      expect(mergedSettings.productPage.alternateTemplates).toEqual([product]);
+      expect(mergedSettings.categoryPage.alternateTemplates).toEqual([category]);
+
+      const scopes = ['pageTemplates'];
+      const user = { id: 'manager' };
+      await ThemeService.apply(pkg, { scopes }, user);
+      expect(writeSettings).toHaveBeenLastCalledWith(expect.arrayContaining([
+        { group: 'productPage', key: 'alternateTemplates', value: [product] },
+        { group: 'categoryPage', key: 'alternateTemplates', value: [category] },
+      ]), user.id, user, { transaction });
+
+      pkg.pageTemplates.category.alternateTemplates.push({ ...category, id: product.id, name: 'Duplicate assignment' });
+      await expect(ThemeService.preview(pkg, ['pageTemplates'])).rejects.toThrow(/only be assigned to one template/);
+
+      delete pkg.pageTemplates.product.alternateTemplates;
+      delete pkg.pageTemplates.category.alternateTemplates;
+      await ThemeService.apply(pkg, { scopes }, user);
+      expect(writeSettings.mock.lastCall[0].some(({ key }) => key === 'alternateTemplates')).toBe(false);
+    } finally {
+      mocks.forEach((mock) => mock.mockRestore());
+    }
+  });
+
+  it('previews exported navigation, commerce styles, and album references', async () => {
+    const { Setting } = require('../../src/modules');
+    const ThemeService = require('../../src/modules/theme/theme.service');
+    const sections = [{ id: 'gallery', type: 'gallery', gallerySlug: 'summer-looks', enabled: true }];
+    const formControl = { variant: 'filled', focusStyle: 'glow' };
+    const readSettings = vi.spyOn(Setting, 'findAll')
+      .mockResolvedValueOnce([
+        { group: 'nav', key: 'showWishlist', value: true },
+        { group: 'nav', key: 'actionsOrder', value: ['wishlist', 'search', 'cart', 'account'] },
+        { group: 'componentStyles', key: 'formControl', value: formControl },
+        { group: 'homepage', key: 'sections', value: sections },
+      ])
+      .mockResolvedValueOnce([]);
+    try {
+      const pkg = await ThemeService.exportCurrent();
+      const preview = await ThemeService.preview(JSON.parse(JSON.stringify(pkg)), ['layoutStyle', 'homepageSections', 'componentStyles']);
+      expect(preview.mergedSettings).toMatchObject({
+        nav: { showWishlist: true, actionsOrder: ['wishlist', 'search', 'cart', 'account'] },
+        componentStyles: { formControl },
+        homepage: { sections },
+      });
+    } finally {
+      readSettings.mockRestore();
+    }
+  });
+
+  it('preserves Designer product and category controls through export and Try in Designer preview', async () => {
+    const { Setting } = require('../../src/modules');
+    const ThemeService = require('../../src/modules/theme/theme.service');
+    const designerSettings = [
+      { group: 'productPage', key: 'templateLayout', value: 'gallery-top-details-below' },
+      { group: 'productPage', key: 'imageAlignment', value: 'vertical' },
+      { group: 'productPage', key: 'showSKU', value: false },
+      { group: 'productPage', key: 'showStockBadge', value: false },
+      { group: 'productPage', key: 'addToCartLabel', value: 'Add to basket' },
+      { group: 'productPage', key: 'showBuyNowButton', value: false },
+      { group: 'productPage', key: 'buyNowLabel', value: 'Buy it now' },
+      { group: 'categoryPage', key: 'heroTitle', value: 'Browse our departments' },
+      { group: 'categoryPage', key: 'headerLayout', value: 'split' },
+      { group: 'categoryPage', key: 'showSubcategories', value: false },
+    ];
+    const readSettings = vi.spyOn(Setting, 'findAll')
+      .mockResolvedValueOnce(designerSettings)
+      .mockResolvedValueOnce([]);
+
+    try {
+      const pkg = await ThemeService.exportCurrent({ includeDemoContent: false });
+      const preview = await ThemeService.preview(pkg, ['pageTemplates']);
+
+      expect(pkg.pageTemplates.product).toMatchObject({
+        imageAlignment: 'vertical',
+        showSKU: false,
+        showStockBadge: false,
+        addToCartLabel: 'Add to basket',
+        showBuyNowButton: false,
+        buyNowLabel: 'Buy it now',
+      });
+      expect(pkg.pageTemplates.category).toEqual({
+        heroTitle: 'Browse our departments',
+        headerLayout: 'split',
+        showSubcategories: false,
+      });
+      expect(preview.mergedSettings.productPage).toMatchObject({
+        imageAlignment: 'vertical',
+        showSKU: false,
+        showStockBadge: false,
+        addToCartLabel: 'Add to basket',
+        showBuyNowButton: false,
+        buyNowLabel: 'Buy it now',
+      });
+      expect(preview.mergedSettings.categoryPage).toMatchObject({
+        heroTitle: 'Browse our departments',
+        headerLayout: 'split',
+        showSubcategories: false,
+      });
+    } finally {
+      readSettings.mockRestore();
+    }
+  });
+
+  it('stages scoped template settings into the existing draft without updating live settings', async () => {
+    const { sequelize, DesignDraft } = require('../../src/modules');
+    const SettingsService = require('../../src/modules/settings/settings.service');
+    const AuditService = require('../../src/modules/audit/audit.service');
+    const ThemeService = require('../../src/modules/theme/theme.service');
+    const transaction = { LOCK: { UPDATE: 'UPDATE' } };
+    const original = {
+      status: 'draft', revision: 2, baseSnapshot: {},
+      payload: [{ group: 'footer', key: 'bgColor', value: '#123456' }],
+    };
+    const update = vi.fn(async (value) => ({ toJSON: () => value }));
+    const mocks = [
+      vi.spyOn(sequelize, 'transaction').mockImplementation((callback) => callback(transaction)),
+      vi.spyOn(DesignDraft, 'findOne').mockResolvedValue({ ...original, update }),
+      vi.spyOn(AuditService, 'log').mockResolvedValue(undefined),
+      vi.spyOn(SettingsService, 'bulkUpdate').mockResolvedValue(undefined),
+    ];
+    try {
+      const pkg = buildMinimalPackage();
+      const header = {
+        id: 'header', type: 'composed-hero', placement: 'header', enabled: true,
+        heroBlocks: [{ id: 'notice', type: 'text', text: 'Seasonal collection' }],
+      };
+      const productInfo = {
+        id: 'info', type: 'product-info', enabled: true,
+        heroBlocks: [{ id: 'enquiry', type: 'enquiry' }],
+      };
+      pkg.layout = { ...pkg.layout, homepageSections: [header] };
+      pkg.pageTemplates = { product: { layout: 'media-left-details-right', sections: [productInfo] } };
+      const draft = await ThemeService.stageDraft(pkg, {
+        scopes: ['design', 'homepageSections', 'pageTemplates'],
+      }, { id: 'manager' });
+      expect(draft.payload).toEqual(expect.arrayContaining([
+        { group: 'homepage', key: 'sections', value: [header], operation: 'upsert' },
+        { group: 'productPage', key: 'sections', value: [productInfo], operation: 'upsert' },
+      ]));
+      expect(draft.revision).toBe(3);
+      expect(draft.payload).toEqual(expect.arrayContaining([
+        { group: 'footer', key: 'bgColor', value: '#123456', operation: 'upsert' },
+        { group: 'theme', key: 'primaryColor', value: '#0f766e', operation: 'upsert' },
+      ]));
+      expect(SettingsService.bulkUpdate).not.toHaveBeenCalled();
+      await expect(ThemeService.stageDraft(buildMinimalPackage(), { scopes: ['dataSources'] }, { id: 'manager' })).rejects.toThrow(/cannot be staged/);
+    } finally {
+      mocks.forEach((mock) => mock.mockRestore());
+    }
+  });
+
+  it('rejects unsafe URLs and unknown fields inside section content', () => {
+    const pkg = buildMinimalPackage({ layout: { homepageSections: [{
+      id: 'hero', type: 'hero-carousel', enabled: true,
+      backgroundImage: 'javascript:alert(1)',
+      slides: [{ buttonLink: '//example.com', script: 'alert(1)' }],
+    }] } });
+    const { error } = packageSchema.validate(pkg, { abortEarly: false });
+
+    expect(error.details.map(({ path }) => path.slice(3).join('.'))).toEqual(expect.arrayContaining([
+      'backgroundImage', 'slides.0.buttonLink', 'slides.0.script',
+    ]));
+  });
+
+  it('accepts typography, mobile, font, and semantic colour tokens saved by the designer', () => {
+    const pkg = buildMinimalPackage();
+    pkg.design.theme = {
+      ...pkg.design.theme,
+      errorColor: '#dc3545',
+      cancelButtonColor: '#e11d48',
+      warningColor: '#d97706',
+      successColor: '#059669',
+      infoColor: '#0284c7',
+      fontVariationSettings: '"opsz" 32, "wght" 650',
+      lineHeightH1: '1.05',
+      lineHeightH2: '1.1',
+      typographyScale: {
+        preset: 'custom',
+        fluid: true,
+        h1: 'clamp(2rem, 5vw, 3.25rem)',
+        body1: '1rem',
+        fluidConfig: { bodyMin: '0.95', bodyMax: '1.05', minVw: '320', maxVw: '1280' },
+      },
+      mobileOverrides: {
+        primaryColor: '#0f766e',
+        bodyFontSize: '0.95rem',
+        headingScale: '0.86',
+        sectionPadding: '32px',
+        containerPadding: '16px',
+      },
+      customFonts: {
+        bodyUrl: 'https://cdn.example.com/fonts/store-body.woff2',
+        bodyFamily: 'Store Body',
+        bodyFormat: 'woff2',
+      },
+      variableFontAxes: {
+        wght: { enabled: true, value: 650, default: 400, min: 100, max: 900 },
+      },
+      darkPalette: {
+        primaryColor: '#4fd1a5',
+        errorColor: '#dc3545',
+        cancelButtonColor: '#e11d48',
+        warningColor: '#d97706',
+        successColor: '#059669',
+        infoColor: '#0284c7',
+      },
+    };
+
+    const { error } = packageSchema.validate(pkg, { abortEarly: false, stripUnknown: false });
+    expect(error).toBeUndefined();
+  });
+
+  it('rejects unknown keys inside saved typography tokens', () => {
+    const pkg = buildMinimalPackage();
+    pkg.design.theme.typographyScale = { preset: 'custom', malicious: 'body { display: none; }' };
+    const { error } = packageSchema.validate(pkg, { abortEarly: false });
+    expect(error).toBeDefined();
+    expect(error.message).toContain('malicious');
+  });
+
+  it('rejects unsupported custom font formats', () => {
+    const pkg = buildMinimalPackage();
+    pkg.design.theme.customFonts = { bodyUrl: 'https://cdn.example.com/font.exe', bodyFormat: 'exe' };
+    const { error } = packageSchema.validate(pkg, { abortEarly: false });
+    expect(error).toBeDefined();
+    expect(error.message).toContain('bodyFormat');
+  });
+
+  it('rejects non-http custom font URLs', () => {
+    const pkg = buildMinimalPackage();
+    pkg.design.theme.customFonts = { bodyUrl: 'javascript:alert(1)', bodyFormat: 'woff2' };
+    const { error } = packageSchema.validate(pkg, { abortEarly: false });
+    expect(error).toBeDefined();
+    expect(error.message).toContain('bodyUrl');
   });
 });
 
@@ -317,3 +810,21 @@ function buildMinimalPackage(overrides = {}) {
     ...overrides,
   };
 }
+
+describe('tag and gallery theme sections', () => {
+  it('preserves content selections through package validation', () => {
+    const homepageSections = [
+      { id: 'tags', type: 'tag-showcase', enabled: true, title: 'Shop by Tag', tagSlugs: ['summer', 'garden'], count: 8 },
+      { id: 'gallery', type: 'gallery-grid', enabled: true, title: 'Our Gallery', gallerySlug: 'our-store', count: 6 },
+    ];
+    const { value, error } = packageSchema.validate(buildMinimalPackage({ layout: { homepageSections } }));
+    expect(error).toBeUndefined();
+    expect(value.layout.homepageSections).toEqual(homepageSections);
+  });
+  it('rejects unsafe gallery slugs and excessive tag selections', () => {
+    const section = { id: 'gallery', type: 'gallery-grid', enabled: true, gallerySlug: '../private' };
+    expect(packageSchema.validate(buildMinimalPackage({ layout: { homepageSections: [section] } })).error).toBeDefined();
+    const tags = { id: 'tags', type: 'tag-showcase', enabled: true, tagSlugs: Array.from({ length: 13 }, (_, i) => `tag-${i}`) };
+    expect(packageSchema.validate(buildMinimalPackage({ layout: { homepageSections: [tags] } })).error).toBeDefined();
+  });
+});

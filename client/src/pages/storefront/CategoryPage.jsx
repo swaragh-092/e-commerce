@@ -159,10 +159,12 @@ const CategoryPage = () => {
     const { settings }      = useSettings();
     const catalog           = settings?.catalog || {};
     const categoryPage      = settings?.categoryPage || {};
-    const defaultSort       = catalog.defaultSort       || 'newest';
-    const defaultLimit      = parseInt(catalog.defaultPageSize) || 20;
-    const gridCols          = parseInt(catalog.gridColumns) || 4;
-    const showFilters       = catalog.showFilters !== false;
+    const defaultSort       = categoryPage.defaultSort || catalog.defaultSort || 'newest';
+    const defaultLimit      = Math.min(100, Math.max(1, Number.parseInt(categoryPage.defaultPageSize ?? catalog.defaultPageSize, 10) || 20));
+    const gridCols          = Math.min(6, Math.max(2, Number.parseInt(categoryPage.gridColumns ?? catalog.gridColumns, 10) || 4));
+    const showFilters       = (categoryPage.showFilters ?? catalog.showFilters) !== false;
+    const categoryDepth     = Math.min(5, Math.max(1, Number.parseInt(categoryPage.categoryDepth ?? catalog.categoryDepth, 10) || 3));
+    const categoryExpandMode = categoryPage.categoryExpandMode || catalog.categoryExpandMode || 'selected-path';
     const collectionLayout  = catalog.templateLayout || 'sidebar-filters-grid';
     const filterLayout      = catalog.filterLayout  || (collectionLayout.includes('top') ? 'topbar' : 'sidebar');
     const isCompact         = collectionLayout.includes('compact') || collectionLayout.includes('b2b');
@@ -178,6 +180,8 @@ const CategoryPage = () => {
 
     // ── URL-driven filter state ───────────────────────────────────────────────
     const filters = {
+        category: categorySlug || '',
+        brand:    searchParams.get('brand') || '',
         page:     parseInt(searchParams.get('page'))     || 1,
         sort:     searchParams.get('sort')               || defaultSort,
         minPrice: searchParams.get('minPrice')           || '',
@@ -193,9 +197,11 @@ const CategoryPage = () => {
         setNotFound(false);
 
         getCategoryWithProducts(categorySlug, {
+            hideEmpty: true,
             page: filters.page,
             limit: filters.limit,
             sort: filters.sort,
+            brand: filters.brand,
             minPrice: filters.minPrice,
             maxPrice: filters.maxPrice,
         })
@@ -215,12 +221,25 @@ const CategoryPage = () => {
 
         return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [categorySlug, searchParams.toString()]);
+    }, [categorySlug, searchParams.toString(), defaultLimit, defaultSort]);
 
     // ── Handlers ──────────────────────────────────────────────────────────────
     const handleFilterChange = (newFilters) => {
+        const { category: nextCategory = '', ...queryFilters } = newFilters;
         const params = new URLSearchParams();
-        Object.entries(newFilters).forEach(([k, v]) => { if (v) params.set(k, String(v)); });
+        Object.entries(queryFilters).forEach(([k, v]) => { if (v) params.set(k, String(v)); });
+        const query = params.toString();
+
+        if (nextCategory && nextCategory !== categorySlug) {
+            navigate(`/category/${encodeURIComponent(nextCategory)}${query ? `?${query}` : ''}`);
+            return;
+        }
+
+        if (!nextCategory && categorySlug) {
+            navigate(`/products${query ? `?${query}` : ''}`);
+            return;
+        }
+
         setSearchParams(params);
     };
 
@@ -268,15 +287,16 @@ const CategoryPage = () => {
     // Map subcategories → tiles expected by CategorySection
     const subcategoryTiles = normalizeSubs(subcategories);
 
-    const hasActiveFilters = Boolean(filters.minPrice || filters.maxPrice);
+    const hasActiveFilters = Boolean(filters.brand || filters.minPrice || filters.maxPrice);
 
     return (
         <Container maxWidth={isCompact ? 'lg' : 'xl'} sx={{ py: 4 }}>
             <PageSEO
                 title={category?.metaTitle || pageTitle}
                 description={category?.metaDescription || category?.description}
-                image={category?.bannerImage ? getMediaUrl(category.bannerImage) : undefined}
+                image={category?.ogImage || category?.bannerImage || category?.image}
                 url={categoryUrl}
+                type="collection"
                 structuredData={breadcrumbStructuredData}
             />
 
@@ -387,6 +407,8 @@ const CategoryPage = () => {
                         filters={filters}
                         onFilterChange={handleFilterChange}
                         priceRange={priceRange}
+                        categoryDepth={categoryDepth}
+                        categoryExpandMode={categoryExpandMode}
                     />
                 </Box>
             )}
@@ -405,6 +427,8 @@ const CategoryPage = () => {
                             filters={filters}
                             onFilterChange={handleFilterChange}
                             priceRange={priceRange}
+                            categoryDepth={categoryDepth}
+                            categoryExpandMode={categoryExpandMode}
                         />
                     </Grid>
                 )}
@@ -447,6 +471,8 @@ const CategoryPage = () => {
                         filters={filters}
                         onFilterChange={(f) => { handleFilterChange(f); setMobileFilterOpen(false); }}
                         priceRange={priceRange}
+                        categoryDepth={categoryDepth}
+                        categoryExpandMode={categoryExpandMode}
                     />
                 </Box>
             </Drawer>

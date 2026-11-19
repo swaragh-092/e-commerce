@@ -5,6 +5,7 @@ import { userService } from '../services/userService';
 import cartService from '../services/cartService';
 import { wishlistService } from '../services/wishlistService';
 import { getPermissionsForUser, getRolesForUser } from '../utils/permissions';
+import { resetAdminSessionLock } from '../services/adminSessionLock';
 
 export const AuthContext = createContext(null);
 
@@ -58,6 +59,7 @@ export const AuthProvider = ({ children }) => {
     initAuth();
 
     const handleUnauthorized = () => {
+      resetAdminSessionLock();
       localStorage.removeItem('userProfile');
       setUser(null);
       setIsAuthenticated(false);
@@ -119,7 +121,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password, rememberMe = false) => {
     const data = await authService.login(email, password, rememberMe);
     // If 2FA is required, return early — caller handles the 2FA step
-    if (data.requiresTwoFactor) {
+    if (data.requiresTwoFactor || data.requiresMfaEnrollment) {
       return data;
     }
     const fullUser = await finalizeAuthenticatedSession();
@@ -158,6 +160,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     await authService.logout();
+    resetAdminSessionLock();
     setUser(null);
     setIsAuthenticated(false);
     localStorage.removeItem('userProfile');

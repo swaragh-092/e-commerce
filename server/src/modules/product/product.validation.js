@@ -6,6 +6,12 @@ const { MIN_SEARCH_QUERY_LENGTH, MAX_SEARCH_QUERY_LENGTH, normalizeSearchQuery }
 
 const productListQuerySchema = Joi.object({
   tags: tagFilterSchema,
+  ids: Joi.array().single().max(12).items(Joi.string().uuid()),
+  discoveryRow: Joi.boolean(),
+  saleLabel: Joi.string().trim().max(100),
+  sale: Joi.boolean(),
+  onSale: Joi.boolean(),
+  featured: Joi.boolean(),
   hasVariants: Joi.boolean(),
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(1000).default(20),
@@ -53,6 +59,7 @@ const createProductSchema = Joi.object({
   sku: Joi.string().max(100).allow('', null),
   unit: Joi.string().max(50).allow('', null),
   price: Joi.number().precision(2).positive().required(),
+  costPrice: Joi.number().precision(2).min(0).max(99999999.99).allow(null),
   salePrice: Joi.number().precision(2).positive().allow(null).less(Joi.ref('price')),
   saleStartAt: Joi.date().iso().allow(null),
   saleEndAt: Joi.date().iso().allow(null).when('saleStartAt', {
@@ -81,6 +88,7 @@ const createProductSchema = Joi.object({
     igst: Joi.number().min(0).max(1),
   }).allow(null),
   type: Joi.string().valid('simple', 'variable', 'combo').required(),
+  storefrontLayout: Joi.string().valid('media-left-details-right', 'gallery-top-details-below', 'sticky-purchase-panel', 'luxury-editorial', 'editorial').allow(null),
   status: Joi.string().valid('draft', 'published'),
   isFeatured: Joi.boolean(),
   categoryIds: Joi.array().items(Joi.string().uuid()),
@@ -119,6 +127,7 @@ const updateProductSchema = Joi.object({
   sku: Joi.string().max(100).allow('', null),
   unit: Joi.string().max(50).allow('', null),
   price: Joi.number().precision(2).positive(),
+  costPrice: Joi.number().precision(2).min(0).max(99999999.99).allow(null),
   salePrice: Joi.number().precision(2).positive().allow(null).when('price', {
     is: Joi.exist(),
     then: Joi.number().precision(2).positive().allow(null).less(Joi.ref('price')),
@@ -148,6 +157,7 @@ const updateProductSchema = Joi.object({
   }).allow(null),
   type: Joi.string().valid('simple', 'variable', 'combo'),
   confirmInventoryReset: Joi.boolean(),
+  storefrontLayout: Joi.string().valid('media-left-details-right', 'gallery-top-details-below', 'sticky-purchase-panel', 'luxury-editorial', 'editorial').allow(null),
   status: Joi.string().valid('draft', 'published', 'archived'),
   isFeatured: Joi.boolean(),
   categoryIds: Joi.array().items(Joi.string().uuid()),

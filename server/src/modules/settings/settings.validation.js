@@ -4,7 +4,7 @@ const Joi = require('joi');
 const { DESIGN_SETTINGS_GROUPS } = require('./designSettings');
 
 const updateSettingsGroupSchema = Joi.object({
-  group: Joi.string().valid('theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'orders', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'brandsPage', 'cartPage', 'accountPage', 'blogPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging', 'messaging_credentials', 'ai', 'ai_credentials', 'advanced').required(),
+  group: Joi.string().valid('theme', 'componentStyles', 'sectionPresets', 'features', 'payments', 'sales', 'seo', 'general', 'orders', 'shipping', 'tax', 'sku', 'logo', 'hero', 'auth', 'footer', 'announcement', 'nav', 'catalog', 'homepage', 'productPage', 'categoryPage', 'brandsPage', 'cartPage', 'accountPage', 'blogPage', 'checkoutPage', 'wishlistPage', 'searchPage', 'notFoundPage', 'ordersPage', 'admin', 'invoice', 'gateway_credentials', 'messaging', 'messaging_credentials', 'ai', 'ai_credentials', 'advanced', 'analytics_reports').required(),
   settings: Joi.object().pattern(Joi.string(), Joi.any()).required()
 });
 
@@ -39,12 +39,15 @@ const saveDesignDraftSchema = Joi.object({
 }).unknown(false);
 
 const publishDesignDraftSchema = Joi.object({
+  conflictToken: Joi.string().hex().length(64).optional(),
   expectedRevision: Joi.number().integer().min(1).optional(),
 }).unknown(false);
 
 const restoreDesignVersionSchema = Joi.object({
   expectedRevision: Joi.number().integer().min(1).optional(),
 }).unknown(false);
+
+const restoreDesignArchiveSchema = Joi.object({ expectedRevision: Joi.number().integer().min(1).optional() }).unknown(false);
 
 module.exports = {
   updateSettingsGroupSchema,
@@ -54,4 +57,5 @@ module.exports = {
   saveDesignDraftSchema,
   publishDesignDraftSchema,
   restoreDesignVersionSchema,
+  restoreDesignArchiveSchema,
 };

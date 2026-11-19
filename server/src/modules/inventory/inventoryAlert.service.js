@@ -244,7 +244,7 @@ const buildInventoryTargets = (products, threshold, now = new Date()) => {
   for (const product of products || []) {
     if (product.status !== 'published' || product.isEnabled === false) continue;
     const variants = Array.isArray(product.variants) ? product.variants : [];
-    const tracksVariants = product.type === 'variable' || variants.length > 0;
+    const tracksVariants = product.type === 'variable';
 
     if (tracksVariants) {
       for (const variant of variants) {
@@ -594,7 +594,8 @@ const runAlertCycle = async ({ now = new Date() } = {}) => {
 };
 
 const getDashboardAlertData = async () => {
-  const rows = await listActiveAlerts();
+  // Refresh quantities and resolve disabled/restocked items before returning the dashboard.
+  const rows = await listActiveAlerts({ synchronize: true });
   const [eligibleUsers, lowStockCount, outOfStockCount] = await Promise.all([
     getEligibleInventoryUsers(),
     InventoryAlert.count({

@@ -4,13 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MediaPage from '../../../pages/admin/MediaPage';
 import { mediaService } from '../../../services/mediaService';
 
-const access = vi.hoisted(() => ({ canDelete: true, canUpload: true }));
+const access = vi.hoisted(() => ({ canDelete: true, canUpload: true, canUpdate: true }));
 const { notify, confirm } = vi.hoisted(() => ({
   notify: vi.fn(),
   confirm: vi.fn(),
 }));
 
-vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: (permission) => (permission !== 'media.delete' || access.canDelete) && (permission !== 'media.upload' || access.canUpload) }) }));
+vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: (permission) => (permission !== 'media.delete' || access.canDelete) && (permission !== 'media.upload' || access.canUpload) && (permission !== 'media.update' || access.canUpdate) }) }));
 vi.mock('../../../context/NotificationContext', () => ({ useNotification: () => ({ notify, confirm }) }));
 vi.mock('../../../services/mediaService', () => ({
   mediaService: {
@@ -30,6 +30,7 @@ describe('Media Library tabs', () => {
     vi.clearAllMocks();
     access.canDelete = true;
     access.canUpload = true;
+    access.canUpdate = true;
     confirm.mockResolvedValue(true);
     mediaService.delete.mockResolvedValue({});
     observers = [];
@@ -99,6 +100,25 @@ describe('Media Library tabs', () => {
 
     expect(await screen.findByText('mui:eco')).toBeInTheDocument();
     expect(screen.getByText('1 icon')).toBeInTheDocument();
+  });
+
+  it('sends the search term to the server', async () => {
+    render(<MediaPage />);
+    await screen.findByText('media-1.png');
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search media' }), { target: { value: ' beet ' } });
+
+    await waitFor(() => expect(mediaService.list).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, search: 'beet' })));
+  });
+
+  it('opens the image editor dialog with crop tools when an image is clicked', async () => {
+    render(<MediaPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open editor for media-1.png' }));
+
+    expect(await screen.findByRole('heading', { name: 'Edit Image' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Crop, rotate & resize' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Copy URL' })).toBeInTheDocument();
+    expect(screen.getByDisplayValue('media-1.png')).toBeInTheDocument();
   });
 
   it('shows per-image usage and requests the unused filter from the server', async () => {
@@ -210,9 +230,9 @@ describe('Media Library tabs', () => {
     expect(screen.getByRole('button', { name: 'Crop selected (0)' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: /Delete selected/ })).not.toBeInTheDocument();
   });
-  it('hides crop selection when neither upload nor delete permission is granted', async () => {
+  it('hides crop selection when neither update nor delete permission is granted', async () => {
     access.canDelete = false;
-    access.canUpload = false;
+    access.canUpdate = false;
     render(<MediaPage />);
     await screen.findByText('Used 2 times');
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();

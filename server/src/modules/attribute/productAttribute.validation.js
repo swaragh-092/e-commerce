@@ -106,6 +106,7 @@ const catalogAddVariantSchema = addVariantSchema.keys({
 });
 
 const updateVariantSchema = Joi.object({
+    costPrice: Joi.number().precision(2).min(0).max(99999999.99).allow(null),
     sku: Joi.string().max(100).allow('', null),
     price: Joi.number().precision(2).min(0),
     stockQty: Joi.number().integer().min(0),
@@ -120,6 +121,7 @@ const updateVariantSchema = Joi.object({
 }).min(1).messages({ 'object.min': 'At least one field is required to update' });
 
 module.exports = {
+    updateProductAttributeGroupSchema: Joi.object({ isVariantAttr: Joi.boolean().required() }),
     reorderProductAttributesSchema: Joi.object({ rowIds: Joi.array().items(Joi.string().uuid()).unique().max(5000).required() }),
     assignProductAttributeSchema,
     addProductAttributeSchema,

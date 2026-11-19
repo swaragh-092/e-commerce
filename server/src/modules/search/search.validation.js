@@ -1,6 +1,7 @@
 'use strict';
 
 const Joi = require('joi');
+const { hideEmptySchema } = require('../../utils/common.validation');
 const { MIN_SEARCH_QUERY_LENGTH, MAX_SEARCH_QUERY_LENGTH, normalizeSearchQuery } = require('./search.utils');
 
 /**
@@ -15,6 +16,7 @@ const { MIN_SEARCH_QUERY_LENGTH, MAX_SEARCH_QUERY_LENGTH, normalizeSearchQuery }
  * requesting the entire catalog in one request.
  */
 const searchQuerySchema = Joi.object({
+  hideEmpty: hideEmptySchema,
   q: Joi.string().custom((value, helpers) => {
     const normalized = normalizeSearchQuery(value);
     const normalizedLength = Array.from(normalized).length;

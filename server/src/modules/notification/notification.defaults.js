@@ -477,6 +477,10 @@ const TEMPLATE_VARIABLES = {
 };
 
 const SAMPLE_VARIABLES = {
+  contact_name: 'Jane Doe',
+  contact_email: 'jane@example.com',
+  contact_phone: '+919876543210',
+  contact_message: 'Hello, I would like to learn more about your seeds.\nPlease contact me with more information.',
   claim_url: 'https://store.example.com/account/orders/link-guest?token=sample-token',
   expiry_minutes: 30,
   customer_name: 'Jane Doe',
@@ -538,4 +542,16 @@ const lifecycleDefaults = require('./notification.lifecycleDefaults');
 Object.assign(DEFAULTS, lifecycleDefaults.buildDefaults(EMAIL_WRAPPER));
 Object.assign(TEMPLATE_VARIABLES, lifecycleDefaults.TEMPLATE_VARIABLES);
 Object.assign(SAMPLE_VARIABLES, { request_type: 'return', reason: 'Item did not fit', status_label: 'approved', resolution_notes: 'Follow the pickup instructions in your order.', new_email: 'new@example.com', setup_url: '#setup', enquiry_id: 'preview-enquiry', unsubscribe_url: '#unsubscribe', campaign_subject: 'Latest store updates', campaign_message: 'Explore our newest products and offers.' });
+for (const [outcome, message] of [
+  ['converted', 'Thank you for choosing us. Your enquiry regarding {{productName}} has been completed.'],
+  ['lost', 'Your enquiry regarding {{productName}} has been closed. If you need further assistance or would like to discuss it again, please contact us.'],
+]) {
+  const name = `enquiry_closed_${outcome}_customer`;
+  DEFAULTS[name] = {
+    subject: 'Update on your enquiry regarding {{productName}} — {{store_name}}',
+    bodyHtml: EMAIL_WRAPPER(`<h2>Enquiry update</h2><p>Hi {{customerName}},</p><p>${message}</p><p>If you have any questions, reply to this email.</p>`),
+    bodyText: `Hi {{customerName}},\n\n${message}\n\nIf you have any questions, reply to this email.\n{{store_name}}`,
+  };
+  TEMPLATE_VARIABLES[name] = ['customerName', 'productName', 'message', 'status_label', 'enquiry_id', 'store_name', 'website_url', 'support_email'];
+}
 module.exports = { DEFAULTS, TEMPLATE_VARIABLES, SAMPLE_VARIABLES };

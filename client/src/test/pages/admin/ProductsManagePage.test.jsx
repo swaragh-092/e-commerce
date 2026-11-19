@@ -1,11 +1,12 @@
 import React from 'react';
 import { getTags, bulkUpdateProductTags } from '../../../services/tagService';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ProductsManagePage from '../../../pages/admin/ProductsManagePage';
 import { bulkUpdateProducts, getProducts, updateProduct } from '../../../services/productService';
+import { getBrands } from '../../../services/brandService';
 import { getCategoryTree } from '../../../services/categoryService';
 import { getSaleLabels } from '../../../services/adminService';
 
@@ -46,6 +47,7 @@ vi.mock('../../../services/productService', () => ({
   getStockHistory: vi.fn(),
 }));
 
+vi.mock('../../../services/brandService', () => ({ getBrands: vi.fn().mockResolvedValue({ data: { data: [] } }) }));
 vi.mock('../../../services/categoryService', () => ({ getCategoryTree: vi.fn().mockResolvedValue({ data: [] }) }));
 vi.mock('../../../services/adminService', () => ({ getSaleLabels: vi.fn().mockResolvedValue({ data: { data: [] } }) }));
 vi.mock('../../../hooks/useSettings', () => ({
@@ -70,10 +72,19 @@ const product = {
   variants: [],
 };
 
+const SearchURLProbe = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return <><output data-testid="search-url">{location.search}</output>
+    <button onClick={() => navigate('?search=opal&tags=summer')}>Navigate tag filter</button>
+    <button onClick={() => navigate(-1)}>Back in history</button></>;
+};
+
 const renderProductsPage = (initialEntries = ['/admin/products']) => render(
   <ThemeProvider theme={createTheme()}>
     <MemoryRouter initialEntries={initialEntries}>
       <ProductsManagePage />
+      <SearchURLProbe />
     </MemoryRouter>
   </ThemeProvider>
 );
@@ -105,6 +116,7 @@ describe('ProductsManagePage storefront state controls', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   it('opens the product editor when the MRP is clicked', async () => {
@@ -201,6 +213,26 @@ describe('ProductsManagePage storefront state controls', () => {
     await waitFor(() => expect(screen.queryByText('1 selected')).not.toBeInTheDocument());
   });
 
+  it('combines the selected brand with the storefront state and clears it with All Brands', async () => {
+    getBrands.mockResolvedValueOnce({ data: { data: [{ id: 'brand-1', name: 'Orbi' }] } });
+    renderProductsPage(['/admin/products?status=published']);
+
+    await screen.findByText('Test product');
+    const brandFilter = screen.getByRole('combobox', { name: 'Brand' });
+    await openSelect(brandFilter);
+    fireEvent.click(await screen.findByRole('option', { name: 'Orbi' }));
+
+    await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({
+      brand: 'brand-1',
+      status: 'published',
+      page: 1,
+    })));
+
+    await openSelect(brandFilter);
+    fireEvent.click(await screen.findByRole('option', { name: 'All Brands' }));
+    await waitFor(() => expect(getProducts.mock.lastCall[0]).not.toHaveProperty('brand'));
+  });
+
   it('applies the Paused summary card filter to the product request', async () => {
     renderProductsPage();
 
@@ -227,6 +259,18 @@ describe('ProductsManagePage storefront state controls', () => {
     await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({ maxQty: 10 })));
     expect(screen.getByText('Showing low-stock products (qty ≤ 10)')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Low Stock/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('stores the category filter in the URL so it is retained when returning from an editor', async () => {
+    getCategoryTree.mockResolvedValue({ data: [{ id: 'vegetables', name: 'Vegetables', children: [] }] });
+    renderProductsPage();
+
+    await screen.findByText('Test product');
+    await openSelect(screen.getByRole('combobox', { name: 'Category' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Vegetables' }));
+
+    await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({ categoryId: 'vegetables' })));
+    expect(screen.getByTestId('search-url')).toHaveTextContent('?category=vegetables');
   });
 
   it('preserves an explicitly configured zero low-stock threshold in the product request', async () => {
@@ -337,6 +381,82 @@ describe('ProductsManagePage storefront state controls', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(screen.queryByText('1 selected')).not.toBeInTheDocument();
     expect(notifyMock).toHaveBeenCalledWith('Tags updated on 1 of 1 selected products.', 'success');
+  });
+
+  it('does not refetch an unchanged query when the debounce timer expires', async () => {
+    vi.useFakeTimers();
+    await act(async () => { renderProductsPage(); });
+    expect(getProducts).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1200); });
+    expect(getProducts).toHaveBeenCalledTimes(1);
+  });
+  it('makes one request for a settled search after URL synchronization', async () => {
+    vi.useFakeTimers();
+    await act(async () => { renderProductsPage(); });
+    getProducts.mockClear();
+    fireEvent.change(screen.getByLabelText('Search name / description'), { target: { value: 'opal' } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1200); });
+    expect(getProducts).toHaveBeenCalledTimes(1);
+    expect(getProducts.mock.calls[0][0]).toMatchObject({ search: 'opal', page: 1 });
+  });
+  it('clears a URL-backed search once and never restores deleted text', async () => {
+    vi.useFakeTimers();
+    await act(async () => { renderProductsPage(['/admin/products?search=opal']); });
+    getProducts.mockClear();
+    fireEvent.click(screen.getByTestId('ClearIcon').closest('button'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1600); });
+    expect(screen.getByLabelText('Search name / description')).toHaveValue('');
+    expect(getProducts).toHaveBeenCalledTimes(1);
+    expect(getProducts.mock.calls[0][0]).not.toHaveProperty('search');
+  });
+  it('ignores older responses arriving after the latest search results', async () => {
+    vi.useFakeTimers();
+    let resolveOld;
+    getProducts.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
+    await act(async () => { renderProductsPage(); });
+    fireEvent.change(screen.getByLabelText('Search name / description'), { target: { value: 'opal' } });
+    getProducts.mockResolvedValue({ data: [{ ...product, id: 'new', name: 'New matching product' }], meta: { total: 1 } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
+    expect(screen.getByText('New matching product')).toBeInTheDocument();
+    await act(async () => { resolveOld({ data: [{ ...product, name: 'Stale product' }], meta: { total: 1 } }); });
+    expect(screen.queryByText('Stale product')).not.toBeInTheDocument();
+    expect(screen.getByText('New matching product')).toBeInTheDocument();
+  });
+
+  it('coalesces rapid typing into one trimmed query', async () => {
+    vi.useFakeTimers();
+    await act(async () => { renderProductsPage(); });
+    getProducts.mockClear();
+    const input = screen.getByLabelText('Search name / description');
+    for (const value of ['o', 'op', 'opal ']) {
+      fireEvent.change(input, { target: { value } });
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+    }
+    expect(getProducts).not.toHaveBeenCalled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+    expect(getProducts).toHaveBeenCalledTimes(1);
+    expect(getProducts.mock.calls[0][0]).toMatchObject({ search: 'opal' });
+    expect(screen.getByTestId('search-url')).toHaveTextContent('?search=opal');
+  });
+  it('does not restore a draft when an unrelated URL filter changes', async () => {
+    vi.useFakeTimers();
+    await act(async () => { renderProductsPage(['/admin/products?search=opal']); });
+    fireEvent.change(screen.getByLabelText('Search name / description'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Navigate tag filter' }));
+    expect(screen.getByLabelText('Search name / description')).toHaveValue('');
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(screen.getByLabelText('Search name / description')).toHaveValue('');
+    expect(screen.getByTestId('search-url')).toHaveTextContent('?tags=summer');
+    expect(getProducts.mock.calls.at(-1)[0]).not.toHaveProperty('search');
+  });
+  it('restores search from actual browser history changes', async () => {
+    vi.useFakeTimers();
+    await act(async () => { renderProductsPage(['/admin/products?search=check', '/admin/products?search=opal']); });
+    expect(screen.getByLabelText('Search name / description')).toHaveValue('opal');
+    fireEvent.click(screen.getByRole('button', { name: 'Back in history' }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(screen.getByLabelText('Search name / description')).toHaveValue('check');
+    expect(getProducts.mock.calls.at(-1)[0]).toMatchObject({ search: 'check' });
   });
 
 });

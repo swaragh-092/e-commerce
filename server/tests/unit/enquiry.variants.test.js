@@ -77,4 +77,16 @@ describe('enquiry product and variant validation', () => {
     await expect(service.createEnquiry({ ...customer, productId, variantId })).resolves.toMatchObject({ id: 'enquiry-1', variantId });
     expect(Enquiry.create).toHaveBeenCalledOnce();
   });
+
+  it.each([{ routed: [] }, { routed: [true] }])('uses configured event delivery without also sending legacy enquiry emails ($routed)', async ({ routed }) => {
+    Enquiry.create.mockImplementation(async payload => ({ ...payload, id: 'enquiry-1' }));
+    vi.spyOn(settings, 'getAll').mockResolvedValue({ messaging: { enquiryCustomerAcknowledgementEnabled: true } });
+    notifications.sendEvent.mockResolvedValue(routed);
+    const legacyRecipients = vi.spyOn(service, 'getAdminNotificationEmails').mockResolvedValue(['legacy@example.test']);
+    const send = vi.spyOn(notifications, 'send').mockResolvedValue(true);
+    await expect(service.createEnquiry({ ...customer, productId, variantId })).resolves.toMatchObject({ id: 'enquiry-1' });
+    expect(notifications.sendEvent).toHaveBeenCalledWith('enquiry_received', expect.objectContaining({ variables: expect.objectContaining({ enquiry_id: 'enquiry-1' }) }));
+    expect(legacyRecipients).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
 });

@@ -1,14 +1,17 @@
-import { useState, useEffect, useMemo } from 'react';
+import { getProductBlockPlacement } from '../../utils/productBlockPlacement';
+import { DEFAULT_DETAILS_FLOW, getProductDetailsOrder, customDetailKey } from '../../utils/productDetailsOrder';
+import ComposedHero from '../../components/storefront/sections/ComposedHero';
+import { Fragment, useState, useEffect, useMemo } from 'react';
 import { useParams, useLocation, useNavigate, Link as RouterLink } from 'react-router-dom';
 import {
-    Alert, Box, Button, Chip, Container, Divider, Grid, IconButton, Skeleton, Typography,
+    Alert, Box, Breadcrumbs, Button, Chip, Container, Divider, Grid, IconButton, Link, Skeleton, Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import CartIcon from '@mui/icons-material/ShoppingCart';
 import FlashOnIcon from '@mui/icons-material/FlashOn';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import { getProduct } from '../../services/productService';
+import { getProduct, trackProductView } from '../../services/productService';
 import PageSEO from '../../components/common/PageSEO';
 import ProductImages from '../../components/product/ProductImages';
 import VariantSelector from '../../components/product/VariantSelector';
@@ -34,8 +37,11 @@ import ProductTabsAccordion from '../../components/storefront/ProductTabsAccordi
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getStoreName } from '../../utils/store';
 import { trackRecentlyViewed } from '../../components/storefront/sections/RecentlyViewedSection';
+import SectionRenderer from '../../components/storefront/sections/SectionRenderer';
+import { getPageSections } from '../../utils/designerSections';
 import { buildBreadcrumbJsonLd, buildProductJsonLd } from '../../utils/seo/buildStructuredData';
 import { getBadgeChipProps } from '../../utils/componentStyles';
+import StorefrontButton from '../../components/storefront/StorefrontButton';
 
 const getAvailableStock = (entity, stockKey) => {
     const total = Number(entity?.[stockKey] || 0);
@@ -58,7 +64,7 @@ const ProductDetailPage = () => {
     const [visibleReviews, setVisibleReviews] = useState([]);
     const { addItem } = useCart();
     const { formatPrice, currency } = useCurrency();
-    const { settings } = useSettings();
+    const { settings, productTemplateId } = useSettings();
     const storeName = getStoreName(settings);
     const cartEnabled    = useFeatureVisible('cart', 'storefront');
     const pricingEnabled = useFeatureVisible('pricing', 'storefront');
@@ -66,6 +72,7 @@ const ProductDetailPage = () => {
     const wishlistEnabled = useFeature('wishlist');
     const enquiryEnabled = useFeature('enquiry');
     const pp = settings?.productPage || {};
+    const designerPreview = new URLSearchParams(location.search).get('previewMode') === '1';
     const badgeChipStyle = useComponentStyles('badgeChip');
     const badgeChipProps = useMemo(() => getBadgeChipProps(badgeChipStyle), [badgeChipStyle]);
     const themedChipProps = (overrides = {}) => ({
@@ -78,11 +85,13 @@ const ProductDetailPage = () => {
     const buyNowLabel = pp.buyNowLabel || 'Buy Now';
     const showBuyNowButton = pp.showBuyNowButton !== false;
     const imageAlignment = pp.imageAlignment === 'vertical' ? 'vertical' : 'horizontal';
-    const productTemplateLayout = pp.templateLayout || 'media-left-details-right';
+    const productTemplateLayout = (designerPreview || productTemplateId ? null : product?.storefrontLayout) || pp.templateLayout || 'media-left-details-right';
     const isGalleryTopLayout = productTemplateLayout === 'gallery-top-details-below';
     const isStickyPanelLayout = productTemplateLayout === 'sticky-purchase-panel';
     const isEditorialProductLayout = ['gallery-top-details-below', 'luxury-editorial', 'editorial'].includes(productTemplateLayout);
-    const showStickyPurchasePanel = pp.showStickyAddToCart !== false && !isGalleryTopLayout;
+    const productInfo = getPageSections(settings, 'product').find((section) => section.type === 'product-info');
+    const orderedDetails = productInfo?.enabled !== false && Array.isArray(productInfo?.detailsBlockOrder);
+    const showStickyPurchasePanel = pp.showStickyAddToCart !== false && !isGalleryTopLayout && !orderedDetails;
 
     // Grid column config per layout variant
     const layoutGrid = isGalleryTopLayout
@@ -117,7 +126,10 @@ const ProductDetailPage = () => {
                 return;
             }
             setProduct(nextProduct);
-            trackRecentlyViewed(nextProduct);
+            if (!designerPreview && nextProduct.status === 'published' && nextProduct.isEnabled !== false) {
+                trackRecentlyViewed(nextProduct);
+                void trackProductView(nextProduct.id);
+            }
             if (nextProduct?.variants?.length > 0) {
                 const requestedVariant = new URLSearchParams(location.search).get('variant');
                 const requestedVariantMatch = requestedVariant
@@ -149,7 +161,7 @@ const ProductDetailPage = () => {
     }, [slug]);
 
     const activeVariants = useMemo(
-        () => (Array.isArray(product?.variants) ? product.variants.filter((variant) => variant?.isActive !== false) : []),
+        () => (product?.type === 'variable' && Array.isArray(product?.variants) ? product.variants.filter((variant) => variant?.isActive !== false) : []),
         [product]
     );
     const displayAttributes = useMemo(() => {
@@ -341,9 +353,10 @@ const ProductDetailPage = () => {
         pageUrl: resolvedPageUrl,
     });
 
-    const productStructuredData = [productJsonLd, breadcrumbStructuredData].filter(Boolean);
+    const showBreadcrumbs = pp.showBreadcrumbs !== false;
+    const productStructuredData = [productJsonLd, showBreadcrumbs ? breadcrumbStructuredData : null].filter(Boolean);
 
-    const hasVariants = product.type === 'variable' || (Array.isArray(product?.variants) && product.variants.some((v) => v?.isActive !== false));
+    const hasVariants = product.type === 'variable';
 
     const handleVariantSelect = (variant) => {
         setSelectedVariant(variant);
@@ -421,6 +434,42 @@ const ProductDetailPage = () => {
         });
     };
 
+    const purchaseTrustBadges = showProductTrustBadges && <>
+        <Divider sx={{ my: 2 }} />
+        <Box sx={{ display: 'grid', gap: 1 }}>
+            {[
+                ['Delivery', 'Fast dispatch after confirmation'],
+                ['Payment', 'Secure transaction'],
+                ['Support', 'Order updates available'],
+            ].map(([label, value]) => (
+                <Box key={label} sx={{ display: 'grid', gridTemplateColumns: '82px 1fr', gap: 1 }}>
+                    <Typography variant="caption" color="text.secondary">{label}</Typography>
+                    <Typography variant="caption" fontWeight={700}>{value}</Typography>
+                </Box>
+            ))}
+        </Box>
+    </>;
+
+    const renderProductBlocks = (placement) => getPageSections(settings, 'product')
+        .filter((section) => section.type === 'product-info' && section.enabled !== false)
+        .map((section) => {
+            const heroBlocks = (section.heroBlocks || []).filter((block) => getProductBlockPlacement(block) === placement);
+            if (!heroBlocks.length && !designerPreview) return null;
+            return (
+                <Box key={section.id} sx={{ display: {
+                    xs: section.hideOnMobile ? 'none' : 'block',
+                    md: section.hideOnDesktop ? 'none' : 'block',
+                } }}>
+                    {designerPreview && (section.heroBlocks?.length || 0) < 12 && <button type="button" hidden data-store-add-block={placement}
+                        data-store-owner={section.id}>Add block here</button>}
+                    {heroBlocks.length > 0 && <ComposedHero embedded section={{ ...section, heroBlocks }}
+                        insertionPlacement={designerPreview && section.heroBlocks.length < 12 ? placement : undefined}
+                        product={{ ...product, selectedVariant, storefrontAvailability: stockAvailable,
+                            storefrontShipsFrom: storeName, storefrontShipping: settings?.shipping }} />}
+                </Box>
+            );
+        });
+
     return (
         <Container
             maxWidth={false}
@@ -432,13 +481,20 @@ const ProductDetailPage = () => {
             }}
         >
             <PageSEO
-                title={product.name}
-                description={product.shortDescription}
+                title={product.metaTitle || product.name}
+                description={product.metaDescription || product.shortDescription}
                 image={product.ogImage || product.images?.[0]?.url}
                 type="product"
                 url={resolvedPageUrl}
                 structuredData={productStructuredData}
             />
+            {showBreadcrumbs && (
+                <Breadcrumbs aria-label="Product breadcrumbs" sx={{ mb: 2 }}>
+                    <Link component={RouterLink} to="/" color="inherit" underline="hover">Home</Link>
+                    <Link component={RouterLink} to="/products" color="inherit" underline="hover">Products</Link>
+                    <Typography color="text.primary" aria-current="page">{product.name}</Typography>
+                </Breadcrumbs>
+            )}
             <Grid
                 container
                 spacing={{ xs: 3, md: layoutGrid.spacing, lg: layoutGrid.spacing + 1 }}
@@ -465,71 +521,75 @@ const ProductDetailPage = () => {
                     </Box>
                 </Grid>
 
-                <Grid item xs={12} md={layoutGrid.details || 12} sx={isGalleryTopLayout ? { maxWidth: 780, mx: 'auto', width: '100%' } : undefined}>
+                <Grid item xs={12} md={orderedDetails ? 12 - layoutGrid.media || 12 : layoutGrid.details || 12} sx={isGalleryTopLayout ? { maxWidth: 780, mx: 'auto', width: '100%' } : undefined}>
                     <Box
                         sx={{
                             p: { xs: 2, sm: 0 },
                         }}
                     >
-                    <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            flexWrap: 'wrap',
-                            gap: 0.8,
-                            mb: 1.2,
-                            fontWeight: 700,
-                            textTransform: 'uppercase',
-                            letterSpacing: 0.5
-                        }}
-                    >
-                        <Box
-                            component={RouterLink}
-                            to="/"
-                            sx={{ color: 'inherit', textDecoration: 'none', '&:hover': { color: 'primary.main' } }}
+                    {showBreadcrumbs && (
+                        <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                                gap: 0.8,
+                                mb: 1.2,
+                                fontWeight: 700,
+                                textTransform: 'uppercase',
+                                letterSpacing: 0.5
+                            }}
                         >
-                            Home
-                        </Box>
+                            <Box
+                                component={RouterLink}
+                                to="/"
+                                sx={{ color: 'inherit', textDecoration: 'none', '&:hover': { color: 'primary.main' } }}
+                            >
+                                Home
+                            </Box>
 
-                        {(() => {
-                            const cats = product.categories;
-                            if (!cats?.length) return null;
+                            {(() => {
+                                const cats = product.categories;
+                                if (!cats?.length) return null;
 
-                            const catMap = Object.fromEntries(cats.map(c => [c.id, c]));
-                            const parentIds = new Set(cats.map(c => c.parentId).filter(Boolean));
-                            const leaf = cats.find(c => !parentIds.has(c.id)) || cats[0];
-                            const path = [];
-                            let cur = leaf;
-                            while (cur) {
-                                path.unshift({ name: cur.name, slug: cur.slug });
-                                cur = cur.parentId ? catMap[cur.parentId] : null;
-                            }
+                                const catMap = Object.fromEntries(cats.map(c => [c.id, c]));
+                                const parentIds = new Set(cats.map(c => c.parentId).filter(Boolean));
+                                const leaf = cats.find(c => !parentIds.has(c.id)) || cats[0];
+                                const path = [];
+                                let cur = leaf;
+                                while (cur) {
+                                    path.unshift({ name: cur.name, slug: cur.slug });
+                                    cur = cur.parentId ? catMap[cur.parentId] : null;
+                                }
 
-                            return path.map((cat, index) => (
-                                <Box key={cat.slug} sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                                    <Box component="span" sx={{ opacity: 0.4, fontWeight: 400 }}>/</Box>
-                                    <Box
-                                        component={RouterLink}
-                                        to={`/category/${cat.slug}`}
-                                        sx={{
-                                            color: 'inherit',
-                                            textDecoration: 'none',
-                                            '&:hover': { color: 'primary.main' },
-                                            // The last one is the current leaf category, maybe make it slightly bolder or different?
-                                            // But for breadcrumbs, usually the current page is not a link.
-                                            // However, here they are all categories.
-                                        }}
-                                    >
-                                        {cat.name}
+                                return path.map((cat, index) => (
+                                    <Box key={cat.slug} sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                                        <Box component="span" sx={{ opacity: 0.4, fontWeight: 400 }}>/</Box>
+                                        <Box
+                                            component={RouterLink}
+                                            to={`/category/${cat.slug}`}
+                                            sx={{
+                                                color: 'inherit',
+                                                textDecoration: 'none',
+                                                '&:hover': { color: 'primary.main' },
+                                                // The last one is the current leaf category, maybe make it slightly bolder or different?
+                                                // But for breadcrumbs, usually the current page is not a link.
+                                                // However, here they are all categories.
+                                            }}
+                                        >
+                                            {cat.name}
+                                        </Box>
                                     </Box>
-                                </Box>
-                            ));
-                        })()}
-                    </Typography>
+                                ));
+                            })()}
+                        </Typography>
+                    )}
 
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, mb: 1.5 }}>
+                     {(() => {
+                         const content = {
+                             title: <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, mb: 1.5 }}>
                         <Typography variant="h2" component="h1" fontWeight={900} sx={{ fontSize: { xs: '2.1rem', md: '2.6rem', lg: '3rem' }, lineHeight: 1.1 }}>
                             {product.name}
                         </Typography>
@@ -541,12 +601,12 @@ const ProductDetailPage = () => {
                                 title={product.name}
                                 text={product.shortDescription}
                                 url={window.location.href}
-                                image={product.ogImage || product.images?.[0]?.url}
-                            />
-                        </Box>
-                    </Box>
+                                 image={product.ogImage || product.images?.[0]?.url}
+                             />
+                         </Box>
+                     </Box>,
 
-                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', mb: 2.5 }}>
+                     metadata: <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', mb: 2.5 }}>
                         {pp.showStockBadge !== false && (
                             <Chip
                                 {...themedChipProps({
@@ -565,9 +625,9 @@ const ProductDetailPage = () => {
                         {selectedVariantLabel && (
                             <Chip {...themedChipProps({ label: `Selected: ${selectedVariantLabel}`, variant: "outlined" })} />
                         )}
-                    </Box>
+                     </Box>,
 
-                    {showPrice && (
+                     price: <>{showPrice && (
                         <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 2, mb: 2.5, flexWrap: 'wrap' }}>
                             {hasSale ? (
                                 <>
@@ -658,21 +718,23 @@ const ProductDetailPage = () => {
                                 </Typography>
                             )}
                         </Box>
-                    )}
+                     )}</>,
 
-                    <Typography variant="body1" color="text.secondary" paragraph sx={{ lineHeight: 1.75, mb: 3 }}>
+                     summary: <Typography variant="body1" color="text.secondary" paragraph sx={{ lineHeight: 1.75, mb: 3 }}>
                         {product.shortDescription}
-                    </Typography>
+                     </Typography>,
 
-                    {activeVariants.length > 0 && (
+                     'before-options': !orderedDetails && renderProductBlocks('before-options'),
+
+                     variants: activeVariants.length > 0 && (
                         <VariantSelector
                             variants={activeVariants}
                             selectedVariantId={selectedVariant?.id}
                             onSelect={handleVariantSelect}
                         />
-                    )}
+                     ),
 
-                    <Box sx={{ display: { xs: 'block', md: 'none' }, mb: 4, mt: 3 }}>
+                     purchase: <Box sx={{ display: { xs: 'block', md: orderedDetails ? 'block' : 'none' }, mb: 4, mt: 3 }}>
                         {cartMsg && (
                             <Alert severity={cartMsg.type} sx={{ mb: 1 }}>
                                 {cartMsg.text}
@@ -747,9 +809,9 @@ const ProductDetailPage = () => {
                                         {pendingAction === 'cart' ? 'Adding...' : stockAvailable ? addToCartLabel : 'Out of Stock'}
                                     </Button>
                                     {showBuyNowButton && (
-                                        <Button
-                                            variant="outlined"
-                                            color="primary"
+                                        <StorefrontButton
+                                            role="primary"
+                                            appearance="outlined"
                                             size="large"
                                             fullWidth
                                             startIcon={<FlashOnIcon />}
@@ -758,7 +820,7 @@ const ProductDetailPage = () => {
                                             sx={{ py: 1.55, fontSize: '1.05rem', borderRadius: 2, fontWeight: 900 }}
                                         >
                                             {pendingAction === 'buyNow' ? 'Redirecting...' : stockAvailable ? buyNowLabel : 'Out of Stock'}
-                                        </Button>
+                                        </StorefrontButton>
                                     )}
                                 </Box>
                             </Box>
@@ -775,9 +837,12 @@ const ProductDetailPage = () => {
                                 Enquire Now
                             </Button>
                         )}
-                    </Box>
+                        {orderedDetails && purchaseTrustBadges}
+                     </Box>,
 
-                    {displayAttributes.length > 0 && (
+                     'before-specifications': !orderedDetails && renderProductBlocks('before-specifications'),
+
+                     specifications: displayAttributes.length > 0 && (
                         <>
                             <Typography variant="h6" component="h2" fontWeight={900} gutterBottom>Specifications</Typography>
                             <Box sx={{ display: 'grid', gap: 1.25 }}>
@@ -807,15 +872,37 @@ const ProductDetailPage = () => {
                                 })}
                             </Box>
                         </>
-                    )}
+                     ),
 
 
-                    {product.description && (
+                     description: product.description && (
                         <>
                             <Typography variant="h6" component="h2" fontWeight={900} sx={{ mt: 4 }} gutterBottom>Product Details</Typography>
                             <Box dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description || '') }} sx={{ typography: 'body2', color: 'text.secondary', '& p': { mt: 0, mb: 2 } }} />
                         </>
-                    )}
+                     ),
+
+                     'after-details': !orderedDetails && renderProductBlocks('after-details'),
+                         };
+                         const order = orderedDetails ? getProductDetailsOrder(productInfo) : DEFAULT_DETAILS_FLOW;
+                         const custom = new Map((productInfo?.heroBlocks || []).map((block) => [customDetailKey(block.id), block]));
+                         const canInsert = orderedDetails && designerPreview && (custom.size < 12);
+                         const insertAfter = (key) => canInsert && <button type="button" hidden data-store-add-block="details-order"
+                             data-store-owner={productInfo.id} data-store-anchor={key}>Add block here</button>;
+                         return <>{insertAfter()}{order.map((key) => {
+                             const block = custom.get(key);
+                             if (orderedDetails && block) return <Box key={key} sx={{ display: {
+                                 xs: productInfo.hideOnMobile ? 'none' : 'block', md: productInfo.hideOnDesktop ? 'none' : 'block',
+                             } }}><ComposedHero embedded section={{ ...productInfo, heroBlocks: [block] }}
+                                 product={{ ...product, selectedVariant, storefrontAvailability: stockAvailable,
+                                     storefrontShipsFrom: storeName, storefrontShipping: settings?.shipping }} />{insertAfter(key)}</Box>;
+                             const node = content[key];
+                             if (designerPreview && node && productInfo && productInfo.enabled !== false && !key.includes('-')) {
+                                 return <Fragment key={key}><Box data-store-owner={productInfo.id} data-store-block={`builtin:${key}`} sx={{ display: 'flow-root' }}>{node}</Box>{insertAfter(key)}</Fragment>;
+                             }
+                             return <Fragment key={key}>{node}</Fragment>;
+                         })}</>;
+                     })()}
 
                     {/* Custom tabs accordion — rendered from product.tabs included in the API response */}
                     {Array.isArray(product.tabs) && product.tabs.length > 0 && (
@@ -879,9 +966,11 @@ const ProductDetailPage = () => {
 
                         <Divider sx={{ my: 1.5 }} />
 
-                        <Typography variant="body2" color="success.main" fontWeight={900} sx={{ mb: 0.75 }}>
-                            {stockAvailable ? 'In stock' : 'Currently unavailable'}
-                        </Typography>
+                        {pp.showStockBadge !== false && (
+                            <Typography variant="body2" color="success.main" fontWeight={900} sx={{ mb: 0.75 }}>
+                                {stockAvailable ? 'In stock' : 'Currently unavailable'}
+                            </Typography>
+                        )}
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                             Ships from <strong>{storeName}</strong>
                         </Typography>
@@ -947,9 +1036,9 @@ const ProductDetailPage = () => {
                                     {pendingAction === 'cart' ? 'Adding...' : stockAvailable ? addToCartLabel : 'Out of Stock'}
                                 </Button>
                                 {showBuyNowButton && (
-                                    <Button
-                                        variant="contained"
-                                        color="secondary"
+                                    <StorefrontButton
+                                        role="primary"
+                                        appearance="outlined"
                                         fullWidth
                                         startIcon={<FlashOnIcon />}
                                         disabled={!stockAvailable || pendingAction !== null}
@@ -957,7 +1046,7 @@ const ProductDetailPage = () => {
                                         sx={{ py: 1.25, borderRadius: 999, fontWeight: 900 }}
                                     >
                                         {pendingAction === 'buyNow' ? 'Redirecting...' : stockAvailable ? buyNowLabel : 'Out of Stock'}
-                                    </Button>
+                                    </StorefrontButton>
                                 )}
                             </Box>
                         )}
@@ -975,28 +1064,22 @@ const ProductDetailPage = () => {
                             </Button>
                         )}
 
-                        {showProductTrustBadges && (
-                            <>
-                                <Divider sx={{ my: 2 }} />
-                                <Box sx={{ display: 'grid', gap: 1 }}>
-                                    {[
-                                        ['Delivery', 'Fast dispatch after confirmation'],
-                                        ['Payment', 'Secure transaction'],
-                                        ['Support', 'Order updates available'],
-                                    ].map(([label, value]) => (
-                                        <Box key={label} sx={{ display: 'grid', gridTemplateColumns: '82px 1fr', gap: 1 }}>
-                                            <Typography variant="caption" color="text.secondary">{label}</Typography>
-                                            <Typography variant="caption" fontWeight={700}>{value}</Typography>
-                                        </Box>
-                                    ))}
-                                </Box>
-                            </>
-                        )}
+                        {purchaseTrustBadges}
                     </Box>
                 </Grid>
             </Grid>
 
             {showProductRelated && <RelatedProducts productId={product.id} />}
+            {getPageSections(settings, 'product')
+                .filter((section) => section.enabled !== false && (
+                    section.type === 'composed-hero' ||
+                    (section.type === 'recently-viewed' && pp.showRecentlyViewed !== false)
+                ))
+                .map((section) => (
+                    <Box key={`${product.id}-${section.id}`} sx={{ display: { xs: section.hideOnMobile ? 'none' : 'block', md: section.hideOnDesktop ? 'none' : 'block' } }}>
+                        <SectionRenderer section={section} mode={designerPreview ? 'preview' : 'live'} data={{ excludeProductId: product.id, product: { ...product, selectedVariant, storefrontAvailability: stockAvailable, storefrontShipsFrom: storeName, storefrontShipping: settings?.shipping } }} />
+                    </Box>
+                ))}
 
             <EnquiryModal
                 open={enquiryOpen}

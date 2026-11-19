@@ -1,3 +1,4 @@
+import SectionRenderer from '../components/storefront/sections/SectionRenderer';
 import { useState, useEffect } from 'react';
 import { Box, AppBar, Toolbar, Typography, Button, IconButton, Badge, Menu, MenuItem, Divider, Avatar, Alert } from '@mui/material';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
@@ -15,15 +16,18 @@ import { useCart } from '../hooks/useCart';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import CategoryNav from '../components/layout/CategoryNav';
 import StorefrontFooter from '../components/layout/StorefrontFooter';
+import StoreHeaderLogo from '../components/layout/StoreHeaderLogo';
 import { useWishlist } from '../context/WishlistContext';
 import { useCategories } from '../context/CategoryContext';
 import SearchWidget from '../components/search/SearchWidget';
-import DarkModeToggle from '../components/layout/DarkModeToggle';
 import PageService from '../services/pageService';
 import MenuService from '../services/menuService';
+import MenuChildrenMore from '../components/layout/MenuChildrenMore';
+import { appendMenuChildren } from '../utils/menuPagination';
 import { ADMIN_ACCESS_PERMISSIONS } from '../utils/permissions';
 import { filterFeatureLinks } from '../utils/featureNavigation';
 import SEO from '../components/common/SEO';
+import StorefrontAnalytics from '../components/common/StorefrontAnalytics';
 import CategoryIcon from '../components/common/CategoryIcon';
 import { isExternalUrl } from '../utils/urls';
 import { getStoreName } from '../utils/store';
@@ -36,6 +40,7 @@ const StoreLayout = () => {
   const { settings, features } = useSettings();
   const { formatPrice } = useCurrency();
   const location = useLocation();
+  const isDesignerPreview = new URLSearchParams(location.search).get('previewMode') === '1';
   const storeName = getStoreName(settings);
   const { cartCount } = useCart();
   const { wishlistCount } = useWishlist();
@@ -52,7 +57,6 @@ const StoreLayout = () => {
   const [menuAnchors, setMenuAnchors] = useState({});
   const [mobileMenuAnchor, setMobileMenuAnchor] = useState(null);
   const [isMobileSearchExpanded, setIsMobileSearchExpanded] = useState(false);
-  const [logoLoadFailed, setLogoLoadFailed] = useState(false);
   const [accountMenuAnchor, setAccountMenuAnchor] = useState(null);
   const canAccessAdmin = hasAnyPermission(ADMIN_ACCESS_PERMISSIONS);
   const isAuthPage = ['/login', '/register'].includes(location.pathname);
@@ -73,8 +77,8 @@ const StoreLayout = () => {
   useEffect(() => {
     const fetchTopLinks = async () => {
       const [headerMenuResult, mobileMenuResult, pageResult] = await Promise.allSettled([
-        MenuService.getPublicMenu('header'),
-        MenuService.getPublicMenu('mobile'),
+        MenuService.getPublicMenu('header', { hideEmpty: true }),
+        MenuService.getPublicMenu('mobile', { hideEmpty: true }),
         pagesEnabled ? PageService.getPublicPages('top') : Promise.resolve({ data: [] }),
       ]);
 
@@ -100,6 +104,10 @@ const StoreLayout = () => {
   }, [pagesEnabled]);
 
   const nav          = settings?.nav          || {};
+  const headerStoreName = nav.logoText || storeName;
+  const headerLogoUrl = nav.logoUrl || settings?.logo?.main || '';
+  const showStoreName = nav.showStoreName !== false;
+  const showHeaderMenu = nav.showMenu !== false;
   const showSearch   = nav.showSearch !== false;
   const showAccount  = nav.showAccount !== false;
   const showCart     = nav.showCart !== false && cartEnabled;
@@ -181,8 +189,13 @@ const StoreLayout = () => {
     setMobileMenuAnchor(null);
   };
 
+  const appendChildren = (menuId, parentId, page) => {
+    setHeaderMenu(menu => appendMenuChildren(menu, menuId, parentId, page));
+    setMobileMenu(menu => appendMenuChildren(menu, menuId, parentId, page));
+  };
+
   const renderDynamicMenuItems = (items = [], parentId, depth = 0) => items.map((item) => {
-    const hasChildren = item.children?.length > 0;
+    const hasChildren = item.children?.length > 0 || item.childrenPagination?.hasMore;
     const navigable = isNavigableItem(item);
     return (
       <Box key={item.id}>
@@ -195,12 +208,13 @@ const StoreLayout = () => {
           {item.label}
         </MenuItem>
         {hasChildren && renderDynamicMenuItems(item.children, parentId, depth + 1)}
+        <MenuChildrenMore item={item} onLoaded={appendChildren} menuItem sx={{ pl: 4 + depth * 2 }} />
       </Box>
     );
   });
 
   const renderHeaderLinks = (items = []) => items.map((item) => {
-    const hasChildren = item.children?.length > 0;
+    const hasChildren = item.children?.length > 0 || item.childrenPagination?.hasMore;
     if (hasChildren) {
       return (
         <Box key={item.id}>
@@ -233,6 +247,7 @@ const StoreLayout = () => {
             )}
             {isNavigableItem(item) && <Divider />}
             {renderDynamicMenuItems(item.children, item.id)}
+            <MenuChildrenMore item={item} onLoaded={appendChildren} menuItem />
           </Menu>
         </Box>
       );
@@ -262,7 +277,7 @@ const StoreLayout = () => {
   });
 
   const renderMobileMenuItems = (items = [], depth = 0) => items.map((item) => {
-    const hasChildren = item.children?.length > 0;
+    const hasChildren = item.children?.length > 0 || item.childrenPagination?.hasMore;
     const navigable = isNavigableItem(item);
 
     return (
@@ -276,13 +291,14 @@ const StoreLayout = () => {
           {item.label}
         </MenuItem>
         {hasChildren && renderMobileMenuItems(item.children, depth + 1)}
+        <MenuChildrenMore item={item} onLoaded={appendChildren} menuItem sx={{ pl: 4 + depth * 2 }} />
       </Box>
     );
   });
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <SEO />
+      <StorefrontAnalytics />
       <Box
         component="a"
         href="#main"
@@ -303,7 +319,7 @@ const StoreLayout = () => {
       </Box>
       {/* Announcement Bar */}
       {showAnnouncement && (
-        <Box sx={{
+        <Box data-store-component="announcementBar" sx={{
           bgcolor: announcement.bgColor || 'primary.dark',
           color: announcement.fgColor || '#fff',
           py: 0.75, px: 2,
@@ -330,6 +346,7 @@ const StoreLayout = () => {
       )}
 
       <AppBar
+        data-store-component="headerLayout"
         position={navPosition}
         elevation={0}
         sx={{
@@ -357,34 +374,24 @@ const StoreLayout = () => {
           <Box
             component={RouterLink}
             to="/"
-            sx={{
+            sx={(theme) => ({
               display: 'flex',
               alignItems: 'center',
               textDecoration: 'none',
               color: 'inherit',
-              gap: 1,
-              flexShrink: 0,
+              flexShrink: 1,
+              [theme.breakpoints.up('md')]: { flexShrink: 0 },
               minWidth: 0,
-            }}
+              maxWidth: { xs: showStoreName && headerLogoUrl ? '50vw' : '42vw', sm: 'none' },
+            })}
           >
-            {settings?.logo?.main && !logoLoadFailed ? (
-              <img
-                src={settings.logo.main}
-                alt={storeName}
-                style={{ maxHeight: 36, maxWidth: 112, objectFit: 'contain' }}
-                onError={() => setLogoLoadFailed(true)}
-              />
-            ) : (
-              <Typography variant="h6" noWrap sx={{ fontWeight: 700, maxWidth: { xs: 110, sm: 180 } }}>
-                {storeName}
-              </Typography>
-            )}
+            <StoreHeaderLogo src={headerLogoUrl} name={headerStoreName} maxWidth={nav.logoMaxWidth} showName={showStoreName} />
           </Box>
 
           {headerAlignment === 'center' && <Box sx={{ flexGrow: 1, minWidth: 8 }} />}
           {headerAlignment === 'right' && <Box sx={{ flexGrow: 1, minWidth: 8 }} />}
 
-          <Box
+          {showHeaderMenu && <Box
             component="nav"
             aria-label="Main navigation"
             sx={{
@@ -412,7 +419,7 @@ const StoreLayout = () => {
 
           >
             {renderHeaderLinks(desktopHeaderItems)}
-          </Box>
+          </Box>}
 
           {(headerAlignment === 'left' || headerAlignment === 'center') && <Box sx={{ flexGrow: 1, minWidth: 8 }} />}
 
@@ -423,7 +430,7 @@ const StoreLayout = () => {
             </Box>
           )}
 
-          {mobileHeaderItems.length > 0 && (
+          {showHeaderMenu && mobileHeaderItems.length > 0 && (
             <>
               <IconButton
                 color="inherit"
@@ -451,9 +458,6 @@ const StoreLayout = () => {
           )}
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.125, sm: 0.5 }, flexShrink: 0 }}>
-            <Box sx={{ display: { xs: 'none', md: 'flex' } }}>
-              <DarkModeToggle />
-            </Box>
             {actionsOrder.map((actionKey) => {
               if (actionKey === 'search') {
                 return showSearch ? (
@@ -616,11 +620,25 @@ const StoreLayout = () => {
         </Alert>
       )}
 
+      {!isAuthPage && (settings?.homepage?.sections || []).filter((section) =>
+        section.type === 'composed-hero' && section.placement === 'header'
+      ).map((section) => <Box key={section.id} data-store-section={section.id}><SectionRenderer section={section} lazy={false} /></Box>)}
+      {!isAuthPage && isDesignerPreview && location.pathname === '/' && (
+        <button type="button" hidden data-store-add-section="header">Add section to header</button>
+      )}
       <Box component="main" id="main" tabIndex={-1} sx={{ flexGrow: 1 }}>
         <Outlet />
       </Box>
 
-      {!isAuthPage && <StorefrontFooter />}
+      {!isAuthPage && isDesignerPreview && location.pathname === '/' && (
+        <button type="button" hidden data-store-add-section="footer">Add section to footer</button>
+      )}
+      {!isAuthPage && (settings?.homepage?.sections || []).filter((section) =>
+        section.type === 'composed-hero' && section.placement === 'footer'
+      ).map((section) => <Box key={section.id} data-store-section={section.id}><SectionRenderer section={section} lazy={false} /></Box>)}
+      {!isAuthPage && <Box data-store-component="footer"><StorefrontFooter /></Box>}
+      {/* Resolved entity metadata and URL overrides take precedence over page fallbacks. */}
+      <SEO />
     </Box>
   );
 };

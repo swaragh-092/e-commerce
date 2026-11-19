@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
+process.env.JWT_ACCESS_SECRET = 'test-cookie-secret-at-least-32-characters';
 const {
   ACCESS_COOKIE,
   REFRESH_COOKIE,
@@ -13,7 +14,9 @@ const {
   stripAuthTokens,
   setTrustedDeviceCookie,
   verifyTrustedDevice,
+  clearTrustedDeviceCookie,
 } = require('../../src/modules/auth/authCookies');
+const rememberedDevices = require('../../src/modules/auth/rememberedDevice');
 const { refreshSchema, logoutSchema } = require('../../src/modules/auth/auth.validation');
 
 describe('HttpOnly auth cookies', () => {
@@ -26,6 +29,16 @@ describe('HttpOnly auth cookies', () => {
     expect(response.cookie).toHaveBeenCalledWith(ACCESS_COOKIE, 'access', expect.objectContaining({ httpOnly: true, sameSite: 'lax' }));
     expect(response.cookie).toHaveBeenCalledWith(REFRESH_COOKIE, 'refresh', expect.objectContaining({ httpOnly: true, maxAge: 30 * 24 * 60 * 60 * 1000 }));
     expect(stripAuthTokens({ user: { id: 'user-1' }, tokens })).toEqual({ user: { id: 'user-1' } });
+  });
+
+  it('caps active admin cookies separately from remembered-device retention', () => {
+    const response = { cookie: vi.fn(), clearCookie: vi.fn() };
+    const expiry = new Date(Date.now() + 12 * 60 * 60 * 1000);
+    setAuthCookies(response, { accessToken: 'access', refreshToken: 'refresh' }, { rememberMe: true, adminSessionExpiresAt: expiry });
+    const options = response.cookie.mock.calls.find(([name]) => name === REFRESH_COOKIE)[2];
+    expect(options.maxAge).toBeLessThanOrEqual(12 * 60 * 60 * 1000);
+    expect(options.maxAge).toBeGreaterThan(11 * 60 * 60 * 1000);
+    expect(stripAuthTokens({ user: { id: 'admin' }, tokens: {}, rememberedDeviceToken: 'secret-device' })).toEqual({ user: { id: 'admin' } });
   });
 
   it('clears both auth cookies and prefers legacy headers/body only when present', () => {
@@ -45,19 +58,21 @@ describe('HttpOnly auth cookies', () => {
     expect(logoutSchema.validate({}).error).toBeUndefined();
   });
 
-  it('encrypts trusted device cookie and verifies valid device', () => {
-    const response = { cookie: vi.fn() };
-    setTrustedDeviceCookie(response, 'user-uuid-123');
+  it('sets opaque server-revocable trusted-device cookies and verifies the database record', async () => {
+    const response = { cookie: vi.fn(), clearCookie: vi.fn() };
+    vi.spyOn(rememberedDevices, 'issue').mockResolvedValue('opaque-random-device-token');
+    const recognize = vi.spyOn(rememberedDevices, 'recognize').mockResolvedValue(true);
+    await setTrustedDeviceCookie(response, 'user-uuid-123');
 
     expect(response.cookie).toHaveBeenCalledWith(
       TRUSTED_DEVICE_COOKIE,
-      expect.stringMatching(/^[a-f0-9]+:[a-f0-9]+:[a-f0-9]+$/),
+      'opaque-random-device-token',
       expect.objectContaining({ httpOnly: true, secure: true, maxAge: 30 * 24 * 60 * 60 * 1000 })
     );
 
-    const encryptedToken = response.cookie.mock.calls[0][1];
-    expect(verifyTrustedDevice(encryptedToken, 'user-uuid-123')).toBe(true);
-    expect(verifyTrustedDevice(encryptedToken, 'other-user')).toBe(false);
-    expect(verifyTrustedDevice('invalid-encrypted-value', 'user-uuid-123')).toBe(false);
+    expect(await verifyTrustedDevice('opaque-random-device-token', 'user-uuid-123')).toBe(true);
+    expect(recognize).toHaveBeenCalledWith('opaque-random-device-token', 'user-uuid-123');
+    clearTrustedDeviceCookie(response);
+    expect(response.clearCookie).toHaveBeenCalledWith(TRUSTED_DEVICE_COOKIE, expect.objectContaining({ httpOnly: true, path: '/' }));
   });
 });

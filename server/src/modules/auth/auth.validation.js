@@ -2,11 +2,7 @@
 
 const Joi = require('joi');
 
-const passwordPolicy = Joi.string()
-  .min(8)
-  .pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])'))
-  .message('Password must be at least 8 characters long and include uppercase, lowercase, number, and special character')
-  .required();
+const passwordPolicy = require('./passwordPolicy').required();
 
 const registerSchema = Joi.object({
   firstName: Joi.string().trim().min(1).required().max(50),
@@ -25,6 +21,7 @@ const loginSchema = Joi.object({
   email: Joi.string().email().required().lowercase(),
   password: Joi.string().required(),
   rememberMe: Joi.boolean().default(false),
+  reauthContext: Joi.string().max(2048).optional(),
 });
 
 const refreshSchema = Joi.object({

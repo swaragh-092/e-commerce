@@ -51,15 +51,15 @@
         if (!items.length) {
             $container.html(
                 '<section class="enquiry-empty-state wishlist-empty-state" aria-labelledby="wishlist-empty-title">' +
-                    '<div class="enquiry-empty-icon" aria-hidden="true">' +
-                        '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>' +
-                    '</div>' +
-                    '<h2 id="wishlist-empty-title">Your wishlist is empty</h2>' +
-                    '<p>Explore our seed varieties and save your favorite products to your wishlist. You can easily move them to your enquiry list whenever you\'re ready.</p>' +
-                    '<div class="enquiry-empty-actions">' +
-                        '<a class="enquiry-empty-primary" href="product.html">Browse Products</a>' +
-                        '<a class="enquiry-empty-secondary" href="index.html">Back to Home</a>' +
-                    '</div>' +
+                '<div class="enquiry-empty-icon" aria-hidden="true">' +
+                '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>' +
+                '</div>' +
+                '<h2 id="wishlist-empty-title">Your wishlist is empty</h2>' +
+                '<p>Explore our seed varieties and save your favorite products to your wishlist. You can easily move them to your enquiry list whenever you\'re ready.</p>' +
+                '<div class="enquiry-empty-actions">' +
+                '<a class="enquiry-empty-primary" href="product.html">Browse Products</a>' +
+                '<a class="enquiry-empty-secondary" href="index.html">Back to Home</a>' +
+                '</div>' +
                 '</section>'
             );
             $actions.hide();
@@ -75,7 +75,7 @@
                 (line.variantLabel ? '<p class="cart-variant">' + esc(line.variantLabel) + '</p>' : '') +
                 (line.sku ? '<p class="cart-variant">SKU: ' + esc(line.sku) + '</p>' : '') +
                 '<div class="cart-bottom"><button type="button" class="view-product-btn move-to-cart-btn">Move to Enquiry List</button></div></div>');
-            $row.find('img').on('error', function () { if (this.getAttribute('src') !== 'images/default-image.png') this.src = 'images/default-image.png'; });
+            $row.find('img').on('error', function () { if (this.getAttribute('src') !== 'images/orbi-seeds-logo.png') this.src = 'images/orbi-seeds-logo.png'; });
             $container.append($row);
         });
     }

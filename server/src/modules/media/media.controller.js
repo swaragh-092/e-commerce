@@ -1,6 +1,16 @@
 'use strict';
 const mediaService = require('./media.service');
 const { success } = require('../../utils/response');
+const editingService = require('./mediaEditing.service');
+
+exports.replaceImage = async (req, res, next) => {
+    try { return success(res, { media: await editingService.replace(req.params.id, req.file) }, 'Image updated everywhere it is used'); }
+    catch (error) { next(error); }
+};
+exports.revertImage = async (req, res, next) => {
+    try { return success(res, { media: await editingService.revert(req.params.id) }, 'Original image restored'); }
+    catch (error) { next(error); }
+};
 
 exports.upload = async (req, res, next) => {
     try {
@@ -23,8 +33,8 @@ exports.uploadFont = async (req, res, next) => {
 
 exports.list = async (req, res, next) => {
     try {
-        const { page, limit, sortBy, sortDir, type = 'image', usage = 'all' } = req.query;
-        const result = await mediaService.listMedia(page, limit, sortBy, sortDir, type, usage);
+        const { page, limit, sortBy, sortDir, type = 'image', usage = 'all', search = '' } = req.query;
+        const result = await mediaService.listMedia(page, limit, sortBy, sortDir, type, usage, search);
         return success(res, result.data, 'Media found', 200, {
             total: result.totalItems,
             page: result.currentPage,

@@ -12,6 +12,6 @@ import api from './api';
  */
 
 export const searchProducts = async (params) => {
-  const response = await api.get('/search', { params });
+  const response = await api.get('/search', { params: { ...params, hideEmpty: true } });
   return response.data;
 };

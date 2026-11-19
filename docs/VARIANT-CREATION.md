@@ -27,6 +27,16 @@ stock, SKU, images, and availability. To edit them, return to the Variant SKUs
 list, expand Edit on the desired combination, and click Save variant changes
 after editing. Skipped combinations can be added later using Add missing variants.
 
+Adding values to an attribute already enabled for variants automatically keeps them
+enabled too. The add-values dialog inherits this setting without asking again; use
+Add missing variants to review and create the new combinations.
+
+To remove an unused attribute value from the product, click its remove icon and
+confirm. Use for variants can stay enabled, and existing variants keep their stock,
+prices, and options. Values used by any existing variant, including unavailable
+variants, remain protected. Removing the entire attribute, including its last value,
+still requires deleting its dependent variants and turning off Use for variants.
+
 The review supports the existing maximum of 500 possible combinations. Prices
 must be nonnegative, with up to two decimals; stock must be a nonnegative whole
 number. The server also validates aggregate stock, the review token, duplicate

@@ -4,7 +4,7 @@
  * we use relative paths. This ensures images load correctly regardless of 
  * whether the app is accessed via localhost, an IP, or a domain.
  */
-export const getMediaUrl = (path) => {
+const resolveMediaPath = (path) => {
   if (!path) return '';
   
   // If the path is already an absolute URL (e.g. from a CDN), return it as-is
@@ -39,13 +39,26 @@ export const getMediaUrl = (path) => {
   return normalizedPath;
 };
 
+// Move existing immutable upload URLs onto revalidating URLs once. The server
+// now returns no-cache so later edits refresh without changing saved references.
+export const getMediaUrl = (path, revision) => {
+  let resolved = resolveMediaPath(path);
+  if (resolved.startsWith('/uploads/') && !/[?&]mediaVersion=/.test(resolved)) {
+    resolved += `${resolved.includes('?') ? '&' : '?'}mediaVersion=editable1`;
+  }
+  if (revision && resolved && !/^(data:|blob:)/.test(resolved)) {
+    resolved += `${resolved.includes('?') ? '&' : '?'}v=${encodeURIComponent(revision)}`;
+  }
+  return resolved;
+};
+
 
 const canUseQueryOptimization = (url) => (
   url &&
   !url.startsWith('data:') &&
   !url.startsWith('blob:') &&
   !url.includes('/svg') &&
-  !url.toLowerCase().endsWith('.svg')
+  !url.split('?')[0].toLowerCase().endsWith('.svg')
 );
 
 /**

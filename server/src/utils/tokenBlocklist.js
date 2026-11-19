@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * In-memory access token blocklist.
- * Entries auto-expire after ACCESS_TOKEN_TTL (default 15min).
- * In a multi-process/cluster deployment, replace with Redis SET + TTL.
+ * Short-lived local blocklist for legacy access tokens that have no session ID.
+ * Current sessions are durably revoked through refresh_tokens.revoked_at and
+ * checked by auth.middleware on every authenticated request.
  */
 const blocklist = new Map();
 const TTL_MS = 15 * 60 * 1000; // 15 minutes (matches access token expiry)
@@ -13,7 +13,8 @@ const TTL_MS = 15 * 60 * 1000; // 15 minutes (matches access token expiry)
  * Sessions live up to 30 days (remember-me), so sid entries get a
  * 30-day TTL. Checked in `authenticate` — revoking a session here kills
  * its access tokens immediately instead of waiting up to 15 minutes.
- * Same Redis caveat as above for multi-instance deployments.
+ * This is a local fast path; the database session record is the cross-worker
+ * source of truth.
  */
 const revokedSids = new Map();
 const SID_TTL_MS = 30 * 24 * 60 * 60 * 1000;

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Button, Grid, Stack, Typography } from '@mui/material';
+import { Box, Button, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Grid, Stack, Typography } from '@mui/material';
 
 import MenuService from '../../services/menuService';
 import PageService from '../../services/pageService';
@@ -24,7 +24,7 @@ import {
   needsUrl,
   placementByLocation,
 } from './menu/constants';
-import { flattenCategories, flattenItems, formatValidationError } from './menu/utils';
+import { flattenCategories, flattenItems, formatValidationError, getMenuItemDeletionBlock } from './menu/utils';
 
 const MenuBuilderPage = () => {
   const [menus, setMenus] = useState([]);
@@ -38,6 +38,7 @@ const MenuBuilderPage = () => {
   const [editingItem, setEditingItem] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
   const [pages, setPages] = useState([]);
+  const [deleteBlock, setDeleteBlock] = useState('');
 
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
@@ -159,14 +160,19 @@ const MenuBuilderPage = () => {
   };
 
   const deleteSelectedMenu = async () => {
-    if (!selectedMenu || !(await confirm('Delete Menu', `Delete "${selectedMenu.name}"?`, 'danger'))) return;
+    if (!selectedMenu) return;
+    if (rows.some((row) => !row.generatedFromCategory)) {
+      setDeleteBlock('This menu contains items. Delete its menu items first, then delete the menu.');
+      return;
+    }
+    if (!(await confirm('Delete Menu', `Delete "${selectedMenu.name}"?`, 'danger'))) return;
     try {
       await MenuService.adminDeleteMenu(selectedMenu.id);
       notify('Menu deleted.', 'success');
       setSelectedMenuId('');
       fetchMenus('');
     } catch (error) {
-      notify(getApiErrorMessage(error, 'Failed to delete menu.'), 'error');
+      setDeleteBlock(getApiErrorMessage(error, 'Failed to delete menu.'));
     }
   };
 
@@ -180,6 +186,7 @@ const MenuBuilderPage = () => {
       targetType: item.targetType === 'collection' ? 'category' : item.targetType || 'none',
       targetId: item.targetId || '',
       syncChildren: Boolean(item.syncChildren),
+      childDisplayLimit: item.childDisplayLimit ?? null,
       url: item.url || '',
       placement: item.placement || 'center',
       sortOrder: item.sortOrder || 0,
@@ -192,12 +199,14 @@ const MenuBuilderPage = () => {
   const buildItemPayload = () => {
     const label = itemForm.label.trim();
     const targetType = itemForm.targetType || 'none';
+    const childDisplayLimit = itemForm.childDisplayLimit;
     const payload = {
       parentId: itemForm.parentId || null,
       label,
       targetType,
       targetId: needsTarget(targetType) ? itemForm.targetId || null : null,
       syncChildren: targetType === 'category' && Boolean(itemForm.syncChildren),
+      childDisplayLimit: childDisplayLimit === 'custom' ? null : childDisplayLimit ?? null,
       url: needsUrl(targetType) ? itemForm.url.trim() : null,
       placement: itemForm.placement,
       sortOrder: Number(itemForm.sortOrder) || 0,
@@ -208,6 +217,11 @@ const MenuBuilderPage = () => {
     if (!payload.label) throw new Error('Label is required.');
     if (needsUrl(targetType) && !payload.url) throw new Error('URL is required for this link type.');
     if (needsTarget(targetType) && !payload.targetId) throw new Error('Please choose a target.');
+    if (childDisplayLimit === 'custom') throw new Error('Enter a custom child batch size before saving.');
+    if (childDisplayLimit !== null && childDisplayLimit !== undefined
+      && (!Number.isInteger(childDisplayLimit) || childDisplayLimit < 1 || childDisplayLimit > 100)) {
+      throw new Error('Child batch size must be a whole number from 1 to 100.');
+    }
 
     return payload;
   };
@@ -231,7 +245,10 @@ const MenuBuilderPage = () => {
   };
 
   const deleteItem = async (item) => {
-    if (!selectedMenu || !(await confirm('Delete Menu Item', `Delete "${item.label}" and its children?`, 'danger'))) return;
+    if (!selectedMenu) return;
+    const blocked = getMenuItemDeletionBlock(item, rows);
+    if (blocked) { setDeleteBlock(blocked); return; }
+    if (!(await confirm('Delete Menu Item', `Delete "${item.label}"?`, 'danger'))) return;
     try {
       await MenuService.adminDeleteMenuItem(selectedMenu.id, item.id);
       notify(`"${item.label}" deleted.`, 'success', {
@@ -248,14 +265,18 @@ const MenuBuilderPage = () => {
       });
       fetchSelectedMenu();
     } catch (error) {
-      notify(formatValidationError(error, 'Failed to delete menu item.'), 'error');
+      setDeleteBlock(formatValidationError(error, 'Failed to delete menu item.'));
+      fetchSelectedMenu();
     }
 
   };
 
 
   const bulkDeleteItems = async () => {
-    if (!selectedMenu || selectedIds.length === 0 || !(await confirm('Bulk Delete', `Delete ${selectedIds.length} items and their children?`, 'danger'))) return;
+    if (!selectedMenu || selectedIds.length === 0) return;
+    const blocked = rows.filter((row) => selectedIds.includes(row.id)).map((item) => getMenuItemDeletionBlock(item, rows)).find(Boolean);
+    if (blocked) { setDeleteBlock(blocked); return; }
+    if (!(await confirm('Bulk Delete', `Delete ${selectedIds.length} selected menu items?`, 'danger'))) return;
     setLoading(true);
     try {
       await MenuService.adminBulkDeleteMenuItems(selectedMenu.id, selectedIds);
@@ -263,7 +284,7 @@ const MenuBuilderPage = () => {
       setSelectedIds([]);
       fetchSelectedMenu();
     } catch (error) {
-      notify(getApiErrorMessage(error, 'Failed to delete items.'), 'error');
+      setDeleteBlock(getApiErrorMessage(error, 'Failed to delete items.'));
       fetchSelectedMenu();
     } finally {
       setLoading(false);
@@ -370,6 +391,11 @@ const MenuBuilderPage = () => {
         </Grid>
       </Grid>
 
+      <Dialog open={Boolean(deleteBlock)} onClose={() => setDeleteBlock('')} aria-labelledby="menu-delete-block-title" fullWidth maxWidth="xs">
+        <DialogTitle id="menu-delete-block-title">Cannot delete yet</DialogTitle>
+        <DialogContent><DialogContentText>{deleteBlock}</DialogContentText></DialogContent>
+        <DialogActions><Button variant="contained" onClick={() => setDeleteBlock('')}>Got it</Button></DialogActions>
+      </Dialog>
       <MenuDialog
         open={menuDialogOpen}
         onClose={() => setMenuDialogOpen(false)}

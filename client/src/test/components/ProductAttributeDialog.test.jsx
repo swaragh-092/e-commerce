@@ -79,6 +79,50 @@ describe('unified product attribute picker', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add to product' }));
     await waitFor(() => expect(attributeService.assignProductAttribute).toHaveBeenCalledWith('product', expect.objectContaining({ values: [{ valueId: 'twenty' }] })));
   });
+  it.each([true, false])('inherits variant use when adding existing values through the picker: preselected=%s', async (preselected) => {
+    mount({ rows: [{ attributeId: 'height', valueId: 'ten', isVariantAttr: true }], initialTemplate: preselected ? height : undefined,
+      variants: [{ id: 'variant', options: [{ attributeId: 'height', valueId: 'ten' }] }] });
+    if (!preselected) await choose('Height');
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: '20cm', exact: true })).toBeEnabled());
+    expect(screen.queryByRole('checkbox', { name: 'Use these values to create variants' })).not.toBeInTheDocument();
+    expect(screen.getByText('New values will also be used for variants.')).toBeInTheDocument();
+    expect(screen.getByText('Added values will appear under “Add missing variants”.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: '20cm', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add to product' }));
+    await waitFor(() => expect(attributeService.assignProductAttribute).toHaveBeenCalledWith('product', {
+      attributeId: 'height', values: [{ valueId: 'twenty' }], isVariantAttr: true,
+    }));
+  });
+  it('inherits variant use for newly entered values even when existing assignments have mixed flags', async () => {
+    mount({ initialTemplate: height, rows: [
+      { attributeId: 'height', valueId: 'ten', isVariantAttr: true },
+      { attributeId: 'height', valueId: 'twenty', isVariantAttr: false },
+    ] });
+    await waitFor(() => expect(screen.queryByLabelText('Loading attribute values')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Add a value', exact: true })); enterRange();
+    fireEvent.click(screen.getByRole('button', { name: 'Add to product' }));
+    await waitFor(() => expect(attributeService.assignProductAttribute).toHaveBeenCalledWith('product', {
+      attributeId: 'height', values: [{ value: '1 - 1.5', unitLabel: 'm', swatchColor: null }], isVariantAttr: true,
+    }));
+  });
+  it('keeps the variant choice local to the selected attribute', async () => {
+    mount({ initialTemplate: height, rows: [{ attributeId: 'height', valueId: 'ten', isVariantAttr: true }] });
+    await waitFor(() => expect(screen.queryByLabelText('Loading attribute values')).not.toBeInTheDocument());
+    expect(screen.queryByRole('checkbox', { name: 'Use these values to create variants' })).not.toBeInTheDocument();
+    await choose('Color');
+    expect(screen.getByRole('checkbox', { name: 'Use these values to create variants' })).not.toBeChecked();
+  });
+  it('keeps display-only attributes unchanged when another attribute is used for variants', async () => {
+    mount({ initialTemplate: height, rows: [
+      { attributeId: 'height', valueId: 'ten', isVariantAttr: false },
+      { attributeId: 'color', valueId: 'red', isVariantAttr: true },
+    ], variants: [{ id: 'color-variant', options: [{ attributeId: 'color', valueId: 'red' }] }] });
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: '20cm', exact: true })).toBeEnabled());
+    expect(screen.getByRole('checkbox', { name: 'Use these values to create variants' })).not.toBeChecked();
+    fireEvent.click(screen.getByRole('checkbox', { name: '20cm', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add to product' }));
+    await waitFor(() => expect(attributeService.assignProductAttribute).toHaveBeenCalledWith('product', expect.objectContaining({ isVariantAttr: false })));
+  });
   it('cancels an unfinished value while keeping selected and included values', async () => {
     mount(); await choose('Height');
     fireEvent.click(screen.getByRole('checkbox', { name: '10cm', exact: true }));

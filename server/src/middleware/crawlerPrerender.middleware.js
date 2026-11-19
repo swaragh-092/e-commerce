@@ -74,11 +74,11 @@ const crawlerPrerender = async (req, res, next) => {
       res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600');
       return res.status(200).send(html);
     } catch (err) {
-      if (err.statusCode === 404 && cleanPath.startsWith('/tags/')) {
+      if (err.statusCode === 404 && /^\/(tags|products?|category|p|blogs|brands)\//.test(cleanPath)) {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'no-store');
         res.setHeader('X-Robots-Tag', 'noindex');
-        return res.status(404).send('<!DOCTYPE html><html><head><title>Tag not found</title><meta name="robots" content="noindex,nofollow"></head><body><h1>Tag not found</h1><a href="/products">Browse products</a></body></html>');
+        return res.status(404).send('<!DOCTYPE html><html><head><title>Page not found</title><meta name="robots" content="noindex,nofollow"></head><body><h1>Page not found</h1><a href="/products">Browse products</a></body></html>');
       }
       logger.error(`[crawlerPrerender] Failed to pre-render for path "${cleanPath}":`, err);
       return next();
