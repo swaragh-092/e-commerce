@@ -59,9 +59,11 @@ describe('store designer section navigation', () => {
     const onSectionClick = vi.fn();
     const onChangePageSections = vi.fn();
     const onPageContentClick = vi.fn();
+    const onPageSettingChange = vi.fn();
     render(<DesignerTreePanel sections={[]} sharedSections={[shared]} activePage="cart"
       pageSettings={{ cart: { productRows: [first, above, second] } }} onAddSection={onAddSection}
-      onSectionClick={onSectionClick} onChangePageSections={onChangePageSections} onPageContentClick={onPageContentClick} />);
+      onSectionClick={onSectionClick} onChangePageSections={onChangePageSections} onPageContentClick={onPageContentClick}
+      onPageSettingChange={onPageSettingChange} />);
     fireEvent.click(screen.getByRole('button', { name: 'Expand Cart blocks' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cart products' }));
     expect(onPageContentClick).toHaveBeenLastCalledWith('cartItem');
@@ -74,6 +76,14 @@ describe('store designer section navigation', () => {
     expect(onAddSection).toHaveBeenCalledWith(1, 'header', add);
     act(() => dnd.end({ source: { droppableId: 'page-template-below', index: 0 }, destination: { droppableId: 'page-template-below', index: 1 } }));
     expect(onChangePageSections).toHaveBeenCalledWith([second, above, first]);
+    act(() => dnd.end({ source: { droppableId: 'page-template-above', index: 0 }, destination: { droppableId: 'page-template-below', index: 0 } }));
+    expect(onChangePageSections).toHaveBeenLastCalledWith([{ ...above, pagePosition: 'below' }, first, second]);
+    const summary = screen.getByRole('checkbox', { name: 'Show Summary' });
+    expect(summary).toBeChecked();
+    fireEvent.click(summary);
+    const [page, apply] = onPageSettingChange.mock.calls[0];
+    expect(page).toBe('cart');
+    expect(apply({ layout: 'compact' })).toEqual({ layout: 'compact', showCartSummary: false });
   });
 
   it('can put a legacy supplemental block directly after a built-in product block', () => {
