@@ -70,6 +70,23 @@ describe('page product rows', () => {
   });
 
   it.each([
+    ['collection', 'catalog'], ['brand', 'brandsPage'], ['blog', 'blogPage'],
+    ['account', 'accountPage'], ['orders', 'ordersPage'], ['wishlist', 'wishlistPage'],
+    ['cart', 'cartPage'], ['search', 'searchPage'], ['not-found', 'notFoundPage'],
+  ])('renders custom sections around the built-in %s content', (page, group) => {
+    const productRows = [
+      { id: 'intro', type: 'composed-hero', pagePosition: 'above', heroBlocks: [{ id: 'copy', type: 'heading', text: 'Custom introduction' }] },
+      { id: 'help', type: 'faq', pagePosition: 'below', title: 'Page help', items: [{ title: 'How does it work?', text: 'Read the instructions.' }] },
+    ];
+    render(<SettingsContext.Provider value={{ settings: { [group]: { productRows } } }}>
+      <MemoryRouter><RoutedProductRows page={page}><h1>Built-in content</h1></RoutedProductRows></MemoryRouter>
+    </SettingsContext.Provider>);
+    const main = screen.getByRole('heading', { name: 'Built-in content' });
+    expect(screen.getByText('Custom introduction').compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(main.compareDocumentPosition(screen.getByRole('heading', { name: 'Page help' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it.each([
     ['featured', '/products?featured=true', { featured: true }],
     ['sale', '/products?onSale=true', { sale: true }],
   ])('preserves %s in the row request and View All link', async (source, href, filter) => {

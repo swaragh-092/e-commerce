@@ -285,7 +285,7 @@ const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingPending, s
     const headerBg = checkoutBlockStyle.headerStyle === 'accent' ? 'primary.main' : checkoutBlockStyle.headerStyle === 'plain' ? 'background.paper' : 'action.selected';
     const headerColor = checkoutBlockStyle.headerStyle === 'accent' ? 'primary.contrastText' : 'text.secondary';
     return (
-        <Box sx={{ position: { md: 'sticky' }, top: { md: 80 }, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        <Box data-store-component="checkoutBlock" sx={{ position: { md: 'sticky' }, top: { md: 80 }, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
 
             {/* Main card */}
             <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: blockRadius, boxShadow: blockShadow, overflow: 'hidden' }}>
@@ -559,7 +559,7 @@ const CartPage = () => {
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: isCompactCart ? '1fr' : 'minmax(0, 1fr) 400px' }, gap: { xs: 3, md: 3.5 }, alignItems: 'start' }}>
 
                 {/* Items */}
-                <Box>
+                <Box data-store-component="cartItem">
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                         {items.map(item => (
                             <CartItem key={item.id} item={item} getQty={getQty}

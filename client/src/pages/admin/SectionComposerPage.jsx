@@ -323,7 +323,8 @@ const SectionComposerPage = () => {
   const productSections = getPageSections({ productPage: editablePageSettings }, 'product');
   const pageSections = editablePageSettings?.productRows || [];
   const editableSections = activePage === 'home' ? sections
-    : activePage === 'product' ? [...productSections, ...pageSections] : pageSections;
+    : [...(activePage === 'product' ? productSections : []), ...pageSections, ...sections.filter(({ placement }) => placement === 'header' || placement === 'footer')];
+  const isSharedSection = (section) => section?.placement === 'header' || section?.placement === 'footer';
   const editSection = panelView.mode === 'section-editor'
     ? editableSections.find((s) => s.id === panelView.sectionId) || null
     : null;
@@ -872,7 +873,7 @@ const SectionComposerPage = () => {
       }));
       return;
     }
-    if (activePage === 'product') {
+    if (activePage === 'product' && !isSharedSection(editSection)) {
       if (editSection?.type === 'product-info' && key === 'heroBlocks') {
         changeProductInfo(editSection.id, (section) => {
           const next = { ...section, heroBlocks: value };
@@ -898,7 +899,7 @@ const SectionComposerPage = () => {
   };
 
   const handleInlineFieldBlur = () => {
-    if (activePage !== 'home') return;
+    if (activePage !== 'home' && !isSharedSection(editSection)) return;
     // Commit the current state to the undo/redo history on input blur
     const currentSections = sectionsRef.current;
     const currentHead = history[historyIndex];
@@ -987,7 +988,7 @@ const SectionComposerPage = () => {
   };
 
   const handleAdd = (newSection) => {
-    if (activePage !== 'home') {
+    if (activePage !== 'home' && !['header', 'footer'].includes(addTarget.area)) {
       if (activePage === 'checkout' || pageSections.length >= 6) return;
       const section = { ...newSection, pagePosition: addTarget.area === 'above' ? 'above' : 'below' };
       const next = [...pageSections];
@@ -1221,6 +1222,8 @@ const SectionComposerPage = () => {
   const treePanel = (
     <DesignerTreePanel
       sections={editableSections}
+      sharedSections={sections}
+      onPageContentClick={activePage === 'cart' ? openComponentEditor : activePage === 'checkout' ? () => openComponentEditor('checkoutBlock') : undefined}
       loadError={loadError}
       onRetryLoad={fetchSections}
       activePage={activePage}
@@ -1254,7 +1257,7 @@ const SectionComposerPage = () => {
         const next = [...items];
         next.splice(index, 0, schema.create());
         const replace = (item) => item.id === section.id ? { ...item, [schema.key]: next } : item;
-        if (activePage === 'home') update(sections.map(replace));
+        if (activePage === 'home' || isSharedSection(section)) update(sections.map(replace));
         else changePageSections(pageSections.map(replace));
         handleInlineBlockFocus(section.id, schema.key, index);
       }}
@@ -1463,9 +1466,9 @@ const SectionComposerPage = () => {
               onChange={handleInlineFieldChange}
               onBlur={handleInlineFieldBlur}
               onApplyPreset={activePage === 'home' ? applySmartPreset : undefined}
-              onDuplicate={activePage === 'home' ? duplicateSection
+              onDuplicate={activePage === 'home' || isSharedSection(editSection) ? duplicateSection
                 : pageSections.includes(editSection) && pageSections.length < 6 ? duplicatePageSection : undefined}
-              onDelete={activePage === 'home' ? removeSectionById
+              onDelete={activePage === 'home' || isSharedSection(editSection) ? removeSectionById
                 : pageSections.includes(editSection) ? removePageSection : undefined}
               pageSection={pageSections.includes(editSection)}
               categoryPage={activePage === 'category'}
@@ -1671,8 +1674,15 @@ const SectionComposerPage = () => {
                         const section = editableSections.find((item) => item.id === id);
                         if (section) selectSection(section);
                       } : undefined}
-                      onInsertSection={!livePreview && activePage !== 'checkout' && pageSections.length < 6
+                      onSelectComponent={!livePreview ? openComponentEditor : undefined}
+                      onInsertSection={!livePreview
                         ? (position, anchor) => {
+                          if (['header', 'footer'].includes(position)) {
+                            const index = sections.findIndex(({ id }) => id === anchor);
+                            openAddSection(index < 0 ? sections.length : index, position);
+                            return;
+                          }
+                          if (activePage === 'checkout' || pageSections.length >= 6) return;
                           const index = pageSections.findIndex(({ id }) => id === anchor);
                           openAddSection(index < 0 ? pageSections.length : index, position);
                         } : undefined}
@@ -1724,8 +1734,7 @@ const SectionComposerPage = () => {
                       if (section && (section.heroBlocks?.length || 0) < 12) openProductBlockPicker(section, { atStart: !afterId, afterId });
                     }}
                     onInsertSection={(area, anchor) => {
-                      const index = sections.findIndex(({ id, placement }) => id === anchor
-                        || (area === 'footer' && !anchor && placement === 'footer'));
+                      const index = sections.findIndex(({ id }) => id === anchor);
                       openAddSection(index < 0 ? sections.length : index, area);
                     }}
                     onSelectComponent={openComponentEditor}
@@ -1764,9 +1773,9 @@ const SectionComposerPage = () => {
           setAddTarget({ index: null, area: 'template' });
         }}
         onAdd={handleAdd}
-        existingIds={editableSections.map((s) => s.id)}
-        allowedTypes={activePage !== 'home' ? getPageSectionTypes(activePage)
-          : ['header', 'footer'].includes(addTarget.area) ? ['composed-hero'] : undefined}
+        existingIds={[...sections, ...editableSections].map((s) => s.id)}
+        allowedTypes={['header', 'footer'].includes(addTarget.area) ? ['composed-hero']
+          : activePage !== 'home' ? getPageSectionTypes(activePage) : undefined}
         insertLabel={addTarget.area === 'header' ? 'Header' : addTarget.area === 'footer' ? 'Footer'
           : activePage === 'home' ? 'this template'
             : addTarget.area === 'above' ? 'above page content' : 'below page content'}

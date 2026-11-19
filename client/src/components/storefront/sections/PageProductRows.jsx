@@ -60,12 +60,13 @@ export function RoutedProductRows({ page, children }) {
   const pricingEnabled = useFeatureVisible('pricing', 'storefront');
   const { categorySlug, slug } = useParams();
   const [searchParams] = useSearchParams();
-  const showInsertion = searchParams.get('previewMode') === '1' && page !== 'checkout';
+  const designerPreview = searchParams.get('previewMode') === '1';
   const alternate = findAssignedPageTemplate(settings, page, page === 'category' ? categorySlug : slug);
   const pageSettings = alternate ? { ...settings, [PAGE_SETTINGS_GROUPS[page]]: alternate.settings } : settings;
   const allowedTypes = getPageSectionTypes(page);
-  const rows = getPageProductRows(pageSettings, page)
-    .filter((row) => allowedTypes.includes(row?.type) && row.enabled !== false && (row.source !== 'sale' || pricingEnabled));
+  const configuredRows = getPageProductRows(pageSettings, page);
+  const showInsertion = designerPreview && page !== 'checkout' && configuredRows.length < 6;
+  const rows = configuredRows.filter((row) => allowedTypes.includes(row?.type) && row.enabled !== false && (row.source !== 'sale' || pricingEnabled));
   const category = page === 'category' ? categorySlug : undefined;
   const above = rows.filter(({ pagePosition }) => pagePosition === 'above');
   const below = rows.filter(({ pagePosition }) => pagePosition !== 'above');
@@ -88,7 +89,9 @@ export function RoutedProductRows({ page, children }) {
 
   const layout = <>
     {renderSections(above, 'above')}{insertion('above')}
-    {children}
+    {designerPreview && (page === 'cart' || page === 'checkout')
+      ? <Box data-store-component={page === 'cart' ? 'cartItem' : 'checkoutBlock'}>{children}</Box>
+      : children}
     {renderSections(below, 'below')}{insertion('below')}
   </>;
   return alternate

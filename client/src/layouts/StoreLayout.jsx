@@ -622,20 +622,26 @@ const StoreLayout = () => {
 
       {!isAuthPage && (settings?.homepage?.sections || []).filter((section) =>
         section.type === 'composed-hero' && section.placement === 'header'
-      ).map((section) => <Box key={section.id} data-store-section={section.id}><SectionRenderer section={section} lazy={false} /></Box>)}
-      {!isAuthPage && isDesignerPreview && location.pathname === '/' && (
+      ).map((section) => <Box key={section.id}>
+        {isDesignerPreview && <button type="button" hidden data-store-add-section="header" data-store-anchor={section.id}>Add section here</button>}
+        <Box data-store-section={section.id}><SectionRenderer section={section} lazy={false} /></Box>
+      </Box>)}
+      {!isAuthPage && isDesignerPreview && (
         <button type="button" hidden data-store-add-section="header">Add section to header</button>
       )}
       <Box component="main" id="main" tabIndex={-1} sx={{ flexGrow: 1 }}>
         <Outlet />
       </Box>
 
-      {!isAuthPage && isDesignerPreview && location.pathname === '/' && (
-        <button type="button" hidden data-store-add-section="footer">Add section to footer</button>
-      )}
       {!isAuthPage && (settings?.homepage?.sections || []).filter((section) =>
         section.type === 'composed-hero' && section.placement === 'footer'
-      ).map((section) => <Box key={section.id} data-store-section={section.id}><SectionRenderer section={section} lazy={false} /></Box>)}
+      ).map((section) => <Box key={section.id}>
+        {isDesignerPreview && <button type="button" hidden data-store-add-section="footer" data-store-anchor={section.id}>Add section here</button>}
+        <Box data-store-section={section.id}><SectionRenderer section={section} lazy={false} /></Box>
+      </Box>)}
+      {!isAuthPage && isDesignerPreview && (
+        <button type="button" hidden data-store-add-section="footer">Add section to footer</button>
+      )}
       {!isAuthPage && <Box data-store-component="footer"><StorefrontFooter /></Box>}
       {/* Resolved entity metadata and URL overrides take precedence over page fallbacks. */}
       <SEO />
