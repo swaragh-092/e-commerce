@@ -39,6 +39,18 @@ describe('Designer dialog dismissal during requests', () => {
     render(<AddSectionDialog open onClose={vi.fn()} onAdd={vi.fn()} allowedTypes={['composed-hero']} />);
     fireEvent.change(screen.getByRole('textbox', { name: 'Search sections' }), { target: { value: 'Best Sellers' } });
     expect(screen.getByRole('status')).toHaveTextContent('No matching sections');
+    expect(screen.queryByRole('complementary', { name: 'Section layout preview' })).not.toBeInTheDocument();
+  });
+
+  it('previews hovered and keyboard-focused sections without inserting them', () => {
+    const onAdd = vi.fn();
+    render(<AddSectionDialog open onClose={vi.fn()} onAdd={onAdd} allowedTypes={['product-row']} />);
+    const pane = screen.getByRole('complementary', { name: 'Section layout preview' });
+    fireEvent.pointerEnter(screen.getByRole('button', { name: 'Best Sellers', exact: true }));
+    expect(pane).toHaveTextContent('Best Sellers');
+    fireEvent.focus(screen.getByRole('button', { name: 'On Sale', exact: true }));
+    expect(pane).toHaveTextContent('On Sale');
+    expect(onAdd).not.toHaveBeenCalled();
   });
 
   it('opens block insertion at the sibling selected in the section tree', () => {
