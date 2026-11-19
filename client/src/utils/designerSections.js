@@ -1,8 +1,7 @@
-const PRODUCT_ROW_ONLY = ['product-row'];
-const CONTENT_PAGE_SECTIONS = [...PRODUCT_ROW_ONLY, 'editorial-image-text', 'faq', 'promo-banners'];
+const CONTENT_PAGE_SECTIONS = ['product-row', 'editorial-image-text', 'faq', 'promo-banners', 'composed-hero'];
 
 export const getPageSectionTypes = (page) =>
-  ['product', 'category', 'collection', 'blog'].includes(page) ? CONTENT_PAGE_SECTIONS : PRODUCT_ROW_ONLY;
+  page === 'checkout' ? ['product-row'] : CONTENT_PAGE_SECTIONS;
 
 export const PAGE_SETTINGS_GROUPS = {
   'product': 'productPage',

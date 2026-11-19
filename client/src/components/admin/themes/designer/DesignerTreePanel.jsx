@@ -244,6 +244,7 @@ const FixedNode = ({ icon, label, description, onClick, expandControl }) => (
 
 const DesignerTreePanel = ({
   sections,
+  sharedSections = sections,
   loadError,
   onRetryLoad,
   activePage,
@@ -267,10 +268,12 @@ const DesignerTreePanel = ({
   onHeaderClick,
   onHeaderPartClick,
   onFooterClick,
+  onPageContentClick,
 }) => {
   const [expandedSections, setExpandedSections] = useState({});
   const [headerExpanded, setHeaderExpanded] = useState(false);
   const [pageSettingsOpen, setPageSettingsOpen] = useState(true);
+  const [cartExpanded, setCartExpanded] = useState(false);
 
   const pageEditorConfig = PAGE_EDITORS[activePage];
   const PageEditor = pageEditorConfig?.Editor;
@@ -289,13 +292,13 @@ const DesignerTreePanel = ({
   const templateSectionRows = sections
     .map((section, originalIndex) => ({ section, originalIndex }))
     .filter(({ section }) => !section.placement || section.placement === 'template');
-  const headerSectionRows = sections.map((section, originalIndex) => ({ section, originalIndex }))
+  const headerSectionRows = sharedSections.map((section, originalIndex) => ({ section, originalIndex }))
     .filter(({ section }) => section.placement === 'header');
-  const footerSectionRows = sections
+  const footerSectionRows = sharedSections
     .map((section, originalIndex) => ({ section, originalIndex }))
     .filter(({ section }) => section.placement === 'footer');
   const templateInsertIndex = footerSectionRows.length > 0 ? footerSectionRows[0].originalIndex : sections.length;
-  const footerStartIndex = footerSectionRows.length > 0 ? footerSectionRows[0].originalIndex : sections.length;
+  const footerStartIndex = footerSectionRows.length > 0 ? footerSectionRows[0].originalIndex : sharedSections.length;
   const showSectionPicker = (index, area) => (event) => onAddSection(index, area, event.currentTarget);
   const isComposedSection = (section) => ['composed-hero', 'editorial-image-text'].includes(section.type);
   const expandSectionControl = (section) => (isComposedSection(section) || BLOCK_FIELD_PRESETS[section.type] || section.type === 'product-info') && (
@@ -356,6 +359,17 @@ const DesignerTreePanel = ({
       if (!destination || source.droppableId !== destination.droppableId || source.index === destination.index) return;
       if (source.droppableId === 'product-details') {
         moveDetail(source.index, destination.index);
+        return;
+      }
+      if (source.droppableId.startsWith('page-template-')) {
+        const position = source.droppableId.slice('page-template-'.length);
+        const rows = pageSections.map((section, index) => ({ section, index }))
+          .filter(({ section }) => (section.pagePosition || 'below') === position);
+        const next = [...pageSections];
+        const ordered = rows.map(({ section }) => section);
+        ordered.splice(destination.index, 0, ordered.splice(source.index, 1)[0]);
+        rows.forEach(({ index }, i) => { next[index] = ordered[i]; });
+        onChangePageSections(next);
         return;
       }
       const rows = source.droppableId === 'footer' ? footerSectionRows : templateSectionRows;
@@ -450,7 +464,7 @@ const DesignerTreePanel = ({
             <HeaderBlockRow icon={<MenuIcon sx={{ fontSize: 15 }} />} label="Menu" description="Primary links and categories" onClick={() => onHeaderPartClick?.('headerMenu')} />
             <HeaderBlockRow icon={<ShoppingBagIcon sx={{ fontSize: 15 }} />} label="Actions" description="Search, account, cart" onClick={() => onHeaderPartClick?.('headerActions')} />
           </Stack>}
-          {isHomePage && <>
+          <>
             {headerSectionRows.map(({ section, originalIndex }, index) => (
               <Box key={section.id}>
                 <InsertSectionControl label="Add section before" onClick={showSectionPicker(originalIndex, 'header')} />
@@ -462,8 +476,8 @@ const DesignerTreePanel = ({
                 {renderExpandableBlocks(section)}
               </Box>
             ))}
-            <AddSectionButton onClick={showSectionPicker(sections.length, 'header')}>Add section to header</AddSectionButton>
-          </>}
+            <AddSectionButton onClick={showSectionPicker(sharedSections.length, 'header')}>Add section to header</AddSectionButton>
+          </>
         </Box>
 
         {isHomePage ? <>
@@ -559,14 +573,30 @@ const DesignerTreePanel = ({
                       {mainSection.detailsBlockOrder && <Button size="small" onClick={() => onProductDetailsOrderChange(mainSection, null)}>Restore default order</Button>}
                     </Stack>}
                   </>
-                ) : <Typography variant="body2" fontWeight={700} sx={{ px: 1, py: 1 }}>Page content</Typography>)}
+                ) : <><FixedNode icon={<StorefrontIcon fontSize="small" />}
+                  label={activePage === 'not-found' ? '404 page' : `${activePage.charAt(0).toUpperCase()}${activePage.slice(1)}`}
+                  description="Page settings"
+                  expandControl={activePage === 'cart' && <ExpandItemsButton label="Cart blocks" expanded={cartExpanded} onToggle={() => setCartExpanded((value) => !value)} />}
+                  onClick={() => {
+                    setPageSettingsOpen(true);
+                    if (activePage === 'cart') setCartExpanded(true);
+                    else onPageContentClick?.();
+                  }} />
+                  {activePage === 'cart' && cartExpanded && <Stack sx={{ pl: 2, borderLeft: 1, borderColor: 'divider' }}>
+                    <Button size="small" sx={{ justifyContent: 'flex-start', textTransform: 'none' }} onClick={() => setPageSettingsOpen(true)}>Title</Button>
+                    <Button size="small" sx={{ justifyContent: 'flex-start', textTransform: 'none' }} onClick={() => onPageContentClick?.('cartItem')}>Cart products</Button>
+                    <Button size="small" sx={{ justifyContent: 'flex-start', textTransform: 'none' }} onClick={() => onPageContentClick?.('checkoutBlock')}>Summary</Button>
+                  </Stack>}
+                </>)}
+                <Droppable droppableId={`page-template-${position}`}>{(drop) => <Box ref={drop.innerRef} {...drop.droppableProps}>
                 {rows.map(({ section, originalIndex }, index) => (
-                  <Fragment key={section.id}>
+                  <Draggable key={section.id} draggableId={`page-template:${section.id}`} index={index}>{(drag) => <Box ref={drag.innerRef} {...drag.draggableProps}>
                     {activePage !== 'checkout' && pageSections.length < 6 && (
                       <InsertSectionControl label={`Add section before ${section.title || getSectionLabel(section)}`}
                         onClick={showSectionPicker(originalIndex, position)} />
                     )}
                   <SectionRow key={section.id} section={section} index={index} total={rows.length}
+                    dragHandleProps={drag.dragHandleProps}
                     expandControl={expandSectionControl(section)}
                     isSelected={selectedSectionId === section.id} onSelect={onSectionClick}
                     onMove={(_, direction) => {
@@ -580,8 +610,9 @@ const DesignerTreePanel = ({
                     onDelete={() => onChangePageSections(pageSections.filter((item) => item.id !== section.id))}
                   />
                     {renderExpandableBlocks(section)}
-                  </Fragment>
+                  </Box>}</Draggable>
                 ))}
+                {drop.placeholder}</Box>}</Droppable>
                 {activePage !== 'checkout' && pageSections.length < 6 && (
                   <AddSectionButton onClick={showSectionPicker(pageSections.length, position)}>
                     Add section {position} page content
@@ -605,7 +636,7 @@ const DesignerTreePanel = ({
           />
         </Box>
 
-        {isHomePage && <Stack spacing={0.35} sx={{ px: 1, mt: 0.75, pb: 1 }}>
+        <Stack spacing={0.35} sx={{ px: 1, mt: 0.75, pb: 1 }}>
           <InsertSectionControl
             label={footerSectionRows.length ? 'Add footer section here' : 'Add section to footer'}
             onClick={showSectionPicker(footerStartIndex, 'footer')}
@@ -630,8 +661,8 @@ const DesignerTreePanel = ({
               {renderExpandableBlocks(section)}
             </Box>}</Draggable>
           ))}{provided.placeholder}</Box>}</Droppable>
-          {footerSectionRows.length > 0 && <AddSectionButton onClick={showSectionPicker(sections.length, 'footer')}>Add section to footer</AddSectionButton>}
-        </Stack>}
+          {footerSectionRows.length > 0 && <AddSectionButton onClick={showSectionPicker(sharedSections.length, 'footer')}>Add section to footer</AddSectionButton>}
+        </Stack>
       </Box>
 
       {/* Bottom: Theme Settings CTA */}

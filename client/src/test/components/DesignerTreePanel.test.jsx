@@ -9,7 +9,7 @@ vi.mock('@hello-pangea/dnd', () => ({
   Draggable: ({ children }) => children({ innerRef: () => {}, draggableProps: {}, dragHandleProps: { role: 'button', tabIndex: 0 } }),
 }));
 const sections = [{ id: 'one', type: 'hero-carousel' }, { id: 'footer', type: 'trust-badges', placement: 'footer' }, { id: 'two', type: 'product-row' }];
-const setup = (activePage = 'home') => { const reorder = vi.fn(); const select = vi.fn(); render(<DesignerTreePanel sections={sections} activePage={activePage} pageSettings={{}} onSectionClick={select} onReorderSection={reorder} />); return { reorder, select }; };
+const setup = (activePage = 'home') => { const reorder = vi.fn(); const select = vi.fn(); render(<DesignerTreePanel sections={activePage === 'home' ? sections : []} activePage={activePage} pageSettings={{}} onSectionClick={select} onReorderSection={reorder} />); return { reorder, select }; };
 describe('store designer section navigation', () => {
   it('translates visible section indices to original insertion indices', () => {
     const { reorder } = setup();
@@ -48,6 +48,32 @@ describe('store designer section navigation', () => {
     render(<DesignerTreePanel sections={customSections} activePage="home" pageSettings={{}} />);
     expect(screen.getByText('Summer Sale 2026')).toBeInTheDocument();
     expect(screen.getByText('Hero carousel')).toBeInTheDocument();
+  });
+
+  it('edits shared sections from Cart and reorders only the target template group', () => {
+    const shared = { id: 'shared', type: 'composed-hero', placement: 'header' };
+    const first = { id: 'first', type: 'product-row' };
+    const above = { id: 'above', type: 'product-row', pagePosition: 'above' };
+    const second = { id: 'second', type: 'product-row' };
+    const onAddSection = vi.fn();
+    const onSectionClick = vi.fn();
+    const onChangePageSections = vi.fn();
+    const onPageContentClick = vi.fn();
+    render(<DesignerTreePanel sections={[]} sharedSections={[shared]} activePage="cart"
+      pageSettings={{ cart: { productRows: [first, above, second] } }} onAddSection={onAddSection}
+      onSectionClick={onSectionClick} onChangePageSections={onChangePageSections} onPageContentClick={onPageContentClick} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Cart blocks' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cart products' }));
+    expect(onPageContentClick).toHaveBeenLastCalledWith('cartItem');
+    fireEvent.click(screen.getByRole('button', { name: 'Summary' }));
+    expect(onPageContentClick).toHaveBeenLastCalledWith('checkoutBlock');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Composable hero' }));
+    expect(onSectionClick).toHaveBeenCalledWith(shared);
+    const add = screen.getByRole('button', { name: 'Add section to header' });
+    fireEvent.click(add);
+    expect(onAddSection).toHaveBeenCalledWith(1, 'header', add);
+    act(() => dnd.end({ source: { droppableId: 'page-template-below', index: 0 }, destination: { droppableId: 'page-template-below', index: 1 } }));
+    expect(onChangePageSections).toHaveBeenCalledWith([second, above, first]);
   });
 
   it('can put a legacy supplemental block directly after a built-in product block', () => {
