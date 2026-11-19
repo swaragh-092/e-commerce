@@ -60,27 +60,44 @@ const formToNestedSettings = (form) => {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function LiveStorefrontPreview({ form, settings, path = '/', device: controlledDevice, showToolbar = true, showStatusText = showToolbar, frameHeight, onSelectSection, onSelectComponent }) {
+export default function LiveStorefrontPreview({ form, settings, path = '/', device: controlledDevice, showToolbar = true, showStatusText = showToolbar, frameHeight, onSelectSection, onSelectComponent, onInsertSection, onInsertBlock, onSelectBlock, selectedSectionId, selectedBlockId }) {
   const iframeRef  = useRef(null);
   const inspectorCleanup = useRef(() => {});
-  const selectionCallbacks = useRef({ onSelectSection, onSelectComponent });
-  selectionCallbacks.current = { onSelectSection, onSelectComponent };
-  const inspecting = Boolean(onSelectSection || onSelectComponent);
+  const selectionCallbacks = useRef({ onSelectSection, onSelectComponent, onInsertSection, onInsertBlock, onSelectBlock, selectedSectionId, selectedBlockId });
+  selectionCallbacks.current = { onSelectSection, onSelectComponent, onInsertSection, onInsertBlock, onSelectBlock };
+  const canInsertSection = Boolean(onInsertSection);
+  const canInsertBlock = Boolean(onInsertBlock);
+  const inspecting = Boolean(onSelectSection || onSelectComponent || onInsertSection || onInsertBlock || onSelectBlock);
 
   const attachInspector = useCallback(() => {
     inspectorCleanup.current();
     const doc = iframeRef.current?.contentDocument;
     if (!doc?.head || !inspecting) return;
     const style = doc.createElement('style');
-    style.textContent = '[data-store-section]:hover,[data-store-component]:hover{outline:2px solid #4f46e5;outline-offset:-2px;cursor:pointer}';
+    style.textContent = '[data-store-section]:hover,[data-store-component]:hover,[data-store-block]:hover{outline:2px solid #4f46e5;outline-offset:-2px;cursor:pointer}';
+    if (selectedSectionId) {
+      const selected = JSON.stringify(String(selectedBlockId || selectedSectionId));
+      const attribute = selectedBlockId ? 'data-store-block' : 'data-store-section';
+      style.textContent += `[${attribute}=${selected}]{outline:2px solid #4f46e5;outline-offset:-2px}`;
+    }
+    const insertionSelectors = [
+      canInsertSection && '[data-store-add-section]',
+      canInsertBlock && '[data-store-add-block]',
+    ].filter(Boolean);
+    if (insertionSelectors.length) {
+      style.textContent += `${insertionSelectors.join(',')}{display:block!important;margin:8px auto;padding:5px 12px;border:1px dashed #4f46e5;border-radius:6px;background:white;color:#3730a3;cursor:pointer;font:inherit}`;
+    }
     doc.head.appendChild(style);
     const select = (event) => {
-      const target = event.target?.closest?.('[data-store-section],[data-store-component]');
+      const target = event.target?.closest?.('[data-store-add-section],[data-store-add-block],[data-store-block],[data-store-section],[data-store-component]');
       // Edit mode must not follow links or submit storefront forms.
       event.preventDefault();
       event.stopPropagation();
       if (!target) return;
-      if (target.dataset.storeSection) selectionCallbacks.current.onSelectSection?.(target.dataset.storeSection);
+      if (target.dataset.storeAddSection) selectionCallbacks.current.onInsertSection?.(target.dataset.storeAddSection, target.dataset.storeAnchor);
+      else if (target.dataset.storeAddBlock) selectionCallbacks.current.onInsertBlock?.(target.dataset.storeOwner, target.dataset.storeAddBlock, target.dataset.storeAnchor);
+      else if (target.dataset.storeBlock) selectionCallbacks.current.onSelectBlock?.(target.dataset.storeOwner, target.dataset.storeBlock);
+      else if (target.dataset.storeSection) selectionCallbacks.current.onSelectSection?.(target.dataset.storeSection);
       else selectionCallbacks.current.onSelectComponent?.(target.dataset.storeComponent);
     };
     doc.addEventListener('click', select, true);
@@ -90,7 +107,7 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', devi
       doc.removeEventListener('submit', select, true);
       style.remove();
     };
-  }, [inspecting]);
+  }, [inspecting, canInsertSection, canInsertBlock, selectedSectionId, selectedBlockId]);
 
   useEffect(() => {
     attachInspector();

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { getCategoryTree } from '../../../../services/categoryService';
 import { getProducts } from '../../../../services/productService';
@@ -44,4 +44,16 @@ it.each([
     { id: expect.any(String), name: 'Seeds', [assignmentKey]: [slug], settings: defaultSettings },
   ]);
   expect(screen.getByText(slug)).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Rename template' }));
+  const rename = within(screen.getByRole('dialog', { name: 'Rename template' }));
+  fireEvent.change(rename.getByRole('textbox', { name: 'Template name' }), { target: { value: 'Herbs' } });
+  fireEvent.click(rename.getByRole('button', { name: 'Save name' }));
+  expect(observeTemplates.mock.lastCall[0][1]).toMatchObject({ name: 'Herbs', [assignmentKey]: [slug] });
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Remove template', exact: true }));
+  const remove = within(screen.getByRole('dialog', { name: 'Remove template?' }));
+  expect(remove.getByText(/all 1 assigned pages will use the default template/)).toBeInTheDocument();
+  fireEvent.click(remove.getByRole('button', { name: 'Remove from draft' }));
+  expect(observeTemplates).toHaveBeenLastCalledWith([{ ...previous, [assignmentKey]: [] }]);
 });

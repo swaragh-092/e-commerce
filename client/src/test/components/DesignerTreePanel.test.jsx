@@ -27,20 +27,20 @@ describe('store designer section navigation', () => {
   it('reveals header elements on demand and exposes section edit buttons', () => {
     const { select } = setup();
     expect(screen.queryByText('Announcement bar')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Header elements' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Header elements' }));
     expect(screen.getByText('Announcement bar')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Edit Hero carousel' }));
     expect(select).toHaveBeenCalledWith(sections[0]);
     expect(screen.getAllByRole('button', { name: 'Add section', exact: true })).toHaveLength(1);
   });
-  it('keeps fixed page controls without offering ineffective section edits', () => {
+  it('keeps shared layout controls and offers template sections without editable items', () => {
     setup('product');
     expect(screen.getByText('Page Settings')).toBeInTheDocument();
-    expect(screen.getByText('This page uses a fixed layout. Use Page Settings above to change its appearance.')).toBeInTheDocument();
-    expect(screen.getByText('Header')).toBeInTheDocument();
-    expect(screen.getByText('Footer')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Header' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Footer' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Reorder/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Add section/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add section above page content' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add section below page content' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument();
   });
   it('displays custom section title and section type sublabel', () => {

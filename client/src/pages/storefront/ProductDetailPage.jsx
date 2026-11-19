@@ -1,3 +1,4 @@
+import { getProductBlockPlacement } from '../../utils/productBlockPlacement';
 import ComposedHero from '../../components/storefront/sections/ComposedHero';
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useLocation, useNavigate, Link as RouterLink } from 'react-router-dom';
@@ -430,6 +431,26 @@ const ProductDetailPage = () => {
         });
     };
 
+    const renderProductBlocks = (placement) => getPageSections(settings, 'product')
+        .filter((section) => section.type === 'product-info' && section.enabled !== false)
+        .map((section) => {
+            const heroBlocks = (section.heroBlocks || []).filter((block) => getProductBlockPlacement(block) === placement);
+            if (!heroBlocks.length && !designerPreview) return null;
+            return (
+                <Box key={section.id} sx={{ display: {
+                    xs: section.hideOnMobile ? 'none' : 'block',
+                    md: section.hideOnDesktop ? 'none' : 'block',
+                } }}>
+                    {designerPreview && (section.heroBlocks?.length || 0) < 12 && <button type="button" hidden data-store-add-block={placement}
+                        data-store-owner={section.id}>Add block here</button>}
+                    {heroBlocks.length > 0 && <ComposedHero embedded section={{ ...section, heroBlocks }}
+                        insertionPlacement={designerPreview && section.heroBlocks.length < 12 ? placement : undefined}
+                        product={{ ...product, selectedVariant, storefrontAvailability: stockAvailable,
+                            storefrontShipsFrom: storeName, storefrontShipping: settings?.shipping }} />}
+                </Box>
+            );
+        });
+
     return (
         <Container
             maxWidth={false}
@@ -682,6 +703,8 @@ const ProductDetailPage = () => {
                         {product.shortDescription}
                     </Typography>
 
+                    {renderProductBlocks('before-options')}
+
                     {activeVariants.length > 0 && (
                         <VariantSelector
                             variants={activeVariants}
@@ -795,19 +818,7 @@ const ProductDetailPage = () => {
                         )}
                     </Box>
 
-                    {getPageSections(settings, 'product')
-                        .filter((section) => section.type === 'product-info' && section.enabled !== false && section.heroBlocks?.length)
-                        .map((section) => (
-                            <Box key={section.id} sx={{ display: { xs: section.hideOnMobile ? 'none' : 'block', md: section.hideOnDesktop ? 'none' : 'block' } }}>
-                                <ComposedHero embedded section={section} product={{
-                                    ...product,
-                                    selectedVariant,
-                                    storefrontAvailability: stockAvailable,
-                                    storefrontShipsFrom: storeName,
-                                    storefrontShipping: settings?.shipping,
-                                }} />
-                            </Box>
-                        ))}
+                    {renderProductBlocks('before-specifications')}
 
                     {displayAttributes.length > 0 && (
                         <>
@@ -848,6 +859,8 @@ const ProductDetailPage = () => {
                             <Box dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description || '') }} sx={{ typography: 'body2', color: 'text.secondary', '& p': { mt: 0, mb: 2 } }} />
                         </>
                     )}
+
+                    {renderProductBlocks('after-details')}
 
                     {/* Custom tabs accordion — rendered from product.tabs included in the API response */}
                     {Array.isArray(product.tabs) && product.tabs.length > 0 && (

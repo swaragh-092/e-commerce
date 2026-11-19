@@ -278,6 +278,11 @@ const SectionComposerPage = () => {
     setPanelView({ mode: 'section-editor', sectionId: section?.id || null, componentKey: null, blockKey: null, blockIndex: null });
   };
 
+  const openProductBlockPicker = (section, insertion) => {
+    setPanelView({ mode: 'section-editor', sectionId: section.id, componentKey: null,
+      blockInsertion: { ...insertion, anchorEl: isMobile ? null : insertion.anchorEl } });
+  };
+
   const focusBlock = (blockKey, blockIndex) => {
     setPanelView((prev) => ({ ...prev, blockKey, blockIndex }));
   };
@@ -307,7 +312,10 @@ const SectionComposerPage = () => {
     return { templates: Array.isArray(templates) ? templates : [], defaults };
   }, [currentPageSettings]);
   const selectedTemplate = alternateTemplates.find(({ id }) => id === selectedTemplateIds[activePage]);
-  const assignedPreviewSlug = assignmentKey && selectedTemplate?.[assignmentKey]?.[0];
+  const [previewProductSlug, setPreviewProductSlug] = useState('');
+  const assignedSlugs = (assignmentKey && selectedTemplate?.[assignmentKey]) || [];
+  const assignedPreviewSlug = activePage === 'product' && assignedSlugs.includes(previewProductSlug)
+    ? previewProductSlug : assignedSlugs[0];
   const editablePageSettings = assignmentKey
     ? selectedTemplate?.settings || defaultTemplate
     : currentPageSettings;
@@ -714,7 +722,7 @@ const SectionComposerPage = () => {
 
     const belongsToArea = (section) => {
       if (!area) return true;
-      return area === 'footer' ? section?.placement === 'footer' : section?.placement !== 'footer';
+      return (section?.placement || 'template') === area;
     };
 
     let target = index + dir;
@@ -733,7 +741,7 @@ const SectionComposerPage = () => {
 
     const belongsToArea = (section) => {
       if (!area) return true;
-      return area === 'footer' ? section?.placement === 'footer' : section?.placement !== 'footer';
+      return (section?.placement || 'template') === area;
     };
     if (!belongsToArea(moving)) return;
 
@@ -952,8 +960,8 @@ const SectionComposerPage = () => {
     setPanelView({ mode: 'section-editor', sectionId: updated.id, componentKey: null });
   };
 
-  const openAddSection = (index = sections.length, area = 'template') => {
-    setAddTarget({ index, area });
+  const openAddSection = (index = sections.length, area = 'template', anchorEl = null) => {
+    setAddTarget({ index, area, anchorEl: isMobile ? null : anchorEl });
     setAddOpen(true);
   };
 
@@ -961,14 +969,16 @@ const SectionComposerPage = () => {
     if (activePage !== 'home') {
       if (activePage === 'checkout' || pageSections.length >= 6) return;
       const section = { ...newSection, pagePosition: addTarget.area === 'above' ? 'above' : 'below' };
-      changePageSections([...pageSections, section]);
+      const next = [...pageSections];
+      next.splice(addTarget.index ?? next.length, 0, section);
+      changePageSections(next);
       selectSection(section);
       setAddOpen(false);
       setAddTarget({ index: null, area: 'template' });
       return;
     }
     const insertIndex = Number.isInteger(addTarget.index) ? addTarget.index : sections.length;
-    const nextSection = addTarget.area === 'footer' ? { ...newSection, placement: 'footer' } : { ...newSection, placement: undefined };
+    const nextSection = { ...newSection, placement: addTarget.area === 'template' ? undefined : addTarget.area };
     const next = [...sections];
     next.splice(Math.max(0, Math.min(insertIndex, next.length)), 0, nextSection);
     update(next);
@@ -1187,6 +1197,52 @@ const SectionComposerPage = () => {
           : null;
 
 
+  const treePanel = (
+    <DesignerTreePanel
+      sections={editableSections}
+      loadError={loadError}
+      onRetryLoad={fetchSections}
+      activePage={activePage}
+      pageSettings={assignmentKey ? { ...pageSettings, [activePage]: editablePageSettings } : pageSettings}
+      pageTemplateControls={assignmentKey && <PageTemplateControls
+        key={activePage}
+        page={activePage}
+        templates={alternateTemplates}
+        defaultSettings={defaultTemplate}
+        selectedTemplate={selectedTemplate}
+        onSelect={(id) => {
+          setSelectedTemplateIds((current) => ({ ...current, [activePage]: id }));
+          backToTree();
+        }}
+        onChange={updatePageTemplates}
+      />}
+      selectedSectionId={panelView.sectionId}
+      onSectionClick={selectSection}
+      onThemeSettingsClick={() => setPanelView({ mode: 'theme-settings', sectionId: null, componentKey: null })}
+      onAddSection={openAddSection}
+      onAddProductBlock={openProductBlockPicker}
+      onSelectProductBlock={(section, id, key = 'heroBlocks') => handleInlineBlockFocus(section.id, key, id)}
+      inheritedBlocksForSection={getInheritedBlocksForSection}
+      onAddSectionItem={(section, schema, items, index) => {
+        const next = [...items];
+        next.splice(index, 0, schema.create());
+        const replace = (item) => item.id === section.id ? { ...item, [schema.key]: next } : item;
+        if (activePage === 'home') update(sections.map(replace));
+        else changePageSections(pageSections.map(replace));
+        handleInlineBlockFocus(section.id, schema.key, index);
+      }}
+      onMoveSection={move}
+      onReorderSection={reorderSection}
+      onToggleSection={toggle}
+      onDeleteSection={remove}
+      onChangePageSections={changePageSections}
+      onPageSettingChange={handlePageSettingChange}
+      onHeaderClick={() => openComponentEditor('headerLayout')}
+      onHeaderPartClick={openComponentEditor}
+      onFooterClick={() => openComponentEditor('footer')}
+    />
+  );
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, flex: 1, overflow: 'hidden', bgcolor: '#f6f6f7' }}>
       
@@ -1276,7 +1332,7 @@ const SectionComposerPage = () => {
               aria-expanded={Boolean(actionsAnchor)} aria-controls={actionsAnchor ? 'designer-actions-menu' : undefined}
               onClick={(event) => setActionsAnchor(event.currentTarget)}><MoreHorizIcon /></IconButton>
             <Menu id="designer-actions-menu" anchorEl={actionsAnchor} open={Boolean(actionsAnchor)} onClose={() => setActionsAnchor(null)}>
-              <MenuItem disabled={activePage === 'checkout' || (activePage !== 'home' && pageSections.length >= 6)} onClick={() => { setActionsAnchor(null); openAddSection(sections.length, 'template'); }}><AddIcon fontSize="small" sx={{ mr: 1.5 }} />Add section</MenuItem>
+              <MenuItem disabled={activePage === 'checkout' || (activePage !== 'home' && pageSections.length >= 6)} onClick={() => { setActionsAnchor(null); openAddSection(activePage === 'home' ? sections.length : pageSections.length, 'template'); }}><AddIcon fontSize="small" sx={{ mr: 1.5 }} />Add section</MenuItem>
               <MenuItem onClick={() => { setActionsAnchor(null); setSaveTemplateOpen(true); }}><SaveIcon fontSize="small" sx={{ mr: 1.5 }} />Save as template</MenuItem>
               <MenuItem onClick={() => { setActionsAnchor(null); openVersionHistory(); }} disabled={saving || publishing}><HistoryIcon fontSize="small" sx={{ mr: 1.5 }} />Version history</MenuItem>
               {draft && <MenuItem onClick={() => { setActionsAnchor(null); setDiscardOpen(true); }} disabled={saving || publishing || discarding}>Discard draft</MenuItem>}
@@ -1348,13 +1404,22 @@ const SectionComposerPage = () => {
       {/* Main Designer Grid */}
       <Box sx={{ display: 'flex', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden', bgcolor: '#f6f6f7' }}>
         
-        {/* Left Sidebar: Controls & Settings */}
         <Box sx={{
-          width: isMobile ? '100%' : { md: 320, lg: 360 },
+          display: !isMobile || (mobileTab === 'editor' && !editSection && panelView.mode !== 'theme-settings') ? 'flex' : 'none',
+          width: isMobile ? '100%' : { md: 235, lg: 280 }, flexShrink: 0, flexDirection: 'column',
+          bgcolor: 'background.paper', borderRight: 1, borderColor: 'divider', minHeight: 0,
+        }}>
+          {treePanel}
+        </Box>
+
+        {/* Section and theme settings */}
+        <Box sx={{
+          width: isMobile ? '100%' : { md: 280, lg: 330 },
+          order: isMobile ? 0 : 2,
           minWidth: 0,
           flexShrink: 0,
-          display: isMobile && mobileTab !== 'editor' ? 'none' : 'flex',
-          borderRight: isMobile ? 'none' : '1px solid',
+          display: (editSection || panelView.mode === 'theme-settings') && (!isMobile || mobileTab === 'editor') ? 'flex' : 'none',
+          borderLeft: isMobile ? 'none' : '1px solid',
           borderColor: 'divider',
           bgcolor: 'background.paper',
           flexDirection: 'column',
@@ -1380,6 +1445,7 @@ const SectionComposerPage = () => {
               onComponentEdit={openComponentEditor}
               activeBlockKey={panelView.blockKey}
               activeBlockIndex={panelView.blockIndex}
+              blockInsertion={panelView.blockInsertion}
               onBlockFocus={focusBlock}
               mappedComponent={editMappedComponent}
               mappedComponentLabel={editMappedComponentLabel}
@@ -1426,40 +1492,7 @@ const SectionComposerPage = () => {
               }}
               canManageAdvancedSettings={canManageAdvancedSettings}
             />
-          ) : (
-            <DesignerTreePanel
-              sections={editableSections}
-              loadError={loadError}
-              onRetryLoad={fetchSections}
-              activePage={activePage}
-              pageSettings={assignmentKey ? { ...pageSettings, [activePage]: editablePageSettings } : pageSettings}
-              pageTemplateControls={assignmentKey && <PageTemplateControls
-                key={activePage}
-                page={activePage}
-                templates={alternateTemplates}
-                defaultSettings={defaultTemplate}
-                selectedTemplate={selectedTemplate}
-                onSelect={(id) => {
-                  setSelectedTemplateIds((current) => ({ ...current, [activePage]: id }));
-                  backToTree();
-                }}
-                onChange={updatePageTemplates}
-              />}
-              selectedSectionId={panelView.sectionId}
-              onSectionClick={selectSection}
-              onThemeSettingsClick={() => setPanelView({ mode: 'theme-settings', sectionId: null, componentKey: null })}
-              onAddSection={openAddSection}
-              onMoveSection={move}
-              onReorderSection={reorderSection}
-              onToggleSection={toggle}
-              onDeleteSection={remove}
-              onChangePageSections={changePageSections}
-              onPageSettingChange={handlePageSettingChange}
-              onHeaderClick={() => openComponentEditor('headerLayout')}
-              onHeaderPartClick={openComponentEditor}
-              onFooterClick={() => openComponentEditor('footer')}
-            />
-          )}
+          ) : null}
 
         </Box>
 
@@ -1481,12 +1514,12 @@ const SectionComposerPage = () => {
                 Storefront Preview
               </Typography>
               <ToggleButtonGroup
-                value={activePage === 'home' && !devicePreview ? previewRenderMode : 'live'}
+                value={devicePreview ? 'live' : previewRenderMode}
                 exclusive
                 onChange={(_, v) => v && setPreviewRenderMode(v)}
                 size="small"
               >
-                <ToggleButton value="mock" disabled={activePage !== 'home' || devicePreview} aria-label="Interactive editor preview">Edit design</ToggleButton>
+                <ToggleButton value="mock" disabled={devicePreview} aria-label="Interactive editor preview">Edit design</ToggleButton>
                 <ToggleButton value="live" aria-label="Interactive preview of the current design">Test design</ToggleButton>
               </ToggleButtonGroup>
             </Stack>
@@ -1500,6 +1533,12 @@ const SectionComposerPage = () => {
               <ToggleButton value="tablet" aria-label="Tablet" title="Tablet View"><TabletMacIcon fontSize="small" /></ToggleButton>
               <ToggleButton value="mobile" aria-label="Mobile" title="Mobile View"><PhoneIphoneIcon fontSize="small" /></ToggleButton>
             </ToggleButtonGroup>
+            {activePage === 'product' && assignedSlugs.length > 1 && (
+              <TextField select size="small" label="Preview product" value={assignedPreviewSlug}
+                onChange={(event) => setPreviewProductSlug(event.target.value)}>
+                {assignedSlugs.map((slug) => <MenuItem key={slug} value={slug}>{slug}</MenuItem>)}
+              </TextField>
+            )}
           </Box>
 
           <Box sx={{ px: 1.5, py: 0.75, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
@@ -1595,6 +1634,22 @@ const SectionComposerPage = () => {
                         ? `/${activePage === 'category' ? 'category' : 'products'}/${encodeURIComponent(assignedPreviewSlug)}`
                         : previewTarget.path || '/'}
                       reloadOnSettingsChange
+                      selectedSectionId={panelView.sectionId}
+                      selectedBlockId={panelView.blockKey === 'heroBlocks' ? panelView.blockIndex : undefined}
+                      onSelectBlock={!livePreview ? (owner, id) => handleInlineBlockFocus(owner, 'heroBlocks', id) : undefined}
+                      onSelectSection={!livePreview ? (id) => {
+                        const section = editableSections.find((item) => item.id === id);
+                        if (section) selectSection(section);
+                      } : undefined}
+                      onInsertSection={!livePreview && activePage !== 'checkout' && pageSections.length < 6
+                        ? (position, anchor) => {
+                          const index = pageSections.findIndex(({ id }) => id === anchor);
+                          openAddSection(index < 0 ? pageSections.length : index, position);
+                        } : undefined}
+                       onInsertBlock={!livePreview ? (id, placement, afterId) => {
+                         const section = editableSections.find((item) => item.id === id);
+                        if (section && (section.heroBlocks?.length || 0) < 12) openProductBlockPicker(section, { placement, atStart: !afterId, afterId });
+                      } : undefined}
                       device={viewportMode}
                       showToolbar={false}
                       frameHeight="100%"
@@ -1630,6 +1685,18 @@ const SectionComposerPage = () => {
                       const section = sections.find((item) => item.id === sectionId);
                       if (section) selectSection(section);
                     }}
+                    selectedSectionId={panelView.sectionId}
+                    selectedBlockId={panelView.blockKey === 'heroBlocks' ? panelView.blockIndex : undefined}
+                    onSelectBlock={(owner, id) => handleInlineBlockFocus(owner, 'heroBlocks', id)}
+                    onInsertBlock={(owner, _placement, afterId) => {
+                      const section = sections.find(({ id }) => id === owner);
+                      if (section && (section.heroBlocks?.length || 0) < 12) openProductBlockPicker(section, { atStart: !afterId, afterId });
+                    }}
+                    onInsertSection={(area, anchor) => {
+                      const index = sections.findIndex(({ id, placement }) => id === anchor
+                        || (area === 'footer' && !anchor && placement === 'footer'));
+                      openAddSection(index < 0 ? sections.length : index, area);
+                    }}
                     onSelectComponent={openComponentEditor}
                   />
                 ) : packageData && (
@@ -1660,14 +1727,16 @@ const SectionComposerPage = () => {
       {/* Modals & Dialogs */}
       <AddSectionDialog
         open={addOpen}
+        anchorEl={addTarget.anchorEl}
         onClose={() => {
           setAddOpen(false);
           setAddTarget({ index: null, area: 'template' });
         }}
         onAdd={handleAdd}
         existingIds={editableSections.map((s) => s.id)}
-        allowedTypes={activePage === 'home' ? undefined : getPageSectionTypes(activePage)}
-        insertLabel={addTarget.area === 'footer' ? 'Footer'
+        allowedTypes={activePage !== 'home' ? getPageSectionTypes(activePage)
+          : ['header', 'footer'].includes(addTarget.area) ? ['composed-hero'] : undefined}
+        insertLabel={addTarget.area === 'header' ? 'Header' : addTarget.area === 'footer' ? 'Footer'
           : activePage === 'home' ? 'this template'
             : addTarget.area === 'above' ? 'above page content' : 'below page content'}
         sectionPresets={sectionPresets}

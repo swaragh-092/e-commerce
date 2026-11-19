@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import EnquiryModal from '../EnquiryModal';
 import NewsletterSection from './NewsletterSection';
 import { formatAttributeValue } from '../../../utils/attributePresentation';
@@ -42,14 +42,14 @@ const Media = ({ block }) => {
   );
 };
 
-const HeroBlock = ({ block, onSelect, catalog, product, depth = 0, onEnquiry }) => {
+const HeroBlock = ({ block, onSelect, catalog, product, depth = 0, onEnquiry, owner }) => {
   if (depth > 3) return null;
 
   let content;
   switch (block.type) {
     case 'group':
       content = <Stack direction={{ xs: 'column', sm: block.direction || 'column' }} spacing={2} sx={{ '& > *': { flex: 1, minWidth: 0 } }}>
-        {(block.children || []).map((child) => <HeroBlock key={child.id} block={child} onSelect={onSelect} catalog={catalog} product={product} onEnquiry={onEnquiry} depth={depth + 1} />)}
+        {(block.children || []).map((child) => <HeroBlock key={child.id} block={child} onSelect={onSelect} catalog={catalog} product={product} onEnquiry={onEnquiry} depth={depth + 1} owner={owner} />)}
       </Stack>;
       break;
     case 'heading':
@@ -100,10 +100,15 @@ const HeroBlock = ({ block, onSelect, catalog, product, depth = 0, onEnquiry }) 
     case 'product-attribute': {
       const attribute = product?.attributes?.find((item) =>
         (item.attribute?.name || item.customName || '').toLowerCase() === (block.attributeName || '').toLowerCase());
-      const value = attribute?.value
+      const value = attribute?.value != null
         ? formatAttributeValue(attribute.value, attribute.attribute)
         : attribute?.customValue;
-      content = value ? <Typography>{block.prefix || ''}{value}{block.suffix || ''}</Typography> : null;
+      content = value != null && String(value).trim() ? (
+        <Stack spacing={0.5}>
+          {block.text && <Typography component="h2" variant="h6">{block.text}</Typography>}
+          <Typography sx={{ whiteSpace: 'pre-wrap' }}>{block.prefix || ''}{value}{block.suffix || ''}</Typography>
+        </Stack>
+      ) : null;
       break;
     }
     case 'button':
@@ -144,12 +149,16 @@ const HeroBlock = ({ block, onSelect, catalog, product, depth = 0, onEnquiry }) 
       return null;
   }
 
+  if (block.type === 'product-attribute' && !content && !onSelect) return null;
+
   const select = (event) => {
     event.stopPropagation();
     onSelect(block.id);
   };
   return (
     <Box
+      data-store-block={block.id}
+      data-store-owner={owner}
       onClick={onSelect ? select : undefined}
       sx={{ minWidth: 0, ...(onSelect && { cursor: 'pointer', '&:hover': { outline: '1px solid', outlineColor: 'primary.main' } }) }}
     >
@@ -161,8 +170,11 @@ const HeroBlock = ({ block, onSelect, catalog, product, depth = 0, onEnquiry }) 
 const hasBinding = (blocks, type, key) => blocks.some((block) =>
   (block.type === type && block[key]) || hasBinding(block.children || [], type, key));
 
-export default function ComposedHero({ section, onInlineBlockFocus, product, embedded = false }) {
+export default function ComposedHero({ section, onInlineBlockFocus, product, embedded = false, insertionPlacement }) {
   const blocks = section.heroBlocks || [];
+  const canvasInsertion = insertionPlacement || (!embedded && typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('previewMode') === '1' && blocks.length < 12
+    ? 'section' : undefined);
   const [enquiryOpen, setEnquiryOpen] = useState(false);
   const onEnquiry = () => setEnquiryOpen(true);
   const { categories } = useHeroCategories(hasBinding(blocks, 'collection', 'categorySlug'));
@@ -178,7 +190,13 @@ export default function ComposedHero({ section, onInlineBlockFocus, product, emb
     : undefined;
   return (
     <Stack spacing={2.5} sx={embedded ? { my: 2 } : { px: { xs: 2, md: 5 }, py: { xs: 3, md: 6 } }}>
-      {blocks.map((block) => <HeroBlock key={block.id} block={block} onSelect={onSelect} catalog={catalog} product={product} onEnquiry={onEnquiry} />)}
+      {canvasInsertion === 'section' && <button type="button" hidden data-store-add-block="section"
+        data-store-owner={section.id}>Add block here</button>}
+      {blocks.map((block) => <Fragment key={block.id}>
+        <HeroBlock block={block} onSelect={onSelect} catalog={catalog} product={product} onEnquiry={onEnquiry} owner={section.id} />
+        {canvasInsertion && <button type="button" hidden data-store-add-block={canvasInsertion}
+          data-store-owner={section.id} data-store-anchor={block.id}>Add block below</button>}
+      </Fragment>)}
       <EnquiryModal open={enquiryOpen} onClose={() => setEnquiryOpen(false)} product={product} />
     </Stack>
   );

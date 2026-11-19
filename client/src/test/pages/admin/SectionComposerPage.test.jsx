@@ -41,7 +41,7 @@ describe('Store Designer section editing', () => {
     ['Category', 'categoryPage', 'categorySlugs', '/category'],
   ])('reopens a saved alternate %s template and previews its assignment', async (page, group, assignmentKey, prefix) => {
     const template = {
-      id: 'seeds', name: 'Seeds', [assignmentKey]: ['basil-seeds'],
+      id: 'seeds', name: 'Seeds', [assignmentKey]: page === 'Product' ? ['basil-seeds', 'beet-seeds', 'plain-seeds'] : ['basil-seeds'],
       settings: { sections: [], productRows: [{ id: 'care', title: 'Care FAQ', type: 'faq' }] },
     };
     service.getDesignDraft.mockResolvedValueOnce({ draft: {
@@ -57,6 +57,13 @@ describe('Store Designer section editing', () => {
 
     expect(screen.getByTestId('live-preview')).toHaveTextContent(`${prefix}/basil-seeds`);
     expect(screen.getByRole('button', { name: 'Hide Care FAQ' })).toBeInTheDocument();
+    if (page === 'Product') {
+      for (const slug of ['beet-seeds', 'plain-seeds']) {
+        fireEvent.mouseDown(screen.getByRole('combobox', { name: /Preview product/ }));
+        fireEvent.click(await screen.findByRole('option', { name: slug }));
+        expect(screen.getByTestId('live-preview')).toHaveTextContent(`/products/${slug}`);
+      }
+    }
   });
 
   const oldDraft = { revision: 46, payload: [{ group: 'homepage', key: 'sections', value: [{ ...homeSection, title: 'Old template hero' }] }] };

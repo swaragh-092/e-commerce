@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Autocomplete, Box, Button, Chip, MenuItem, Stack, TextField } from '@mui/material';
+import { Alert, Autocomplete, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, TextField, Typography } from '@mui/material';
 import { getProducts } from '../../../../services/productService';
 
 import { getCategoryTree } from '../../../../services/categoryService';
@@ -15,9 +15,18 @@ export default function PageTemplateControls({ page, templates, defaultSettings,
   const [search, setSearch] = useState('');
   const [matches, setMatches] = useState([]);
   const [searchError, setSearchError] = useState(false);
+  const [dialog, setDialog] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
   const templateName = name.trim();
-  const duplicateName = templates.some((template) => template.name.toLowerCase() === templateName.toLowerCase());
   const isCategory = page === 'category';
+  const defaultLabel = isCategory ? 'Default category' : 'Default product';
+  const nameInUse = (value, exceptId) => {
+    const normalized = value.toLowerCase();
+    return normalized === defaultLabel.toLowerCase()
+      || templates.some((template) => template.id !== exceptId && template.name.toLowerCase() === normalized);
+  };
+  const duplicateName = nameInUse(templateName);
+  const renameDuplicate = nameInUse(renameValue.trim(), selectedTemplate?.id);
   const assignmentKey = PAGE_TEMPLATE_ASSIGNMENT_KEYS[page];
   const assigned = selectedTemplate?.[assignmentKey] || [];
   const [categories, setCategories] = useState([]);
@@ -74,7 +83,7 @@ export default function PageTemplateControls({ page, templates, defaultSettings,
       <TextField select size="small" label={isCategory ? 'Category template' : 'Product template'} value={selectedTemplate?.id || ''}
         InputLabelProps={{ shrink: true }} SelectProps={{ displayEmpty: true }}
         onChange={(event) => onSelect(event.target.value)}>
-        <MenuItem value="">{isCategory ? 'Default category' : 'Default product'}</MenuItem>
+        <MenuItem value="">{defaultLabel}</MenuItem>
         {templates.map(({ id, name: label }) => <MenuItem key={id} value={id}>{label}</MenuItem>)}
       </TextField>
       <TextField size="small" label="New template name" value={name}
@@ -83,6 +92,18 @@ export default function PageTemplateControls({ page, templates, defaultSettings,
       <Button size="small" disabled={!templateName || duplicateName} onClick={create}>Duplicate default template</Button>
       {selectedTemplate && (
         <>
+          <Typography variant="body2" color="text.secondary">
+            {assigned.length} {isCategory
+              ? (assigned.length === 1 ? 'category' : 'categories')
+              : (assigned.length === 1 ? 'product' : 'products')} assigned
+          </Typography>
+          <Stack direction="row" spacing={1}>
+            <Button size="small" onClick={() => {
+              setRenameValue(selectedTemplate.name);
+              setDialog('rename');
+            }}>Rename template</Button>
+            <Button size="small" color="error" onClick={() => setDialog('remove')}>Remove template</Button>
+          </Stack>
           <Autocomplete
             size="small" value={null} inputValue={search}
             options={(isCategory ? categories : matches).filter(({ slug }) => !assigned.includes(slug))}
@@ -117,6 +138,36 @@ export default function PageTemplateControls({ page, templates, defaultSettings,
           </Stack>}
         </>
       )}
+      {selectedTemplate && <Dialog open={dialog !== null} onClose={() => setDialog(null)} fullWidth maxWidth="xs">
+        <DialogTitle>{dialog === 'remove' ? 'Remove template?' : 'Rename template'}</DialogTitle>
+        <DialogContent>
+          {dialog === 'remove' ? (
+            <Typography>
+              Remove {selectedTemplate.name} from the draft? After publishing, all {assigned.length} assigned pages will use the default template.
+            </Typography>
+          ) : (
+            <TextField autoFocus fullWidth margin="dense" label="Template name" value={renameValue}
+              onChange={(event) => setRenameValue(event.target.value)} inputProps={{ maxLength: 60 }}
+              error={renameDuplicate} helperText={renameDuplicate ? 'Choose a unique name.' : undefined} />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialog(null)}>Cancel</Button>
+          {dialog === 'remove' ? (
+            <Button color="error" onClick={() => {
+              onChange(templates.filter(({ id }) => id !== selectedTemplate.id));
+              setDialog(null);
+              onSelect('');
+            }}>Remove from draft</Button>
+          ) : (
+            <Button disabled={!renameValue.trim() || renameDuplicate} onClick={() => {
+              onChange(templates.map((template) => template.id === selectedTemplate.id
+                ? { ...template, name: renameValue.trim() } : template));
+              setDialog(null);
+            }}>Save name</Button>
+          )}
+        </DialogActions>
+      </Dialog>}
     </Stack>
   );
 }

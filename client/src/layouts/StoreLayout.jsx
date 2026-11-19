@@ -40,6 +40,7 @@ const StoreLayout = () => {
   const { settings, features } = useSettings();
   const { formatPrice } = useCurrency();
   const location = useLocation();
+  const isDesignerPreview = new URLSearchParams(location.search).get('previewMode') === '1';
   const storeName = getStoreName(settings);
   const { cartCount } = useCart();
   const { wishlistCount } = useWishlist();
@@ -621,14 +622,20 @@ const StoreLayout = () => {
 
       {!isAuthPage && (settings?.homepage?.sections || []).filter((section) =>
         section.type === 'composed-hero' && section.placement === 'header'
-      ).map((section) => <SectionRenderer key={section.id} section={section} lazy={false} />)}
+      ).map((section) => <Box key={section.id} data-store-section={section.id}><SectionRenderer section={section} lazy={false} /></Box>)}
+      {!isAuthPage && isDesignerPreview && location.pathname === '/' && (
+        <button type="button" hidden data-store-add-section="header">Add section to header</button>
+      )}
       <Box component="main" id="main" tabIndex={-1} sx={{ flexGrow: 1 }}>
         <Outlet />
       </Box>
 
+      {!isAuthPage && isDesignerPreview && location.pathname === '/' && (
+        <button type="button" hidden data-store-add-section="footer">Add section to footer</button>
+      )}
       {!isAuthPage && (settings?.homepage?.sections || []).filter((section) =>
         section.type === 'composed-hero' && section.placement === 'footer'
-      ).map((section) => <SectionRenderer key={section.id} section={section} lazy={false} />)}
+      ).map((section) => <Box key={section.id} data-store-section={section.id}><SectionRenderer section={section} lazy={false} /></Box>)}
       {!isAuthPage && <Box data-store-component="footer"><StorefrontFooter /></Box>}
       {/* Resolved entity metadata and URL overrides take precedence over page fallbacks. */}
       <SEO />
