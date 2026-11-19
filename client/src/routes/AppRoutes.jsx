@@ -69,6 +69,8 @@ const TagPage = lazy(() => import('../pages/storefront/TagPage'));
 const ProductListPage = lazy(() => import('../pages/storefront/ProductListPage'));
 const CategoryPage = lazy(() => import('../pages/storefront/CategoryPage'));
 const CartPage = lazy(() => import('../pages/storefront/CartPage'));
+const GiftCardPage = lazy(() => import('../pages/storefront/GiftCardPage'));
+const GiftCardsPage = lazy(() => import('../pages/admin/GiftCardsPage'));
 const CheckoutPage = lazy(() => import('../pages/storefront/CheckoutPage'));
 const PaymentPage = lazy(() => import('../pages/storefront/PaymentPage'));
 const PaymentSuccessPage = lazy(() => import('../pages/storefront/PaymentSuccessPage'));
@@ -188,6 +190,7 @@ const AppRoutes = () => (
           <Route path="cart" element={<RoutedProductRows page="cart"><CartPage /></RoutedProductRows>} />
         </Route>
         <Route element={<FeatureRoute feature="checkout" />}>
+          <Route path="gift-cards" element={<GiftCardPage />} />
           <Route path="checkout" element={<RoutedProductRows page="checkout"><CheckoutPage /></RoutedProductRows>} />
           <Route path="payment/:orderId" element={<PaymentPage />} />
           <Route path="payment/success" element={<PaymentSuccessPage />} />
@@ -307,6 +310,9 @@ const AppRoutes = () => (
           </Route>
           <Route element={<ProtectedRoute role="super_admin" />}>
             <Route path="features" element={<FeaturesPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_MANAGE} />}>
+            <Route path="gift-cards" element={<GiftCardsPage />} />
           </Route>
           {/* Payment Gateways, Shipping, Sale Labels — ecommerce only */}
           <Route element={<ModeRoute requiredMode="ecommerce" />}>

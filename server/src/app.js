@@ -213,6 +213,7 @@ app.use('/api/analytics/events', require('./modules/analytics/analyticsEvent.rou
 app.use('/api/coupons', couponRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/gift-cards', require('./modules/giftCard/giftCard.routes'));
 app.use('/api/shipping', shippingRoutes);
 app.use('/api/webhook/shipping', shippingWebhookRoutes);
 app.use('/api/v1/shipping/webhooks', shippingWebhookRoutes);

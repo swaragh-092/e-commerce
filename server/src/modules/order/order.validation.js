@@ -14,6 +14,7 @@ const {
 
 const placeOrderSchema = Joi.object({
     shippingAddressId: Joi.string().uuid().optional().allow(null, ''),
+    giftCardCode: Joi.string().trim().hex().length(36).optional(),
     couponCode: Joi.string().trim().max(50).uppercase().optional().allow(null, ''),
     couponCodes: Joi.array().items(Joi.string().trim().max(50).uppercase()).max(MAX_CHECKOUT_COUPONS).optional().default([]),
     notes: Joi.string().allow(null, ''),
