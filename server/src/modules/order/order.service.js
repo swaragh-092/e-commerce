@@ -2208,6 +2208,72 @@ const updateContactEmail = async (orderId, email) => sequelize.transaction(async
     return order;
 });
 
+const ORDER_DETAILS_EDITABLE_STATUSES = ['pending_payment', 'confirmed', 'on_hold', 'processing', 'ready_for_shipment'];
+const ORDER_ADDRESS_FIELDS = ['fullName', 'phone', 'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country', 'email'];
+const normalizeAddressValue = (value) => String(value ?? '').trim().toLowerCase();
+
+const updateOrderDetails = async (orderId, payload, actorId) => sequelize.transaction(async (transaction) => {
+    const order = await Order.findByPk(orderId, { transaction, lock: Transaction.LOCK.UPDATE });
+    if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
+    const status = normalizeOrderStatus(order.status);
+    if (!ORDER_DETAILS_EDITABLE_STATUSES.includes(status)) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Cancelled or closed orders can no longer be edited.');
+    }
+
+    const updates = {};
+    const changedFields = [];
+
+    if (payload.shippingAddress) {
+        const current = order.shippingAddressSnapshot || {};
+        if (current.digital) throw new AppError('VALIDATION_ERROR', 400, 'Digital orders have no shipping address to edit.');
+        const incoming = {};
+        for (const field of ORDER_ADDRESS_FIELDS) {
+            if (payload.shippingAddress[field] !== undefined) incoming[field] = payload.shippingAddress[field];
+        }
+        if (incoming.email !== undefined && order.userId) {
+            throw new AppError('VALIDATION_ERROR', 400, 'Only guest orders use an order contact email.');
+        }
+        for (const field of ['state', 'country']) {
+            if (incoming[field] !== undefined && normalizeAddressValue(incoming[field]) !== normalizeAddressValue(current[field])) {
+                throw new AppError('VALIDATION_ERROR', 400, 'State and country cannot be changed because tax was calculated for the original destination. Cancel and re-place the order instead.');
+            }
+            delete incoming[field];
+        }
+        const addressChanged = Object.keys(incoming).filter((field) => String(incoming[field] ?? '') !== String(current[field] ?? ''));
+        if (addressChanged.length > 0) {
+            const shipments = await Shipment.findAll({ where: { orderId }, attributes: ['id', 'status'], transaction });
+            if (shipments.some((shipment) => shipment.status !== 'cancelled')) {
+                throw new AppError('VALIDATION_ERROR', 400, 'The shipping address cannot be changed after a shipment has been created.');
+            }
+            updates.shippingAddressSnapshot = { ...current, ...incoming };
+            changedFields.push(...addressChanged.map((field) => `shipping ${field}`));
+        }
+    }
+
+    if (payload.notes !== undefined) {
+        const nextNotes = (payload.notes || '').trim() || null;
+        if (nextNotes !== (order.notes || null)) {
+            updates.notes = nextNotes;
+            changedFields.push('order notes');
+        }
+    }
+
+    if (changedFields.length === 0) return order;
+
+    await order.update(updates, { transaction });
+
+    await addOrderHistoryEvent({
+        orderId,
+        eventType: 'order_edited',
+        description: `Order details edited by admin: ${changedFields.join(', ')}`,
+        actorId,
+        actorType: 'admin',
+        metadata: { changedFields },
+        transaction,
+    });
+    return order;
+});
+
 const calculateShipmentAmounts = ({ order, parcelItems, allocateOrderShipping, priorAllocatedTotal = 0, isFinalShipment = false }) => {
     const subtotal = Number(parcelItems.reduce((sum, item) => sum + Number(item.unitPrice || 0) * Number(item.quantity || 0), 0).toFixed(2));
     const orderSubtotal = Number(order.subtotal || 0);
@@ -4002,6 +4068,7 @@ module.exports = {
     getOrders,
     getOrderById,
     updateContactEmail,
+    updateOrderDetails,
     getFulfillmentTracking,
     buildOrderLookupWhere,
     calculateShipmentAmounts,

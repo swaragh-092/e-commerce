@@ -6,6 +6,7 @@ const {
   placeOrderSchema, 
   updateOrderStatusSchema,
   updateOrderContactEmailSchema,
+  updateOrderDetailsSchema,
   cancelOrderSchema,
   createFulfillmentSchema,
   updateFulfillmentStatusSchema,
@@ -56,6 +57,7 @@ router.post('/:id/replacements', featureGate('orders'), authenticate, authorizeP
 
 // Admin
 router.patch('/:id/contact-email', authenticate, authorizePermissions(PERMISSIONS.ORDERS_UPDATE_STATUS), validate(idParamSchema, 'params'), validate(updateOrderContactEmailSchema), auditLog('Order'), orderController.updateContactEmail);
+router.patch('/:id', authenticate, authorizePermissions(PERMISSIONS.ORDERS_UPDATE_STATUS), validate(idParamSchema, 'params'), validate(updateOrderDetailsSchema), auditLog('Order'), orderController.updateDetails);
 router.put('/:id/status', authenticate, authorizePermissions(PERMISSIONS.ORDERS_UPDATE_STATUS), validate(idParamSchema, 'params'), validate(updateOrderStatusSchema), auditLog('Order'), orderController.updateStatus);
 router.post('/:id/refund', authenticate, authorizePermissions(PERMISSIONS.ORDERS_REFUND), validate(processRefundSchema), auditLog('Order'), orderController.processRefund);
 router.post('/:id/fulfillments', authenticate, authorizePermissions(PERMISSIONS.ORDERS_UPDATE_STATUS), validate(idParamSchema, 'params'), validate(createFulfillmentSchema), auditLog('Order'), orderController.createFulfillment);

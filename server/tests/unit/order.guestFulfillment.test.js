@@ -94,3 +94,34 @@ describe('Guest order ownership and Shiprocket contact', () => {
         expect(request).not.toHaveBeenCalled();
     });
 });
+
+describe('Admin order details edit', () => {
+    const mockTx = () => vi.spyOn(sequelize, 'transaction').mockImplementation(async (callback) => callback({}));
+
+    it('updates the address and notes and records an order_edited event', async () => {
+        const order = { id: 'order-1', status: 'processing', userId: 'user-1', notes: null, shippingAddressSnapshot: { fullName: 'A', city: 'Mumbai', state: 'MH', country: 'India' }, update: vi.fn() };
+        mockTx();
+        vi.spyOn(Order, 'findByPk').mockResolvedValue(order);
+        vi.spyOn(Shipment, 'findAll').mockResolvedValue([]);
+        const history = vi.spyOn(require('../../src/modules').OrderHistory, 'create').mockResolvedValue({});
+
+        await OrderService.updateOrderDetails('order-1', { shippingAddress: { city: 'Pune' }, notes: 'Leave at gate' }, 'admin-1');
+
+        expect(order.update).toHaveBeenCalledWith({ shippingAddressSnapshot: { fullName: 'A', city: 'Pune', state: 'MH', country: 'India' }, notes: 'Leave at gate' }, expect.any(Object));
+        expect(history).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'order_edited', actorId: 'admin-1' }), expect.any(Object));
+    });
+
+    it('rejects edits on closed orders, shipped orders and tax-relevant state changes', async () => {
+        mockTx();
+        const find = vi.spyOn(Order, 'findByPk');
+        find.mockResolvedValueOnce({ status: 'closed', update: vi.fn() });
+        await expect(OrderService.updateOrderDetails('o', { notes: 'x' }, 'a')).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+
+        find.mockResolvedValueOnce({ status: 'processing', shippingAddressSnapshot: { city: 'A' }, update: vi.fn() });
+        vi.spyOn(Shipment, 'findAll').mockResolvedValue([{ id: 's', status: 'created' }]);
+        await expect(OrderService.updateOrderDetails('o', { shippingAddress: { city: 'B' } }, 'a')).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+
+        find.mockResolvedValueOnce({ status: 'processing', shippingAddressSnapshot: { state: 'MH' }, update: vi.fn() });
+        await expect(OrderService.updateOrderDetails('o', { shippingAddress: { state: 'KA' } }, 'a')).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    });
+});
