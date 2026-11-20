@@ -1,3 +1,8 @@
+const CONTENT_PAGE_SECTIONS = ['product-row', 'editorial-image-text', 'faq', 'promo-banners', 'composed-hero'];
+
+export const getPageSectionTypes = (page) =>
+  page === 'checkout' ? ['product-row'] : CONTENT_PAGE_SECTIONS;
+
 export const PAGE_SETTINGS_GROUPS = {
   'product': 'productPage',
   'category': 'categoryPage',
@@ -96,3 +101,17 @@ export const getPageProductRows = (settings, page) => {
   const rows = settings?.[PAGE_SETTINGS_GROUPS[page]]?.productRows;
   return Array.isArray(rows) ? rows : [];
 };
+
+export const PAGE_TEMPLATE_ASSIGNMENT_KEYS = {
+  product: 'productSlugs',
+  category: 'categorySlugs',
+};
+
+export function findAssignedPageTemplate(settings, page, slug) {
+  const assignmentKey = PAGE_TEMPLATE_ASSIGNMENT_KEYS[page];
+  const templates = settings?.[PAGE_SETTINGS_GROUPS[page]]?.alternateTemplates;
+  if (!assignmentKey || !slug || !Array.isArray(templates)) return undefined;
+  return templates.find((template) => Array.isArray(template?.[assignmentKey])
+    && template[assignmentKey].includes(slug)
+    && template.settings);
+}

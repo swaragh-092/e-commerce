@@ -81,14 +81,14 @@ router.put('/mfa-policy', authenticate, authorizePermissions(PERMISSIONS.SETTING
 const totpCodeSchema = Joi.object({ code: Joi.string().length(6).pattern(/^\d+$/).required() });
 // Disable accepts a TOTP code OR a single-use backup code (lost-device recovery).
 const disableTwoFactorSchema = Joi.object({
-  code: Joi.string().required().pattern(/^(\d{6}|[a-f0-9]{8})$/i).messages({
-    'string.pattern.base': 'Code must be a 6-digit TOTP or 8-character backup code',
+  code: Joi.string().required().pattern(/^(\d{6}|[a-f0-9]{8}|[a-f0-9]{32})$/i).messages({
+    'string.pattern.base': 'Code must be a 6-digit TOTP or a valid backup code',
   }),
 });
 const twoFactorVerifySchema = Joi.object({
   tempToken: Joi.string().required(),
-  code: Joi.string().required().pattern(/^(\d{6}|[a-f0-9]{8})$/i).messages({
-    'string.pattern.base': 'Code must be a 6-digit TOTP or 8-character backup code',
+  code: Joi.string().required().pattern(/^(\d{6}|[a-f0-9]{8}|[a-f0-9]{32})$/i).messages({
+    'string.pattern.base': 'Code must be a 6-digit TOTP or a valid backup code',
   }),
   trustDevice: Joi.boolean().default(false),
 });
@@ -158,7 +158,8 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'], session: false }));
   router.get('/google/callback', passport.authenticate('google', { session: false, failureRedirect: `${clientUrl}/login?error=oauth_failed` }), (req, res) => {
     if (req.user.requiresTwoFactor) {
-      res.redirect(`${clientUrl}/login?requiresTwoFactor=true&tempToken=${encodeURIComponent(req.user.tempToken)}`);
+      res.setHeader('Cache-Control', 'no-store');
+      res.redirect(`${clientUrl}/login#requiresTwoFactor=true&tempToken=${encodeURIComponent(req.user.tempToken)}`);
     } else {
       const { tokens } = req.user;
       setAuthCookies(res, tokens);

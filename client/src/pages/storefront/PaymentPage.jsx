@@ -11,37 +11,7 @@ import { PAYMENT_SETTLED_STATUSES } from '../../utils/constants';
 import { useSettings } from '../../hooks/useSettings';
 import { getStoreName } from '../../utils/store';
 
-const loadScript = (src, globalName) => new Promise((resolve, reject) => {
-    if (globalName && window[globalName]) {
-        resolve(window[globalName]);
-        return;
-    }
-
-    const existing = document.querySelector(`script[src="${src}"]`);
-    if (existing) {
-        if (globalName && window[globalName]) {
-            resolve(window[globalName]);
-            return;
-        }
-        if (existing.dataset.loaded === 'true') {
-            resolve(globalName ? window[globalName] : true);
-            return;
-        }
-        existing.addEventListener('load', () => resolve(globalName ? window[globalName] : true), { once: true });
-        existing.addEventListener('error', reject, { once: true });
-        return;
-    }
-
-    const script = document.createElement('script');
-    script.src = src;
-    script.async = true;
-    script.onload = () => {
-        script.dataset.loaded = 'true';
-        resolve(globalName ? window[globalName] : true);
-    };
-    script.onerror = reject;
-    document.body.appendChild(script);
-});
+import loadScript from '../../utils/loadPaymentScript';
 
 const PaymentPage = () => {
     const { orderId } = useParams();
@@ -105,7 +75,7 @@ const PaymentPage = () => {
                     navigate('/payment/success', { replace: true, state: { orderId, orderNumber: order?.orderNumber, isCod: true } });
                     return;
                 }
-                if (PAYMENT_SETTLED_STATUSES.includes(order?.Payment?.status)) {
+                if (PAYMENT_SETTLED_STATUSES.includes(order?.Payment?.status) && !order?.Payment?.metadata?.lateSettlement) {
                     navigate('/payment/success', { replace: true, state: { orderId, orderNumber: order?.orderNumber } });
                     return;
                 }
@@ -114,7 +84,9 @@ const PaymentPage = () => {
                     return;
                 }
 
-                return paymentService.createOrder(orderId)
+                const create = order?.giftCardAmountPaise && !order.userId
+                    ? paymentService.createGuestGiftPayment : paymentService.createOrder;
+                return create(orderId)
                     .then((r) => {
                         const data = r.data?.data || r.data;
                         if (data?.freeOrder) {
@@ -151,11 +123,17 @@ const PaymentPage = () => {
                 order_id: orderData.id,
                 handler: async (response) => {
                     try {
-                        await paymentService.verifyPayment(orderId, {
+                        const verify = order?.giftCardAmountPaise && !order.userId
+                            ? paymentService.verifyGuestGiftPayment : paymentService.verifyPayment;
+                        const result = await verify(orderId, {
                             razorpay_order_id: response.razorpay_order_id,
                             razorpay_payment_id: response.razorpay_payment_id,
                             razorpay_signature: response.razorpay_signature
                         });
+                        if (result.data?.data?.orderCancelled) {
+                            navigate('/payment/failure', { state: { orderId, status: 'late_settlement' } });
+                            return;
+                        }
                         fetchCart();
                         navigate('/payment/success', { state: { orderId, orderNumber: order?.orderNumber } });
                     } catch (err) {

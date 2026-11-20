@@ -27,7 +27,7 @@ describe('public tag visibility', () => {
     vi.spyOn(db.Tag, 'findOne').mockResolvedValue(null);
     await expect(tags.getPublicTagBySlug('internal')).rejects.toMatchObject({ statusCode: 404 });
   });
-  it('exposes only the slug lookup before authentication, keeping the dictionary protected', () => {
+  it('exposes public tags and slug lookup before authentication, keeping the admin dictionary protected', () => {
     const router = require('../../src/modules/product/tag.routes');
     const { authenticate } = require('../../src/middleware/auth.middleware');
     const authIndex = router.stack.findIndex((layer) => layer.handle === authenticate);
@@ -35,7 +35,7 @@ describe('public tag visibility', () => {
     const dictionaryIndex = router.stack.findIndex((layer) => layer.route?.path === '/');
     expect(publicIndex).toBeLessThan(authIndex);
     expect(dictionaryIndex).toBeGreaterThan(authIndex);
-    expect(router.stack.filter((layer, index) => index < authIndex && layer.route).map((layer) => layer.route.path)).toEqual(['/public/:slug']);
+    expect(router.stack.filter((layer, index) => index < authIndex && layer.route).map((layer) => layer.route.path)).toEqual(['/public', '/public/:slug']);
   });
 });
 

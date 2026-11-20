@@ -149,6 +149,19 @@ describe('Design draft safety', () => {
     ])).toThrow(/not allowed/);
   });
 
+  it.each(['default', 'alternate'])('validates block placement for the %s Product template', (template) => {
+    const entry = (productPlacement) => {
+      const sections = [{ type: 'product-info', heroBlocks: [{ productPlacement }] }];
+      return template === 'default' ? { group: 'productPage', key: 'sections', value: sections } : {
+        group: 'productPage', key: 'alternateTemplates', value: [{
+          id: 'b44157f1-27e9-4afc-82cb-2c3698403af4', name: 'Seeds', productSlugs: [], settings: { sections },
+        }],
+      };
+    };
+    expect(DesignDraftService.normalizePayload([entry('after-details')])).toHaveLength(1);
+    expect(() => DesignDraftService.normalizePayload([entry('invalid')])).toThrow(/Invalid product block placement/);
+  });
+
   it('normalizes reset operations and keeps the last operation per setting', () => {
     const payload = DesignDraftService.normalizePayload([
       { group: 'theme', key: 'radius', value: 12 },
@@ -156,6 +169,15 @@ describe('Design draft safety', () => {
     ]);
 
     expect(payload).toEqual([{ group: 'theme', key: 'radius', operation: 'delete' }]);
+  });
+
+  it('preserves an explicit Details order and rejects duplicate entries', () => {
+    const entry = (detailsBlockOrder) => ({ group: 'productPage', key: 'sections', value: [{
+      id: 'prod-info', type: 'product-info', detailsBlockOrder, heroBlocks: [{ id: 'care', type: 'text' }],
+    }] });
+    const valid = entry(['title', 'description', 'custom:care', 'purchase']);
+    expect(DesignDraftService.normalizePayload([valid])[0].value).toEqual(valid.value);
+    expect(() => DesignDraftService.normalizePayload([entry(['purchase', 'purchase'])])).toThrow(/Invalid product details order/);
   });
 
   it('freezes the published payload at the draft revision before incrementing it', () => {

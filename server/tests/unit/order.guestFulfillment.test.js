@@ -44,7 +44,7 @@ describe('Guest order ownership and Shiprocket contact', () => {
 
         await OrderService.updateContactEmail('order-1', ' buyer@example.com ');
 
-        expect(order.update).toHaveBeenCalledWith({ shippingAddressSnapshot: { city: 'Mumbai', email: 'buyer@example.com' } }, expect.any(Object));
+        expect(order.update).toHaveBeenCalledWith({ shippingAddressSnapshot: { city: 'Mumbai', email: 'buyer@example.com' }, guestEmail: 'buyer@example.com' }, expect.any(Object));
         expect(operation.update).toHaveBeenCalledWith({ requestPayload: {
             order: { total: 1118, subtotal: 1000, user: { email: 'buyer@example.com' } },
             shipment: { providerRequestId: 'GUEST-1-PARCEL-1' },
@@ -92,5 +92,101 @@ describe('Guest order ownership and Shiprocket contact', () => {
 
         await expect(provider.createShipment(input)).rejects.toThrow("customer's valid email address");
         expect(request).not.toHaveBeenCalled();
+    });
+});
+
+describe('Admin order details edit', () => {
+    const mockTx = () => vi.spyOn(sequelize, 'transaction').mockImplementation(async (callback) => callback({}));
+
+    it('updates the address and notes and records an order_edited event', async () => {
+        const order = { id: 'order-1', status: 'processing', userId: 'user-1', notes: null, shippingAddressSnapshot: { fullName: 'A', city: 'Mumbai', state: 'MH', country: 'India' }, update: vi.fn() };
+        mockTx();
+        vi.spyOn(Order, 'findByPk').mockResolvedValue(order);
+        vi.spyOn(Shipment, 'findAll').mockResolvedValue([]);
+        const history = vi.spyOn(require('../../src/modules').OrderHistory, 'create').mockResolvedValue({});
+
+        await OrderService.updateOrderDetails('order-1', { shippingAddress: { fullName: 'B' }, notes: 'Leave at gate' }, 'admin-1');
+
+        expect(order.update).toHaveBeenCalledWith({ shippingAddressSnapshot: { fullName: 'B', city: 'Mumbai', state: 'MH', country: 'India' }, notes: 'Leave at gate' }, expect.any(Object));
+        expect(history).toHaveBeenCalledWith(expect.objectContaining({ eventType: 'order_edited', actorId: 'admin-1' }), expect.any(Object));
+    });
+
+    it('rejects edits on closed orders, shipped orders and tax-relevant state changes', async () => {
+        mockTx();
+        const find = vi.spyOn(Order, 'findByPk');
+        find.mockResolvedValueOnce({ status: 'closed', update: vi.fn() });
+        await expect(OrderService.updateOrderDetails('o', { notes: 'x' }, 'a')).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+
+        find.mockResolvedValueOnce({ status: 'processing', shippingAddressSnapshot: { fullName: 'A' }, update: vi.fn() });
+        vi.spyOn(Shipment, 'findAll').mockResolvedValue([{ id: 's', status: 'created' }]);
+        await expect(OrderService.updateOrderDetails('o', { shippingAddress: { fullName: 'B' } }, 'a')).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+
+        find.mockResolvedValueOnce({ status: 'processing', shippingAddressSnapshot: { state: 'MH' }, update: vi.fn() });
+        await expect(OrderService.updateOrderDetails('o', { shippingAddress: { state: 'KA' } }, 'a')).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    });
+});
+
+
+describe('Admin order edit edge cases', () => {
+    const setup = (overrides = {}) => {
+        const order = { id: 'order-1', status: 'processing', userId: null, notes: null,
+            guestEmail: 'old@example.com', shippingAddressSnapshot: { city: 'Mumbai', email: 'old@example.com' },
+            update: vi.fn(), ...overrides };
+        vi.spyOn(sequelize, 'transaction').mockImplementation(async callback => callback({}));
+        vi.spyOn(Order, 'findByPk').mockResolvedValue(order);
+        vi.spyOn(Shipment, 'findAll').mockResolvedValue([]);
+        const history = vi.spyOn(require('../../src/modules').OrderHistory, 'create').mockResolvedValue({});
+        return { order, history };
+    };
+
+    it('keeps the guest claim email in sync with the corrected contact address', async () => {
+        const { order } = setup();
+        await OrderService.updateOrderDetails('order-1', { shippingAddress: { email: ' Corrected@Example.com ' } }, 'admin-1');
+        expect(order.update).toHaveBeenCalledWith({
+            shippingAddressSnapshot: { city: 'Mumbai', email: 'corrected@example.com' },
+            guestEmail: 'corrected@example.com',
+        }, expect.any(Object));
+    });
+
+    it('rejects shipping address edits on digital orders', async () => {
+        const { order } = setup({ shippingAddressSnapshot: { digital: true } });
+        await expect(OrderService.updateOrderDetails('order-1', { shippingAddress: { city: 'Pune' } }, 'admin-1'))
+            .rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+        expect(order.update).not.toHaveBeenCalled();
+    });
+
+    it('allows notes-only changes when a shipment exists', async () => {
+        const { order } = setup();
+        Shipment.findAll.mockResolvedValue([{ status: 'created' }]);
+        await OrderService.updateOrderDetails('order-1', { notes: '  Gate 2  ' }, 'admin-1');
+        expect(order.update).toHaveBeenCalledWith({ notes: 'Gate 2' }, expect.any(Object));
+    });
+
+    it('does not write or audit unchanged values', async () => {
+        const { order, history } = setup();
+        await OrderService.updateOrderDetails('order-1', { shippingAddress: { city: 'Mumbai' }, notes: '' }, 'admin-1');
+        expect(order.update).not.toHaveBeenCalled();
+        expect(history).not.toHaveBeenCalled();
+    });
+
+    it('rejects changes to the tax destination country', async () => {
+        const { order } = setup({ shippingAddressSnapshot: { country: 'India' } });
+        await expect(OrderService.updateOrderDetails('order-1', { shippingAddress: { country: 'UK' } }, 'admin-1'))
+            .rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+        expect(order.update).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['city', 'Mumbai', 'Pune'],
+        ['postalCode', '400001', '411001'],
+    ])('rejects changing %s without altering the saved shipping decision', async (field, original, destination) => {
+        const shippingSnapshot = { serviceable: true, codAvailable: true, courierCompanyId: 42 };
+        const { order, history } = setup({ shippingAddressSnapshot: { [field]: original }, shippingSnapshot });
+        await expect(OrderService.updateOrderDetails('order-1', {
+            shippingAddress: { [field]: destination }, notes: 'New destination',
+        }, 'admin-1')).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+        expect(order.update).not.toHaveBeenCalled();
+        expect(history).not.toHaveBeenCalled();
+        expect(order.shippingSnapshot).toBe(shippingSnapshot);
     });
 });

@@ -67,6 +67,9 @@ const expireOrderReservation = async (orderId, cutoff) => sequelize.transaction(
     }
   }
 
+  if (order.giftCardAmountPaise) {
+    await require('../modules/giftCard/giftCard.service').settle(order.id, 'released', transaction);
+  }
   await order.update({ status: 'cancelled', inventoryReleasedAt: new Date() }, { transaction });
   if (payment && ['payment_pending', 'pending', 'payment_failed'].includes(payment.status)) {
     const fromStatus = payment.status;

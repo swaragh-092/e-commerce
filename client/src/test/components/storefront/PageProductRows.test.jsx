@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { getProducts } from '../../../services/productService';
-import PageProductRows from '../../../components/storefront/sections/PageProductRows';
+import { SettingsContext } from '../../../context/ThemeContext';
+import PageProductRows, { RoutedProductRows } from '../../../components/storefront/sections/PageProductRows';
 
 vi.mock('../../../services/productService', () => ({ getProducts: vi.fn() }));
 
@@ -10,6 +11,79 @@ describe('page product rows', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getProducts.mockResolvedValue({ data: [] });
+  });
+
+  it.each([
+    ['product', 'productPage', 'productSlugs', '/products', 'slug'],
+    ['category', 'categoryPage', 'categorySlugs', '/category', 'categorySlug'],
+  ].flatMap(([page, group, assignmentKey, prefix, param]) => [
+    [page, group, assignmentKey, prefix, param, 'seeds', 'Care FAQ', 'Default FAQ'],
+    [page, group, assignmentKey, prefix, param, 'watering-can', 'Default FAQ', 'Care FAQ'],
+  ]))('renders the correct %s layout for %s assignment', (page, group, assignmentKey, prefix, param, slug, heading, otherHeading) => {
+    const faq = (title) => ({
+      id: 'faq', type: 'faq', title, items: [{ title: 'How do I use it?', text: 'Follow the instructions.' }],
+    });
+    const pageSettings = {
+      productRows: [faq('Default FAQ')],
+      alternateTemplates: [{
+        id: 'seeds-template', name: 'Seeds', [assignmentKey]: ['seeds'],
+        settings: { productRows: [faq('Care FAQ')] },
+      }],
+    };
+    render(
+      <SettingsContext.Provider value={{ settings: { [group]: pageSettings } }}>
+        <MemoryRouter initialEntries={[`${prefix}/${slug}`]}>
+          <Routes>
+            <Route path={`${prefix}/:${param}`} element={<RoutedProductRows page={page}><h1>Product Information</h1></RoutedProductRows>} />
+          </Routes>
+        </MemoryRouter>
+      </SettingsContext.Provider>,
+    );
+    expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: otherHeading })).not.toBeInTheDocument();
+  });
+
+  it('renders enabled content sections around the main product content in saved order', () => {
+    const rows = [
+      { id: 'shipping', type: 'faq', title: 'Shipping', pagePosition: 'below',
+        items: [{ title: 'When does it ship?', text: 'Within two business days.' }] },
+      { id: 'ordering', type: 'faq', title: 'Ordering', pagePosition: 'above',
+        items: [{ title: 'Can I order online?', text: 'Yes.' }] },
+      { id: 'hidden', type: 'faq', title: 'Hidden FAQ', enabled: false,
+        items: [{ title: 'Hidden question', text: 'Hidden answer' }] },
+      { id: 'returns', type: 'faq', title: 'Returns', pagePosition: 'below',
+        items: [{ title: 'Can I return it?', text: 'Yes.' }] },
+    ];
+    render(
+      <SettingsContext.Provider value={{ settings: { productPage: { productRows: rows } } }}>
+        <MemoryRouter>
+          <RoutedProductRows page="product"><h1>Product Information</h1></RoutedProductRows>
+        </MemoryRouter>
+      </SettingsContext.Provider>,
+    );
+
+    expect(screen.getAllByRole('heading').map(({ textContent }) => textContent)).toEqual([
+      'Ordering', 'Can I order online?', 'Product Information',
+      'Shipping', 'When does it ship?', 'Returns', 'Can I return it?',
+    ]);
+    expect(screen.queryByText('Hidden question')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['collection', 'catalog'], ['brand', 'brandsPage'], ['blog', 'blogPage'],
+    ['account', 'accountPage'], ['orders', 'ordersPage'], ['wishlist', 'wishlistPage'],
+    ['cart', 'cartPage'], ['search', 'searchPage'], ['not-found', 'notFoundPage'],
+  ])('renders custom sections around the built-in %s content', (page, group) => {
+    const productRows = [
+      { id: 'intro', type: 'composed-hero', pagePosition: 'above', heroBlocks: [{ id: 'copy', type: 'heading', text: 'Custom introduction' }] },
+      { id: 'help', type: 'faq', pagePosition: 'below', title: 'Page help', items: [{ title: 'How does it work?', text: 'Read the instructions.' }] },
+    ];
+    render(<SettingsContext.Provider value={{ settings: { [group]: { productRows } } }}>
+      <MemoryRouter><RoutedProductRows page={page}><h1>Built-in content</h1></RoutedProductRows></MemoryRouter>
+    </SettingsContext.Provider>);
+    const main = screen.getByRole('heading', { name: 'Built-in content' });
+    expect(screen.getByText('Custom introduction').compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(main.compareDocumentPosition(screen.getByRole('heading', { name: 'Page help' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it.each([

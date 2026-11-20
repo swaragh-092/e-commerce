@@ -14,8 +14,9 @@ const { verifyTrustedDevice } = require('./authCookies');
 const logger = require('../../utils/logger');
 const { requiresAdminMfa, canUseEmailMfa, isEnrollmentRequired, assertMfaEnrollment, assertMfaSession, loadMfaPolicy } = require('./mfaPolicy');
 const LoginAttemptStore = require('./loginAttemptStore');
+const TwoFactorChallenge = require('./twoFactorChallenge');
 
-const { hashToken, generateTokens, signTempTwoFactorToken, signMfaEnrollmentToken } = require('./tokenUtils');
+const { hashToken, generateTokens, signMfaEnrollmentToken } = require('./tokenUtils');
 const rememberedDevices = require('./rememberedDevice');
 
 const authUserInclude = [
@@ -241,12 +242,20 @@ const login = async (email, password, ipAddress, rememberMe = false, userAgent, 
     return { requiresMfaEnrollment: true, enrollmentToken: signMfaEnrollmentToken(user.id) };
   }
 
-  if (user.twoFactorEnabled && (requiresAdminMfa(user, mfaPolicy) || !verifyTrustedDevice(trustedDeviceToken, user.id))) {
+  if (user.twoFactorEnabled && (requiresAdminMfa(user, mfaPolicy) || !(await verifyTrustedDevice(trustedDeviceToken, user.id)))) {
     const emailMfa = canUseEmailMfa(user, mfaPolicy) ? require('./emailMfa.service') : null;
+    const tempChallenge = await TwoFactorChallenge.issue(
+      user.id,
+      emailMfa ? crypto.randomBytes(32).toString('hex') : undefined,
+      { rememberMe: Boolean(rememberMe), knownDevice, ...(reauth ? { reauthSid: reauth.sid } : {}) },
+    );
     return {
       requiresTwoFactor: true,
-      tempToken: signTempTwoFactorToken(user.id, emailMfa ? crypto.randomBytes(32).toString('hex') : undefined, { rememberMe: Boolean(rememberMe), knownDevice, ...(reauth ? { reauthSid: reauth.sid } : {}) }),
-      ...(emailMfa?.isBound(user) ? { emailChallenge: emailMfa.issueChallenge(user, { rememberMe: Boolean(rememberMe), knownDevice, ...(reauth ? { reauthSid: reauth.sid } : {}) }) } : {}),
+      tempToken: tempChallenge.token,
+      ...(emailMfa?.isBound(user) ? { emailChallenge: emailMfa.issueChallenge(user, {
+        rememberMe: Boolean(rememberMe), knownDevice, tempChallengeId: tempChallenge.jti,
+        ...(reauth ? { reauthSid: reauth.sid } : {}),
+      }) } : {}),
       knownDevice,
     };
   }
@@ -744,65 +753,92 @@ const verifyTwoFactor = async (tempToken, totpCode, ipAddress) => {
   if (decoded.purpose !== '2fa') {
     throw new AppError('UNAUTHORIZED', 401, 'Invalid token purpose');
   }
+  if (!decoded.jti) throw new AppError('UNAUTHORIZED', 401, 'Invalid or expired 2FA token');
 
-  const user = await User.scope('withPassword').findByPk(decoded.id, { include: authUserInclude });
-  if (!user || user.status !== 'active') {
-    throw new AppError('FORBIDDEN', 403, 'User inactive');
-  }
-  if (decoded.reauthSid) {
-    const lockedSession = await RefreshToken.findByPk(decoded.reauthSid, { attributes: ['id', 'userId'] });
-    if (!lockedSession || lockedSession.userId !== user.id) throw new AppError('FORBIDDEN', 403, 'Reauthentication must use the same administrator account');
-    if (!isAdminUser(user)) throw new AppError('FORBIDDEN', 403, 'Admin reauthentication requires an administrator account');
-  }
-  if (user.scheduledDeletionAt && new Date(user.scheduledDeletionAt) <= new Date()) {
-    throw new AppError('FORBIDDEN', 403, 'Account deletion period has expired');
-  }
+  const result = await sequelize.transaction(async transaction => {
+    const user = await User.scope('withPassword').findByPk(decoded.id, {
+      include: authUserInclude,
+      transaction,
+      lock: { level: transaction.LOCK.UPDATE, of: User },
+    });
+    if (!user || user.status !== 'active') throw new AppError('FORBIDDEN', 403, 'User inactive');
+    if (user.scheduledDeletionAt && new Date(user.scheduledDeletionAt) <= new Date()) {
+      throw new AppError('FORBIDDEN', 403, 'Account deletion period has expired');
+    }
+    if (decoded.reauthSid) {
+      const lockedSession = await RefreshToken.findByPk(decoded.reauthSid, {
+        attributes: ['id', 'userId', 'revokedAt'], transaction, lock: transaction.LOCK.UPDATE,
+      });
+      if (!lockedSession || lockedSession.userId !== user.id || lockedSession.revokedAt) {
+        throw new AppError('FORBIDDEN', 403, 'Reauthentication must use the same active administrator session');
+      }
+      if (!isAdminUser(user)) throw new AppError('FORBIDDEN', 403, 'Admin reauthentication requires an administrator account');
+    }
 
-  const policy = await loadMfaPolicy(user);
-  assertMfaEnrollment(user, policy);
-  if (!user.twoFactorEnabled) throw new AppError('UNAUTHORIZED', 401, 'MFA is not enabled');
-  const TwoFactorService = require('./twoFactor.service');
-  let isValid = false;
-  try {
-    isValid = TwoFactorService.verify(user, totpCode);
-  } catch (e) {}
-  const verifiedAuthenticator = isValid;
-  if (!isValid) {
-    isValid = await TwoFactorService.verifyBackupCode(user, totpCode);
-  }
-  if (!isValid) {
-    throw new AppError('UNAUTHORIZED', 401, 'Invalid 2FA code');
-  }
+    await LoginAttemptStore.checkMfaLock(user.email, transaction);
+    const challenge = await TwoFactorChallenge.lock(decoded.jti, transaction);
+    if (!TwoFactorChallenge.isUsable(challenge)) throw new AppError('UNAUTHORIZED', 401, 'Invalid or expired 2FA token');
 
-  const sessionId = crypto.randomUUID();
-  const tokens = generateTokens(user, sessionId, { mfaVerified: true });
-  await RefreshToken.create({
-    id: sessionId,
-    userId: user.id,
-    token: hashToken(tokens.refreshToken),
-    expiresAt: new Date(Date.now() + (isAdminUser(user) ? 12 * 60 * 60 * 1000 : (decoded.rememberMe ? AUTH_TIME.REMEMBER_ME_TTL_MS : AUTH_TIME.REFRESH_TOKEN_TTL_MS))),
-    absoluteExpiresAt: new Date(Date.now() + (isAdminUser(user) ? 12 * 60 * 60 * 1000 : (decoded.rememberMe ? AUTH_TIME.REMEMBER_ME_TTL_MS : AUTH_TIME.REFRESH_TOKEN_TTL_MS))),
-    lastActiveAt: new Date(),
-    createdByIp: ipAddress,
+    const policy = await loadMfaPolicy(user, transaction);
+    assertMfaEnrollment(user, policy);
+    if (!user.twoFactorEnabled) throw new AppError('UNAUTHORIZED', 401, 'MFA is not enabled');
+
+    const TwoFactorService = require('./twoFactor.service');
+    let verifiedAuthenticator = false;
+    try { verifiedAuthenticator = TwoFactorService.verify(user, totpCode); } catch { /* Try a backup code. */ }
+    const verified = verifiedAuthenticator || await TwoFactorService.verifyBackupCode(user, totpCode, { transaction });
+    if (!verified) {
+      await LoginAttemptStore.recordMfaFailure(user.email, transaction);
+      return { invalid: true };
+    }
+
+    await challenge.update({ attempts: challenge.maxAttempts }, { transaction });
+    const sessionId = crypto.randomUUID();
+    const now = new Date();
+    const staffSession = isAdminUser(user);
+    const ttl = staffSession ? 12 * 60 * 60 * 1000
+      : (decoded.rememberMe ? AUTH_TIME.REMEMBER_ME_TTL_MS : AUTH_TIME.REFRESH_TOKEN_TTL_MS);
+    const tokens = generateTokens(user, sessionId, { mfaVerified: true });
+    await RefreshToken.create({
+      id: sessionId,
+      userId: user.id,
+      token: hashToken(tokens.refreshToken),
+      expiresAt: new Date(now.getTime() + ttl),
+      absoluteExpiresAt: new Date(now.getTime() + ttl),
+      lastActiveAt: now,
+      createdByIp: ipAddress,
+    }, { transaction });
+
+    const updates = { lastLoginAt: now };
+    // Require fresh authenticator proof after a password or email change.
+    if (verifiedAuthenticator && decoded.passwordBinding && canUseEmailMfa(user, policy)
+        && !user.emailMfaPasswordBinding) {
+      updates.emailMfaPasswordBinding = decoded.passwordBinding;
+    }
+    await user.update(updates, { transaction });
+    await LoginAttemptStore.clearMfaFailures(user.email, transaction);
+    try {
+      if (AuditService?.log) {
+        await AuditService.log({
+          userId: user.id, action: ACTIONS.LOGIN, entity: ENTITIES.USER,
+          entityId: user.id, ipAddress,
+        }, transaction);
+      }
+    } catch { /* Audit failure must not discard a verified sign-in. */ }
+
+    const userData = await User.findByPk(user.id, { include: authUserInclude, transaction });
+    return {
+      user: enrichUserAuthorization(userData), tokens,
+      ...(staffSession ? { adminSessionExpiresAt: new Date(now.getTime() + ttl) } : {}),
+      rememberMe: decoded.rememberMe === true,
+      knownDevice: decoded.knownDevice === true,
+      ...(staffSession && decoded.rememberMe
+        ? { rememberedDeviceToken: await rememberedDevices.issue(user.id, transaction) } : {}),
+    };
   });
 
-  const updates = { lastLoginAt: new Date() };
-  // Require a fresh authenticator sign-in after any password or email change.
-  // An inbox alone must not satisfy both password reset and the second step.
-  if (verifiedAuthenticator && decoded.passwordBinding && canUseEmailMfa(user, policy)
-      && !user.emailMfaPasswordBinding) {
-    updates.emailMfaPasswordBinding = decoded.passwordBinding;
-  }
-  await user.update(updates);
-  const userData = await User.findByPk(user.id, { include: authUserInclude });
-
-  try {
-    if (AuditService && AuditService.log) {
-      await AuditService.log({ userId: user.id, action: ACTIONS.LOGIN, entity: ENTITIES.USER, entityId: user.id, ipAddress });
-    }
-  } catch (e) {}
-
-  return { user: enrichUserAuthorization(userData), tokens, ...(isAdminUser(user) ? { adminSessionExpiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000) } : {}), rememberMe: decoded.rememberMe === true, knownDevice: decoded.knownDevice === true, ...(isAdminUser(user) && decoded.rememberMe ? { rememberedDeviceToken: await rememberedDevices.issue(user.id) } : {}) };
+  if (result.invalid) throw new AppError('UNAUTHORIZED', 401, 'Invalid 2FA code');
+  return result;
 };
 
 const loginByPhone = async (phone, ipAddress) => {
@@ -866,7 +902,8 @@ const loginByPhone = async (phone, ipAddress) => {
 
   // If 2FA is enabled, return temp token instead of full auth
   if (user.twoFactorEnabled) {
-    return { requiresTwoFactor: true, tempToken: signTempTwoFactorToken(user.id) };
+    const challenge = await TwoFactorChallenge.issue(user.id);
+    return { requiresTwoFactor: true, tempToken: challenge.token };
   }
 
   return await sequelize.transaction(async (t) => {

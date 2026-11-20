@@ -273,7 +273,6 @@ exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20,
 
 exports.CATEGORY_PRODUCT_VARIANT_ATTRIBUTES = CATEGORY_PRODUCT_VARIANT_ATTRIBUTES;
 
-
 /**
  * Check if a root category with the same name already exists.
  * Root categories are those with parentId === null.
@@ -407,6 +406,47 @@ exports.reorderCategory = async (id, direction) => {
 };
 
 /**
+ * Move a category under a new parent (or the root) at a given position among
+ * its siblings. Used by the admin drag-and-drop category tree.
+ * @param {string} id - category id
+ * @param {{parentId: string|null, position: number}} payload
+ */
+exports.moveCategory = async (id, payload) => {
+    const category = await Category.findByPk(id);
+    if (!category) throw new AppError('NOT_FOUND', 404, 'Category not found');
+
+    const parentId = payload.parentId ?? null;
+    if (parentId) {
+        if (parentId === id) {
+            throw new AppError('VALIDATION_ERROR', 400, 'Category cannot be its own parent');
+        }
+        const parent = await Category.findByPk(parentId);
+        if (!parent) throw new AppError('NOT_FOUND', 404, 'Parent category not found');
+        // F-09: full cycle guard (e.g. A→B→C and trying to move A under C)
+        if (await wouldCreateCycle(id, parentId)) {
+            throw new AppError('VALIDATION_ERROR', 400, 'Setting this parent would create a circular reference');
+        }
+    }
+
+    const siblings = (await Category.findAll({
+        where: { parentId: parentId ?? null },
+        order: [['sortOrder', 'ASC'], ['name', 'ASC'], ['id', 'ASC']]
+    })).filter(c => c.id !== id);
+
+    const position = Math.max(0, Math.min(payload.position, siblings.length));
+    siblings.splice(position, 0, category);
+
+    await Category.sequelize.transaction(async (transaction) => {
+        await category.update({ parentId }, { transaction });
+        for (let index = 0; index < siblings.length; index += 1) {
+            await siblings[index].update({ sortOrder: index * 10 }, { transaction });
+        }
+    });
+
+    return true;
+};
+
+/**
  * Update the sort order of products within a category.
  * @param {string} categoryId - category id
  * @param {string[]} productIds - ordered list of product ids
@@ -419,9 +459,9 @@ exports.reorderProducts = async (categoryId, productIds) => {
         for (let i = 0; i < productIds.length; i++) {
             await ProductCategory.update(
                 { sortOrder: i },
-                { 
+                {
                     where: { categoryId, productId: productIds[i] },
-                    transaction 
+                    transaction
                 }
             );
         }

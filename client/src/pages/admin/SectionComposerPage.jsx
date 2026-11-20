@@ -1,4 +1,4 @@
-import { getPageSections } from '../../utils/designerSections';
+import { getPageSections, getPageSectionTypes, PAGE_TEMPLATE_ASSIGNMENT_KEYS } from '../../utils/designerSections';
 import { useState, useEffect, useCallback, useContext, useMemo, useRef } from 'react';
 import {
   Box, Button, Card, Container, Divider, IconButton, Stack, Switch,
@@ -45,11 +45,13 @@ import { SettingsContext } from '../../context/ThemeContext';
 import { getSectionLabel, SECTION_VARIANTS } from '../../components/storefront/sections/sectionRegistry';
 import { createDefaultSection } from '../../utils/sectionPresets';
 import AddSectionDialog from '../../components/admin/sections/AddSectionDialog';
+import { customDetailKey, getProductDetailsOrder, PRODUCT_DETAILS_LABELS } from '../../utils/productDetailsOrder';
 import SaveAsTemplateDialog from '../../components/admin/themes/SaveAsTemplateDialog';
 import DraftReviewDialog from '../../components/admin/themes/DraftReviewDialog';
 import DraftArchivesDialog from '../../components/admin/themes/DraftArchivesDialog';
 import DesignVersionHistoryDialog from '../../components/admin/themes/DesignVersionHistoryDialog';
 import StorefrontTemplatePreview from '../../components/admin/themes/StorefrontTemplatePreview';
+import PageTemplateControls from '../../components/admin/themes/designer/PageTemplateControls';
 import DesignerTreePanel from '../../components/admin/themes/designer/DesignerTreePanel';
 import DesignerSectionEditor from '../../components/admin/themes/designer/DesignerSectionEditor';
 import DesignerThemePanel from '../../components/admin/themes/designer/DesignerThemePanel';
@@ -200,6 +202,7 @@ const SectionComposerPage = () => {
   
   // Unified page style settings state
   const [pageSettings, setPageSettings] = useState({});
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState({});
 
   // History state for Undo/Redo
   const [history, setHistory] = useState([]);
@@ -276,6 +279,11 @@ const SectionComposerPage = () => {
     setPanelView({ mode: 'section-editor', sectionId: section?.id || null, componentKey: null, blockKey: null, blockIndex: null });
   };
 
+  const openProductBlockPicker = (section, insertion) => {
+    setPanelView({ mode: 'section-editor', sectionId: section.id, componentKey: null,
+      blockInsertion: { ...insertion, anchorEl: isMobile ? null : insertion.anchorEl } });
+  };
+
   const focusBlock = (blockKey, blockIndex) => {
     setPanelView((prev) => ({ ...prev, blockKey, blockIndex }));
   };
@@ -297,8 +305,26 @@ const SectionComposerPage = () => {
   };
 
   // Derived properties from active FSM state
-  const productSections = getPageSections({ productPage: pageSettings.product }, 'product');
-  const editableSections = activePage === 'product' ? productSections : sections;
+  const assignmentKey = PAGE_TEMPLATE_ASSIGNMENT_KEYS[activePage];
+  const pageGroup = DESIGNER_PAGE_GROUP_MAP[activePage];
+  const currentPageSettings = pageSettings[activePage];
+  const { templates: alternateTemplates, defaults: defaultTemplate } = useMemo(() => {
+    const { alternateTemplates: templates, ...defaults } = currentPageSettings || {};
+    return { templates: Array.isArray(templates) ? templates : [], defaults };
+  }, [currentPageSettings]);
+  const selectedTemplate = alternateTemplates.find(({ id }) => id === selectedTemplateIds[activePage]);
+  const [previewProductSlug, setPreviewProductSlug] = useState('');
+  const assignedSlugs = (assignmentKey && selectedTemplate?.[assignmentKey]) || [];
+  const assignedPreviewSlug = activePage === 'product' && assignedSlugs.includes(previewProductSlug)
+    ? previewProductSlug : assignedSlugs[0];
+  const editablePageSettings = assignmentKey
+    ? selectedTemplate?.settings || defaultTemplate
+    : currentPageSettings;
+  const productSections = getPageSections({ productPage: editablePageSettings }, 'product');
+  const pageSections = editablePageSettings?.productRows || [];
+  const editableSections = activePage === 'home' ? sections
+    : [...(activePage === 'product' ? productSections : []), ...pageSections, ...sections.filter(({ placement }) => placement === 'header' || placement === 'footer')];
+  const isSharedSection = (section) => section?.placement === 'header' || section?.placement === 'footer';
   const editSection = panelView.mode === 'section-editor'
     ? editableSections.find((s) => s.id === panelView.sectionId) || null
     : null;
@@ -307,6 +333,7 @@ const SectionComposerPage = () => {
 
   const getBlockLabel = (section, blockKey, blockIndex) => {
     if (!section || blockKey == null || blockIndex == null) return null;
+    if (blockKey === 'detailsBlockOrder') return PRODUCT_DETAILS_LABELS[blockIndex];
     const blocks = section[blockKey];
     if (!Array.isArray(blocks) || !blocks[blockIndex]) return null;
     const block = blocks[blockIndex];
@@ -698,7 +725,7 @@ const SectionComposerPage = () => {
 
     const belongsToArea = (section) => {
       if (!area) return true;
-      return area === 'footer' ? section?.placement === 'footer' : section?.placement !== 'footer';
+      return (section?.placement || 'template') === area;
     };
 
     let target = index + dir;
@@ -717,7 +744,7 @@ const SectionComposerPage = () => {
 
     const belongsToArea = (section) => {
       if (!area) return true;
-      return area === 'footer' ? section?.placement === 'footer' : section?.placement !== 'footer';
+      return (section?.placement || 'template') === area;
     };
     if (!belongsToArea(moving)) return;
 
@@ -781,11 +808,47 @@ const SectionComposerPage = () => {
 
   const handlePageSettingChange = (page, value) => {
     clearDraftDelete(DESIGNER_PAGE_GROUP_MAP[page] || page);
+    setPageSettings((current) => {
+      const previous = current[page] || {};
+      const apply = (settings) => typeof value === 'function' ? value(settings) : value;
+      if (!PAGE_TEMPLATE_ASSIGNMENT_KEYS[page]) return { ...current, [page]: apply(previous) };
+
+      const { alternateTemplates: templates, ...defaults } = previous;
+      const selectedId = selectedTemplateIds[page];
+      const next = Array.isArray(templates) && templates.some(({ id }) => id === selectedId)
+        ? { ...previous, alternateTemplates: templates.map((template) => template.id === selectedId
+          ? { ...template, settings: apply(template.settings) } : template) }
+        : { ...apply(defaults), ...(Array.isArray(templates) && { alternateTemplates: templates }) };
+      return { ...current, [page]: next };
+    });
+    setDirty(true);
+  };
+
+  const changePageSections = (productRows) => {
+    handlePageSettingChange(activePage, (current) => ({ ...current, productRows }));
+  };
+
+  const updatePageTemplates = (templates) => {
+    clearDraftDelete(pageGroup);
     setPageSettings((current) => ({
       ...current,
-      [page]: value,
+      [activePage]: { ...current[activePage], alternateTemplates: templates },
     }));
     setDirty(true);
+  };
+
+  const removePageSection = () => {
+    changePageSections(pageSections.filter((section) => section.id !== editSection.id));
+    backToTree();
+  };
+
+  const duplicatePageSection = () => {
+    const index = pageSections.findIndex((section) => section.id === editSection.id);
+    const copy = { ...editSection, id: `page-section-${crypto.randomUUID()}` };
+    const next = [...pageSections];
+    next.splice(index + 1, 0, copy);
+    changePageSections(next);
+    selectSection(copy);
   };
 
   // Debounce live-preview updates from inline field edits. Color pickers
@@ -795,11 +858,38 @@ const SectionComposerPage = () => {
   // input remains responsive, but the downstream preview re-render is
   // coalesced to ~200ms.
   const livePreviewRef = useRef({ value: null, timer: null });
-  const handleInlineFieldChange = (key, value) => {
+  const changeProductInfo = (id, apply) => handlePageSettingChange('product', (current) => ({
+    ...current, sections: getPageSections({ productPage: current }, 'product').map((section) =>
+      section.id === id && section.type === 'product-info' ? apply(section) : section),
+  }));
+
+  const handleInlineFieldChange = (key, value, detailInsertion) => {
     if (!panelView.sectionId) return;
-    if (activePage === 'product') {
-      handlePageSettingChange('product', { ...pageSettings.product, sections: productSections.map((section) =>
-        section.id === panelView.sectionId ? updateSectionField(section, key, value) : section) });
+    if (pageSections.some((section) => section.id === panelView.sectionId)) {
+      handlePageSettingChange(activePage, (current) => ({
+        ...current,
+        productRows: current.productRows.map((section) =>
+          section.id === panelView.sectionId ? updateSectionField(section, key, value) : section),
+      }));
+      return;
+    }
+    if (activePage === 'product' && !isSharedSection(editSection)) {
+      if (editSection?.type === 'product-info' && key === 'heroBlocks') {
+        changeProductInfo(editSection.id, (section) => {
+          const next = { ...section, heroBlocks: value };
+          if (detailInsertion) {
+            const order = getProductDetailsOrder(section);
+            order.splice(detailInsertion.after === null ? 0 : order.indexOf(detailInsertion.after) + 1, 0, customDetailKey(detailInsertion.id));
+            next.detailsBlockOrder = getProductDetailsOrder({ ...next, detailsBlockOrder: order });
+          } else if (section.detailsBlockOrder) {
+            next.detailsBlockOrder = getProductDetailsOrder(next);
+          }
+          return next;
+        });
+        return;
+      }
+      handlePageSettingChange('product', (current) => ({ ...current, sections: getPageSections({ productPage: current }, 'product').map((section) =>
+        section.id === panelView.sectionId ? updateSectionField(section, key, value) : section) }));
       return;
     }
     const next = sectionsRef.current.map((section) =>
@@ -809,7 +899,7 @@ const SectionComposerPage = () => {
   };
 
   const handleInlineFieldBlur = () => {
-    if (activePage === 'product') return;
+    if (activePage !== 'home' && !isSharedSection(editSection)) return;
     // Commit the current state to the undo/redo history on input blur
     const currentSections = sectionsRef.current;
     const currentHead = history[historyIndex];
@@ -892,14 +982,25 @@ const SectionComposerPage = () => {
     setPanelView({ mode: 'section-editor', sectionId: updated.id, componentKey: null });
   };
 
-  const openAddSection = (index = sections.length, area = 'template') => {
-    setAddTarget({ index, area });
+  const openAddSection = (index = sections.length, area = 'template', anchorEl = null) => {
+    setAddTarget({ index, area, anchorEl: isMobile ? null : anchorEl });
     setAddOpen(true);
   };
 
   const handleAdd = (newSection) => {
+    if (activePage !== 'home' && !['header', 'footer'].includes(addTarget.area)) {
+      if (activePage === 'checkout' || pageSections.length >= 6) return;
+      const section = { ...newSection, pagePosition: addTarget.area === 'above' ? 'above' : 'below' };
+      const next = [...pageSections];
+      next.splice(addTarget.index ?? next.length, 0, section);
+      changePageSections(next);
+      selectSection(section);
+      setAddOpen(false);
+      setAddTarget({ index: null, area: 'template' });
+      return;
+    }
     const insertIndex = Number.isInteger(addTarget.index) ? addTarget.index : sections.length;
-    const nextSection = addTarget.area === 'footer' ? { ...newSection, placement: 'footer' } : { ...newSection, placement: undefined };
+    const nextSection = { ...newSection, placement: addTarget.area === 'template' ? undefined : addTarget.area };
     const next = [...sections];
     next.splice(Math.max(0, Math.min(insertIndex, next.length)), 0, nextSection);
     update(next);
@@ -1037,6 +1138,12 @@ const SectionComposerPage = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings, sections, themeSettings, componentStyles, navSettings, footerSettings, announcementSettings, pageSettings, advancedSettings, canManageAdvancedSettings, stagedHomepage, livePreviewTick]);
 
+  const templatePreviewSettings = useMemo(() =>
+    assignmentKey && livePreviewSettings
+      ? { ...livePreviewSettings, [pageGroup]: editablePageSettings }
+      : livePreviewSettings,
+  [assignmentKey, pageGroup, editablePageSettings, livePreviewSettings]);
+
   if (loading) {
     return (
       <Container maxWidth="md" sx={{ py: 5, textAlign: 'center' }}>
@@ -1090,9 +1197,11 @@ const SectionComposerPage = () => {
     setPageSearch('');
   };
   const blockLabel = editSection ? getBlockLabel(editSection, panelView.blockKey, panelView.blockIndex) : null;
-  const designerBreadcrumbs = activePage !== 'home'
-    ? [activePageLabel, 'Page Layout']
-    : editSection
+  const designerBreadcrumbs = assignmentKey
+    ? [activePageLabel, selectedTemplate?.name || 'Default template']
+    : activePage !== 'home'
+      ? [activePageLabel, 'Page Layout']
+      : editSection
       ? blockLabel
         ? [activePageLabel, 'Sections', getSectionLabel(editSection), blockLabel]
         : [activePageLabel, 'Sections', getSectionLabel(editSection)]
@@ -1109,6 +1218,60 @@ const SectionComposerPage = () => {
           ? 'No draft to publish.'
           : null;
 
+
+  const treePanel = (
+    <DesignerTreePanel
+      sections={editableSections}
+      sharedSections={sections}
+      onPageContentClick={activePage === 'cart' ? openComponentEditor : activePage === 'checkout' ? () => openComponentEditor('checkoutBlock') : undefined}
+      loadError={loadError}
+      onRetryLoad={fetchSections}
+      activePage={activePage}
+      pageSettings={assignmentKey ? { ...pageSettings, [activePage]: editablePageSettings } : pageSettings}
+      pageTemplateControls={assignmentKey && <PageTemplateControls
+        key={activePage}
+        page={activePage}
+        templates={alternateTemplates}
+        defaultSettings={defaultTemplate}
+        selectedTemplate={selectedTemplate}
+        onSelect={(id) => {
+          setSelectedTemplateIds((current) => ({ ...current, [activePage]: id }));
+          backToTree();
+        }}
+        onChange={updatePageTemplates}
+      />}
+      selectedSectionId={panelView.sectionId}
+      onSectionClick={selectSection}
+      onThemeSettingsClick={() => setPanelView({ mode: 'theme-settings', sectionId: null, componentKey: null })}
+      onAddSection={openAddSection}
+      onAddProductBlock={openProductBlockPicker}
+      onProductDetailsOrderChange={(section, detailsBlockOrder) => changeProductInfo(section.id, (current) => {
+        const next = { ...current };
+        if (detailsBlockOrder) next.detailsBlockOrder = detailsBlockOrder;
+        else delete next.detailsBlockOrder;
+        return next;
+      })}
+      onSelectProductBlock={(section, id, key = 'heroBlocks') => handleInlineBlockFocus(section.id, key, id)}
+      inheritedBlocksForSection={getInheritedBlocksForSection}
+      onAddSectionItem={(section, schema, items, index) => {
+        const next = [...items];
+        next.splice(index, 0, schema.create());
+        const replace = (item) => item.id === section.id ? { ...item, [schema.key]: next } : item;
+        if (activePage === 'home' || isSharedSection(section)) update(sections.map(replace));
+        else changePageSections(pageSections.map(replace));
+        handleInlineBlockFocus(section.id, schema.key, index);
+      }}
+      onMoveSection={move}
+      onReorderSection={reorderSection}
+      onToggleSection={toggle}
+      onDeleteSection={remove}
+      onChangePageSections={changePageSections}
+      onPageSettingChange={handlePageSettingChange}
+      onHeaderClick={() => openComponentEditor('headerLayout')}
+      onHeaderPartClick={openComponentEditor}
+      onFooterClick={() => openComponentEditor('footer')}
+    />
+  );
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, flex: 1, overflow: 'hidden', bgcolor: '#f6f6f7' }}>
@@ -1199,7 +1362,7 @@ const SectionComposerPage = () => {
               aria-expanded={Boolean(actionsAnchor)} aria-controls={actionsAnchor ? 'designer-actions-menu' : undefined}
               onClick={(event) => setActionsAnchor(event.currentTarget)}><MoreHorizIcon /></IconButton>
             <Menu id="designer-actions-menu" anchorEl={actionsAnchor} open={Boolean(actionsAnchor)} onClose={() => setActionsAnchor(null)}>
-              <MenuItem onClick={() => { setActionsAnchor(null); openAddSection(sections.length, 'template'); }}><AddIcon fontSize="small" sx={{ mr: 1.5 }} />Add section</MenuItem>
+              <MenuItem disabled={activePage === 'checkout' || (activePage !== 'home' && pageSections.length >= 6)} onClick={() => { setActionsAnchor(null); openAddSection(activePage === 'home' ? sections.length : pageSections.length, 'template'); }}><AddIcon fontSize="small" sx={{ mr: 1.5 }} />Add section</MenuItem>
               <MenuItem onClick={() => { setActionsAnchor(null); setSaveTemplateOpen(true); }}><SaveIcon fontSize="small" sx={{ mr: 1.5 }} />Save as template</MenuItem>
               <MenuItem onClick={() => { setActionsAnchor(null); openVersionHistory(); }} disabled={saving || publishing}><HistoryIcon fontSize="small" sx={{ mr: 1.5 }} />Version history</MenuItem>
               {draft && <MenuItem onClick={() => { setActionsAnchor(null); setDiscardOpen(true); }} disabled={saving || publishing || discarding}>Discard draft</MenuItem>}
@@ -1271,13 +1434,22 @@ const SectionComposerPage = () => {
       {/* Main Designer Grid */}
       <Box sx={{ display: 'flex', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden', bgcolor: '#f6f6f7' }}>
         
-        {/* Left Sidebar: Controls & Settings */}
         <Box sx={{
-          width: isMobile ? '100%' : { md: 320, lg: 360 },
+          display: !isMobile || (mobileTab === 'editor' && !editSection && panelView.mode !== 'theme-settings') ? 'flex' : 'none',
+          width: isMobile ? '100%' : { md: 235, lg: 280 }, flexShrink: 0, flexDirection: 'column',
+          bgcolor: 'background.paper', borderRight: 1, borderColor: 'divider', minHeight: 0,
+        }}>
+          {treePanel}
+        </Box>
+
+        {/* Section and theme settings */}
+        <Box sx={{
+          width: isMobile ? '100%' : { md: 280, lg: 330 },
+          order: isMobile ? 0 : 2,
           minWidth: 0,
           flexShrink: 0,
-          display: isMobile && mobileTab !== 'editor' ? 'none' : 'flex',
-          borderRight: isMobile ? 'none' : '1px solid',
+          display: (editSection || panelView.mode === 'theme-settings') && (!isMobile || mobileTab === 'editor') ? 'flex' : 'none',
+          borderLeft: isMobile ? 'none' : '1px solid',
           borderColor: 'divider',
           bgcolor: 'background.paper',
           flexDirection: 'column',
@@ -1294,11 +1466,16 @@ const SectionComposerPage = () => {
               onChange={handleInlineFieldChange}
               onBlur={handleInlineFieldBlur}
               onApplyPreset={activePage === 'home' ? applySmartPreset : undefined}
-              onDuplicate={activePage === 'home' ? duplicateSection : undefined}
-              onDelete={activePage === 'home' ? removeSectionById : undefined}
+              onDuplicate={activePage === 'home' || isSharedSection(editSection) ? duplicateSection
+                : pageSections.includes(editSection) && pageSections.length < 6 ? duplicatePageSection : undefined}
+              onDelete={activePage === 'home' || isSharedSection(editSection) ? removeSectionById
+                : pageSections.includes(editSection) ? removePageSection : undefined}
+              pageSection={pageSections.includes(editSection)}
+              categoryPage={activePage === 'category'}
               onComponentEdit={openComponentEditor}
               activeBlockKey={panelView.blockKey}
               activeBlockIndex={panelView.blockIndex}
+              blockInsertion={panelView.blockInsertion}
               onBlockFocus={focusBlock}
               mappedComponent={editMappedComponent}
               mappedComponentLabel={editMappedComponentLabel}
@@ -1345,27 +1522,7 @@ const SectionComposerPage = () => {
               }}
               canManageAdvancedSettings={canManageAdvancedSettings}
             />
-          ) : (
-            <DesignerTreePanel
-              sections={editableSections}
-              loadError={loadError}
-              onRetryLoad={fetchSections}
-              activePage={activePage}
-              pageSettings={pageSettings}
-              selectedSectionId={panelView.sectionId}
-              onSectionClick={selectSection}
-              onThemeSettingsClick={() => setPanelView({ mode: 'theme-settings', sectionId: null, componentKey: null })}
-              onAddSection={openAddSection}
-              onMoveSection={move}
-              onReorderSection={reorderSection}
-              onToggleSection={toggle}
-              onDeleteSection={remove}
-              onPageSettingChange={handlePageSettingChange}
-              onHeaderClick={() => openComponentEditor('headerLayout')}
-              onHeaderPartClick={openComponentEditor}
-              onFooterClick={() => openComponentEditor('footer')}
-            />
-          )}
+          ) : null}
 
         </Box>
 
@@ -1387,12 +1544,12 @@ const SectionComposerPage = () => {
                 Storefront Preview
               </Typography>
               <ToggleButtonGroup
-                value={activePage === 'home' && !devicePreview ? previewRenderMode : 'live'}
+                value={devicePreview ? 'live' : previewRenderMode}
                 exclusive
                 onChange={(_, v) => v && setPreviewRenderMode(v)}
                 size="small"
               >
-                <ToggleButton value="mock" disabled={activePage !== 'home' || devicePreview} aria-label="Interactive editor preview">Edit design</ToggleButton>
+                <ToggleButton value="mock" disabled={devicePreview} aria-label="Interactive editor preview">Edit design</ToggleButton>
                 <ToggleButton value="live" aria-label="Interactive preview of the current design">Test design</ToggleButton>
               </ToggleButtonGroup>
             </Stack>
@@ -1406,6 +1563,12 @@ const SectionComposerPage = () => {
               <ToggleButton value="tablet" aria-label="Tablet" title="Tablet View"><TabletMacIcon fontSize="small" /></ToggleButton>
               <ToggleButton value="mobile" aria-label="Mobile" title="Mobile View"><PhoneIphoneIcon fontSize="small" /></ToggleButton>
             </ToggleButtonGroup>
+            {activePage === 'product' && assignedSlugs.length > 1 && (
+              <TextField select size="small" label="Preview product" value={assignedPreviewSlug}
+                onChange={(event) => setPreviewProductSlug(event.target.value)}>
+                {assignedSlugs.map((slug) => <MenuItem key={slug} value={slug}>{slug}</MenuItem>)}
+              </TextField>
+            )}
           </Box>
 
           <Box sx={{ px: 1.5, py: 0.75, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
@@ -1484,21 +1647,50 @@ const SectionComposerPage = () => {
             >
               <Box sx={{ width: '100%', flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
                 {activePage !== 'home' ? (
-                  previewTarget.error ? (
+                  previewTarget.error && !assignedPreviewSlug ? (
                     <Box sx={{ p: 4, textAlign: 'center' }}>
                       <Alert severity="info" variant="outlined" sx={{ maxWidth: 480, mx: 'auto' }}>
                         {previewTarget.error}
                       </Alert>
                     </Box>
-                  ) : previewTarget.loading ? (
+                  ) : previewTarget.loading && !assignedPreviewSlug ? (
                     <Box sx={{ p: 4, textAlign: 'center' }}>
                       <CircularProgress size={28} />
                     </Box>
                   ) : (
                     <LiveStorefrontPreview
-                      settings={livePreviewSettings}
-                      path={previewTarget.path || '/'}
+                      settings={templatePreviewSettings}
+                      path={assignedPreviewSlug
+                        ? `/${activePage === 'category' ? 'category' : 'products'}/${encodeURIComponent(assignedPreviewSlug)}`
+                        : previewTarget.path || '/'}
                       reloadOnSettingsChange
+                      selectedSectionId={panelView.sectionId}
+                       selectedBlockId={panelView.blockKey === 'detailsBlockOrder' ? `builtin:${panelView.blockIndex}`
+                         : panelView.blockKey === 'heroBlocks' ? panelView.blockIndex : undefined}
+                       onSelectBlock={!livePreview ? (owner, id) => id.startsWith('builtin:')
+                         ? handleInlineBlockFocus(owner, 'detailsBlockOrder', id.slice(8))
+                         : handleInlineBlockFocus(owner, 'heroBlocks', id) : undefined}
+                      onSelectSection={!livePreview ? (id) => {
+                        const section = editableSections.find((item) => item.id === id);
+                        if (section) selectSection(section);
+                      } : undefined}
+                      onSelectComponent={!livePreview ? openComponentEditor : undefined}
+                      onInsertSection={!livePreview
+                        ? (position, anchor) => {
+                          if (['header', 'footer'].includes(position)) {
+                            const index = sections.findIndex(({ id }) => id === anchor);
+                            openAddSection(index < 0 ? sections.length : index, position);
+                            return;
+                          }
+                          if (activePage === 'checkout' || pageSections.length >= 6) return;
+                          const index = pageSections.findIndex(({ id }) => id === anchor);
+                          openAddSection(index < 0 ? pageSections.length : index, position);
+                        } : undefined}
+                       onInsertBlock={!livePreview ? (id, placement, afterId) => {
+                         const section = editableSections.find((item) => item.id === id);
+                        if (section && (section.heroBlocks?.length || 0) < 12) openProductBlockPicker(section, placement === 'details-order'
+                          ? { detailAfter: afterId || null } : { placement, atStart: !afterId, afterId });
+                      } : undefined}
                       device={viewportMode}
                       showToolbar={false}
                       frameHeight="100%"
@@ -1534,6 +1726,17 @@ const SectionComposerPage = () => {
                       const section = sections.find((item) => item.id === sectionId);
                       if (section) selectSection(section);
                     }}
+                    selectedSectionId={panelView.sectionId}
+                    selectedBlockId={panelView.blockKey === 'heroBlocks' ? panelView.blockIndex : undefined}
+                    onSelectBlock={(owner, id) => handleInlineBlockFocus(owner, 'heroBlocks', id)}
+                    onInsertBlock={(owner, _placement, afterId) => {
+                      const section = sections.find(({ id }) => id === owner);
+                      if (section && (section.heroBlocks?.length || 0) < 12) openProductBlockPicker(section, { atStart: !afterId, afterId });
+                    }}
+                    onInsertSection={(area, anchor) => {
+                      const index = sections.findIndex(({ id }) => id === anchor);
+                      openAddSection(index < 0 ? sections.length : index, area);
+                    }}
                     onSelectComponent={openComponentEditor}
                   />
                 ) : packageData && (
@@ -1564,13 +1767,18 @@ const SectionComposerPage = () => {
       {/* Modals & Dialogs */}
       <AddSectionDialog
         open={addOpen}
+        anchorEl={addTarget.anchorEl}
         onClose={() => {
           setAddOpen(false);
           setAddTarget({ index: null, area: 'template' });
         }}
         onAdd={handleAdd}
-        existingIds={sections.map((s) => s.id)}
-        insertLabel={addTarget.area === 'footer' ? 'Footer' : 'this template'}
+        existingIds={[...sections, ...editableSections].map((s) => s.id)}
+        allowedTypes={['header', 'footer'].includes(addTarget.area) ? ['composed-hero']
+          : activePage !== 'home' ? getPageSectionTypes(activePage) : undefined}
+        insertLabel={addTarget.area === 'header' ? 'Header' : addTarget.area === 'footer' ? 'Footer'
+          : activePage === 'home' ? 'this template'
+            : addTarget.area === 'above' ? 'above page content' : 'below page content'}
         sectionPresets={sectionPresets}
       />
 

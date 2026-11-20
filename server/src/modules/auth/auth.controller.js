@@ -12,6 +12,7 @@ const {
   stripAuthTokens,
   setRememberedDeviceCookie,
   clearRememberedDeviceCookie,
+  clearTrustedDeviceCookie,
   setTrustedDeviceCookie,
 } = require('./authCookies');
 
@@ -68,6 +69,7 @@ const logout = async (req, res, next) => {
     const refreshToken = getRefreshToken(req);
     if (refreshToken) await AuthService.logout(refreshToken, req.user?.id);
     await require('./rememberedDevice').revoke(req.cookies?.remembered_device);
+    await require('./rememberedDevice').revoke(req.cookies?.trusted_device);
     clearRememberedDeviceCookie(res);
     // Persist the session revocation so every worker rejects this access token
     // and any sibling access token from the same session.
@@ -102,6 +104,7 @@ const logout = async (req, res, next) => {
     next(err);
   } finally {
     clearAuthCookies(res);
+    clearTrustedDeviceCookie(res);
   }
 };
 
@@ -150,7 +153,7 @@ const verifyTwoFactor = async (req, res, next) => {
     const ipAddress = req.ip;
     const result = await AuthService.verifyTwoFactor(tempToken, code, ipAddress);
     if (trustDevice && result.user && !require('../../config/permissions').isAdminUser(result.user)) {
-      setTrustedDeviceCookie(res, result.user.id);
+      await setTrustedDeviceCookie(res, result.user.id);
     }
 
     return sendAuthSuccess(res, result, 'Login successful', { rememberMe: result.rememberMe });

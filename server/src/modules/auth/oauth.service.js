@@ -8,7 +8,8 @@ const crypto = require('crypto');
 const { sequelize, User, RefreshToken, Role, Permission } = require('../index');
 const { enrichUserAuthorization } = require('../../config/permissions');
 const { AUTH_TIME } = require('../../config/constants');
-const { hashToken, generateTokens, signTempTwoFactorToken } = require('./tokenUtils');
+const { hashToken, generateTokens } = require('./tokenUtils');
+const TwoFactorChallenge = require('./twoFactorChallenge');
 
 const authUserInclude = [
   { model: Role, as: 'roles', through: { attributes: [] }, include: [{ model: Permission, as: 'permissions', through: { attributes: [] } }] },
@@ -100,7 +101,8 @@ const findOrCreateOAuthUser = async (profile, clientIp) => {
 
     // Check if 2FA is enabled — return temp token instead of full auth
     if (user.twoFactorEnabled) {
-      return { requiresTwoFactor: true, tempToken: signTempTwoFactorToken(user.id) };
+      const challenge = await TwoFactorChallenge.issue(user.id, undefined, {}, t);
+      return { requiresTwoFactor: true, tempToken: challenge.token };
     }
 
     const sessionId = crypto.randomUUID();

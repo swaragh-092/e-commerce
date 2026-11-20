@@ -11,7 +11,7 @@ vi.mock('../../../context/NotificationContext', () => ({ useNotification: () => 
 vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () => true }) }));
 vi.mock('../../../services/settingsService', () => ({ getSettingsGroup: vi.fn(), getDesignDraft: vi.fn(), getDesignState: vi.fn(), getDesignVersions: vi.fn(), publishDesignDraft: vi.fn(), restoreDesignVersion: vi.fn(), saveDesignDraft: vi.fn(), discardDesignDraft: vi.fn() }));
 vi.mock('../../../components/admin/themes/StorefrontTemplatePreview', () => ({ default: ({ activePage, currentSettings, onSelectSection }) => <div>{(activePage === 'home' ? currentSettings.homepage.sections : currentSettings.productPage.sections)?.map((section) => <button key={section.id} onClick={() => onSelectSection(section)}>Preview {section.title}</button>)}</div> }));
-vi.mock('../../../components/admin/themes/designer/DesignerTreePanel', () => ({ default: ({ sections, onToggleSection }) => <div>{sections.map((section, index) => <button key={section.id} onClick={() => onToggleSection(index)}>Hide {section.title}</button>)}</div> }));
+vi.mock('../../../components/admin/themes/designer/DesignerTreePanel', () => ({ default: ({ sections, onToggleSection, pageTemplateControls }) => <div>{pageTemplateControls}{sections.map((section, index) => <button key={section.id} onClick={() => onToggleSection(index)}>Hide {section.title}</button>)}</div> }));
 vi.mock('../../../components/admin/themes/designer/DesignerSectionEditor', () => ({ default: ({ section, onChange, onBlur }) => (
   <div>
     <input aria-label="Section title" value={section.title} onChange={(event) => onChange('title', event.target.value)} onBlur={onBlur} />
@@ -36,6 +36,36 @@ beforeEach(() => {
   service.saveDesignDraft.mockImplementation(async (payload) => ({ revision: 1, payload }));
 });
 describe('Store Designer section editing', () => {
+  it.each([
+    ['Product', 'productPage', 'productSlugs', '/products'],
+    ['Category', 'categoryPage', 'categorySlugs', '/category'],
+  ])('reopens a saved alternate %s template and previews its assignment', async (page, group, assignmentKey, prefix) => {
+    const template = {
+      id: 'seeds', name: 'Seeds', [assignmentKey]: page === 'Product' ? ['basil-seeds', 'beet-seeds', 'plain-seeds'] : ['basil-seeds'],
+      settings: { sections: [], productRows: [{ id: 'care', title: 'Care FAQ', type: 'faq' }] },
+    };
+    service.getDesignDraft.mockResolvedValueOnce({ draft: {
+      revision: 4,
+      payload: [{ group, key: 'alternateTemplates', value: [template] }],
+    } });
+    mount();
+    await screen.findByRole('button', { name: 'Preview Homepage hero' });
+    fireEvent.click(screen.getByRole('button', { name: /^Home/ }));
+    fireEvent.click(await screen.findByText(page, { selector: '.MuiListItemText-primary' }));
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: `${page} template` }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Seeds' }));
+
+    expect(screen.getByTestId('live-preview')).toHaveTextContent(`${prefix}/basil-seeds`);
+    expect(screen.getByRole('button', { name: 'Hide Care FAQ' })).toBeInTheDocument();
+    if (page === 'Product') {
+      for (const slug of ['beet-seeds', 'plain-seeds']) {
+        fireEvent.mouseDown(screen.getByRole('combobox', { name: /Preview product/ }));
+        fireEvent.click(await screen.findByRole('option', { name: slug }));
+        expect(screen.getByTestId('live-preview')).toHaveTextContent(`/products/${slug}`);
+      }
+    }
+  });
+
   const oldDraft = { revision: 46, payload: [{ group: 'homepage', key: 'sections', value: [{ ...homeSection, title: 'Old template hero' }] }] };
   const conflicts = [{ group: 'homepage', key: 'sections' }];
 

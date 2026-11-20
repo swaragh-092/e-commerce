@@ -60,6 +60,83 @@ async function main() {
     assert.ok(archivesAfterPublishedRestore.some(row => row.revision === beforePublishedRestore.revision && JSON.stringify(row.payload) === JSON.stringify(beforePublishedRestore.payload)));
     const metadata = await service.getArchivedDrafts();
     assert.ok(metadata.archives.every(row => !('payload' in row) && !('baseSnapshot' in row)));
+
+    const productRows = [
+      { id: 'picks', type: 'product-row', source: 'staffPicks', pagePosition: 'below',
+        productIds: [randomUUID(), randomUUID()] },
+      { id: 'faq', type: 'faq', pagePosition: 'below', items: [
+        { title: 'When will it ship?', text: 'Within two business days.' },
+        { title: 'Can I collect it?', text: 'Yes, at the store.' },
+      ] },
+    ];
+    const sectionSetting = { group: 'productPage', key: 'productRows' };
+    const savedLayout = await service.saveDraft({
+      settings: [{ ...sectionSetting, value: productRows }],
+      expectedRevision: (await service.getDraft()).draft.revision,
+    }, user);
+    const { draft: reopened } = await service.getDraft();
+    assert.equal(reopened.revision, savedLayout.revision);
+    assert.deepEqual(reopened.payload, [{ ...sectionSetting, operation: 'upsert', value: productRows }]);
+    assert.equal(await db.Setting.findOne({ where: sectionSetting }), null);
+    await service.publishDraft({ expectedRevision: reopened.revision }, user);
+    assert.deepEqual((await db.Setting.findOne({ where: sectionSetting })).value, productRows);
+    console.log('PASS: reopening and publishing preserves Staff Picks and both FAQ items in order.');
+
+    const infoSetting = { group: 'productPage', key: 'sections' };
+    const productInfo = {
+      id: 'info', type: 'product-info', enabled: true,
+      detailsBlockOrder: ['title', 'metadata', 'price', 'summary', 'variants', 'purchase', 'specifications', 'description', 'custom:care-attribute'],
+      heroBlocks: [{ id: 'care-attribute', type: 'product-attribute', attributeName: 'Care instructions' }],
+    };
+    const infoDraft = await service.saveDraft({
+      settings: [{ ...infoSetting, value: [productInfo] }],
+      expectedRevision: (await db.DesignDraft.findOne()).revision,
+    }, user);
+    assert.deepEqual((await service.getDraft()).draft.payload[0].value, [productInfo]);
+    assert.equal(await db.Setting.findOne({ where: infoSetting }), null);
+    await service.publishDraft({ expectedRevision: infoDraft.revision }, user);
+    assert.deepEqual((await db.Setting.findOne({ where: infoSetting })).value, [productInfo]);
+    console.log('PASS: default Product Information order survives draft reload and publish.');
+
+    for (const [group, assignmentKey] of [
+      ['productPage', 'productSlugs'],
+      ['categoryPage', 'categorySlugs'],
+    ]) {
+      const alternateSetting = { group, key: 'alternateTemplates' };
+      const alternateTemplates = [{
+        id: randomUUID(),
+        name: 'Seeds',
+        [assignmentKey]: ['basil-seeds'],
+        settings: {
+          ...(group === 'productPage' && { sections: [{
+             ...productInfo,
+             detailsBlockOrder: ['title', 'metadata', 'price', 'summary', 'custom:care-attribute', 'variants', 'purchase', 'specifications', 'description'],
+             heroBlocks: [{
+              id: 'care-attribute', type: 'product-attribute', attributeName: 'Care instructions', text: 'Care instructions',
+              productPlacement: 'before-options',
+            }],
+          }] }),
+          productRows: [{
+            id: 'care', type: 'faq', items: [{ title: 'How deep should I sow?', text: 'Sow just below the surface.' }],
+          }],
+        },
+      }];
+      const defaultSetting = { ...sectionSetting, group };
+      if (group === 'categoryPage') await db.Setting.create({ ...defaultSetting, value: productRows });
+      const publishedLayout = await db.DesignDraft.findOne();
+      await service.saveDraft({
+        settings: [{ ...alternateSetting, value: alternateTemplates }],
+        expectedRevision: publishedLayout.revision,
+      }, user);
+      const { draft: alternateDraft } = await service.getDraft();
+      assert.deepEqual(alternateDraft.payload[0].value, alternateTemplates);
+      assert.equal(await db.Setting.findOne({ where: alternateSetting }), null);
+      await service.publishDraft({ expectedRevision: alternateDraft.revision }, user);
+      assert.deepEqual((await db.Setting.findOne({ where: alternateSetting })).value, alternateTemplates);
+       assert.deepEqual((await db.Setting.findOne({ where: defaultSetting })).value, productRows);
+       assert.deepEqual((await db.Setting.findOne({ where: infoSetting })).value, [productInfo]);
+      console.log(`PASS: publishing the assigned Seeds template preserves the default layout for ${group}.`);
+    }
     console.log('PASS: published history, draft archives and restores preserve replaced drafts without publishing restored payload.');
   } finally {
     AuditService.log = originalAudit;

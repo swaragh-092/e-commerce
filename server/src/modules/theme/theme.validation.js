@@ -1,6 +1,7 @@
 'use strict';
 
 const Joi = require('joi');
+const { TEMPLATE_ASSIGNMENT_KEYS, buildAlternateTemplatesSchema } = require('../settings/alternateTemplates');
 
 const hexColor = Joi.string().pattern(/^#[0-9a-fA-F]{3,8}$/).max(9).messages({
   'string.pattern.base': '{{#label}} must be a valid hex color (e.g. #ff0000)',
@@ -193,10 +194,17 @@ const heroSlideSchema = Joi.object({
 const padding = Joi.number().integer().min(0).max(240);
 const margin = Joi.number().integer().min(-240).max(240);
 
+const productBlockPlacementSchema = Joi.string().valid('before-options', 'before-specifications', 'after-details');
+const productDetailsOrderSchema = Joi.array().items(Joi.alternatives().try(
+  Joi.string().valid('title', 'metadata', 'price', 'summary', 'variants', 'purchase', 'specifications', 'description'),
+  Joi.string().pattern(/^custom:.{1,50}$/),
+)).min(1).max(20).unique();
+
 const heroBlockSchema = (depth = 0) => Joi.object({
   id: Joi.string().max(50).required(),
   type: Joi.string().valid('group', 'heading', 'text', 'button', 'media', 'collection', 'brand', 'tag', 'product', 'product-attribute', 'product-rating', 'availability', 'fulfillment', 'enquiry', 'newsletter', 'blog', 'page', 'gallery').required(),
   text: Joi.string().max(1500).allow(''),
+  productPlacement: depth === 0 ? productBlockPlacementSchema : Joi.forbidden(),
   href: linkUrl,
   url: sectionImageUrl,
   mobileUrl: sectionImageUrl,
@@ -250,6 +258,7 @@ const homepageSectionSchema = Joi.object({
   type: Joi.string().valid(...SECTION_TYPES).required(),
   enabled: Joi.boolean().required(),
   heroBlocks: Joi.when('type', { is: Joi.valid('composed-hero', 'product-info', 'editorial-image-text'), then: Joi.array().items(heroBlockSchema()).max(12).unique('id'), otherwise: Joi.forbidden() }),
+  detailsBlockOrder: Joi.when('type', { is: 'product-info', then: productDetailsOrderSchema, otherwise: Joi.forbidden() }),
   title: safeText,
   subtitle: safeText,
   source: Joi.string().valid(...PRODUCT_SOURCES),
@@ -355,16 +364,22 @@ const metaSchema = Joi.object({
   platformCompatibility: Joi.string().max(20).allow('', null),
 }).unknown(false);
 
-const pageProductRowsSchema = Joi.array().items(
-  homepageSectionSchema.keys({ type: Joi.string().valid('product-row').required() }),
+const pageLayoutSectionsSchema = (...types) => Joi.array().items(
+  homepageSectionSchema.keys({
+    type: Joi.string().valid('product-row', ...types).required(),
+    layout: Joi.string().valid('grid', 'grid-compact', 'carousel'),
+  }),
 ).max(6);
+
+const pageProductRowsSchema = pageLayoutSectionsSchema();
+const contentPageLayoutSchema = pageLayoutSectionsSchema('composed-hero', 'editorial-image-text', 'faq', 'promo-banners');
 
 const pageSectionsSchema = (systemTypes) => Joi.array().items(
   homepageSectionSchema.keys({ type: Joi.string().valid(...SECTION_TYPES, ...systemTypes).required() }),
 ).max(20);
 
 const pageTemplateSchema = Joi.object({
-  productRows: pageProductRowsSchema,
+  productRows: contentPageLayoutSchema,
   layout: Joi.string().max(80).required(),
   imageAlignment: Joi.string().valid('horizontal', 'vertical'),
   showSKU: Joi.boolean(),
@@ -381,16 +396,28 @@ const pageTemplateSchema = Joi.object({
   filterLayout: Joi.string().valid('sidebar', 'drawer', 'topbar'),
 }).unknown(false);
 
+const alternatePageTemplates = (group, systemTypes) => buildAlternateTemplatesSchema(
+  TEMPLATE_ASSIGNMENT_KEYS[group],
+  Joi.object({
+    productRows: contentPageLayoutSchema,
+    sections: pageSectionsSchema(systemTypes),
+  }).unknown(true),
+);
+
+const productSectionTypes = ['product-info', 'product-reviews'];
+const categorySectionTypes = ['category-header', 'category-products'];
+
 const categoryPageTemplateSchema = Joi.object({
-  productRows: pageProductRowsSchema,
-  sections: pageSectionsSchema(['category-header', 'category-products']),
+  productRows: contentPageLayoutSchema,
+  sections: pageSectionsSchema(categorySectionTypes),
+  alternateTemplates: alternatePageTemplates('categoryPage', categorySectionTypes),
   heroTitle: safeText,
   headerLayout: Joi.string().valid('standard', 'cover', 'split'),
   showSubcategories: Joi.boolean(),
 }).unknown(false);
 
 const brandPageTemplateSchema = Joi.object({
-  productRows: pageProductRowsSchema,
+  productRows: contentPageLayoutSchema,
   sections: pageSectionsSchema(['brands-header', 'brands-list']),
   layout: Joi.string().valid('standard', 'overlay', 'minimal').required(),
   title: safeText,
@@ -408,7 +435,10 @@ const brandPageTemplateSchema = Joi.object({
 }).unknown(false);
 
 const cartPageTemplateSchema = Joi.object({
-  productRows: pageProductRowsSchema,
+  showCartTitle: Joi.boolean(),
+  showCartProducts: Joi.boolean(),
+  showCartSummary: Joi.boolean(),
+  productRows: contentPageLayoutSchema,
   sections: pageSectionsSchema(['cart-main']),
   layout: Joi.string().valid('standard', 'compact').required(),
   showCrossSells: Joi.boolean(),
@@ -417,7 +447,7 @@ const cartPageTemplateSchema = Joi.object({
 }).unknown(false);
 
 const accountPageTemplateSchema = Joi.object({
-  productRows: pageProductRowsSchema,
+  productRows: contentPageLayoutSchema,
   sections: pageSectionsSchema(['account-main']),
   layout: Joi.string().valid('tabs', 'sidebar').required(),
   orderCardStyle: Joi.string().valid('detailed', 'compact'),
@@ -425,7 +455,7 @@ const accountPageTemplateSchema = Joi.object({
 }).unknown(false);
 
 const blogPageTemplateSchema = Joi.object({
-  productRows: pageProductRowsSchema,
+  productRows: contentPageLayoutSchema,
   sections: pageSectionsSchema(['blog-header', 'blog-posts']),
   listLayout: Joi.string().valid('grid', 'list', 'masonry').required(),
   articleLayout: Joi.string().valid('standard', 'cover'),
@@ -575,7 +605,10 @@ const packageSchema = Joi.object({
   }).unknown(false),
   dataSources: Joi.array().items(dataSourceSchema).max(12),
   pageTemplates: Joi.object({
-    product: pageTemplateSchema.keys({ sections: pageSectionsSchema(['product-info', 'product-reviews']) }),
+    product: pageTemplateSchema.keys({
+      sections: pageSectionsSchema(productSectionTypes),
+      alternateTemplates: alternatePageTemplates('productPage', productSectionTypes),
+    }),
     category: categoryPageTemplateSchema,
     collection: pageTemplateSchema.keys({
       sections: pageSectionsSchema(['catalog-header', 'catalog-products']),
@@ -588,10 +621,10 @@ const packageSchema = Joi.object({
     account: accountPageTemplateSchema,
     blog: blogPageTemplateSchema,
     'checkout': Joi.object({ productRows: pageProductRowsSchema }).unknown(false),
-    'wishlist': Joi.object({ productRows: pageProductRowsSchema }).unknown(false),
-    'search': Joi.object({ productRows: pageProductRowsSchema }).unknown(false),
-    'not-found': Joi.object({ productRows: pageProductRowsSchema }).unknown(false),
-    'orders': Joi.object({ productRows: pageProductRowsSchema }).unknown(false),
+    'wishlist': Joi.object({ productRows: contentPageLayoutSchema }).unknown(false),
+    'search': Joi.object({ productRows: contentPageLayoutSchema }).unknown(false),
+    'not-found': Joi.object({ productRows: contentPageLayoutSchema }).unknown(false),
+    'orders': Joi.object({ productRows: contentPageLayoutSchema }).unknown(false),
 
     page: pageTemplateSchema,
   }).unknown(false),
@@ -624,6 +657,8 @@ const idParamSchema = Joi.object({
 });
 
 module.exports = {
+  productBlockPlacementSchema,
+  productDetailsOrderSchema,
   packageSchema,
   applyRequestSchema,
   previewRequestSchema,

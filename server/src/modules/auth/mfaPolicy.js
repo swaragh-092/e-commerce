@@ -1,5 +1,6 @@
 'use strict';
 const AppError = require('../../utils/AppError');
+const { isAdminUser } = require('../../config/permissions');
 
 const Joi = require('joi');
 const POLICY_KEY = 'mfaPolicy';
@@ -18,7 +19,7 @@ const classifyUser = (user) => {
   const staffRoles = roles.filter(role => role?.baseRole === 'admin' && !['admin', 'super_admin'].includes(role.slug));
   const administrator = user?.role === 'super_admin'
     || roles.some(role => ['admin', 'super_admin'].includes(role?.slug) || role?.baseRole === 'super_admin')
-    || (user?.role === 'admin' && !staffRoles.length);
+    || (!staffRoles.length && (user?.role === 'admin' || isAdminUser(user)));
   return { administrator, staffRoles, administrative: administrator || staffRoles.length > 0 };
 };
 const environmentPolicy = () => ({

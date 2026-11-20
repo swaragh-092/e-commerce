@@ -109,7 +109,7 @@ const createTransporter = async (sensitive = false) => {
  * @param {Object} [payload.headers]   - Optional extra headers (e.g. List-Unsubscribe)
  * @returns {Promise<boolean>}
  */
-const send = async ({ to, subject, html, text, headers, sensitive = false }) => {
+const send = async ({ to, subject, html, text, headers, sensitive = false, messageId }) => {
     if (process.env.NODE_ENV === 'test') {
         // Skip actual delivery in test environments — log only
         logger.debug(`[email.channel] TEST MODE — skipping send to ${to}`);
@@ -149,6 +149,7 @@ const send = async ({ to, subject, html, text, headers, sensitive = false }) => 
             subject,
             text,
             html,
+            ...(messageId ? { messageId } : {}),
             ...(headers && typeof headers === 'object' ? { headers } : {}),
         });
         return true;

@@ -4,10 +4,12 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { sequelize, User, Role, Permission, OtpToken, RefreshToken } = require('../index');
 const AppError = require('../../utils/AppError');
-const { AUTH_TIME } = require('../../config/constants');
+const { AUTH_TIME, ACTIONS, ENTITIES } = require('../../config/constants');
 const { enrichUserAuthorization } = require('../../config/permissions');
 const { canUseEmailMfa, loadMfaPolicy } = require('./mfaPolicy');
 const { getIssAud, generateTokens, hashToken } = require('./tokenUtils');
+const AuditService = require('../audit/audit.service');
+const TwoFactorChallenge = require('./twoFactorChallenge');
 
 const PURPOSE = 'staff-email-mfa';
 const WINDOW_MS = 5 * 60 * 1000;
@@ -44,6 +46,8 @@ const withChallenge = (token, action) => {
         || (user.scheduledDeletionAt && new Date(user.scheduledDeletionAt) <= new Date())
         || !canUseEmailMfa(user, await loadMfaPolicy(user, transaction))
         || claims.exp * 1000 <= Date.now()) throw denied();
+    if (claims.tempChallengeId
+        && !TwoFactorChallenge.isUsable(await TwoFactorChallenge.lock(claims.tempChallengeId, transaction))) throw denied();
     const where = { identifier: user.id, purpose: PURPOSE };
     const record = await OtpToken.findOne({ where, transaction, lock: transaction.LOCK.UPDATE });
     return action({ user, claims, where, record, transaction });
@@ -61,7 +65,7 @@ const sendCode = async (token, ipAddress) => {
       ...where, otpHash: hashCode(claims.jti, code), maxAttempts: MAX_ATTEMPTS,
       expiresAt: new Date(claims.exp * 1000), createdByIp: ipAddress,
     }, { transaction });
-    return { email: user.email, code };
+    return { userId: user.id, email: user.email, code, otpHash: hashCode(claims.jti, code) };
   });
 
   try {
@@ -72,6 +76,11 @@ const sendCode = async (token, ipAddress) => {
       sensitive: true,
     });
   } catch {
+    // The delivery call may have timed out after accepting the message. Remove
+    // only this challenge's hash so a later/newer code is never deleted.
+    await OtpToken.destroy({
+      where: { identifier: delivery.userId, purpose: PURPOSE, otpHash: delivery.otpHash },
+    }).catch(() => {});
     throw new AppError('EMAIL_DELIVERY_FAILED', 503, 'The sign-in email could not be sent. Use your authenticator or try again.');
   }
 };
@@ -89,6 +98,7 @@ const verifyCode = async (token, code, ipAddress) => {
       await record.increment('attempts', { transaction });
       return null;
     }
+    if (claims.tempChallengeId && !await TwoFactorChallenge.consume(claims.tempChallengeId, transaction)) return null;
 
     // Keep the spent record for the per-account send cooldown.
     await record.update({ attempts: record.maxAttempts }, { transaction });
@@ -107,12 +117,23 @@ const verifyCode = async (token, code, ipAddress) => {
       lastActiveAt: new Date(),
     }, { transaction });
     await user.update({ lastLoginAt: new Date() }, { transaction });
+    try {
+      if (AuditService?.log) {
+        await AuditService.log({
+          userId: user.id,
+          action: ACTIONS.LOGIN,
+          entity: ENTITIES.USER,
+          entityId: user.id,
+          ipAddress,
+        }, transaction);
+      }
+    } catch { /* Audit failure must not discard a verified sign-in. */ }
     const publicUser = await User.findByPk(user.id, {
       include: [{ model: Role, as: 'roles', include: [{ model: Permission, as: 'permissions' }] }],
       transaction,
     });
     return { user: enrichUserAuthorization(publicUser), tokens, ...(staffSession ? { adminSessionExpiresAt: new Date(Date.now() + ttl) } : {}), rememberMe: claims.rememberMe === true, knownDevice: claims.knownDevice === true,
-      ...(staffSession && claims.rememberMe ? { rememberedDeviceToken: await require('./rememberedDevice').issue(user.id) } : {}) };
+      ...(staffSession && claims.rememberMe ? { rememberedDeviceToken: await require('./rememberedDevice').issue(user.id, transaction) } : {}) };
   });
   if (!result) throw new AppError('VALIDATION_ERROR', 400, 'Invalid or expired email code. Check the code or use your authenticator.');
   return result;

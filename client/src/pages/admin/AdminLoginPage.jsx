@@ -185,24 +185,24 @@ const AdminLoginPage = () => {
         ) : twoFactorStep ? (
           <Box component="form" onSubmit={handleTwoFactorSubmit}>
             <Typography sx={{ mb: 2, fontSize: 14, color: '#475569' }}>
-              {useBackupCode ? 'Enter one of your 8-character backup codes.' : 'Enter the 6-digit code from your authenticator app.'}
+              {useBackupCode ? 'Enter a backup code. New codes contain 32 characters; existing 8-character codes still work.' : 'Enter the 6-digit code from your authenticator app.'}
             </Typography>
             <TextField
               fullWidth
               autoFocus
-              placeholder={useBackupCode ? 'e.g. b2ef58fb' : '000000'}
+              placeholder={useBackupCode ? 'Enter your backup code' : '000000'}
               value={totpCode}
               onChange={(e) => {
-                if (useBackupCode) setTotpCode(e.target.value.replace(/[^a-f0-9]/gi, '').toLowerCase().slice(0, 8));
+                if (useBackupCode) setTotpCode(e.target.value.replace(/[^a-f0-9]/gi, '').toLowerCase().slice(0, 32));
                 else setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6));
               }}
-              inputProps={{ maxLength: useBackupCode ? 8 : 6, autoComplete: 'one-time-code' }}
+              inputProps={{ maxLength: useBackupCode ? 32 : 6, autoComplete: 'one-time-code' }}
               sx={inputSx}
             />
             <Button
               fullWidth type="submit" variant="contained" size="large"
               sx={{ mt: 1, mb: 1, py: 1.45, borderRadius: '8px', fontWeight: 800 }}
-              disabled={loading || totpCode.length !== (useBackupCode ? 8 : 6)}
+              disabled={loading || (useBackupCode ? ![8, 32].includes(totpCode.length) : totpCode.length !== 6)}
             >
               {loading ? <CircularProgress size={18} color="inherit" /> : 'Verify'}
             </Button>

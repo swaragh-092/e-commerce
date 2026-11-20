@@ -99,6 +99,15 @@ const updateContactEmail = async (req, res, next) => {
   }
 };
 
+const updateDetails = async (req, res, next) => {
+  try {
+    const order = await OrderService.updateOrderDetails(req.params.id, req.validated, req.user.id);
+    return success(res, order, 'Order updated');
+  } catch (err) {
+    next(err);
+  }
+};
+
 const getFulfillmentTracking = async (req, res, next) => {
   try {
     const isAdminSession = hasOrderAdminAccess(req.user);
@@ -279,6 +288,7 @@ module.exports = {
   getOrders,
   getOrderById,
   updateContactEmail,
+  updateDetails,
   getFulfillmentTracking,
   updateStatus,
   cancelOrder,

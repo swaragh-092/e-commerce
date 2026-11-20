@@ -91,6 +91,17 @@ describe('cart failure recovery', () => {
 
 
 describe('cart designer controls', () => {
+  it.each([
+    ['showCartTitle', /Shopping Cart/, 'Test product'],
+    ['showCartProducts', 'Test product', 'Order Summary'],
+    ['showCartSummary', 'Order Summary', 'Test product'],
+  ])('hides only the selected Cart block with %s', async (key, hidden, visible) => {
+    settingsState.current = { cartPage: { [key]: false } };
+    mount();
+    expect(await screen.findByText(visible)).toBeInTheDocument();
+    expect(screen.queryByText(hidden)).not.toBeInTheDocument();
+  });
+
   it('applies empty-cart copy and a safe internal recovery link', async () => {
     settingsState.current = { cartPage: { emptyStateTitle: 'Basket waiting', emptyStateText: 'Pick something you love.', emptyStateButtonLabel: 'Explore flowers', emptyStateButtonLink: '/category/flowers' } };
     cartService.getCart.mockResolvedValue(response([]));

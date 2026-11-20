@@ -53,6 +53,21 @@ exports.reorder = async (req, res, next) => {
     }
 };
 
+exports.move = async (req, res, next) => {
+    try {
+        await categoryService.moveCategory(req.params.id, req.body);
+        return success(res, null, 'Category moved');
+    } catch (err) {
+        if (err.message === 'Category not found' || err.message === 'Parent category not found') {
+            return error(res, err.message, 404, 'NOT_FOUND');
+        }
+        if (err.message === 'Category cannot be its own parent' || err.message === 'Setting this parent would create a circular reference') {
+            return error(res, err.message, 400, 'VALIDATION_ERROR');
+        }
+        next(err);
+    }
+};
+
 exports.update = async (req, res, next) => {
     try {
         const category = await categoryService.updateCategory(req.params.id, req.body);

@@ -6,6 +6,7 @@ const {
   placeOrderSchema, 
   updateOrderStatusSchema,
   updateOrderContactEmailSchema,
+  updateOrderDetailsSchema,
   cancelOrderSchema,
   createFulfillmentSchema,
   updateFulfillmentStatusSchema,
@@ -22,18 +23,22 @@ const { authorizePermissions, authorizeAnyPermission } = require('../../middlewa
 const { auditLog } = require('../audit/audit.middleware');
 const { PERMISSIONS } = require('../../config/permissions');
 const { idParamSchema, idAndFulfillmentIdParamSchema } = require('../../utils/common.validation');
-const { guestOrderClaimLimiter } = require('../../middleware/rateLimiter.middleware');
+const { guestOrderClaimLimiter, createLimiter } = require('../../middleware/rateLimiter.middleware');
 
 
 
 const { featureGate, featureGateUnlessPermission } = require('../../middleware/featureGate.middleware');
 
+const giftCardOrderLimiter = createLimiter(15, 30, 'Too many gift card checkout attempts.', { prefix: 'gift-card-checkout' });
 router.post('/', featureGate('orders'), optionalAuth, (req, res, next) => {
   if (req.user) {
     return authorizePermissions(PERMISSIONS.CHECKOUT_SELF)(req, res, next);
   }
   next();
-}, validate(placeOrderSchema), orderController.placeOrder);
+}, validate(placeOrderSchema), (req, res, next) => {
+  if (req.validated.giftCardCode) return giftCardOrderLimiter(req, res, next);
+  next();
+}, orderController.placeOrder);
 
 router.get('/', authenticate, featureGateUnlessPermission('orders', PERMISSIONS.ORDERS_READ, PERMISSIONS.ORDERS_UPDATE_STATUS), authorizeAnyPermission(PERMISSIONS.ACCOUNT_SELF, PERMISSIONS.ORDERS_READ), validate(listOrdersQuerySchema, 'query'), orderController.getOrders);
 router.post('/guest-orders/claim/request', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), guestOrderClaimLimiter, orderController.requestGuestOrderClaim);
@@ -56,6 +61,7 @@ router.post('/:id/replacements', featureGate('orders'), authenticate, authorizeP
 
 // Admin
 router.patch('/:id/contact-email', authenticate, authorizePermissions(PERMISSIONS.ORDERS_UPDATE_STATUS), validate(idParamSchema, 'params'), validate(updateOrderContactEmailSchema), auditLog('Order'), orderController.updateContactEmail);
+router.patch('/:id', authenticate, authorizePermissions(PERMISSIONS.ORDERS_UPDATE_STATUS), validate(idParamSchema, 'params'), validate(updateOrderDetailsSchema), auditLog('Order'), orderController.updateDetails);
 router.put('/:id/status', authenticate, authorizePermissions(PERMISSIONS.ORDERS_UPDATE_STATUS), validate(idParamSchema, 'params'), validate(updateOrderStatusSchema), auditLog('Order'), orderController.updateStatus);
 router.post('/:id/refund', authenticate, authorizePermissions(PERMISSIONS.ORDERS_REFUND), validate(processRefundSchema), auditLog('Order'), orderController.processRefund);
 router.post('/:id/fulfillments', authenticate, authorizePermissions(PERMISSIONS.ORDERS_UPDATE_STATUS), validate(idParamSchema, 'params'), validate(createFulfillmentSchema), auditLog('Order'), orderController.createFulfillment);

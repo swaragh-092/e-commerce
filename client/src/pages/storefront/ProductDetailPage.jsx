@@ -1,5 +1,7 @@
+import { getProductBlockPlacement } from '../../utils/productBlockPlacement';
+import { DEFAULT_DETAILS_FLOW, getProductDetailsOrder, customDetailKey } from '../../utils/productDetailsOrder';
 import ComposedHero from '../../components/storefront/sections/ComposedHero';
-import { useState, useEffect, useMemo } from 'react';
+import { Fragment, useState, useEffect, useMemo } from 'react';
 import { useParams, useLocation, useNavigate, Link as RouterLink } from 'react-router-dom';
 import {
     Alert, Box, Breadcrumbs, Button, Chip, Container, Divider, Grid, IconButton, Link, Skeleton, Typography,
@@ -62,7 +64,7 @@ const ProductDetailPage = () => {
     const [visibleReviews, setVisibleReviews] = useState([]);
     const { addItem } = useCart();
     const { formatPrice, currency } = useCurrency();
-    const { settings } = useSettings();
+    const { settings, productTemplateId } = useSettings();
     const storeName = getStoreName(settings);
     const cartEnabled    = useFeatureVisible('cart', 'storefront');
     const pricingEnabled = useFeatureVisible('pricing', 'storefront');
@@ -83,11 +85,13 @@ const ProductDetailPage = () => {
     const buyNowLabel = pp.buyNowLabel || 'Buy Now';
     const showBuyNowButton = pp.showBuyNowButton !== false;
     const imageAlignment = pp.imageAlignment === 'vertical' ? 'vertical' : 'horizontal';
-    const productTemplateLayout = (designerPreview ? null : product?.storefrontLayout) || pp.templateLayout || 'media-left-details-right';
+    const productTemplateLayout = (designerPreview || productTemplateId ? null : product?.storefrontLayout) || pp.templateLayout || 'media-left-details-right';
     const isGalleryTopLayout = productTemplateLayout === 'gallery-top-details-below';
     const isStickyPanelLayout = productTemplateLayout === 'sticky-purchase-panel';
     const isEditorialProductLayout = ['gallery-top-details-below', 'luxury-editorial', 'editorial'].includes(productTemplateLayout);
-    const showStickyPurchasePanel = pp.showStickyAddToCart !== false && !isGalleryTopLayout;
+    const productInfo = getPageSections(settings, 'product').find((section) => section.type === 'product-info');
+    const orderedDetails = productInfo?.enabled !== false && Array.isArray(productInfo?.detailsBlockOrder);
+    const showStickyPurchasePanel = pp.showStickyAddToCart !== false && !isGalleryTopLayout && !orderedDetails;
 
     // Grid column config per layout variant
     const layoutGrid = isGalleryTopLayout
@@ -430,6 +434,42 @@ const ProductDetailPage = () => {
         });
     };
 
+    const purchaseTrustBadges = showProductTrustBadges && <>
+        <Divider sx={{ my: 2 }} />
+        <Box sx={{ display: 'grid', gap: 1 }}>
+            {[
+                ['Delivery', 'Fast dispatch after confirmation'],
+                ['Payment', 'Secure transaction'],
+                ['Support', 'Order updates available'],
+            ].map(([label, value]) => (
+                <Box key={label} sx={{ display: 'grid', gridTemplateColumns: '82px 1fr', gap: 1 }}>
+                    <Typography variant="caption" color="text.secondary">{label}</Typography>
+                    <Typography variant="caption" fontWeight={700}>{value}</Typography>
+                </Box>
+            ))}
+        </Box>
+    </>;
+
+    const renderProductBlocks = (placement) => getPageSections(settings, 'product')
+        .filter((section) => section.type === 'product-info' && section.enabled !== false)
+        .map((section) => {
+            const heroBlocks = (section.heroBlocks || []).filter((block) => getProductBlockPlacement(block) === placement);
+            if (!heroBlocks.length && !designerPreview) return null;
+            return (
+                <Box key={section.id} sx={{ display: {
+                    xs: section.hideOnMobile ? 'none' : 'block',
+                    md: section.hideOnDesktop ? 'none' : 'block',
+                } }}>
+                    {designerPreview && (section.heroBlocks?.length || 0) < 12 && <button type="button" hidden data-store-add-block={placement}
+                        data-store-owner={section.id}>Add block here</button>}
+                    {heroBlocks.length > 0 && <ComposedHero embedded section={{ ...section, heroBlocks }}
+                        insertionPlacement={designerPreview && section.heroBlocks.length < 12 ? placement : undefined}
+                        product={{ ...product, selectedVariant, storefrontAvailability: stockAvailable,
+                            storefrontShipsFrom: storeName, storefrontShipping: settings?.shipping }} />}
+                </Box>
+            );
+        });
+
     return (
         <Container
             maxWidth={false}
@@ -481,7 +521,7 @@ const ProductDetailPage = () => {
                     </Box>
                 </Grid>
 
-                <Grid item xs={12} md={layoutGrid.details || 12} sx={isGalleryTopLayout ? { maxWidth: 780, mx: 'auto', width: '100%' } : undefined}>
+                <Grid item xs={12} md={orderedDetails ? 12 - layoutGrid.media || 12 : layoutGrid.details || 12} sx={isGalleryTopLayout ? { maxWidth: 780, mx: 'auto', width: '100%' } : undefined}>
                     <Box
                         sx={{
                             p: { xs: 2, sm: 0 },
@@ -547,7 +587,9 @@ const ProductDetailPage = () => {
                         </Typography>
                     )}
 
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, mb: 1.5 }}>
+                     {(() => {
+                         const content = {
+                             title: <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, mb: 1.5 }}>
                         <Typography variant="h2" component="h1" fontWeight={900} sx={{ fontSize: { xs: '2.1rem', md: '2.6rem', lg: '3rem' }, lineHeight: 1.1 }}>
                             {product.name}
                         </Typography>
@@ -559,12 +601,12 @@ const ProductDetailPage = () => {
                                 title={product.name}
                                 text={product.shortDescription}
                                 url={window.location.href}
-                                image={product.ogImage || product.images?.[0]?.url}
-                            />
-                        </Box>
-                    </Box>
+                                 image={product.ogImage || product.images?.[0]?.url}
+                             />
+                         </Box>
+                     </Box>,
 
-                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', mb: 2.5 }}>
+                     metadata: <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', mb: 2.5 }}>
                         {pp.showStockBadge !== false && (
                             <Chip
                                 {...themedChipProps({
@@ -583,9 +625,9 @@ const ProductDetailPage = () => {
                         {selectedVariantLabel && (
                             <Chip {...themedChipProps({ label: `Selected: ${selectedVariantLabel}`, variant: "outlined" })} />
                         )}
-                    </Box>
+                     </Box>,
 
-                    {showPrice && (
+                     price: <>{showPrice && (
                         <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 2, mb: 2.5, flexWrap: 'wrap' }}>
                             {hasSale ? (
                                 <>
@@ -676,21 +718,23 @@ const ProductDetailPage = () => {
                                 </Typography>
                             )}
                         </Box>
-                    )}
+                     )}</>,
 
-                    <Typography variant="body1" color="text.secondary" paragraph sx={{ lineHeight: 1.75, mb: 3 }}>
+                     summary: <Typography variant="body1" color="text.secondary" paragraph sx={{ lineHeight: 1.75, mb: 3 }}>
                         {product.shortDescription}
-                    </Typography>
+                     </Typography>,
 
-                    {activeVariants.length > 0 && (
+                     'before-options': !orderedDetails && renderProductBlocks('before-options'),
+
+                     variants: activeVariants.length > 0 && (
                         <VariantSelector
                             variants={activeVariants}
                             selectedVariantId={selectedVariant?.id}
                             onSelect={handleVariantSelect}
                         />
-                    )}
+                     ),
 
-                    <Box sx={{ display: { xs: 'block', md: 'none' }, mb: 4, mt: 3 }}>
+                     purchase: <Box sx={{ display: { xs: 'block', md: orderedDetails ? 'block' : 'none' }, mb: 4, mt: 3 }}>
                         {cartMsg && (
                             <Alert severity={cartMsg.type} sx={{ mb: 1 }}>
                                 {cartMsg.text}
@@ -793,23 +837,12 @@ const ProductDetailPage = () => {
                                 Enquire Now
                             </Button>
                         )}
-                    </Box>
+                        {orderedDetails && purchaseTrustBadges}
+                     </Box>,
 
-                    {getPageSections(settings, 'product')
-                        .filter((section) => section.type === 'product-info' && section.enabled !== false && section.heroBlocks?.length)
-                        .map((section) => (
-                            <Box key={section.id} sx={{ display: { xs: section.hideOnMobile ? 'none' : 'block', md: section.hideOnDesktop ? 'none' : 'block' } }}>
-                                <ComposedHero embedded section={section} product={{
-                                    ...product,
-                                    selectedVariant,
-                                    storefrontAvailability: stockAvailable,
-                                    storefrontShipsFrom: storeName,
-                                    storefrontShipping: settings?.shipping,
-                                }} />
-                            </Box>
-                        ))}
+                     'before-specifications': !orderedDetails && renderProductBlocks('before-specifications'),
 
-                    {displayAttributes.length > 0 && (
+                     specifications: displayAttributes.length > 0 && (
                         <>
                             <Typography variant="h6" component="h2" fontWeight={900} gutterBottom>Specifications</Typography>
                             <Box sx={{ display: 'grid', gap: 1.25 }}>
@@ -839,15 +872,37 @@ const ProductDetailPage = () => {
                                 })}
                             </Box>
                         </>
-                    )}
+                     ),
 
 
-                    {product.description && (
+                     description: product.description && (
                         <>
                             <Typography variant="h6" component="h2" fontWeight={900} sx={{ mt: 4 }} gutterBottom>Product Details</Typography>
                             <Box dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description || '') }} sx={{ typography: 'body2', color: 'text.secondary', '& p': { mt: 0, mb: 2 } }} />
                         </>
-                    )}
+                     ),
+
+                     'after-details': !orderedDetails && renderProductBlocks('after-details'),
+                         };
+                         const order = orderedDetails ? getProductDetailsOrder(productInfo) : DEFAULT_DETAILS_FLOW;
+                         const custom = new Map((productInfo?.heroBlocks || []).map((block) => [customDetailKey(block.id), block]));
+                         const canInsert = orderedDetails && designerPreview && (custom.size < 12);
+                         const insertAfter = (key) => canInsert && <button type="button" hidden data-store-add-block="details-order"
+                             data-store-owner={productInfo.id} data-store-anchor={key}>Add block here</button>;
+                         return <>{insertAfter()}{order.map((key) => {
+                             const block = custom.get(key);
+                             if (orderedDetails && block) return <Box key={key} sx={{ display: {
+                                 xs: productInfo.hideOnMobile ? 'none' : 'block', md: productInfo.hideOnDesktop ? 'none' : 'block',
+                             } }}><ComposedHero embedded section={{ ...productInfo, heroBlocks: [block] }}
+                                 product={{ ...product, selectedVariant, storefrontAvailability: stockAvailable,
+                                     storefrontShipsFrom: storeName, storefrontShipping: settings?.shipping }} />{insertAfter(key)}</Box>;
+                             const node = content[key];
+                             if (designerPreview && node && productInfo && productInfo.enabled !== false && !key.includes('-')) {
+                                 return <Fragment key={key}><Box data-store-owner={productInfo.id} data-store-block={`builtin:${key}`} sx={{ display: 'flow-root' }}>{node}</Box>{insertAfter(key)}</Fragment>;
+                             }
+                             return <Fragment key={key}>{node}</Fragment>;
+                         })}</>;
+                     })()}
 
                     {/* Custom tabs accordion — rendered from product.tabs included in the API response */}
                     {Array.isArray(product.tabs) && product.tabs.length > 0 && (
@@ -1009,23 +1064,7 @@ const ProductDetailPage = () => {
                             </Button>
                         )}
 
-                        {showProductTrustBadges && (
-                            <>
-                                <Divider sx={{ my: 2 }} />
-                                <Box sx={{ display: 'grid', gap: 1 }}>
-                                    {[
-                                        ['Delivery', 'Fast dispatch after confirmation'],
-                                        ['Payment', 'Secure transaction'],
-                                        ['Support', 'Order updates available'],
-                                    ].map(([label, value]) => (
-                                        <Box key={label} sx={{ display: 'grid', gridTemplateColumns: '82px 1fr', gap: 1 }}>
-                                            <Typography variant="caption" color="text.secondary">{label}</Typography>
-                                            <Typography variant="caption" fontWeight={700}>{value}</Typography>
-                                        </Box>
-                                    ))}
-                                </Box>
-                            </>
-                        )}
+                        {purchaseTrustBadges}
                     </Box>
                 </Grid>
             </Grid>

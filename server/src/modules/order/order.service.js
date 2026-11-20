@@ -819,6 +819,9 @@ const releaseOrderCoupons = async (order, transaction) => {
 };
 
 const releaseOrderReservationsAndCoupons = async (order, transaction) => {
+    if (order.giftCardAmountPaise) {
+        await require('../giftCard/giftCard.service').settle(order.id, 'released', transaction);
+    }
     if (order.inventoryReleasedAt) {
         return [];
     }
@@ -890,6 +893,9 @@ const getCapturedPaymentAmount = (payment, order = {}) => {
             return paymentAmount;
         }
         return 0;
+    }
+    if (order.giftCardAmountPaise && !payment.metadata?.lateSettlement) {
+        return money(Number(payment.amount) + order.giftCardAmountPaise / 100);
     }
     return money(payment.amount || order.total);
 };
@@ -1190,6 +1196,9 @@ const placeOrder = async (userId, payload) => {
     }
     const idempotencyKey = payload.idempotencyKey || payload.checkoutSessionId || null;
     const intentPayload = { ...payload };
+    if (intentPayload.giftCardCode) {
+        intentPayload.giftCardCode = require('../giftCard/giftCard.service').digest('gift-card', intentPayload.giftCardCode.toUpperCase());
+    }
     delete intentPayload.idempotencyKey;
     delete intentPayload.checkoutSessionId;
     delete intentPayload.utmSource;
@@ -1563,7 +1572,18 @@ const placeOrder = async (userId, payload) => {
         const orderNumber = `ORD-${dateStr}-${randStr}`;
 
         // Free orders (100% coupon): settle immediately, no provider session.
-        const isFreeOnlineOrder = paymentMethod !== 'cod' && Number(total) <= 0.009;
+        let giftCard = null;
+        let giftCardAmountPaise = null;
+        const giftCards = payload.giftCardCode ? require('../giftCard/giftCard.service') : null;
+        if (giftCards) {
+            const currency = await Setting.findOne({ where: { group: 'general', key: 'currency' }, transaction: t });
+            if (paymentMethod !== 'razorpay' || String(currency?.value || 'INR').toUpperCase() !== 'INR') {
+                throw new AppError('GIFT_CARD_PAYMENT_METHOD', 422, 'Use Razorpay for INR gift card checkout.');
+            }
+            giftCard = await giftCards.findCard(payload.giftCardCode, t);
+            giftCardAmountPaise = Math.min(Math.round(total * 100), giftCard.balance - giftCard.held) || null;
+        }
+        const isFreeOnlineOrder = paymentMethod !== 'cod' && Math.round(total * 100) === (giftCardAmountPaise || 0);
         const initialOrderStatus = paymentMethod === 'cod' ? ORDER_DEFAULT_STATUS : (isFreeOnlineOrder ? 'processing' : 'pending_payment');
         const initialPaymentStatus = paymentMethod === 'cod' ? 'pending_cod' : (isFreeOnlineOrder ? 'paid_online' : 'payment_pending');
 
@@ -1622,6 +1642,7 @@ const placeOrder = async (userId, payload) => {
             shippingTaxBreakdown: shippingQuote?.taxBreakdown || null,
             discountAmount,
             total,
+            giftCardAmountPaise,
             couponId: appliedCoupon ? appliedCoupon.id : null,
             appliedDiscounts: (couponBenefits?.appliedCoupons || []).map((coupon) => ({
                 couponId: coupon.id,
@@ -1637,6 +1658,8 @@ const placeOrder = async (userId, payload) => {
             shippingAddressSnapshot,
             notes
         }, { transaction: t });
+
+        if (giftCardAmountPaise) await giftCards.reserve(order, giftCard, giftCardAmountPaise, isFreeOnlineOrder, t);
 
         // For COD orders, create the Payment record immediately inside the transaction.
         // This mirrors how Razorpay creates a pending Payment; it is updated to 'completed'
@@ -1659,11 +1682,11 @@ const placeOrder = async (userId, payload) => {
             await Payment.create({
                 orderId: order.id,
                 provider: paymentMethod,
-                transactionId: `free_${order.id}`,
+                transactionId: `${giftCardAmountPaise ? 'gift' : 'free'}_${order.id}`,
                 amount: 0,
                 currency,
                 status: 'paid_online',
-                metadata: { freeOrder: true, settledAt: new Date().toISOString() },
+                metadata: { freeOrder: !giftCardAmountPaise, giftCardAmountPaise, settledAt: new Date().toISOString() },
             }, { transaction: t });
         }
 
@@ -1716,7 +1739,7 @@ const placeOrder = async (userId, payload) => {
             await addOrderHistoryEvent({
                 orderId: order.id,
                 eventType: 'order_placed',
-                description: isFreeOnlineOrder ? 'Free order was placed successfully (no payment required).' : 'Order was placed successfully.',
+                description: giftCardAmountPaise ? 'Order paid in full with a gift card.' : isFreeOnlineOrder ? 'Free order was placed successfully (no payment required).' : 'Order was placed successfully.',
                 actorId: userId,
                 actorType: 'customer',
                 transaction: t,
@@ -2244,8 +2267,8 @@ const updateContactEmail = async (orderId, email) => sequelize.transaction(async
     const order = await Order.findByPk(orderId, { transaction, lock: Transaction.LOCK.UPDATE });
     if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
     if (order.userId) throw new AppError('VALIDATION_ERROR', 400, 'Only guest orders use an order contact email.');
-    const contactEmail = email.trim();
-    await order.update({ shippingAddressSnapshot: { ...(order.shippingAddressSnapshot || {}), email: contactEmail } }, { transaction });
+    const contactEmail = email.trim().toLowerCase();
+    await order.update({ shippingAddressSnapshot: { ...(order.shippingAddressSnapshot || {}), email: contactEmail }, guestEmail: contactEmail }, { transaction });
     const shipments = await Shipment.findAll({ where: { orderId }, attributes: ['id'], transaction });
     if (shipments.length > 0) {
         const operations = await ShippingOperation.findAll({
@@ -2262,6 +2285,74 @@ const updateContactEmail = async (orderId, email) => sequelize.transaction(async
             } }, { transaction });
         }
     }
+    return order;
+});
+
+const ORDER_DETAILS_EDITABLE_STATUSES = ['pending_payment', 'confirmed', 'on_hold', 'processing', 'ready_for_shipment'];
+const ORDER_ADDRESS_FIELDS = ['fullName', 'phone', 'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country', 'email'];
+const normalizeAddressValue = (value) => String(value ?? '').trim().toLowerCase();
+
+const updateOrderDetails = async (orderId, payload, actorId) => sequelize.transaction(async (transaction) => {
+    const order = await Order.findByPk(orderId, { transaction, lock: Transaction.LOCK.UPDATE });
+    if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
+    const status = normalizeOrderStatus(order.status);
+    if (!ORDER_DETAILS_EDITABLE_STATUSES.includes(status)) {
+        throw new AppError('VALIDATION_ERROR', 400, 'Cancelled or closed orders can no longer be edited.');
+    }
+
+    const updates = {};
+    const changedFields = [];
+
+    if (payload.shippingAddress) {
+        const current = order.shippingAddressSnapshot || {};
+        if (current.digital) throw new AppError('VALIDATION_ERROR', 400, 'Digital orders have no shipping address to edit.');
+        const incoming = {};
+        for (const field of ORDER_ADDRESS_FIELDS) {
+            if (payload.shippingAddress[field] !== undefined) incoming[field] = payload.shippingAddress[field];
+        }
+        if (incoming.email !== undefined && order.userId) {
+            throw new AppError('VALIDATION_ERROR', 400, 'Only guest orders use an order contact email.');
+        }
+        if (incoming.email !== undefined) incoming.email = incoming.email.trim().toLowerCase();
+        for (const field of ['city', 'postalCode', 'state', 'country']) {
+            if (incoming[field] !== undefined && normalizeAddressValue(incoming[field]) !== normalizeAddressValue(current[field])) {
+                throw new AppError('VALIDATION_ERROR', 400, 'City, postal code, state and country cannot be changed because shipping eligibility and tax were calculated for the original destination. Cancel and re-place the order instead.');
+            }
+            delete incoming[field];
+        }
+        const addressChanged = Object.keys(incoming).filter((field) => String(incoming[field] ?? '') !== String(current[field] ?? ''));
+        if (addressChanged.length > 0) {
+            const shipments = await Shipment.findAll({ where: { orderId }, attributes: ['id', 'status'], transaction });
+            if (shipments.some((shipment) => shipment.status !== 'cancelled')) {
+                throw new AppError('VALIDATION_ERROR', 400, 'The shipping address cannot be changed after a shipment has been created.');
+            }
+            updates.shippingAddressSnapshot = { ...current, ...incoming };
+            if (incoming.email !== undefined) updates.guestEmail = incoming.email;
+            changedFields.push(...addressChanged.map((field) => `shipping ${field}`));
+        }
+    }
+
+    if (payload.notes !== undefined) {
+        const nextNotes = (payload.notes || '').trim() || null;
+        if (nextNotes !== (order.notes || null)) {
+            updates.notes = nextNotes;
+            changedFields.push('order notes');
+        }
+    }
+
+    if (changedFields.length === 0) return order;
+
+    await order.update(updates, { transaction });
+
+    await addOrderHistoryEvent({
+        orderId,
+        eventType: 'order_edited',
+        description: `Order details edited by admin: ${changedFields.join(', ')}`,
+        actorId,
+        actorType: 'admin',
+        metadata: { changedFields },
+        transaction,
+    });
     return order;
 });
 
@@ -3870,6 +3961,9 @@ const processRefund = async (orderId, payload, actingUserId, isAdmin, auditConte
         if (amount <= 0 || amount > money(capturedAmount - exposed)) {
             throw new AppError('VALIDATION_ERROR', 400, `Refund amount exceeds the remaining refundable amount ${money(capturedAmount - exposed).toFixed(2)}`);
         }
+        const giftCardRefundPaise = order.giftCardAmountPaise
+            ? await require('../giftCard/giftCard.service').refundAllocation(orderId, Math.round(amount * 100), t)
+            : 0;
         const refund = await OrderRefund.create({
             orderId,
             returnId: returnRequest?.id || null,
@@ -3881,6 +3975,7 @@ const processRefund = async (orderId, payload, actingUserId, isAdmin, auditConte
             metadata: {
                 returnItemAmount: returnRequest ? getReturnRequestItemAmount(returnRequest, order) : null,
                 requestedBy: actingUserId,
+                ...(giftCardRefundPaise ? { giftCardRefundPaise } : {}),
                 ...(isOfflineRefund ? { refundMethod: 'offline', manualReference: String(payload.offlineRefundReference).trim() } : {}),
             },
         }, { transaction: t });
@@ -3889,7 +3984,10 @@ const processRefund = async (orderId, payload, actingUserId, isAdmin, auditConte
     });
 
     let providerResult;
-    if (request.payment.provider === 'cod') {
+    const externalAmount = money(Number(request.refund.amount) - (request.refund.metadata?.giftCardRefundPaise || 0) / 100);
+    if (externalAmount === 0) {
+        providerResult = { status: 'succeeded', providerRefundId: `gift-card:${request.refund.id}` };
+    } else if (request.payment.provider === 'cod') {
         providerResult = { status: 'succeeded', providerRefundId: `offline:${String(payload.offlineRefundReference).trim()}` };
     }
     try {
@@ -3897,7 +3995,7 @@ const processRefund = async (orderId, payload, actingUserId, isAdmin, auditConte
             payment: request.payment,
             order: request.order,
             refundId: request.refund.id,
-            amount: request.refund.amount,
+            amount: externalAmount,
             reason: request.refund.reason,
         });
     } catch (error) {
@@ -3979,6 +4077,9 @@ const finalizeProviderRefund = async (refundId, providerResult, actorId = null) 
         include: [{ model: OrderReturnItem, as: 'items', include: [{ model: OrderItem, as: 'orderItem', attributes: ['id', 'quantity', 'total', 'snapshotName'] }] }],
         transaction: t,
     }) : null;
+    if (refund.metadata?.giftCardRefundPaise) {
+        await require('../giftCard/giftCard.service').restore(order.id, refund, actorId, t);
+    }
     const finalized = await createRefundRecord({
         order,
         payment,
@@ -4007,7 +4108,10 @@ const reconcileOpenRefunds = async ({ limit = 20 } = {}) => {
         try {
             const payment = await Payment.findByPk(refund.paymentId);
             if (!payment || payment.provider === 'cod') continue;
-            const result = await PaymentService.fetchProviderRefundStatus({ payment, refund });
+            const giftCardOnly = Math.round(Number(refund.amount) * 100) === refund.metadata?.giftCardRefundPaise;
+            const result = giftCardOnly
+                ? { status: 'succeeded', providerRefundId: `gift-card:${refund.id}` }
+                : await PaymentService.fetchProviderRefundStatus({ payment, refund });
             if (result.status === 'pending' && !result.providerRefundId) continue;
             await finalizeProviderRefund(refund.id, result);
             reconciled += 1;
@@ -4059,6 +4163,7 @@ module.exports = {
     getOrders,
     getOrderById,
     updateContactEmail,
+    updateOrderDetails,
     getFulfillmentTracking,
     buildOrderLookupWhere,
     calculateShipmentAmounts,

@@ -10,6 +10,46 @@ vi.mock('../../services/adminService', () => ({
 vi.mock('../../components/common/MediaPicker', () => ({ default: () => <div data-testid="media-picker" /> }));
 
 describe('DesignerSectionEditor BlockListEditor', () => {
+  it('inserts a block directly after the selected sibling in the requested placement', () => {
+    const first = { id: 'first', type: 'text', text: 'First' };
+    const last = { id: 'last', type: 'text', text: 'Last' };
+    const section = { id: 'info', type: 'product-info', heroBlocks: [first, last] };
+    const onChange = vi.fn();
+    render(<DesignerSectionEditor section={section} onChange={onChange} onBlur={vi.fn()}
+      onBlockFocus={vi.fn()} blockInsertion={{ placement: 'before-specifications', afterId: 'first' }} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Newsletter signup', exact: true }));
+    expect(onChange).toHaveBeenCalledWith('heroBlocks', [
+      first, expect.objectContaining({ type: 'newsletter', productPlacement: 'before-specifications' }), last,
+    ]);
+  });
+
+  it('inserts a product information preset bound to a product attribute', () => {
+    const onChange = vi.fn();
+    render(<DesignerSectionEditor section={{ id: 'info', type: 'product-info' }}
+      onChange={onChange} onBlur={vi.fn()} onBlockFocus={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add block before variant options' }));
+    expect(screen.getByRole('button', { name: 'Delivery information' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Care instructions' }));
+    expect(onChange).toHaveBeenCalledWith('heroBlocks', [{
+      id: expect.any(String), type: 'product-attribute', attributeName: 'Care instructions', text: 'Care instructions', productPlacement: 'before-options',
+    }]);
+  });
+
+  it('shows only the section actions provided by the layout', () => {
+    const section = { id: 'faq', type: 'faq' };
+    const onDelete = vi.fn();
+    const { rerender } = render(<DesignerSectionEditor section={section} onDelete={onDelete} />);
+
+    expect(screen.queryByTitle('Duplicate')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTitle('Delete'));
+    expect(onDelete).toHaveBeenCalledWith(section);
+
+    rerender(<DesignerSectionEditor section={section} />);
+    expect(screen.queryByTitle('Delete')).not.toBeInTheDocument();
+  });
+
   it('offers "Customize existing content" and copies inherited blocks when section is uncustomized', () => {
     const section = { id: 'hero-1', type: 'hero-carousel', title: 'Main Hero' };
     const inheritedBlocks = [

@@ -164,6 +164,14 @@ const withoutStoreDataSource = (section) => {
   return { ...portableSection, enabled };
 };
 
+const portableAlternateTemplates = (templates) => templates.map((template) => {
+  const settings = { ...template.settings };
+  for (const key of ['productRows', 'sections']) {
+    if (Array.isArray(settings[key])) settings[key] = settings[key].map(withoutStoreDataSource);
+  }
+  return { ...template, settings };
+});
+
 const buildPageTemplateRows = (pkg, scopes) => {
   const rows = [];
   if (!scopes.includes('pageTemplates') || !pkg.pageTemplates) return rows;
@@ -173,6 +181,8 @@ const buildPageTemplateRows = (pkg, scopes) => {
     if (productRows) pushDefinedSetting(rows, group, 'productRows', productRows.map(withoutStoreDataSource));
     const sections = pkg.pageTemplates[page]?.sections;
     if (sections) pushDefinedSetting(rows, group, 'sections', sections.map(withoutStoreDataSource));
+    const alternates = pkg.pageTemplates[page]?.alternateTemplates;
+    if (alternates) pushDefinedSetting(rows, group, 'alternateTemplates', portableAlternateTemplates(alternates));
   }
 
   const product = pkg.pageTemplates.product;
@@ -232,6 +242,9 @@ const buildPageTemplateRows = (pkg, scopes) => {
     pushDefinedSetting(rows, 'cartPage', 'showCrossSells', cart.showCrossSells);
     pushDefinedSetting(rows, 'cartPage', 'showTrustBadges', cart.showTrustBadges);
     pushDefinedSetting(rows, 'cartPage', 'emptyStateText', cart.emptyStateText);
+    for (const key of ['showCartTitle', 'showCartProducts', 'showCartSummary']) {
+      pushDefinedSetting(rows, 'cartPage', key, cart[key]);
+    }
   }
 
   const account = pkg.pageTemplates.account;
@@ -808,6 +821,9 @@ const exportCurrent = async (options = {}) => {
       showCrossSells: snapshot.cartPage?.showCrossSells,
       showTrustBadges: snapshot.cartPage?.showTrustBadges,
       emptyStateText: snapshot.cartPage?.emptyStateText,
+      showCartTitle: snapshot.cartPage?.showCartTitle,
+      showCartProducts: snapshot.cartPage?.showCartProducts,
+      showCartSummary: snapshot.cartPage?.showCartSummary,
     },
     account: {
       layout: snapshot.accountPage?.layout || 'tabs',
@@ -829,6 +845,9 @@ const exportCurrent = async (options = {}) => {
     }
     const sections = snapshot[group]?.sections;
     if (Array.isArray(sections) && pkg.pageTemplates[page]) pkg.pageTemplates[page].sections = sections.map(withoutStoreDataSource);
+    if (['product', 'category'].includes(page) && Array.isArray(snapshot[group]?.alternateTemplates)) {
+      pkg.pageTemplates[page].alternateTemplates = portableAlternateTemplates(snapshot[group].alternateTemplates);
+    }
   }
 
   if (includeDemoContent) {
