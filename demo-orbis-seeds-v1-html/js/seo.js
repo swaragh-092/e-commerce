@@ -39,8 +39,10 @@
         const storefront = new URL('.', window.location.href);
         const name = entity && (entity.customHeading || entity.name || entity.title);
         const rawTitle = (entity && entity.metaTitle) || name || pageTitle;
-        const title = rawTitle.endsWith(' | ' + routes.siteName) ? rawTitle : rawTitle + ' | ' + routes.siteName;
-        const description = (entity && entity.metaDescription) || (entity && plainText(entity.shortDescription || entity.summary || entity.description || entity.content).slice(0, 160)) || pageDescription;
+        const title = route.approvedCopy?.metaTitle
+            || (rawTitle.endsWith(' | ' + routes.siteName) ? rawTitle : rawTitle + ' | ' + routes.siteName);
+        const description = route.approvedCopy?.metaDescription || (entity && entity.metaDescription)
+            || (entity && plainText(entity.shortDescription || entity.summary || entity.description || entity.content).slice(0, 160)) || pageDescription;
         const mainImage = entity && (entity.featuredImage || entity.coverImage);
         const product = route.kind === 'product' && entity ? OrbiCatalog.line(entity) : null;
         const image = mediaUrl(entity && (entity.ogImage || (mainImage && mainImage.url) || entity.bannerImage || entity.image))

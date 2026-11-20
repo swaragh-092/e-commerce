@@ -7,6 +7,8 @@ const categoryService = require('../../src/modules/category/category.service');
 const settings = require('../../src/modules/settings/settings.service');
 const featureGate = require('../../src/middleware/featureGate.middleware');
 const root = '/demo-orbis-seeds-v1-html';
+const { resolve: resolveRoute } = require('../../../demo-orbis-seeds-v1-html/js/seo-routes');
+const escapeHtml = (text) => text.replaceAll('&', '&amp;').replaceAll("'", '&#39;');
 let router;
 let api;
 
@@ -55,6 +57,43 @@ afterEach(() => {
 });
 
 describe('Orbi storefront SEO', () => {
+  it.each([
+    '/index.html', '/about-orbis.html', '/product.html?cat=fruit', '/product.html?cat=vegetables',
+    '/product.html?cat=flowers', '/research-and-development.html', '/partners.html', '/resources.html',
+    '/gallery.html', '/gallery-detail.html?album=vegetables', '/gallery-detail.html?album=flower',
+    '/gallery-detail.html?album=fresh-fruits', '/contact-us.html',
+  ])('renders the approved default verbatim at %s', async (target) => {
+    db.Setting.findAll.mockResolvedValue([
+      { group: 'homepage', key: 'seoTitle', value: 'Old home title' },
+      { group: 'homepage', key: 'seoDescription', value: 'Old home description' },
+      { group: 'seo', key: 'titleTemplate', value: 'Template: %s' },
+    ]);
+    categoryService.getCategoryTree.mockResolvedValue(['fruit', 'vegetables', 'flowers'].map((slug) => ({
+      slug, name: slug, metaTitle: 'Saved category title', metaDescription: 'Saved category description',
+      children: [{ slug: slug + '-child', children: [] }],
+    })));
+    db.Gallery.findAll.mockImplementation(async ({ where }) => [{
+      toJSON: () => ({ slug: where.slug, title: 'Saved album title', description: 'Saved album description' }),
+    }]);
+
+    const url = new URL(target, 'https://seeds.test');
+    const { approvedCopy } = resolveRoute(url.pathname.slice(1), url.searchParams);
+    const res = await get(target);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain(`<title>${escapeHtml(approvedCopy.metaTitle)}</title>`);
+    expect(res.body).toContain(`name="description" content="${escapeHtml(approvedCopy.metaDescription)}"`);
+    expect(res.body).toContain(`property="og:title" content="${escapeHtml(approvedCopy.metaTitle)}"`);
+  });
+
+  it('allows an explicit SEO override to replace part of the approved copy', async () => {
+    db.SeoOverride.findAll.mockResolvedValue([
+      { path: '/store/gallery.html', metaDescription: 'Temporary exhibition' },
+    ]);
+    const res = await get('/gallery.html');
+    expect(res.body).toContain('<title>Agricultural &amp; Seed Gallery | Orbi Seeds International Pvt. Ltd.</title>');
+    expect(res.body).toContain('name="description" content="Temporary exhibition"');
+  });
+
   it('renders saved SEO fields and image alt in the initial product HTML', async () => {
     db.Product.findOne.mockResolvedValue({
       name: 'Dwarf tomato', metaTitle: 'Dwarf tomato seeds', metaDescription: 'Compact tomato plants',

@@ -98,9 +98,12 @@ function mountOrbiStorefront(app) {
 
   function fallback(route) {
     const [title, description, image, schemaType] = pages[route.missing ? 'error.html' : route.file];
+    const approvedCopy = route.missing ? undefined : route.approvedCopy;
     return {
-      title, description, ogImage: image ? absolute('images/' + image) : '', schemaType,
-      siteName, siteUrl: publicUrl.href, titleSuffix: ' | Orbi Seeds', organizationType: 'Organization',
+      title: approvedCopy?.metaTitle || title,
+      description: approvedCopy?.metaDescription || description,
+      ogImage: image ? absolute('images/' + image) : '', schemaType,
+      siteName, siteUrl: publicUrl.href, titleSuffix: approvedCopy ? '' : ' | Orbi Seeds', organizationType: 'Organization',
       canonicalBaseUrl: publicUrl.origin, noIndex: route.noIndex,
       canonicalUrl: route.noIndex ? '' : absolute(route.publicPath),
     };
@@ -149,10 +152,17 @@ function mountOrbiStorefront(app) {
     const canonical = new URL(publicPath, publicUrl);
     const paths = overridePaths(publicPath.split(/[&?]page=/)[0], route.key);
     const overrides = await SeoOverride.findAll({ where: { path: { [Op.in]: paths } } });
+    const override = selectOverride(new Map(overrides.map((row) => [row.path, row])), paths);
+    if (route.approvedCopy) {
+      entity = { ...entity, ...route.approvedCopy };
+      if (!override?.metaTitle) {
+        defaults.titleTemplate = '';
+        defaults.titleSuffix = '';
+      }
+    }
     const data = await seo.getMetadataByPath(route.key, {
       defaults, entity, kind: route.kind, noIndex: route.noIndex,
-      publicPath: canonical.pathname + canonical.search,
-      override: selectOverride(new Map(overrides.map((row) => [row.path, row])), paths),
+      publicPath: canonical.pathname + canonical.search, override,
     });
     if (data.productData) {
       const { features } = await settings.getFeatures();
