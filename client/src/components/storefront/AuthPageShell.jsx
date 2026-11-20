@@ -54,7 +54,7 @@ const AuthPageShell = ({ type = 'login', fullHeight = false, children }) => {
         minHeight: fullHeight ? '100svh' : { xs: 'calc(100svh - 64px)', md: 'calc(100svh - 72px)' },
         display: 'flex',
         alignItems: 'center',
-        bgcolor: '#fffaf2',
+        bgcolor: type === 'admin' ? '#ffffff' : '#fffaf2',
         ...(image && {
           backgroundImage: `linear-gradient(90deg, rgba(255,250,242,0.68) 0%, rgba(255,250,242,0.56) 36%, rgba(255,250,242,0.38) 58%, rgba(255,250,242,0.7) 100%), url(${getMediaUrl(image)})`,
           backgroundSize: 'cover',

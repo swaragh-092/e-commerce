@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## [1.9.0.1] - 2026-11-20
+
+### Fixed
+
+- Use a pure white background on the admin sign-in page.
+
 ## [1.9.0.0] - 2026-11-20
 
 ### Added
