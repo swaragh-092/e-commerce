@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## [1.7.0.0] - 2026-11-20
+
+### Added
+
+- Add INR digital gift cards with scheduled email delivery, checkout redemption, gift card refunds, and merchant reconciliation. New sales start paused.
+
 ## [1.6.0.0] - 2026-11-19
 
 ### Added

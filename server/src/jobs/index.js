@@ -29,6 +29,7 @@ const startJobs = () => {
   analyticsReportJob.run();
   refundReconciliationJob.run();
   productRankingsJob.run();
+  require("./giftCardDelivery.job").run();
 };
 
 module.exports = startJobs;

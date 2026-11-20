@@ -15,6 +15,7 @@ import LocationOnIcon from '@mui/icons-material/LocationOn';
 import { useSettings } from '../../hooks/useSettings';
 import { useTheme } from '@mui/material/styles';
 import PageService from '../../services/pageService';
+import api from '../../services/api';
 import MenuService from '../../services/menuService';
 import MenuChildrenMore from './MenuChildrenMore';
 import { appendMenuChildren } from '../../utils/menuPagination';
@@ -35,6 +36,7 @@ const StorefrontFooter = () => {
   const theme = useTheme();
   const [dynamicLinks, setDynamicLinks] = React.useState([]);
   const [footerMenu, setFooterMenu] = React.useState(null);
+  const [giftCardsEnabled, setGiftCardsEnabled] = React.useState(false);
   const [logoLoadFailed, setLogoLoadFailed] = React.useState(false);
 
   React.useEffect(() => {
@@ -58,6 +60,15 @@ const StorefrontFooter = () => {
     };
     fetchDynamicLinks();
   }, [pagesEnabled]);
+
+  React.useEffect(() => {
+    if (features?.checkout !== true || features?.payments !== true) return undefined;
+    const controller = new AbortController();
+    api.get('/gift-cards/policy', { signal: controller.signal })
+      .then(({ data }) => setGiftCardsEnabled(data.data.enabled))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [features?.checkout, features?.payments]);
 
   const f       = settings?.footer  || {};
   const general = settings?.general || {};
@@ -114,7 +125,10 @@ const StorefrontFooter = () => {
     ...(Array.isArray(f.links) ? f.links : []).map(toFooterLink),
     ...dynamicLinks.map(toFooterLink),
   ].filter(Boolean);
-  const allLinks = filterFeatureLinks(dedupeLinks(menuLinks.length ? menuLinks : legacyLinks), features || {});
+  const baseLinks = menuLinks.length ? menuLinks : legacyLinks;
+  const giftLinks = giftCardsEnabled && features?.checkout && features?.payments && !baseLinks.some((link) => link.url === '/gift-cards')
+    ? [{ label: 'Gift cards', url: '/gift-cards' }] : [];
+  const allLinks = filterFeatureLinks(dedupeLinks([...baseLinks, ...giftLinks]), features || {});
 
   const hasSocial  = f.showSocial  && SOCIAL.some(({ key }) => f[key]);
   const hasLinks   = f.showLinks !== false && allLinks.length > 0;

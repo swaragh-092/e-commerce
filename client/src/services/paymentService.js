@@ -21,6 +21,8 @@ export const configurePaymentGateway = (gatewayId, payload) =>
 
 const paymentService = {
   createOrder: createPaymentOrder,
+  createGuestGiftPayment: (orderId) => api.post('/gift-cards/guest-payment', { orderId }),
+  verifyGuestGiftPayment: (orderId, data) => api.post(`/gift-cards/guest-verify/${orderId}`, data),
   verifyPayment,
   markFailed: markPaymentFailed,
   getGateways: getPaymentGateways,

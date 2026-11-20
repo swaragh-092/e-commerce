@@ -130,6 +130,9 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.DECIMAL(10, 2),
             allowNull: false,
         },
+        giftCardAmountPaise: {
+            type: DataTypes.INTEGER,
+        },
         couponId: {
             type: DataTypes.UUID,
         },

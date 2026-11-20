@@ -4,7 +4,7 @@ import {
     Box, Container, Typography, Button, Divider, Paper, TextField,
     CircularProgress, Alert, Radio, RadioGroup,
     FormControlLabel, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
-    Grid, IconButton, Checkbox, Collapse, Autocomplete,
+    Grid, IconButton, Checkbox, Collapse, Autocomplete, Stack,
 } from '@mui/material';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
@@ -24,6 +24,7 @@ import { useSettings, useCurrency, useFeature, useFeatureVisible, useFeaturesRes
 import { useCart } from '../../hooks/useCart';
 import { getSessionId } from '../../services/cartService';
 import api from '../../services/api';
+import loadScript from '../../utils/loadPaymentScript';
 import { userService } from '../../services/userService';
 import { orderService } from '../../services/orderService';
 import paymentService from '../../services/paymentService';
@@ -139,38 +140,6 @@ const getOrderSubmissionKey = async (checkoutSessionId, orderPayload) => {
         return uuidv4();
     }
 };
-
-const loadScript = (src, globalName) => new Promise((resolve, reject) => {
-    if (globalName && window[globalName]) {
-        resolve(window[globalName]);
-        return;
-    }
-
-    const existing = document.querySelector(`script[src="${src}"]`);
-    if (existing) {
-        if (globalName && window[globalName]) {
-            resolve(window[globalName]);
-            return;
-        }
-        if (existing.dataset.loaded === 'true') {
-            resolve(globalName ? window[globalName] : true);
-            return;
-        }
-        existing.addEventListener('load', () => resolve(globalName ? window[globalName] : true), { once: true });
-        existing.addEventListener('error', reject, { once: true });
-        return;
-    }
-
-    const script = document.createElement('script');
-    script.src = src;
-    script.async = true;
-    script.onload = () => {
-        script.dataset.loaded = 'true';
-        resolve(globalName ? window[globalName] : true);
-    };
-    script.onerror = reject;
-    document.body.appendChild(script);
-});
 
 // Section wrapper — shows locked/completed state when not active
 const Section = ({ step, activeSection, completedSections, title, icon, summary, onEdit, children, radius }) => {
@@ -455,6 +424,31 @@ const CheckoutPage = () => {
     const [guestEmail, setGuestEmail] = useState('');
     const [guestEmailError, setGuestEmailError] = useState(false);
 
+    const [giftCardInput, setGiftCardInput] = useState('');
+    const [giftCard, setGiftCard] = useState(null);
+    const [giftCardError, setGiftCardError] = useState('');
+    const [giftCardBusy, setGiftCardBusy] = useState(false);
+    const [giftCardsAvailable, setGiftCardsAvailable] = useState(false);
+    useEffect(() => {
+        const controller = new AbortController();
+        api.get('/gift-cards/policy', { signal: controller.signal })
+            .then(({ data }) => setGiftCardsAvailable(data.data.redeemable))
+            .catch(() => {});
+        return () => controller.abort();
+    }, []);
+    const applyGiftCard = async () => {
+        setGiftCardBusy(true);
+        setGiftCardError('');
+        try {
+            const code = giftCardInput.trim().toUpperCase();
+            const { data } = await api.post('/gift-cards/balance', { code });
+            setGiftCard({ code, ...data.data });
+        } catch (error) {
+            setGiftCardError(getApiErrorMessage(error, 'This gift card could not be applied.'));
+        } finally {
+            setGiftCardBusy(false);
+        }
+    };
     const [paymentMethod, setPaymentMethod] = useState(defaultPaymentMethod || 'razorpay');
 
     useEffect(() => {
@@ -517,6 +511,9 @@ const CheckoutPage = () => {
     const shippingTaxIncluded = Boolean(shippingQuote?.taxIncluded);
     const effectiveDeliveryTax = (!shippingTaxIncluded && effectiveShippingCost > 0) ? shippingTaxAmount : 0;
     const total = Math.max(0, subtotal + effectiveShippingCost + taxAmount + effectiveDeliveryTax - orderDiscount);
+    const totalPaise = Math.round(total * 100);
+    const giftAppliedPaise = Math.min(totalPaise, giftCard?.available || 0);
+    const onlineDuePaise = totalPaise - giftAppliedPaise;
     const itemSignature = useMemo(() => (
         items.map((item) => `${item?.productId || item?.product?.id}:${item?.variantId || item?.variant?.id || 'base'}:${normalizeBuyNowQuantity(item?.quantity)}`).join('|')
     ), [items]);
@@ -743,11 +740,18 @@ const CheckoutPage = () => {
             order_id: paymentOrder.id,
             handler: async (response) => {
                 try {
-                    await paymentService.verifyPayment(orderId, {
+                    const verify = !user && giftCard
+                        ? paymentService.verifyGuestGiftPayment
+                        : paymentService.verifyPayment;
+                    const verified = await verify(orderId, {
                         razorpay_order_id: response.razorpay_order_id,
                         razorpay_payment_id: response.razorpay_payment_id,
                         razorpay_signature: response.razorpay_signature,
                     });
+                    if (verified.data?.data?.orderCancelled) {
+                        navigate('/payment/failure', { state: { orderId, orderNumber, status: 'late_settlement' } });
+                        return;
+                    }
                     if (!isBuyNowFlow) await clearCart();
                     navigate('/payment/success', { state: { orderId, orderNumber } });
                 } catch (err) {
@@ -765,7 +769,9 @@ const CheckoutPage = () => {
             },
             modal: {
                 ondismiss: async () => {
-                    try { await paymentService.markFailed(orderId, { reason: 'checkout modal dismissed' }); } catch { /* keep order retryable */ }
+                    if (user || !giftCard) {
+                        try { await paymentService.markFailed(orderId, { reason: 'checkout modal dismissed' }); } catch { /* keep order retryable */ }
+                    }
                     setPlacing(false);
                 },
             },
@@ -776,7 +782,9 @@ const CheckoutPage = () => {
     };
 
     const startOnlinePayment = async (orderId, orderNumber) => {
-        const paymentResponse = await paymentService.createOrder(orderId);
+        const paymentResponse = !user && giftCard
+            ? await paymentService.createGuestGiftPayment(orderId)
+            : await paymentService.createOrder(orderId);
         const paymentOrder = paymentResponse.data?.data || paymentResponse.data;
         if (paymentOrder?.freeOrder) {
             if (!isBuyNowFlow) await clearCart();
@@ -850,6 +858,7 @@ const CheckoutPage = () => {
             setError('Enter a valid email address.');
             return;
         }
+        if (giftCard && paymentMethod !== 'razorpay') { setError('Select Razorpay or remove the gift card.'); return; }
         if (!paymentMethod) { setError('No payment method is currently available.'); return; }
         if (!hasPhysicalItems && paymentMethod === 'cod') { setError('Cash on delivery is not available for digital products.'); return; }
         if (hasPhysicalItems && shippingLoading) { setError('Please wait while we confirm delivery availability.'); return; }
@@ -869,6 +878,7 @@ const CheckoutPage = () => {
                 sessionId: getSessionId(),
                 ...(!user && guestEmail ? { guestEmail: guestEmail.trim() } : {}),
                 paymentMethod,
+                ...(giftCard ? { giftCardCode: giftCard.code } : {}),
                 ...(couponCode && couponResult && !couponResult.error && { couponCode }),
                 ...(appliedCoupons.length > 0 && { couponCodes: appliedCoupons.map((c) => c.code) }),
                 ...(notes && { notes }),
@@ -895,7 +905,7 @@ const CheckoutPage = () => {
                 try { sessionStorage.removeItem(`pendingOrderSubmission:${checkoutSessionId}`); } catch (_) {}
                 if (!isBuyNowFlow) await clearCart();
                 navigate('/payment/success', { state: { orderId, orderNumber, isCod: true } });
-            } else if (Number.isFinite(orderTotal) && orderTotal <= 0.009) {
+            } else if (Number.isFinite(orderTotal) && Math.round(orderTotal * 100) <= (res?.order?.giftCardAmountPaise || 0)) {
                 // Free order already settled server-side; no provider session.
                 if (!isBuyNowFlow) await clearCart();
                 navigate('/payment/success', { state: { orderId, orderNumber } });
@@ -1385,6 +1395,29 @@ const CheckoutPage = () => {
                                 Payment options are hidden on the storefront. Your order will use the store's configured payment method.
                             </Alert>
                         )}
+                        {giftCardsAvailable && (
+                            <Stack spacing={1} sx={{ mb: 2 }}>
+                                {giftCard ? (
+                                    <>
+                                        <Typography>Gift card ending in {giftCard.suffix}</Typography>
+                                        <Typography variant="body2">
+                                            Applied {formatPrice(giftAppliedPaise / 100)}
+                                            {' · '}Card balance after purchase {formatPrice((giftCard.available - giftAppliedPaise) / 100)}
+                                            {' · '}Online due {formatPrice(onlineDuePaise / 100)}
+                                        </Typography>
+                                        {paymentMethod !== 'razorpay' && <Alert severity="info">Select Razorpay to use the gift card.</Alert>}
+                                        <Button onClick={() => { setGiftCard(null); setGiftCardInput(''); }}>Remove gift card</Button>
+                                    </>
+                                ) : (
+                                    <Stack direction="row" spacing={1}>
+                                        <TextField label="Gift card code" size="small" value={giftCardInput}
+                                            onChange={(event) => setGiftCardInput(event.target.value)} fullWidth />
+                                        <Button onClick={applyGiftCard} disabled={giftCardBusy || !giftCardInput.trim()}>Apply</Button>
+                                    </Stack>
+                                )}
+                                {giftCardError && <Alert severity="error">{giftCardError}</Alert>}
+                            </Stack>
+                        )}
                         {paymentsVisible && (
                         <RadioGroup
                             aria-label="Payment method"
@@ -1645,7 +1678,7 @@ const CheckoutPage = () => {
                                 ) : paymentMethod === 'cod' ? (
                                     (checkoutStyle.placeOrderLabel || 'Place Order')
                                 ) : (
-                                    'Proceed to Pay'
+                                    giftCard && onlineDuePaise === 0 ? 'Pay with gift card' : 'Proceed to Pay'
                                 )}
                             </Button>
 

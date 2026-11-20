@@ -313,6 +313,8 @@ const getRazorpayClient = async () => {
 /**
  * Creates a Razorpay Order
  */
+const razorpayDuePaise = (order) => Math.round(Number(order.total) * 100) - (order.giftCardAmountPaise || 0);
+
 const createRazorpayOrder = async (userId, order) => {
     const razorpay = await getRazorpayClient();
 
@@ -321,31 +323,41 @@ const createRazorpayOrder = async (userId, order) => {
     const currency = (currencySetting?.value || 'INR').toUpperCase();
 
     // Razorpay expects amount in subunits (paise for INR, cents for USD)
-    const amountInSubunits = Math.round(Number(order.total) * 100);
+    const amountInSubunits = razorpayDuePaise(order);
 
-    try {
+    const open = async (transaction) => {
+        const paymentOptions = { where: { orderId: order.id } };
+        if (transaction) {
+            Object.assign(paymentOptions, { transaction, lock: transaction.LOCK.UPDATE });
+        }
+        const existing = transaction ? await Payment.findOne(paymentOptions) : null;
+        if (transaction && existing?.transactionId?.startsWith('order_')) {
+            return {
+                provider: 'razorpay', id: existing.transactionId, amount: amountInSubunits, currency,
+                keyId: await getCredential('razorpay.keyId', 'RAZORPAY_KEY_ID'),
+            };
+        }
         const razorpayOrder = await razorpay.orders.create({
             amount: amountInSubunits,
             currency,
-            receipt: `order_rcptid_${order.id}`,
+            receipt: order.giftCardAmountPaise ? order.id : `order_rcptid_${order.id}`,
             notes: {
                 orderId: order.id,
-                userId: userId,
+                ...(userId ? { userId } : {}),
             },
         });
-
-        const existing = await Payment.findOne({ where: { orderId: order.id } });
+        const previous = transaction ? existing : await Payment.findOne(paymentOptions);
         const cartId = await getActiveCartIdForUser(userId);
         await Payment.upsert({
             orderId: order.id,
             provider: 'razorpay',
             transactionId: razorpayOrder.id,
-            amount: order.total,
+            amount: transaction ? amountInSubunits / 100 : order.total,
             currency,
             status: 'payment_pending',
-            expiresAt: existing?.expiresAt || null,
-            metadata: buildAttemptMetadata(existing, { ...(cartId ? { cartId } : {}) }),
-        });
+            expiresAt: previous?.expiresAt || null,
+            metadata: buildAttemptMetadata(previous, { ...(cartId ? { cartId } : {}) }),
+        }, ...(transaction ? [{ transaction }] : []));
 
         return {
             provider: 'razorpay',
@@ -354,7 +366,19 @@ const createRazorpayOrder = async (userId, order) => {
             currency: razorpayOrder.currency,
             keyId: await getCredential('razorpay.keyId', 'RAZORPAY_KEY_ID'),
         };
+    };
+
+    try {
+        if (!order.giftCardAmountPaise) return await open();
+        return await sequelize.transaction(async (transaction) => {
+            const lockedOrder = await Order.findByPk(order.id, { transaction, lock: transaction.LOCK.UPDATE });
+            if (!lockedOrder || lockedOrder.status !== 'pending_payment') {
+                throw new AppError('PAYMENT_UNAVAILABLE', 409, 'This order can no longer accept payment.');
+            }
+            return open(transaction);
+        });
     } catch (err) {
+        if (err instanceof AppError) throw err;
         throw new AppError('PAYMENT_ERROR', 400, `Razorpay Order Creation Failed: ${getErrorMessage(err)}`);
     }
 };
@@ -667,13 +691,18 @@ const handlePayUReturn = async (payload) => {
 };
 
 
-const createOrder = async (userId, orderId) => {
-    const order = await Order.findOne({ where: { id: orderId, userId } });
+const checkoutOwner = (userId, guestSessionId) => guestSessionId
+    ? { userId: null, guestSessionId, giftCardAmountPaise: { [Op.gt]: 0 } }
+    : { userId };
+
+const createOrder = async (userId, orderId, guestSessionId = null) => {
+    const owner = checkoutOwner(userId, guestSessionId);
+    const order = await Order.findOne({ where: { id: orderId, ...owner } });
     if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
     // Zero-total (100% coupon) online orders never touch a provider.
     // Checked first so free orders placed as `processing/paid_online` return
     // idempotently instead of hitting the pending-only guard below.
-    if (isZeroTotal(order.total) && order.paymentMethod !== 'cod') {
+    if ((isZeroTotal(order.total) || (order.giftCardAmountPaise && razorpayDuePaise(order) === 0)) && order.paymentMethod !== 'cod') {
         const existingFree = await Payment.findOne({ where: { orderId: order.id } });
         if (existingFree?.status === 'paid_online') {
             return { provider: order.paymentMethod, freeOrder: true, amount: 0, currency: existingFree?.currency || 'INR' };
@@ -708,7 +737,7 @@ const createOrder = async (userId, orderId) => {
     // is opening a new provider session.
     let paymentExpiresAt;
     await sequelize.transaction(async (t) => {
-        const lockedOrder = await Order.findOne({ where: { id: order.id, userId }, transaction: t, lock: t.LOCK.UPDATE });
+        const lockedOrder = await Order.findOne({ where: { id: order.id, ...owner }, transaction: t, lock: t.LOCK.UPDATE });
         if (!lockedOrder || !['pending_payment', 'confirmed', 'on_hold'].includes(lockedOrder.status)) {
             throw new AppError('VALIDATION_ERROR', 400, 'This order can no longer accept a payment attempt. Please start a new order.');
         }
@@ -740,7 +769,7 @@ const createOrder = async (userId, orderId) => {
             await Payment.create({
                 orderId: lockedOrder.id,
                 provider: lockedOrder.paymentMethod,
-                amount: lockedOrder.total,
+                amount: lockedOrder.giftCardAmountPaise ? razorpayDuePaise(lockedOrder) / 100 : lockedOrder.total,
                 currency: (currencySetting?.value || 'INR').toUpperCase(),
                 status: 'payment_pending',
                 expiresAt: paymentExpiresAt,
@@ -768,7 +797,7 @@ const createOrder = async (userId, orderId) => {
 /**
  * Verifies Razorpay Signature
  */
-const verifyRazorpayPayment = async (userId, orderId, paymentData) => {
+const verifyRazorpayPayment = async (userId, orderId, paymentData, guestSessionId = null) => {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = paymentData || {};
 
     const keySecret = await getCredential('razorpay.keySecret', 'RAZORPAY_KEY_SECRET');
@@ -780,7 +809,7 @@ const verifyRazorpayPayment = async (userId, orderId, paymentData) => {
         throw new AppError('VALIDATION_ERROR', 400, 'Missing payment verification data');
     }
 
-    const order = await Order.findOne({ where: { id: orderId, userId } });
+    const order = await Order.findOne({ where: { id: orderId, ...checkoutOwner(userId, guestSessionId) } });
     if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
     if (order.paymentMethod !== 'razorpay') {
         throw new AppError('VALIDATION_ERROR', 400, 'This order is not a Razorpay order');
@@ -788,7 +817,11 @@ const verifyRazorpayPayment = async (userId, orderId, paymentData) => {
 
     const payment = await Payment.findOne({ where: { orderId: order.id, provider: 'razorpay' } });
     if (!payment) throw new AppError('NOT_FOUND', 404, 'Payment record not found for this order');
-    if (payment.status === 'paid_online') return { success: true };
+    if (payment.status === 'paid_online' || (order.giftCardAmountPaise && ['refunded', 'partially_refunded'].includes(payment.status))) {
+        return payment.metadata?.lateSettlement
+            ? { success: true, status: 'late_settlement', orderCancelled: true }
+            : { success: true };
+    }
     // Bind the verification to the provider order created for THIS order.
     // Without this, a signature from a cheap order could replay against an
     // expensive order (same key secret signs both).
@@ -838,7 +871,7 @@ const validateRazorpayPayment = (providerPayment, { order, payment, expectedOrde
     if (expectedOrderId && providerPayment.order_id !== expectedOrderId) {
         throw new AppError('PAYMENT_ERROR', 400, 'Razorpay payment does not belong to this order');
     }
-    if (Number(providerPayment.amount) !== Math.round(Number(order.total) * 100)) {
+    if (Number(providerPayment.amount) !== razorpayDuePaise(order)) {
         throw new AppError('PAYMENT_ERROR', 400, 'Razorpay payment amount does not match order total');
     }
     if (String(providerPayment.currency).toUpperCase() !== String(payment.currency).toUpperCase()) {
@@ -868,6 +901,9 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {}, 
         const previousOrderStatus = lockedOrder.status;
         const shouldFinalizePendingOrder = lockedOrder.status === 'pending_payment';
         if (['pending_payment', 'confirmed', 'on_hold'].includes(lockedOrder.status)) {
+            if (lockedOrder.giftCardAmountPaise) {
+                await require('../giftCard/giftCard.service').settle(lockedOrder.id, 'captured', t);
+            }
             await lockedOrder.update({ status: 'processing' }, { transaction: t });
         }
 
@@ -878,6 +914,10 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {}, 
         });
         const paymentAttemptExpired = Boolean(payment?.expiresAt && new Date(payment.expiresAt).getTime() <= Date.now());
         const paymentWasAlreadyPaid = payment?.status === 'paid_online';
+        if (lockedOrder.giftCardAmountPaise && ['refunded', 'partially_refunded'].includes(payment?.status)) {
+            lateSettlement = Boolean(payment.metadata?.lateSettlement);
+            return;
+        }
         lateSettlement = !paymentWasAlreadyPaid && ['cancelled', 'closed'].includes(previousOrderStatus);
 
         if (payment && payment.status !== 'paid_online') {
@@ -1268,6 +1308,11 @@ const handleWebhook = async (rawOrParsedBody, signature) => {
             ? JSON.parse(rawOrParsedBody)
             : rawOrParsedBody;
     const event = payload.event;
+    const dispute = payload.payload?.dispute?.entity;
+    if (event === 'payment.dispute.created' && dispute?.payment_id && dispute.id) {
+        await require('../giftCard/giftCard.service').dispute(dispute.payment_id, dispute.id);
+        return { received: true };
+    }
     const paymentEntity = payload.payload?.payment?.entity;
     const paymentId = paymentEntity?.id;
 
@@ -1284,6 +1329,13 @@ const handleWebhook = async (rawOrParsedBody, signature) => {
             const providerPayment = await razorpay.payments.fetch(paymentId);
             if (String(providerPayment?.status || '').toLowerCase() !== 'captured') {
                 throw new AppError('PAYMENT_ERROR', 400, 'Razorpay has not confirmed this payment as captured');
+            }
+            const giftCards = require('../giftCard/giftCard.service');
+            const giftPurchaseId = providerPayment.notes?.giftCardPurchaseId || paymentEntity.notes?.giftCardPurchaseId
+                || (!paymentEntity.notes?.orderId && (await giftCards.purchaseForProviderOrder(providerPayment.order_id))?.id);
+            if (giftPurchaseId) {
+                await giftCards.capture(giftPurchaseId, providerPayment);
+                return { received: true };
             }
             const noteOrderId = paymentEntity.notes?.orderId;
             if (!noteOrderId) throw new AppError('PAYMENT_ERROR', 400, 'Razorpay webhook has no local order reference');
@@ -1307,6 +1359,13 @@ const handleWebhook = async (rawOrParsedBody, signature) => {
             throw new AppError('PAYMENT_ERROR', 503, `Could not verify Razorpay webhook payment: ${getErrorMessage(err)}`);
         }
     } else if (event === 'payment.failed') {
+        const giftCards = require('../giftCard/giftCard.service');
+        const purchaseId = paymentEntity.notes?.giftCardPurchaseId || (!paymentEntity.notes?.orderId && paymentEntity.order_id
+            && (await giftCards.purchaseForProviderOrder(paymentEntity.order_id))?.id);
+        if (purchaseId) {
+            await giftCards.failed(purchaseId, paymentEntity.order_id);
+            return { received: true };
+        }
         failedOrderId = paymentEntity.notes?.orderId || null;
     }
 
@@ -1768,4 +1827,4 @@ const saveGatewayCredentials = async (gatewayId, credentials, actingUserId) => {
     return { success: true, gateway: gatewayId };
 };
 
-module.exports = { createOrder, verifyPayment, handleWebhook, handleCashfreeWebhook, handleStripeWebhook, handlePayUReturn, markPaymentFailed, markOrderPaid, confirmCodPayment, getGatewayStatuses, saveGatewayCredentials, initiateProviderRefund, fetchProviderRefundStatus };
+module.exports = { verifyRazorpayPayment, getCredential, getRazorpayClient, createOrder, verifyPayment, handleWebhook, handleCashfreeWebhook, handleStripeWebhook, handlePayUReturn, markPaymentFailed, markOrderPaid, confirmCodPayment, getGatewayStatuses, saveGatewayCredentials, initiateProviderRefund, fetchProviderRefundStatus };
