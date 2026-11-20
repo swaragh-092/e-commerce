@@ -202,7 +202,13 @@ describe('Orbi storefront SEO', () => {
     db.Page.findAll.mockResolvedValue([page]);
     const res = await get('/page.html?slug=policies');
     expect(res.statusCode).toBe(200);
-    expect(res.body).toContain('<h1>About our policies</h1>');
+    expect(res.body).toContain('id="cms-page-title">About our policies</h1>');
+    expect(res.body).toContain('id="cms-page-breadcrumb" aria-current="page">About our policies</span>');
+    expect(res.body).toContain('class="cms-banner-image" src="https://backend.test/uploads/growers.jpg"');
+    expect(res.body).toContain('<div data-orbi-cms-rendered>');
+    expect(res.body).toContain('class="nav-links"');
+    expect(res.body).toContain('data-orbi-footer-menu="quick_links"');
+    expect(res.body).toContain('data-orbi-footer-menu="footer_column"');
     expect(res.body).toContain('<h2>Delivery</h2>');
     expect(res.body).toContain('<title>Policies for growers | Orbi Seeds</title>');
     expect(res.body).toContain('content="Read about our policies"');

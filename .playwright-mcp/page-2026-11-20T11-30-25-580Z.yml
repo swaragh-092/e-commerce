@@ -1,0 +1,108 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e54]:
+    - banner [ref=e55]:
+      - generic [ref=e56]:
+        - button "open drawer" [ref=e57] [cursor=pointer]
+        - img "ORBI SEEDS" [ref=e61]
+        - link "View Store" [ref=e62] [cursor=pointer]:
+          - /url: /
+        - button "S" [ref=e65] [cursor=pointer]
+    - main [ref=e67]:
+      - generic [ref=e117]:
+        - navigation [ref=e323]:
+          - list [ref=e324]:
+            - listitem [ref=e325]:
+              - link "Pages" [ref=e326] [cursor=pointer]:
+                - /url: /admin/pages
+            - listitem [aria-hidden] [ref=e327]: /
+            - listitem [ref=e328]:
+              - paragraph [ref=e329]: Edit Page
+        - generic [ref=e330]:
+          - generic [ref=e331]:
+            - button [ref=e332] [cursor=pointer]
+            - generic [ref=e335]:
+              - 'heading "Edit: Privacy Policy" [level=1] [ref=e336]'
+              - generic [ref=e337]:
+                - text: "Slug:"
+                - code [ref=e338]: /p/privacy-policy-1
+          - generic [ref=e339]:
+            - button "View Live" [ref=e340] [cursor=pointer]
+            - button "Save Page" [ref=e344] [cursor=pointer]
+        - generic [ref=e348]:
+          - generic [ref=e349]:
+            - generic [ref=e350]:
+              - generic [ref=e351]:
+                - generic [ref=e352]: Page Title *
+                - generic [ref=e353]:
+                  - textbox "Page Title *" [ref=e354]: Privacy Policy
+                  - group [aria-hidden]:
+                    - generic: Page Title *
+              - tablist [ref=e358]:
+                - tab "Visual" [ref=e359] [cursor=pointer]
+                - tab "HTML Code" [ref=e362] [cursor=pointer]
+                - tab "Preview" [selected] [ref=e365] [cursor=pointer]
+              - iframe [ref=e369]:
+                - generic [ref=f2e1]:
+                  - paragraph [ref=f2e2]: This notice explains how Orbi Seeds International Pvt. Ltd. uses information when you browse our website, contact us, submit a seed enquiry, or place an order where online ordering is available.
+                  - heading "Information you provide" [level=2] [ref=f2e3]
+                  - paragraph [ref=f2e4]: When you contact us or send an enquiry, you may provide your name, email address, telephone number and details of the varieties or quantities you are interested in. An order may also require billing and delivery information. Share only the information needed to handle your request.
+                  - heading "How information is used" [level=2] [ref=f2e5]
+                  - paragraph [ref=f2e6]: We use these details to respond to enquiries, communicate about requests and orders, and provide customer support. The website may use browser storage to remember items in an enquiry list or wishlist. If you subscribe to updates, use the unsubscribe option in the message or contact us to change your preference.
+                  - heading "Service providers" [level=2] [ref=f2e7]
+                  - paragraph [ref=f2e8]: Where needed to provide a service, relevant information may be shared with providers that help operate the website, deliver communications, process payments or deliver an order. For example, a carrier needs the delivery details for a shipment it handles.
+                  - heading "Privacy requests" [level=2] [ref=f2e9]
+                  - paragraph [ref=f2e10]:
+                    - text: For a question about your information, or to ask about access, correction, deletion or withdrawal of consent where applicable, contact
+                    - link "info@orbiseeds.com" [ref=f2e11] [cursor=pointer]:
+                      - /url: mailto:info@orbiseeds.com
+                    - text: . Tell us how you interacted with the website so we can identify the relevant information.
+            - generic [ref=e370]:
+              - heading "SEO" [level=6] [ref=e371]
+              - generic [ref=e372]:
+                - generic: Meta Title
+                - generic [ref=e373]:
+                  - textbox "Meta Title" [ref=e374]:
+                    - /placeholder: Privacy Policy
+                  - group [aria-hidden]:
+                    - generic: Meta Title
+              - generic [ref=e375]:
+                - generic [ref=e376]: Meta Description
+                - generic [ref=e377]:
+                  - textbox "Meta Description" [ref=e378]:
+                    - /placeholder: Brief description for search engines (150–160 chars recommended)
+                    - text: Learn how Orbi Seeds handles information from website visits, seed enquiries and orders, and how to contact us about privacy.
+                  - group [aria-hidden]:
+                    - generic: Meta Description
+          - generic [ref=e379]:
+            - generic [ref=e380]:
+              - heading "Settings" [level=6] [ref=e381]
+              - generic [ref=e382]:
+                - generic [ref=e383]: Status
+                - generic [ref=e384]:
+                  - combobox "Draft" [ref=e385] [cursor=pointer]
+                  - textbox [aria-hidden]: draft
+                  - group [aria-hidden]:
+                    - generic: Status
+              - generic [ref=e386]:
+                - generic [ref=e387]: Sort Order
+                - generic [ref=e388]:
+                  - spinbutton "Sort Order" [ref=e389]: "10"
+                  - group [aria-hidden]:
+                    - generic: Sort Order
+                - paragraph [ref=e390]: Lower numbers appear first
+              - separator [ref=e391]
+              - heading "Storefront Link Placement" [level=6] [ref=e392]
+              - generic [ref=e393]:
+                - generic [ref=e394]: Position
+                - generic [ref=e395]:
+                  - combobox "None (Hidden from menus)" [ref=e396] [cursor=pointer]
+                  - textbox [aria-hidden]: none
+                  - group [aria-hidden]:
+                    - generic: Position
+            - generic [ref=e397]:
+              - heading "Page Banner" [level=6] [ref=e398]
+              - button "Select or Upload Banner" [ref=e400] [cursor=pointer]
+              - generic [ref=e401]: "Recommended: 1920×400px. Shown as a full-width hero on the page."
+  - alert [ref=e402]:
+    - generic [ref=e406]: Page created successfully.
+    - button "Close" [ref=e408] [cursor=pointer]

@@ -10,8 +10,8 @@ const getEditorHtml = (quill) => {
 };
 
 const applyHtmlToEditor = (quill, html) => {
-  // Always clear the editor first to ensure we are replacing content, not appending
-  quill.setText('');
+  // Replacing content from props must not report an empty edit to the caller.
+  quill.setText('', 'silent');
   if (html) {
     quill.clipboard.dangerouslyPasteHTML(0, html, 'silent');
   }

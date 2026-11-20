@@ -119,3 +119,56 @@ it('keeps public menu entity links on the Orbi storefront', () => {
     dom.window.close();
   }
 });
+
+it('renders each Orbi footer placement separately in backend order', async () => {
+  const dom = new JSDOM(source('about-orbis.html'), {
+    url: 'https://seeds.test/store/page.html?slug=page-check', runScripts: 'outside-only',
+  });
+  try {
+    const { window } = dom;
+    window.$ = () => ({ length: 0, ready() {}, on() {} });
+    window.API_URL = 'https://backend.test/api/';
+    window.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, data: { items: [
+        { label: 'Page Check', placement: 'footer_column', targetType: 'page', url: '/p/page-check' },
+        { label: 'Hidden', placement: 'footer_column', isVisible: false, url: '/hidden' },
+        { label: 'Partner', placement: 'quick_links', url: 'https://partner.test/about', openInNewTab: true },
+        { label: 'Category group', placement: 'quick_links', children: [
+          { label: 'Flowers', url: '/products?category=flowers' },
+          { label: 'Seed guide', placement: 'footer_column', url: '/blogs/seed-guide' },
+        ] },
+      ] } }),
+    });
+    window.eval(source('js/common.js'));
+    window.eval('setActiveLinks = function () {}');
+    await window.fetchAndRenderFooterMenu();
+    expect(window.fetch).toHaveBeenCalledWith('https://backend.test/api/menus/slug/public/otbi-footer?hideEmpty=true');
+    const quickLinks = window.document.querySelector('[data-orbi-footer-menu="quick_links"]');
+    const footerColumn = window.document.querySelector('[data-orbi-footer-menu="footer_column"]');
+    const links = (section) => Array.from(section.querySelectorAll('a'), (link) => [link.textContent, link.getAttribute('href')]);
+    expect(quickLinks.hidden).toBe(false);
+    expect(footerColumn.hidden).toBe(false);
+    expect(links(quickLinks)).toEqual([
+      ['Partner', 'https://partner.test/about'],
+      ['Flowers', 'products.html?category=flowers'],
+    ]);
+    expect(links(footerColumn)).toEqual([
+      ['Page Check', 'page.html?slug=page-check'],
+      ['Seed guide', 'resource.html?slug=seed-guide'],
+    ]);
+    const partner = quickLinks.querySelector('a');
+    expect(partner.target).toBe('_blank');
+    expect(partner.rel).toBe('noopener noreferrer');
+
+    window.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, data: { items: [{ label: 'Page Check', placement: 'footer_column', url: '/p/page-check' }] } }),
+    });
+    await window.fetchAndRenderFooterMenu();
+    expect(quickLinks.hidden).toBe(true);
+    expect(footerColumn.hidden).toBe(false);
+  } finally {
+    dom.window.close();
+  }
+});

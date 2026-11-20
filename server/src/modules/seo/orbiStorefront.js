@@ -88,7 +88,11 @@ function mountOrbiStorefront(app) {
       },
     });
     const banner = cmsImageUrl(page.bannerUrl);
-    return `<h1>${escape(page.title)}</h1>${banner ? `<img src="${escape(banner)}" alt="">` : ''}${content || ''}`;
+    return {
+      title: escape(page.title),
+      banner: banner ? `<img class="cms-banner-image" src="${escape(banner)}" alt="">` : '',
+      body: `<div data-orbi-cms-rendered>${content || ''}</div>`,
+    };
   }
 
   async function publishedPages(attributes) {
@@ -273,12 +277,12 @@ function mountOrbiStorefront(app) {
     try {
       let status = route.missing ? 404 : 200;
       let data;
-      let cmsBody = '';
+      let cms;
       let cmsLinks = '';
       try {
         const result = await getPageMetadata(route);
         data = result.data;
-        if (result.page) cmsBody = cmsMarkup(result.page);
+        if (result.page) cms = cmsMarkup(result.page);
         if (route.file === 'sitemap.html') {
           const records = await publishedPages(['title', 'slug']);
           cmsLinks = records.map(({ title, slug }) => `<li><a href="${escape(pagePath('page.html', { slug }))}">${escape(title)}</a></li>`).join('\n');
@@ -316,7 +320,10 @@ function mountOrbiStorefront(app) {
         .replace(/<!-- orbi-seo-start -->[\s\S]*?<!-- orbi-seo-end -->/, () => `<title>${escape(head.title)}</title>\n${tags}\n${rendered}\n${boot}`)
         .replace('<!-- orbi-seo-preview -->', () => preview)
         .replace('<!-- orbi-cms-links -->', () => cmsLinks)
-        .replace(/<!-- orbi-cms-start -->[\s\S]*?<!-- orbi-cms-end -->/, (original) => cmsBody || original));
+        .replace('<!-- orbi-cms-banner -->', () => cms?.banner || '')
+        .replace(/<!-- orbi-cms-title-start -->[\s\S]*?<!-- orbi-cms-title-end -->/, (original) => cms?.title || original)
+        .replace(/<!-- orbi-cms-breadcrumb-start -->[\s\S]*?<!-- orbi-cms-breadcrumb-end -->/, (original) => cms?.title || original)
+        .replace(/<!-- orbi-cms-start -->[\s\S]*?<!-- orbi-cms-end -->/, (original) => cms?.body || original));
     } catch (err) {
       next(err);
     }

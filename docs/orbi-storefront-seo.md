@@ -54,8 +54,9 @@ product's slug URL. Clean listing pagination keeps its page parameter.
 
 Published CMS Pages render their saved title, content and banner at the Orbi
 detail route when the backend Pages feature is enabled. The HTML site map links
-to published pages and the XML sitemap includes their indexable URLs. CMS
-Pages require the Express entry point. The Orbi storefront has no dedicated
+to published pages and the XML sitemap includes their indexable URLs. The Express entry point
+renders the CMS page in the initial HTML. Static hosting loads published CMS
+content and banner images from the Pages API in the browser. The Orbi storefront has no dedicated
 brand or tag collection routes.
 
 Selected storefront URLs use the SEO team's approved titles and descriptions

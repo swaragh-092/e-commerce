@@ -24,7 +24,7 @@ function setActiveLinks() {
     var currentCat = (currentParams.get('category') || currentParams.get('cat') || '').toLowerCase();
 
     // Select all links in header navigation, dropdowns, megamenu, mobile menu, and footer
-    var $navLinks = $('.nav-links a, .mobile-menu-content a, .footer-active-links ul li a, footer .columns-sec li a');
+    var $navLinks = $('.nav-links a, .mobile-menu-content a, [data-orbi-footer-menu] a, .footer-active-links ul li a, footer .columns-sec li a');
 
     var $activeNavLinks = $navLinks.filter(function () {
         // Catalog previews use hover/focus states; the top-level link marks the current section.
@@ -364,6 +364,61 @@ function fetchAndRenderMenu() {
         });
 }
 
+function renderFooterLinks(items, list) {
+    visibleMenuItems(items).forEach(function (item) {
+        var entry = document.createElement('li');
+        var target = typeof item.url === 'string' ? item.url.trim() : '';
+        if (/^(https?:|mailto:|tel:)/i.test(target) || item.targetType === 'category_tree' || (target && target !== '#')) {
+            var href = /^(https?:|mailto:|tel:)/i.test(target) ? target : getMenuItemUrl(item);
+            var resolved = new URL(href, window.location.href);
+            if (['http:', 'https:', 'mailto:', 'tel:'].includes(resolved.protocol)) {
+                var link = document.createElement('a');
+                link.href = href;
+                link.textContent = item.label;
+                if (item.openInNewTab) {
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                }
+                entry.appendChild(link);
+            }
+        }
+        var children = document.createElement('ul');
+        renderFooterLinks(item.children, children);
+        if (children.childElementCount) entry.appendChild(children);
+        if (entry.childElementCount) list.appendChild(entry);
+    });
+}
+
+function groupFooterItems(items, groups, placement = 'quick_links', branch = groups[placement]) {
+    visibleMenuItems(items).forEach(function (item) {
+        var section = item.placement === 'quick_links' || item.placement === 'footer_column'
+            ? item.placement : placement;
+        var entry = { ...item, children: [] };
+        // Keep same-placement descendants nested. A different placement starts its own branch.
+        (section === placement ? branch : groups[section]).push(entry);
+        groupFooterItems(item.children, groups, section, entry.children);
+    });
+}
+
+function fetchAndRenderFooterMenu() {
+    var sections = document.querySelectorAll('[data-orbi-footer-menu]');
+    if (!sections.length) return;
+    return fetch(API_URL + 'menus/slug/public/otbi-footer?hideEmpty=true')
+        .then(readMenuResponse)
+        .then(function (result) {
+            var groups = { quick_links: [], footer_column: [] };
+            groupFooterItems(result.data?.items, groups);
+            sections.forEach(function (footer) {
+                var list = footer.querySelector('ul');
+                list.replaceChildren();
+                renderFooterLinks(groups[footer.dataset.orbiFooterMenu], list);
+                footer.hidden = !list.childElementCount;
+            });
+            setActiveLinks();
+        })
+        .catch(function (error) { console.error('Error fetching footer menu:', error); });
+}
+
 function applyCachedMenu() {
     try {
         var cached = JSON.parse(localStorage.getItem(menuDataCacheKey));
@@ -380,6 +435,7 @@ if (typeof $ !== 'undefined' && $('.nav-links').length > 0) applyCachedMenu();
 $(document).ready(function () {
     applyCachedMenu();
     fetchAndRenderMenu();
+    fetchAndRenderFooterMenu();
 });
 // active links code
 
