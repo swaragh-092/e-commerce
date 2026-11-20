@@ -116,6 +116,7 @@ function mountOrbiStorefront(app) {
   async function metadata(route, page) {
     let entity;
     let publicPath = route.publicPath;
+    let noIndex = route.noIndex;
     if (route.missing || ['wishlist.html', 'enquiry-list.html', 'thank-you.html'].includes(route.file)) return fallback(route);
 
     const fallbackData = fallback(route);
@@ -129,7 +130,12 @@ function mountOrbiStorefront(app) {
       ogImageAlt: global.ogImage ? '' : global.siteName,
     };
     if (route.kind === 'category') {
-      entity = flatten(await categoryService.getCategoryTree({ hideEmpty: true })).find((category) => category.slug === route.slug);
+      const matchesSlug = (category) => category.slug === route.slug;
+      entity = flatten(await categoryService.getCategoryTree({ hideEmpty: true })).find(matchesSlug);
+      if (!entity || (route.file === 'product.html' && !entity.children.length)) {
+        noIndex = noIndex || !entity;
+        entity = flatten(await categoryService.getCategoryTree()).find(matchesSlug);
+      }
       if (!entity) return null;
       publicPath = categoryPath(entity) + (route.page ? '&page=' + route.page : '');
     } else if (route.kind === 'page') {
@@ -166,7 +172,7 @@ function mountOrbiStorefront(app) {
       }
     }
     const data = await seo.getMetadataByPath(route.key, {
-      defaults, entity, kind: route.kind, noIndex: route.noIndex,
+      defaults, entity, kind: route.kind, noIndex,
       publicPath: canonical.pathname + canonical.search, override,
     });
     if (data.productData) {

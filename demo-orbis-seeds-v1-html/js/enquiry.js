@@ -4,7 +4,7 @@ $(document).ready(function () {
     var enquiryEnabled = true;
     C.getFeatures().then(function (features) {
         enquiryEnabled = features.enquiry !== false;
-        if (!enquiryEnabled) $('<style>').text('.add-enquiry-list, .open-enquiry-popup, .move-to-cart-btn, #move-all-to-cart-btn, #cart-enquiry-btn, a[href*="enquiry-list.html"] { display: none !important; }').appendTo('head');
+        if (!enquiryEnabled) $('<style>').text('.add-enquiry-list, .product-enquiry-quantity, .open-enquiry-popup, .move-to-cart-btn, #move-all-to-cart-btn, #cart-enquiry-btn, a[href*="enquiry-list.html"] { display: none !important; }').appendTo('head');
     }).catch(function () { /* Keep the page usable when feature settings cannot be refreshed. */ });
 
     /* ========================================================
@@ -110,9 +110,16 @@ $(document).ready(function () {
     function getCart() { return C.getCart(); }
     function saveCart(cart) { C.saveCart(cart); }
     function updateHeaderCounter() { $('#header-enquiry-count').text(getCart().length); }
-    window.addEventListener('orbi:cart-change', updateHeaderCounter);
+    function syncCartIndicators() {
+        updateHeaderCounter();
+        C.syncEnquiryButtons();
+    }
+    window.addEventListener('orbi:cart-change', syncCartIndicators);
     window.addEventListener('storage', function (event) {
-        if (event.key === 'enquiryCart') { updateHeaderCounter(); renderCart(); }
+        if (event.key === 'enquiryCart' || event.key === null) { syncCartIndicators(); renderCart(); }
+    });
+    window.addEventListener('pageshow', function (event) {
+        if (event.persisted) { syncCartIndicators(); renderCart(); }
     });
 
     $(document).on('click', '.add-enquiry-list', function (e) {
@@ -121,8 +128,32 @@ $(document).ready(function () {
         try {
             var line = C.actionLine(this);
             if (!line.id) return;
-            C.addToCart(line);
-            customAlert('Added!', line.name + (line.variantLabel ? ' (' + line.variantLabel + ')' : '') + ' has been added to your enquiry list.', 'success', 2000);
+            var hadFocus = document.activeElement === this;
+            if (C.addToCart(line, { incrementExisting: false })) {
+                if (hadFocus) this.parentElement.querySelector('[data-enquiry-step="1"]')?.focus();
+                customAlert('Added!', line.name + (line.variantLabel ? ' (' + line.variantLabel + ')' : '') + ' has been added to your enquiry list.', 'success', 2000);
+            } else {
+                syncCartIndicators();
+            }
+        } catch (error) { customAlert('Enquiry list', error.message, 'error', 2500); }
+    });
+
+    $(document).on('click', '.product-enquiry-quantity [data-enquiry-step]', function () {
+        if (!enquiryEnabled || this.disabled) return;
+        var addButton = this.closest('.product-enquiry-actions').querySelector('.add-enquiry-list');
+        try {
+            var key = C.key(C.actionLine(addButton));
+            var cart = getCart();
+            var index = cart.findIndex(function (item) { return C.key(item) === key; });
+            if (index === -1) { syncCartIndicators(); return; }
+
+            var quantity = cart[index].quantity + Number(this.dataset.enquiryStep);
+            var hadFocus = document.activeElement === this;
+            if (quantity === 0) cart.splice(index, 1);
+            else if (C.quantity(quantity) !== null) cart[index].quantity = quantity;
+            else return;
+            saveCart(cart);
+            if (quantity === 0 && hadFocus) addButton.focus();
         } catch (error) { customAlert('Enquiry list', error.message, 'error', 2500); }
     });
 
@@ -164,7 +195,7 @@ $(document).ready(function () {
         });
     }
 
-    updateHeaderCounter();
+    syncCartIndicators();
     renderCart();
 
     $(document).on('click', '.qty-btn', function (e) {

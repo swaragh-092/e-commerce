@@ -114,10 +114,10 @@
         localStorage.setItem('enquiryCart', JSON.stringify(cart));
         window.dispatchEvent(new Event('orbi:cart-change'));
     };
-    C.addToCart = function (line, transferId) {
+    C.addToCart = function (line, { transferId, incrementExisting = true } = {}) {
         var cart = C.getCart(), existing = cart.find(function (i) { return C.key(i) === C.key(line); });
         if (existing) {
-            if (transferId && (existing.wishlistTransfers || []).includes(transferId)) return;
+            if (!incrementExisting || (transferId && (existing.wishlistTransfers || []).includes(transferId))) return false;
             existing.quantity = Math.min(99999, existing.quantity + 1);
             if (transferId) existing.wishlistTransfers = (existing.wishlistTransfers || []).concat(transferId);
         }
@@ -126,6 +126,7 @@
             cart.push(Object.assign({}, line, { quantity: 1, wishlistTransfers: transferId ? [transferId] : [] }));
         }
         C.saveCart(cart);
+        return true;
     };
     C.productUrl = function (line) {
         if (!line.slug) return 'product.html';
@@ -182,6 +183,25 @@
             variantLabel: button.getAttribute('data-variant-label') || '', image: C.imageUrl(button.getAttribute('data-image')),
             slug: button.getAttribute('data-slug') || '', categorySlug: button.getAttribute('data-category') || '', unit: button.getAttribute('data-unit') || '', quantity: 1
         };
+    };
+    C.syncEnquiryButtons = function (root = document) {
+        var cartItems = new Map(C.getCart().map(function (item) { return [C.key(item), item]; }));
+        root.querySelectorAll('.add-enquiry-list').forEach(function (button) {
+            var section = button.closest('.product-sec');
+            var needsOption = section?.orbiProduct && C.hasVariants(section.orbiProduct) && !section.orbiVariant;
+            var item = !needsOption && cartItems.get(C.key({ id: button.dataset.id, variantId: button.dataset.variantId }));
+            var controls = button.parentElement.querySelector('.product-enquiry-quantity');
+            button.setAttribute('aria-disabled', String(Boolean(needsOption)));
+            if (!controls) return;
+            button.hidden = !!item;
+            controls.hidden = !item;
+            if (!item) return;
+
+            controls.querySelector('output').value = item.quantity;
+            controls.querySelector('[data-enquiry-step="-1"]').setAttribute('aria-label',
+                item.quantity === 1 ? 'Remove from enquiry list' : 'Decrease enquiry quantity');
+            controls.querySelector('[data-enquiry-step="1"]').disabled = C.quantity(item.quantity + 1) === null;
+        });
     };
     // Rich descriptions keep formatting; executable markup and arbitrary attributes are discarded.
     C.description = function (html) {
@@ -264,6 +284,7 @@
                     });
                 });
             });
+            C.syncEnquiryButtons(section);
             if (window.syncWishlistHearts) window.syncWishlistHearts();
         }
         host.addEventListener('change', function (event) {

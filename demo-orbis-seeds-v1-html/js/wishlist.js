@@ -106,7 +106,7 @@
     }
     async function move(line, resolve) {
         var resolved = await (resolve || C.resolveLine)(line);
-        C.addToCart(resolved, line.wishlistItemId);
+        C.addToCart(resolved, { transferId: line.wishlistItemId });
         try { await remove(line); }
         catch (error) { throw new Error('Added to your enquiry list. Could not remove it from the wishlist; retry to finish the move.'); }
     }

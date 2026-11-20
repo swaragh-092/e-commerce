@@ -478,7 +478,14 @@ function renderProducts(products, contentContainer, listContainer, requestedProd
             (product.shortDescription ? '<h4>Remarks</h4><p>' + esc(product.shortDescription) + '</p>' : '') +
             '<div class="product-options"></div><p class="product-selection-status" role="status"></p><p class="product-selected-price"></p>' +
             '<div class="product-enquiry-actions"><button type="button" class="view-product-btn open-enquiry-popup"' + metadata + '>Enquiry Now</button>' +
-            '<button type="button" class="view-product-btn add-enquiry-list"' + metadata + '>Add to Enquiry List</button></div>' +
+            '<button type="button" class="view-product-btn add-enquiry-list"' + metadata + '>Add to Enquiry List</button>' +
+            '<div class="product-enquiry-quantity" role="group" aria-label="Enquiry list quantity for ' + esc(product.name) + '" hidden>' +
+            '<span class="product-enquiry-status"><span aria-hidden="true">&#10003;</span> In Enquiry List</span>' +
+            '<div class="product-enquiry-stepper">' +
+            '<button type="button" data-enquiry-step="-1" aria-label="Decrease enquiry quantity">−</button>' +
+            '<output aria-label="Enquiry quantity"></output>' +
+            '<button type="button" data-enquiry-step="1" aria-label="Increase enquiry quantity">+</button>' +
+            '</div></div></div>' +
             '</div>' +
             '</div>';
         productDiv.querySelector('img').addEventListener('error', function () {
