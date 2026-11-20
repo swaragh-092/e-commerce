@@ -70,6 +70,7 @@ import { formatAttributeValue, getSwatchColor } from '../../utils/attributePrese
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import { formatSeoTitle } from '../../utils/seo/formatSeoTitle';
 import { formatOpenEndedDateRange } from '../../utils/dates';
 import ProductTagsInput from '../../components/admin/ProductTagsInput';
 import ProductCustomTabs from '../../components/admin/ProductCustomTabs';
@@ -1708,7 +1709,7 @@ const ProductEditPage = () => {
                   GOOGLE SEARCH PREVIEW
                 </Typography>
                 <Typography variant="body1" sx={{ color: '#1a0dab', fontSize: '18px', '&:hover': { textDecoration: 'underline' }, cursor: 'pointer', mb: 0.5 }}>
-                  {formData.metaTitle || formData.name || 'Product Name'} {settings?.seo?.titleSuffix || ' | My Store'}
+                  {formatSeoTitle(formData.metaTitle || formData.name || 'Product Name', settings)}
                 </Typography>
                 <Typography variant="body2" sx={{ color: '#006621', fontSize: '14px', mb: 0.5 }}>
                   {window.location.origin}/product/{formData.slug || 'slug'}

@@ -1,6 +1,6 @@
 {
     "general": {
-        "storeName": "My Store",
+        "storeName": "E-Commerce Store",
         "storeDescription": "Premium online shopping experience",
         "currency": "USD",
         "currencySymbol": "$",
@@ -171,7 +171,7 @@
         "igstRate": 0.18
     },
     "seo": {
-        "titleTemplate": "%s | My Store",
+        "titleTemplate": "",
         "defaultDescription": "Shop the best products online at unbeatable prices",
         "ogImage": "/assets/og-image.jpg"
     },

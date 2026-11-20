@@ -30,8 +30,20 @@ describe('SEO output', () => {
   it('keeps product social cards typed as products', () => {
     const output = head({ title: 'Seeds', type: 'product', image: '/uploads/seeds.png' });
     expect(output.meta.toString()).toContain('property="og:type" content="product"');
-    expect(output.meta.toString()).toContain('content="https://shop.test/uploads/seeds.png"');
+    expect(output.meta.toString()).toContain('content="https://shop.test/uploads/seeds.png?mediaVersion=editable1"');
     expect(output.title.toString()).toContain('Seeds | Shop');
+  });
+  it('uses the configured store name when the old SEO defaults are saved', () => {
+    state.settings = {
+      general: { storeName: 'ORBI SEEDS' },
+      seo: { siteName: 'My Store', titleTemplate: '%s | My Store', titleSuffix: ' | My Store' },
+    };
+    const output = head({ title: 'Marigold Seeds' });
+    expect(output.title.toString()).toContain('Marigold Seeds | ORBI SEEDS');
+    expect(output.meta.toString()).toContain('property="og:site_name" content="ORBI SEEDS"');
+    expect(formatSeoTitle('Marigold Seeds', {
+      ...state.settings, seo: { ...state.settings.seo, titleSuffix: '— Seed Catalogue' },
+    })).toBe('Marigold Seeds — Seed Catalogue');
   });
   it('uses the configured canonical origin for relative URLs and removes query parameters', () => {
     expect(resolveCanonicalUrl({ url: '/products/seeds?sort=price#details', settings: state.settings })).toBe('https://shop.test/products/seeds');

@@ -13,7 +13,7 @@ vi.mock('../../../services/categoryService', () => ({ getCategoryTree: vi.fn().m
 vi.mock('../../../services/brandService', () => ({ default: { getBrands: vi.fn().mockResolvedValue({ data: { data: [] } }) } }));
 vi.mock('../../../services/adminService', () => ({ getSaleLabels: vi.fn().mockResolvedValue({ data: { data: [] } }) }));
 vi.mock('../../../hooks/useSettings', () => ({
-  useSettings: () => ({ settings: {} }),
+  useSettings: () => ({ settings: { general: { storeName: 'ORBI SEEDS' } } }),
   useFeature: (name) => features[name] ?? false,
   useFeatureVisible: (name) => features[name] ?? false,
   useFeaturesResolved: () => true,
@@ -22,6 +22,7 @@ vi.mock('../../../hooks/useSettings', () => ({
 vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () => true }) }));
 vi.mock('../../../context/NotificationContext', () => ({ useNotification: () => ({ notify, confirm: async () => true }) }));
 vi.mock('../../../components/admin/ProductCustomTabs', () => ({ default: () => null }));
+vi.mock('../../../components/admin/ProductRelatedPicker', () => ({ default: () => null }));
 vi.mock('../../../components/admin/ProductComboBuilder', () => ({ default: () => null }));
 vi.mock('../../../components/admin/ProductVariantsPanel', () => ({ default: () => null }));
 vi.mock('../../../components/common/MediaPicker', () => ({ default: () => null }));
@@ -36,7 +37,15 @@ describe('product editor validation', () => {
   getTags.mockResolvedValue({ data: [] });
     features.pricing = false;
     features.showPrice = false;
+    features.seo = false;
     createProduct.mockResolvedValue({ data: { id: 'new-product' } });
+  });
+
+  it('uses Store Identity in the product search preview', () => {
+    features.seo = true;
+    renderForm();
+    fireEvent.change(screen.getByLabelText('Product Name *'), { target: { value: 'Marigold Seeds' } });
+    expect(screen.getByText('Marigold Seeds | ORBI SEEDS')).toBeInTheDocument();
   });
 
   it('saves a catalog product without requiring a hidden MRP field', async () => {
