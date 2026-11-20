@@ -24,6 +24,61 @@
         'thank-you.html': ['Thank You', 'Review your Orbi Seeds enquiry confirmation.'],
         'error.html': ['Page Not Found', 'The requested Orbi Seeds page could not be found.']
     };
+    // Complete titles and descriptions supplied by the SEO team.
+    const approvedCopy = {
+        '/': {
+            metaTitle: 'Best quality hybrid seeds for vegetables, fruits & flowers | Orbi Seeds International Pvt. Ltd.',
+            metaDescription: "Discover Orbi Seeds' diverse range of hybrid vegetable, fruit and flower seeds, backed by advanced research, innovative breeding and seed development for the world.",
+        },
+        '/about-orbis.html': {
+            metaTitle: 'About Orbi Seeds | Global Hybrid Seed Company',
+            metaDescription: 'Learn about Orbi Seeds International, a global seed company specializing in hybrid seed development, agricultural research, innovative breeding and diverse seed varieties.',
+        },
+        '/category/fruit': {
+            metaTitle: 'Hybrid Fruit Seeds – Watermelon & Muskmelon | Orbi Seeds',
+            metaDescription: 'Explore quality hybrid fruit seeds from Orbi Seeds, including watermelon and muskmelon varieties developed through advanced breeding and research for better cultivation.',
+        },
+        '/category/vegetables': {
+            metaTitle: 'Hybrid Vegetable Seeds & Varieties | Orbi Seeds India',
+            metaDescription: 'Explore hybrid vegetable seeds from Orbi Seeds, including tomato, cucumber, cabbage, cauliflower, okra, eggplant and pepper varieties for diverse farming needs.',
+        },
+        '/category/flowers': {
+            metaTitle: 'Hybrid Flower Seeds for Growers | Orbi Seeds India',
+            metaDescription: 'Explore quality flower seeds from Orbi Seeds, featuring diverse ornamental flower varieties developed through innovative breeding for gardens and commercial cultivation.',
+        },
+        '/research-and-development.html': {
+            metaTitle: 'Agricultural R&D & Seed Breeding | Orbi Seeds',
+            metaDescription: 'Discover Orbi Seeds agricultural research and development, specializing in hybrid vegetable seed breeding, molecular genetics, seed quality testing and crop improvement.',
+        },
+        '/partners.html': {
+            metaTitle: 'Global Seed Industry Partners & Collaborations | Orbi Seeds',
+            metaDescription: "Discover Orbi Seeds' global partnerships with leading seed companies, supporting vegetable seed breeding, agricultural innovation and international collaboration.",
+        },
+        '/blogs': {
+            metaTitle: 'Agricultural Resources & Seed Information | Orbi Seeds',
+            metaDescription: "Explore Orbi Seeds' agricultural resources for useful information on vegetable seeds, hybrid varieties, seed technology, crop development and farming practices.",
+        },
+        '/gallery.html': {
+            metaTitle: 'Agricultural & Seed Gallery | Orbi Seeds International Pvt. Ltd.',
+            metaDescription: 'Explore the Orbi Seeds gallery featuring agricultural activities, research facilities, seed production and company events.',
+        },
+        '/gallery/vegetables': {
+            metaTitle: 'Vegetable Seed Crops Photo Gallery | Orbi Seeds',
+            metaDescription: 'Explore the Orbi Seeds vegetable gallery featuring images of diverse vegetable varieties, hybrid crops and agricultural products developed through seed research and innovation.',
+        },
+        '/gallery/flower': {
+            metaTitle: 'Flower Seed Crops Photo Gallery | Orbi Seeds',
+            metaDescription: 'Explore the ORBI Seeds flower gallery featuring beautiful flower varieties, ornamental crops and flower images showcasing diversity in breeding and cultivation.',
+        },
+        '/gallery/fresh-fruits': {
+            metaTitle: 'Fresh Fruit Varieties Gallery & Images | ORBI Seeds',
+            metaDescription: 'Explore the ORBI Seeds fresh fruits gallery featuring watermelon, muskmelon and other fruit varieties, showcasing hybrid crop quality, colours and characteristics.',
+        },
+        '/contact-us.html': {
+            metaTitle: 'Contact the leading seed company in India | Orbi Seeds',
+            metaDescription: 'Contact Orbi Seeds for hybrid seed enquiries, product information, distribution opportunities and business collaborations. Connect with our team today.',
+        },
+    };
     const utility = ['wishlist.html', 'enquiry-list.html', 'thank-you.html', 'error.html'];
     const siteName = 'Orbi Seeds';
     const pagePath = (file, params) => {
@@ -65,6 +120,7 @@
             route.page = Number(page);
             route.publicPath += (route.publicPath.includes('?') ? '&' : '?') + 'page=' + page;
         }
+        if (!route.noIndex && !route.page) route.approvedCopy = approvedCopy[route.key];
         return route;
     }
 

@@ -1,10 +1,50 @@
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { JSDOM } from 'jsdom';
 import { expect, it, vi } from 'vitest';
 
 const storefront = resolve(import.meta.dirname, '../../../../demo-orbis-seeds-v1-html');
 const source = (file) => readFileSync(resolve(storefront, file), 'utf8');
+
+const require = createRequire(import.meta.url);
+const { resolve: resolveRoute } = require(resolve(storefront, 'js/seo-routes.js'));
+
+it.each([
+  'index.html', 'about-orbis.html', 'research-and-development.html', 'partners.html',
+  'resources.html', 'gallery.html', 'contact-us.html',
+])('includes the approved copy in the static HTML for %s', (file) => {
+  const { approvedCopy } = resolveRoute(file, new URLSearchParams());
+  const { window } = new JSDOM(source(file));
+  try {
+    expect(window.document.title).toBe(approvedCopy.metaTitle);
+    expect(window.document.querySelector('meta[name="description"]').content).toBe(approvedCopy.metaDescription);
+    expect(window.document.querySelector('meta[property="og:title"]').content).toBe(approvedCopy.metaTitle);
+    expect(window.document.querySelector('meta[name="twitter:description"]').content).toBe(approvedCopy.metaDescription);
+  } finally {
+    window.close();
+  }
+});
+
+it.each([
+  ['product.html', '?cat=flowers'],
+  ['gallery-detail.html', '?album=fresh-fruits'],
+])('uses the approved copy for %s%s before the backend responds', (file, query) => {
+  const { approvedCopy } = resolveRoute(file, new URLSearchParams(query));
+  const { window } = new JSDOM(source(file), {
+    url: 'https://seeds.test/store/' + file + query, runScripts: 'outside-only',
+  });
+  try {
+    window.API_URL = 'https://backend.test/api/';
+    window.fetch = vi.fn().mockResolvedValue({ ok: false });
+    for (const script of ['seo-routes.js', 'seo.js']) window.eval(source('js/' + script));
+    window.OrbiSEO.refresh({ name: 'Backend name', metaTitle: 'Old title', metaDescription: 'Old description' });
+    expect(window.document.title).toBe(approvedCopy.metaTitle);
+    expect(window.document.querySelector('meta[name="description"]').content).toBe(approvedCopy.metaDescription);
+  } finally {
+    window.close();
+  }
+});
 
 it('updates one canonical and preserves the selected product when backend metadata is unavailable', async () => {
   const dom = new JSDOM(source('products.html'), {

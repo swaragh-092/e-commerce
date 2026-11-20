@@ -58,6 +58,11 @@ to published pages and the XML sitemap includes their indexable URLs. CMS
 Pages require the Express entry point. The Orbi storefront has no dedicated
 brand or tag collection routes.
 
+Selected storefront URLs use the SEO team's approved titles and descriptions
+from `demo-orbis-seeds-v1-html/js/seo-routes.js`. For those URLs, the approved copy
+takes precedence over global title formatting and saved category copy. An
+explicit matching SEO URL Override can still replace either field.
+
 Product and variant image rows use their saved alt text first and Media
 Library alt text second. Blog photos and album covers use Media Library alt
 text. Category records currently store image URLs, and the storefront uses
