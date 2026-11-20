@@ -8,6 +8,7 @@ const path = require('path');
 const compression = require('compression');
 const cookieParser = require('cookie-parser');
 const { v4: uuidv4 } = require('uuid');
+const { csrfToken, verifyCsrf } = require('./middleware/csrf.middleware');
 const { errorHandler } = require('./middleware/errorHandler.middleware');
 const { globalLimiter } = require('./middleware/rateLimiter.middleware');
 const { success, error } = require('./utils/response');
@@ -30,7 +31,7 @@ app.use((req, res, next) => {
 });
 const corsOptionsDelegate = (req, callback) => {
   const origin = req.headers.origin;
-  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  const host = req.get('host');
 
   const rawOrigins = [
     ...(process.env.CORS_URL ? process.env.CORS_URL.split(',') : []),
@@ -64,16 +65,8 @@ const corsOptionsDelegate = (req, callback) => {
     if (!hasWildcard && configuredOrigins.includes(cleanOrigin)) {
       isAllowed = true;
     } else if (host && !hasWildcard) {
-      // Allow if origin hostname matches the request host (e.g. https://soft.swaragh.net)
-      const cleanHost = host.split(':')[0].toLowerCase();
-      try {
-        const originUrl = new URL(cleanOrigin);
-        if (originUrl.hostname.toLowerCase() === cleanHost) {
-          isAllowed = true;
-        }
-      } catch (e) {
-        // Invalid origin format
-      }
+      // Require the full origin, including scheme and port.
+      isAllowed = cleanOrigin === `${req.protocol}://${host}`;
     }
   }
 
@@ -91,6 +84,8 @@ const { mountOrbiStorefront } = require('./modules/seo/orbiStorefront');
 
 // Global rate limiting
 app.use('/api', globalLimiter);
+app.get('/api/csrf-token', csrfToken);
+app.use('/api', verifyCsrf);
 mountOrbiStorefront(app);
 
 // Body Parsing

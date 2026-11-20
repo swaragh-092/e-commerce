@@ -10,6 +10,10 @@ All notable changes to this project are documented here.
 - Register gift card permissions in Access Control and add an E-commerce-only issuance switch in Platform Features.
 - Track delayed permanent gift card email bounces through an authenticated mail event relay.
 
+### Fixed
+
+- Require CSRF tokens for browser API writes and cookie-authenticated API writes.
+
 ## [1.7.0.0] - 2026-11-20
 
 ### Added
