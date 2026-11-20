@@ -8,13 +8,17 @@
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
     };
+    C.imageAlt = function (image, fallback) {
+        var candidates = image && [image.alt, image.media && image.media.alt];
+        return (candidates && candidates.find(function (alt) { return typeof alt === 'string' && alt.trim(); }) || fallback || '').trim();
+    };
     C.imageUrl = function (url) {
         if (typeof url !== 'string' || !url.trim()) return 'images/orbi-seeds-logo.png';
         url = url.trim();
         if (/^https?:\/\//i.test(url)) return url;
         if (/^(?:[a-z][a-z\d+.-]*:|\/\/|\\)/i.test(url)) return 'images/orbi-seeds-logo.png';
         if (url.charAt(0) === '/') return String(window.APP_URL || window.location.origin).replace(/\/+$/, '') + url;
-        return url;
+        return url.startsWith('uploads/') ? String(window.APP_URL || window.location.origin).replace(/\/+$/, '') + '/' + url : url;
     };
     C.valueLabel = function (value, attribute) {
         value = value || {};
@@ -65,15 +69,18 @@
     };
     function primaryImage(images) {
         var ordered = (images || []).slice().sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
-        var image = ordered.find(function (i) { return i.isPrimary; }) || ordered[0];
-        return image && (image.url || (image.media && image.media.url));
+        var available = ordered.filter(function (image) { return image.url || (image.media && image.media.url); });
+        return available.find(function (image) { return image.isPrimary; }) || available[0];
     }
     C.line = function (product, variant) {
         var unitRow = (product.attributes || []).find(function (a) { return /^(unit|uom)$/i.test(a.customName || (a.attribute && a.attribute.name) || ''); });
+        var image = primaryImage(variant && variant.images) || (variant && variant.media && variant.media.url && variant.media) || primaryImage(product.images);
+        var variantLabel = C.variantLabel(variant);
         return {
             id: String(product.id), name: product.name || 'Product', type: product.type,
-            variantId: variant ? variant.id : null, variantLabel: C.variantLabel(variant), sku: (variant && variant.sku) || product.sku || '',
-            image: C.imageUrl(primaryImage(variant && variant.images) || (variant && variant.media && variant.media.url) || primaryImage(product.images)),
+            variantId: variant ? variant.id : null, variantLabel: variantLabel, sku: (variant && variant.sku) || product.sku || '',
+            image: C.imageUrl(image && (image.url || image.media.url)),
+            imageAlt: C.imageAlt(image, (product.name || 'Product') + (variantLabel ? ' — ' + variantLabel : '')),
             slug: product.slug || '', categorySlug: (product.categories && product.categories[0] && product.categories[0].slug) || (product.category && product.category.slug) || '',
             unit: product.unit || (unitRow && (unitRow.customValue || C.valueLabel(unitRow.value, unitRow.attribute))) || '', quantity: 1
         };
@@ -123,7 +130,11 @@
     };
     C.readResponse = function (response) {
         return response.json().then(function (result) {
-            if (!response.ok || result.success === false) throw new Error((result.error && result.error.message) || 'Unable to complete the request. Please try again.');
+            if (!response.ok || result.success === false) {
+                var error = new Error((result.error && result.error.message) || 'Unable to complete the request. Please try again.');
+                error.status = response.status;
+                throw error;
+            }
             return result;
         });
     };
@@ -218,7 +229,7 @@
             var ready = !variable || !!variant;
             var line = C.line(product, variant);
             image.src = line.image;
-            image.alt = product.name + (line.variantLabel ? ' — ' + line.variantLabel : '');
+            image.alt = line.imageAlt;
             if (variable && !variants.length) status.textContent = 'No options are currently available for this product.';
             else if (!ready) status.textContent = requestedVariant && !preselected ? 'The saved option is no longer available. Choose another option.' : '';
             else {

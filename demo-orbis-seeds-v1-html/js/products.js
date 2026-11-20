@@ -30,6 +30,7 @@ function loadProductView() {
     var slug = params.get('slug');
     var state = productBrowser ? productBrowser.sync() : { page: 1 };
     productsState.detailCategory = null;
+    if (window.OrbiSEO) window.OrbiSEO.refresh();
     if (category || !slug) {
         updateCategoryUi(category ? formatCategorySlug(category) : 'Our Products');
         updateCategoryBreadcrumbs(category, category ? formatCategorySlug(category) : 'Our Products');
@@ -51,12 +52,13 @@ function loadProductView() {
         renderProducts([product], content, list, slug, false);
         var category = product.categories && product.categories[0];
         productsState.detailCategory = category && category.slug;
-        updateCategoryUi(category ? category.name : 'Our Products');
+        updateCategoryUi(product.name);
         updateCategoryBreadcrumbs(category && category.slug, category ? category.name : 'Our Products');
         if (productBrowser) productBrowser.setStatus('Showing the selected product. Use search or filters to browse products.');
     }).catch(function (error) {
         if (requestId !== productsState.requestId) return;
         content.innerHTML = '';
+        if (error.status === 404 && window.OrbiSEO) window.OrbiSEO.unavailable();
         showProductError(error, loadProductView);
     }).finally(function () {
         if (requestId !== productsState.requestId) return;
@@ -158,6 +160,7 @@ function fetchProducts(categorySlug, requestedProductSlug, page) {
                 if (pages === 1) corrected.searchParams.delete('page'); else corrected.searchParams.set('page', pages);
                 window.history.replaceState({}, '', corrected);
                 if (productBrowser) productBrowser.sync();
+                if (window.OrbiSEO) window.OrbiSEO.refresh();
                 return fetchProducts(categorySlug, requestedProductSlug, pages);
             }
             var linkedProduct = null;
@@ -179,7 +182,7 @@ function fetchProducts(categorySlug, requestedProductSlug, page) {
                     first.prepend(label);
                 }
                 var category = products[0].categories && products[0].categories.find(function (item) { return item.slug === categorySlug; });
-                if (category) updateCategoryUi(category.name);
+                if (category && !requestedProductSlug) updateCategoryUi(category.name);
             } else {
                 renderEmptyState(content, list);
             }
@@ -195,6 +198,7 @@ function fetchProducts(categorySlug, requestedProductSlug, page) {
         .catch(function (error) {
             if (requestId !== productsState.requestId || error.name === 'AbortError') return;
             content.innerHTML = '';
+            if (error.status === 404 && window.OrbiSEO) window.OrbiSEO.unavailable();
             showProductError(error, function () { fetchProducts(categorySlug, requestedProductSlug, page); });
         })
         .finally(function () {
@@ -337,7 +341,7 @@ function updateCategoryBreadcrumbs(categorySlug, fallbackName) {
         updateCategoryBanner(path);
         updateBackButtonPath(path);
         var currentCat = path && path[path.length - 1];
-        if (window.OrbiSEO && currentCat && !params.get('slug')) window.OrbiSEO.setCategorySEO(currentCat, path);
+        if (window.OrbiSEO && currentCat && !params.get('slug')) window.OrbiSEO.refresh(currentCat);
     }
     try {
         var cached = JSON.parse(sessionStorage.getItem('orbis_categories_populated_v1') || 'null');
@@ -457,7 +461,8 @@ function renderProducts(products, contentContainer, listContainer, requestedProd
         productDiv.id = sectionId;
         productDiv.setAttribute('data-product-slug', productSlug);
 
-        const finalImageUrl = OrbiCatalog.line(product).image;
+        const productLine = OrbiCatalog.line(product);
+        const finalImageUrl = productLine.image;
 
         const attributesHtml = renderProductAttributes(product.attributes);
 
@@ -465,10 +470,10 @@ function renderProducts(products, contentContainer, listContainer, requestedProd
         const metadata = ' data-id="' + esc(product.id) + '" data-name="' + esc(product.name) + '" data-image="' + esc(finalImageUrl) + '" data-slug="' + esc(productSlug) + '" data-category="' + esc(categorySlug) + '" data-unit="' + esc(productUnit) + '"';
         productDiv.innerHTML =
             '<div class="products">' +
-            '<div class="products-left"><img src="' + esc(finalImageUrl) + '" alt="' + esc(product.name) + '" loading="lazy"></div>' +
+            '<div class="products-left"><img src="' + esc(finalImageUrl) + '" alt="' + esc(productLine.imageAlt) + '" loading="lazy"></div>' +
             '<div class="products-right">' +
             '<button type="button" class="wishlist-heart-btn"' + metadata + ' aria-label="Add to wishlist" aria-pressed="false" title="Add to wishlist">&#9825;</button>' +
-            '<h3>' + esc(product.name) + '</h3>' + attributesHtml +
+            '<h3><a href="products.html?slug=' + encodeURIComponent(productSlug) + '">' + esc(product.name) + '</a></h3>' + attributesHtml +
             (product.description ? '<div class="product-description">' + OrbiCatalog.description(product.description) + '</div>' : '') +
             (product.shortDescription ? '<h4>Remarks</h4><p>' + esc(product.shortDescription) + '</p>' : '') +
             '<div class="product-options"></div><p class="product-selection-status" role="status"></p><p class="product-selected-price"></p>' +
@@ -486,16 +491,12 @@ function renderProducts(products, contentContainer, listContainer, requestedProd
         contentContainer.appendChild(productDiv);
     });
 
-    if (!append && products && products.length > 0) {
-        var activeProd = null;
-        if (requestedProductSlug) {
-            activeProd = products.find(function (p) { return (p.slug || String(p.id)) === requestedProductSlug; });
-        }
-        if (!activeProd && !productsState.categorySlug) {
-            activeProd = products[0];
-        }
-        if (activeProd && window.OrbiSEO) {
-            window.OrbiSEO.setProductSEO(activeProd);
+    if (requestedProductSlug && window.OrbiSEO) {
+        var activeProduct = products.find(function (product) { return (product.slug || String(product.id)) === requestedProductSlug; });
+        if (activeProduct) {
+            const heading = document.querySelector('.inner-banner .product-heading');
+            if (heading) heading.textContent = activeProduct.name;
+            window.OrbiSEO.refresh(activeProduct);
         }
     }
 
@@ -572,10 +573,7 @@ function initDynamicEvents() {
                 if (link) {
                     link.classList.add('act');
                 }
-                const prod = $(entry.target).data('product');
-                if (prod && window.OrbiSEO) {
-                    window.OrbiSEO.setProductSEO(prod);
-                }
+
             }
         });
     }, {

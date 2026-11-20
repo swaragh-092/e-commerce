@@ -87,8 +87,11 @@ const corsOptionsDelegate = (req, callback) => {
 
 app.use(cors(corsOptionsDelegate));
 
+const { mountOrbiStorefront } = require('./modules/seo/orbiStorefront');
+
 // Global rate limiting
 app.use('/api', globalLimiter);
+mountOrbiStorefront(app);
 
 // Body Parsing
 // Important: Webhook routes must be parsed as raw, so only apply json parser if not a webhook.

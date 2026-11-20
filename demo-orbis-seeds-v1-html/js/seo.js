@@ -1,249 +1,144 @@
-(function (window) {
+(function () {
     'use strict';
 
-    if (window.OrbiSEO) return;
+    const routes = window.OrbiSEORoutes;
+    let requestId = 0;
+    let currentUrl = '';
+    let serverHead = false;
 
-    var OrbiSEO = {
-        toAbsoluteUrl: function (url) {
-            if (!url || typeof url !== 'string' || !url.trim()) return '';
-            url = url.trim();
-            if (/^https?:\/\//i.test(url)) return url;
-            var base = (typeof APP_URL !== 'undefined' ? APP_URL : 'https://eshopadmin.swaragh.org.in/').replace(/\/+$/, '');
-            if (url.charAt(0) === '/') return base + url;
-            return base + '/' + url;
-        },
+    function setHead(title, tags) {
+        document.title = title;
+        document.head.querySelectorAll('[data-orbi-seo]').forEach((tag) => tag.remove());
+        tags.forEach((tag) => {
+            const copy = document.createElement(tag.tagName.toLowerCase());
+            for (const attribute of tag.attributes) copy.setAttribute(attribute.name, attribute.value);
+            copy.setAttribute('data-orbi-seo', '');
+            copy.textContent = tag.textContent;
+            document.head.appendChild(copy);
+        });
+    }
 
-        stripHtml: function (html) {
-            if (!html) return '';
-            var tmp = document.createElement('div');
-            tmp.innerHTML = html;
-            return (tmp.textContent || tmp.innerText || '').trim();
-        },
+    function plainText(value) {
+        const template = document.createElement('template');
+        template.innerHTML = value || '';
+        return template.content.textContent.replace(/\s+/g, ' ').trim();
+    }
 
-        getOrCreateMeta: function (attrName, attrValue) {
-            var selector = 'meta[' + attrName + '="' + attrValue + '"]';
-            var el = document.querySelector(selector);
-            if (!el) {
-                el = document.createElement('meta');
-                el.setAttribute(attrName, attrValue);
-                document.head.appendChild(el);
-            }
-            return el;
-        },
-
-        setMeta: function (options) {
-            options = options || {};
-            var title = options.title || options.metaTitle || 'Orbi Seeds International';
-            var description = options.description || options.metaDescription || '';
-            var keywords = options.keywords || options.metaKeywords || '';
-            var image = options.image || options.ogImage || '';
-            var url = options.url || window.location.href;
-            var type = options.type || 'website';
-            var schema = options.schema || null;
-
-            // 1. Title Tag
-            if (title) {
-                var cleanTitle = title.trim();
-                if (!/\|\s*Orbi Seeds/i.test(cleanTitle)) {
-                    document.title = cleanTitle + ' | Orbi Seeds';
-                } else {
-                    document.title = cleanTitle;
-                }
-            }
-
-            // 2. Standard Meta Description & Keywords
-            if (description) {
-                OrbiSEO.getOrCreateMeta('name', 'description').setAttribute('content', description.trim());
-            }
-            if (keywords) {
-                OrbiSEO.getOrCreateMeta('name', 'keywords').setAttribute('content', keywords.trim());
-            }
-
-            // 3. Open Graph Tags
-            OrbiSEO.getOrCreateMeta('property', 'og:title').setAttribute('content', document.title);
-            if (description) {
-                OrbiSEO.getOrCreateMeta('property', 'og:description').setAttribute('content', description.trim());
-            }
-            OrbiSEO.getOrCreateMeta('property', 'og:url').setAttribute('content', url.split('#')[0]);
-            OrbiSEO.getOrCreateMeta('property', 'og:type').setAttribute('content', type);
-            OrbiSEO.getOrCreateMeta('property', 'og:site_name').setAttribute('content', 'Orbi Seeds International');
-
-            var absImage = OrbiSEO.toAbsoluteUrl(image);
-            if (absImage) {
-                OrbiSEO.getOrCreateMeta('property', 'og:image').setAttribute('content', absImage);
-            }
-
-            // 4. Twitter Card Tags
-            OrbiSEO.getOrCreateMeta('name', 'twitter:card').setAttribute('content', 'summary_large_image');
-            OrbiSEO.getOrCreateMeta('name', 'twitter:title').setAttribute('content', document.title);
-            if (description) {
-                OrbiSEO.getOrCreateMeta('name', 'twitter:description').setAttribute('content', description.trim());
-            }
-            if (absImage) {
-                OrbiSEO.getOrCreateMeta('name', 'twitter:image').setAttribute('content', absImage);
-            }
-
-            // 5. Canonical Link
-            var canonical = document.querySelector('link[rel="canonical"]');
-            if (!canonical) {
-                canonical = document.createElement('link');
-                canonical.setAttribute('rel', 'canonical');
-                document.head.appendChild(canonical);
-            }
-            canonical.setAttribute('href', url.split('#')[0]);
-
-            // 6. Schema.org JSON-LD Structured Data
-            if (schema) {
-                var script = document.getElementById('orbi-dynamic-schema');
-                if (!script) {
-                    script = document.createElement('script');
-                    script.id = 'orbi-dynamic-schema';
-                    script.type = 'application/ld+json';
-                    document.head.appendChild(script);
-                }
-                script.textContent = JSON.stringify(schema);
-            }
-        },
-
-        // --- Category SEO ---
-        setCategorySEO: function (category, path) {
-            if (!category) return;
-            var name = category.name || 'Category';
-            var title = category.metaTitle || name;
-            var cleanDesc = category.description ? OrbiSEO.stripHtml(category.description) : '';
-            var desc = category.metaDescription || cleanDesc || ('Explore premium ' + name + ' seeds cultivated for superior performance, high yield, and disease resistance by Orbi Seeds.');
-            var keywords = category.metaKeywords || (name + ', ' + name.toLowerCase() + ' seeds, hybrid seeds, vegetable seeds, Orbi Seeds');
-            var image = category.ogImage || category.bannerImage || category.image || 'images/inr-bnr.avif';
-            var pageUrl = window.location.href;
-
-            var schema = {
-                '@context': 'https://schema.org',
-                '@type': 'CollectionPage',
-                'name': title,
-                'description': desc,
-                'url': pageUrl,
-                'isPartOf': {
-                    '@type': 'WebSite',
-                    'name': 'Orbi Seeds',
-                    'url': window.location.origin
-                }
-            };
-
-            OrbiSEO.setMeta({
-                title: title,
-                description: desc,
-                keywords: keywords,
-                image: image,
-                type: 'website',
-                schema: schema
-            });
-        },
-
-        // --- Product SEO ---
-        setProductSEO: function (product) {
-            if (!product) return;
-            var name = product.name || 'Product';
-            var title = product.metaTitle || name;
-            var cleanDesc = product.shortDescription || (product.description ? OrbiSEO.stripHtml(product.description) : '');
-            var desc = product.metaDescription || cleanDesc || ('Buy high-yielding ' + name + ' hybrid seeds from Orbi Seeds. High germination rate and excellent disease tolerance.');
-            var keywords = product.metaKeywords || (name + ', ' + name.toLowerCase() + ' seeds, hybrid seed varieties, Orbi Seeds International');
-
-            var primaryImg = '';
-            if (product.ogImage) {
-                primaryImg = product.ogImage;
-            } else if (product.images && product.images.length > 0) {
-                var pImg = product.images.find(function (i) { return i.isPrimary; }) || product.images[0];
-                primaryImg = pImg.url || pImg.image || (pImg.media && pImg.media.url) || '';
-            }
-            var absImage = OrbiSEO.toAbsoluteUrl(primaryImg || 'images/orbi-seeds-logo.png');
-            var pageUrl = window.location.href;
-
-            var schema = {
-                '@context': 'https://schema.org',
-                '@type': 'Product',
-                'name': name,
-                'image': absImage ? [absImage] : undefined,
-                'description': desc,
-                'sku': product.sku || undefined,
-                'brand': {
-                    '@type': 'Brand',
-                    'name': 'Orbi Seeds'
-                },
-                'offers': {
-                    '@type': 'Offer',
-                    'availability': (product.quantity > 0 || product.isEnabled) ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
-                    'url': pageUrl
-                }
-            };
-
-            OrbiSEO.setMeta({
-                title: title,
-                description: desc,
-                keywords: keywords,
-                image: absImage,
-                type: 'product',
-                schema: schema
-            });
-        },
-
-        // --- Blog / Single Resource SEO ---
-        setBlogSEO: function (post) {
-            if (!post) return;
-            var title = post.metaTitle || post.title || 'Blog';
-            var cleanDesc = post.summary || (post.content ? OrbiSEO.stripHtml(post.content).slice(0, 160) : '');
-            var desc = post.metaDescription || cleanDesc || ('Read insights and farming tips on ' + (post.title || 'seeds and agriculture') + ' from Orbi Seeds.');
-            var keywords = post.metaKeywords || ((post.title || '') + ', agricultural insights, farming guide, hybrid seeds, Orbi Seeds blog');
-
-            var image = post.ogImage || (post.featuredImage && (post.featuredImage.url || post.featuredImage.path)) || 'images/about-us.jpg';
-            var absImage = OrbiSEO.toAbsoluteUrl(image);
-            var pageUrl = window.location.href;
-
-            var schema = {
-                '@context': 'https://schema.org',
-                '@type': 'BlogPosting',
-                'headline': post.title || title,
-                'description': desc,
-                'image': absImage ? [absImage] : undefined,
-                'datePublished': post.publishedAt || post.createdAt,
-                'dateModified': post.updatedAt || post.publishedAt || post.createdAt,
-                'mainEntityOfPage': {
-                    '@type': 'WebPage',
-                    '@id': pageUrl
-                },
-                'author': {
-                    '@type': 'Person',
-                    'name': (post.author && (post.author.firstName + ' ' + (post.author.lastName || '')).trim()) || 'Orbi Seeds Team'
-                },
-                'publisher': {
-                    '@type': 'Organization',
-                    'name': 'Orbi Seeds International Pvt Ltd',
-                    'logo': {
-                        '@type': 'ImageObject',
-                        'url': OrbiSEO.toAbsoluteUrl('images/orbi-seeds-logo.png')
-                    }
-                }
-            };
-
-            OrbiSEO.setMeta({
-                title: title,
-                description: desc,
-                keywords: keywords,
-                image: absImage,
-                type: 'article',
-                schema: schema
-            });
-        },
-
-        // --- Blog / Resources List SEO ---
-        setBlogListSEO: function () {
-            OrbiSEO.setMeta({
-                title: 'Resources & Agricultural Blog',
-                description: 'Discover agricultural insights, seed cultivation tips, and industry updates from Orbi Seeds International.',
-                keywords: 'agricultural blog, farming resources, hybrid seeds, crop management, Orbi Seeds',
-                type: 'website'
-            });
+    function mediaUrl(value) {
+        if (!value) return '';
+        try {
+            const url = new URL(value, window.APP_URL);
+            return /^https?:$/.test(url.protocol) ? url.href : '';
+        } catch (_) {
+            return '';
         }
-    };
+    }
 
-    window.OrbiSEO = OrbiSEO;
-})(window);
+    function fallback(route, entity) {
+        const [pageTitle, pageDescription, pageImage, pageType] = routes.pages[route.file];
+        const storefront = new URL('.', window.location.href);
+        const name = entity && (entity.customHeading || entity.name || entity.title);
+        const rawTitle = (entity && entity.metaTitle) || name || pageTitle;
+        const title = rawTitle.endsWith(' | ' + routes.siteName) ? rawTitle : rawTitle + ' | ' + routes.siteName;
+        const description = (entity && entity.metaDescription) || (entity && plainText(entity.shortDescription || entity.summary || entity.description || entity.content).slice(0, 160)) || pageDescription;
+        const mainImage = entity && (entity.featuredImage || entity.coverImage);
+        const product = route.kind === 'product' && entity ? OrbiCatalog.line(entity) : null;
+        const image = mediaUrl(entity && (entity.ogImage || (mainImage && mainImage.url) || entity.bannerImage || entity.image))
+            || (product && product.image !== 'images/orbi-seeds-logo.png' ? new URL(product.image, storefront).href : '')
+            || (pageImage ? new URL('images/' + pageImage, storefront).href : '');
+        const imageAlt = (entity && !entity.ogImage && ((mainImage && mainImage.alt) || (product && product.imageAlt))) || name || routes.siteName;
+        const type = route.kind === 'blog' && entity ? 'article' : route.kind === 'product' && entity ? 'product' : 'website';
+        const schemaType = { product: 'Product', blog: 'BlogPosting', category: 'CollectionPage', gallery: 'ImageGallery' }[entity && route.kind] || pageType || 'WebPage';
+        let publicPath = route.publicPath;
+        if (route.kind === 'category' && entity && Array.isArray(entity.children)) {
+            publicPath = entity.children.length ? routes.pagePath('product.html', { cat: entity.slug })
+                : routes.pagePath('products.html', { category: entity.slug });
+            if (route.page) publicPath += '&page=' + route.page;
+        }
+        const canonical = new URL(publicPath, storefront).href;
+        const tags = [];
+        function meta(attribute, key, content) {
+            if (!content) return;
+            const element = document.createElement('meta');
+            element.setAttribute(attribute, key);
+            element.content = content;
+            tags.push(element);
+        }
+        meta('name', 'description', description);
+        meta('name', 'keywords', entity && entity.metaKeywords);
+        meta('name', 'robots', route.noIndex ? 'noindex, nofollow' : 'index, follow');
+        if (!route.noIndex) {
+            const link = document.createElement('link');
+            link.rel = 'canonical';
+            link.href = canonical;
+            tags.push(link);
+            meta('property', 'og:url', canonical);
+            const script = document.createElement('script');
+            script.type = 'application/ld+json';
+            script.textContent = JSON.stringify({
+                '@context': 'https://schema.org', '@type': schemaType, url: canonical,
+                name: name || pageTitle, description, ...(image && { image }),
+                ...(type === 'article' && { headline: entity.title, datePublished: entity.publishedAt, dateModified: entity.updatedAt }),
+            });
+            tags.push(script);
+        }
+        meta('property', 'og:site_name', routes.siteName);
+        meta('property', 'og:type', type);
+        meta('property', 'og:title', title);
+        meta('property', 'og:description', description);
+        meta('property', 'og:image', image);
+        meta('property', 'og:image:alt', image && imageAlt);
+        meta('name', 'twitter:card', image ? 'summary_large_image' : 'summary');
+        meta('name', 'twitter:title', title);
+        meta('name', 'twitter:description', description);
+        meta('name', 'twitter:image', image);
+        meta('name', 'twitter:image:alt', image && imageAlt);
+        setHead(title, tags);
+    }
+
+    function refresh(entity) {
+        const file = window.location.pathname.split('/').pop() || 'index.html';
+        const location = '/' + file + window.location.search;
+        const route = routes.resolve(file, new URLSearchParams(window.location.search));
+        if (location === currentUrl) {
+            if (entity && !serverHead) fallback(route, entity);
+            return;
+        }
+        currentUrl = location;
+        serverHead = false;
+        fallback(route, entity);
+        const activeRequest = ++requestId;
+
+        const query = new URLSearchParams({ path: location });
+        fetch(window.API_URL + 'seo/orbi/metadata?' + query)
+            .then((response) => response.ok ? response.json() : null)
+            .then((result) => {
+                if (!result?.data || activeRequest !== requestId) return;
+                const parsed = new DOMParser().parseFromString('<head>' + result.data.tags + '</head>', 'text/html');
+                const tags = Array.from(parsed.head.children).filter((tag) =>
+                    tag.matches('meta[name], meta[property], link[rel="canonical"], script[type="application/ld+json"]'));
+                setHead(result.data.title, tags);
+                serverHead = true;
+            })
+            .catch(() => { /* Keep local page and entity metadata if the API is unavailable. */ });
+    }
+
+    function unavailable() {
+        if (serverHead) return;
+        requestId++;
+        setHead(routes.pages['error.html'][0] + ' | ' + routes.siteName, []);
+        const robots = document.createElement('meta');
+        robots.name = 'robots';
+        robots.content = 'noindex, nofollow';
+        robots.setAttribute('data-orbi-seo', '');
+        document.head.appendChild(robots);
+    }
+
+    window.OrbiSEO = { refresh, unavailable };
+    if (document.head.querySelector('meta[name="orbi-seo-rendered"]')) {
+        currentUrl = '/' + (window.location.pathname.split('/').pop() || 'index.html') + window.location.search;
+        serverHead = true;
+    } else {
+        refresh();
+    }
+})();

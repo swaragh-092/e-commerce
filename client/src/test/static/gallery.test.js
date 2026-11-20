@@ -4,9 +4,10 @@ import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { waitFor } from '@testing-library/react';
 
+const catalogScript = readFileSync(resolve(import.meta.dirname, '../../../../demo-orbis-seeds-v1-html/js/catalog.js'), 'utf8');
 const script = readFileSync(resolve(import.meta.dirname, '../../../../demo-orbis-seeds-v1-html/js/gallery.js'), 'utf8');
 const albums = [
-  { title: 'Flower', slug: 'flower', coverImage: { url: '/cover.png' } },
+  { title: 'Flower', slug: 'flower', coverImage: { url: '/cover.png', alt: 'Yellow flowers in a field' } },
   { title: 'Gallery', slug: 'gallery', coverImage: { url: '/first.png' } },
 ];
 const response = (data, ok = true, status = 500) => ({ ok, status: ok ? 200 : status, json: async () => data });
@@ -25,6 +26,7 @@ const mount = (fetchMock, { view = 'index', query = '', origin = 'http://localho
   dom.window.APP_URL = media;
   dom.window.fetch = fetchMock;
   dom.window.console.error = vi.fn();
+  dom.window.eval(catalogScript);
   dom.window.eval(script);
   return dom.window.document;
 };
@@ -41,6 +43,8 @@ describe('Orbi gallery album cards', () => {
     expect(Array.from(cards, (card) => card.querySelector('h3').textContent)).toEqual(['Flower', 'Gallery']);
     expect(cards[0].href).toBe('http://localhost:3000/gallery-detail.html?album=flower');
     expect(cards[0].querySelector('img').src).toBe('https://api.example.com/cover.png');
+    expect(cards[0].querySelector('img').alt).toBe('Yellow flowers in a field');
+    expect(cards[1].querySelector('img').alt).toBe('Gallery');
     expect(cards[1].querySelector('img').src).toBe('https://api.example.com/first.png');
     expect(doc.querySelector('.gallery-inner-wrapper')).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -126,6 +130,7 @@ describe('Orbi gallery detail page', () => {
     expect(fetchMock.mock.calls[0][0]).toContain('/galleries/public/flower?page=1&limit=20');
     expect(doc.getElementById('gallery-title').textContent).toBe('Flower');
     expect(doc.getElementById('gallery-description').textContent).toBe('Flower photographs');
+    expect(doc.querySelector('.gallery-inner-wrapper img').alt).toBe('Flower image');
     expect(Array.from(doc.querySelectorAll('.gallery-inner-wrapper img'), (img) => new URL(img.src).pathname)).toEqual(['/one.png', '/two.png']);
     expect(doc.querySelector('.gallery-back').getAttribute('href')).toBe('gallery.html');
     expect(doc.querySelector('.gallery-album-card')).toBeNull();

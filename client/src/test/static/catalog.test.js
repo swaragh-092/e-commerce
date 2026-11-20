@@ -43,6 +43,6 @@ describe('Orbi variant and enquiry identities', () => {
     const c = mount();
     expect(c.valueLabel({ displayLabel: '50', unitLabel: 'g' })).toBe('50g');
     expect(c.valueLabel({ value: '50g', unitLabel: 'g' })).toBe('50g');
-    expect(c.imageUrl('javascript:alert(1)')).toBe('images/default-image.png');
+    expect(c.imageUrl('javascript:alert(1)')).toBe('images/orbi-seeds-logo.png');
   });
 });
