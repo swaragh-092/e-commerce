@@ -46,7 +46,7 @@
             || (entity && plainText(entity.shortDescription || entity.summary || entity.description || entity.content).slice(0, 160)) || pageDescription;
         const mainImage = entity && (entity.featuredImage || entity.coverImage);
         const product = route.kind === 'product' && entity ? OrbiCatalog.line(entity) : null;
-        const image = mediaUrl(entity && (entity.ogImage || (mainImage && mainImage.url) || entity.bannerImage || entity.image))
+        const image = mediaUrl(entity && (entity.ogImage || (mainImage && mainImage.url) || entity.bannerImage || entity.bannerUrl || entity.image))
             || (product && product.image !== 'images/orbi-seeds-logo.png' ? new URL(product.image, storefront).href : '')
             || (pageImage ? new URL('images/' + pageImage, storefront).href : '');
         const imageAlt = (entity && !entity.ogImage && ((mainImage && mainImage.alt) || (product && product.imageAlt))) || name || routes.siteName;
@@ -60,6 +60,7 @@
         }
         const canonical = new URL(publicPath, storefront).href;
         const tags = [];
+        const noIndex = route.noIndex || (route.kind === 'page' && !entity);
         function meta(attribute, key, content) {
             if (!content) return;
             const element = document.createElement('meta');
@@ -69,8 +70,8 @@
         }
         meta('name', 'description', description);
         meta('name', 'keywords', entity && entity.metaKeywords);
-        meta('name', 'robots', route.noIndex ? 'noindex, nofollow' : 'index, follow');
-        if (!route.noIndex) {
+        meta('name', 'robots', noIndex ? 'noindex, nofollow' : 'index, follow');
+        if (!noIndex) {
             const link = document.createElement('link');
             link.rel = 'canonical';
             link.href = canonical;

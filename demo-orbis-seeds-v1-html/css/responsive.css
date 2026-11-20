@@ -260,14 +260,6 @@
    #section-1 .banner-statistics h3 {font-size: 20px;}
 
    .location-1 span {flex-basis: 44px;width: 44px;height: 44px;}
-   .footer-inner {flex-direction: column;align-items: center;gap: 50px;}
-   .footer-left{max-width: 100%;padding: 0;}
-   .footer-middle{max-width: 100%;padding: 0;}
-   .footer-right{max-width: 100%;padding: 0;}
-   .footer-middle ul{align-items: start;}
-   .footer-inner{align-items: start;}
-   .copyright-inner ul{flex-direction: column;padding: 10px 0;gap: 3px;}
-   .copyright-inner ul p{margin: 0;}
    .our-core-values-inner{flex-wrap: wrap;}
    .world-operations-wrapper{padding: 30px 0;}
    .reseach-developement{padding: 30px 0;}
@@ -301,7 +293,6 @@
    .counter h3{font-size:22px;text-align:center;}
    .location-1 h3{font-size: 18px;}
    .contact-us-right h2{text-align: center;}
-   .copyright-inner ul p a{font-size: 14px;}
    .ip-products-list{margin: auto; max-width: 400px;}
    .controls-line{margin-bottom: 40px;}
    .reality .counter span{font-size:32px;}
@@ -350,7 +341,6 @@
    .location-1{gap: 8px;}
    .location-1 span{flex-basis: 36px;width: 36px;height: 36px;font-size: 15px;}
    .location-1 h3{font-size: 16px;}
-   .footer-inner{gap: 30px;}
    /* Keep room around button labels instead of squeezing them into fixed widths. */
    .common-btn-parent {width: fit-content;max-width: 100%;}
    .common-btn-parent a {padding: 5px 16px;font-size: 14px;}
@@ -468,7 +458,6 @@
   .common-btn-parent{margin: auto;}
 
   .right-cards-main .sub-cards-box:nth-child(2) .our-cards.bg-geen::before{display: none;}
-  .copyright-inner ul li p{margin: 0;}
   .orbi-catalogue-cta .common-btn-parent,
   #section-1 .banner-inner-wrapper .common-btn-parent {margin: 0;}
 }

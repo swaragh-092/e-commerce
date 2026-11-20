@@ -1,0 +1,108 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e54]:
+    - banner [ref=e55]:
+      - generic [ref=e56]:
+        - button "open drawer" [ref=e57] [cursor=pointer]
+        - img "ORBI SEEDS" [ref=e61]
+        - link "View Store" [ref=e62] [cursor=pointer]:
+          - /url: /
+        - button "S" [ref=e65] [cursor=pointer]
+    - main [ref=e67]:
+      - generic [ref=e411]:
+        - navigation [ref=e412]:
+          - list [ref=e413]:
+            - listitem [ref=e414]:
+              - link "Pages" [ref=e415] [cursor=pointer]:
+                - /url: /admin/pages
+            - listitem [aria-hidden] [ref=e416]: /
+            - listitem [ref=e417]:
+              - paragraph [ref=e418]: Edit Page
+        - generic [ref=e419]:
+          - generic [ref=e420]:
+            - button [ref=e421] [cursor=pointer]
+            - generic [ref=e424]:
+              - 'heading "Edit: Terms and Conditions" [level=1] [ref=e491]'
+              - generic [ref=e426]:
+                - text: "Slug:"
+                - code [ref=e427]: /p/terms-and-conditions-1
+          - generic [ref=e428]:
+            - button "View Live" [ref=e429] [cursor=pointer]
+            - button "Save Page" [ref=e433] [cursor=pointer]
+        - generic [ref=e437]:
+          - generic [ref=e438]:
+            - generic [ref=e439]:
+              - generic [ref=e440]:
+                - generic [ref=e441]: Page Title *
+                - generic [ref=e442]:
+                  - textbox "Page Title *" [ref=e443]: Terms and Conditions
+                  - group [aria-hidden]:
+                    - generic: Page Title *
+              - tablist [ref=e447]:
+                - tab "Visual" [ref=e448] [cursor=pointer]
+                - tab "HTML Code" [ref=e451] [cursor=pointer]
+                - tab "Preview" [selected] [ref=e454] [cursor=pointer]
+              - iframe [ref=e458]:
+                - generic [ref=f4e1]:
+                  - paragraph [ref=f4e2]: These terms describe how to use the Orbi Seeds International Pvt. Ltd. website and how seed enquiries and purchases are handled.
+                  - heading "Seed information and enquiries" [level=2] [ref=f4e3]
+                  - paragraph [ref=f4e4]: Use the product pages to explore varieties and send an enquiry. Sending an enquiry does not confirm a purchase or reserve stock. Before committing to a purchase, check the variety, pack size, price, delivery destination and any restrictions that apply to your order.
+                  - heading "Growing conditions" [level=2] [ref=f4e5]
+                  - paragraph [ref=f4e6]: Season, location, soil, weather and cultivation practices affect crop performance. Ask our team about a variety’s suitability for your conditions and follow any instructions provided with the seed or packaging.
+                  - heading "Orders and service" [level=2] [ref=f4e7]
+                  - paragraph [ref=f4e8]:
+                    - text: Keep your quote or order confirmation and check the information on it. For delivery questions, changes, product concerns or cancellations, use the order or enquiry reference when contacting us at
+                    - link "info@orbiseeds.com" [ref=f4e9] [cursor=pointer]:
+                      - /url: mailto:info@orbiseeds.com
+                    - text: .
+                  - heading "Consumer rights" [level=2] [ref=f4e10]
+                  - paragraph [ref=f4e11]: These website terms do not limit any rights or remedies available to you under applicable law.
+            - generic [ref=e459]:
+              - heading "SEO" [level=6] [ref=e460]
+              - generic [ref=e461]:
+                - generic: Meta Title
+                - generic [ref=e462]:
+                  - textbox "Meta Title" [ref=e463]:
+                    - /placeholder: Terms and Conditions
+                  - group [aria-hidden]:
+                    - generic: Meta Title
+              - generic [ref=e464]:
+                - generic [ref=e465]: Meta Description
+                - generic [ref=e466]:
+                  - textbox "Meta Description" [ref=e467]:
+                    - /placeholder: Brief description for search engines (150–160 chars recommended)
+                    - text: Read the terms for using the Orbi Seeds website, making seed enquiries and placing orders where available.
+                  - group [aria-hidden]:
+                    - generic: Meta Description
+          - generic [ref=e468]:
+            - generic [ref=e469]:
+              - heading "Settings" [level=6] [ref=e470]
+              - generic [ref=e471]:
+                - generic [ref=e472]: Status
+                - generic [ref=e473]:
+                  - combobox "Draft" [ref=e474] [cursor=pointer]
+                  - textbox [aria-hidden]: draft
+                  - group [aria-hidden]:
+                    - generic: Status
+              - generic [ref=e475]:
+                - generic [ref=e476]: Sort Order
+                - generic [ref=e477]:
+                  - spinbutton "Sort Order" [ref=e478]: "20"
+                  - group [aria-hidden]:
+                    - generic: Sort Order
+                - paragraph [ref=e479]: Lower numbers appear first
+              - separator [ref=e480]
+              - heading "Storefront Link Placement" [level=6] [ref=e481]
+              - generic [ref=e482]:
+                - generic [ref=e483]: Position
+                - generic [ref=e484]:
+                  - combobox "None (Hidden from menus)" [ref=e485] [cursor=pointer]
+                  - textbox [aria-hidden]: none
+                  - group [aria-hidden]:
+                    - generic: Position
+            - generic [ref=e486]:
+              - heading "Page Banner" [level=6] [ref=e487]
+              - button "Select or Upload Banner" [ref=e489] [cursor=pointer]
+              - generic [ref=e490]: "Recommended: 1920×400px. Shown as a full-width hero on the page."
+  - alert [ref=e492]:
+    - generic [ref=e496]: Page updated successfully.
+    - button "Close" [ref=e498] [cursor=pointer]

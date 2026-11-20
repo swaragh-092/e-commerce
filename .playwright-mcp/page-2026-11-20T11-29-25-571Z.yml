@@ -1,0 +1,112 @@
+- generic [ref=e54]:
+  - banner [ref=e55]:
+    - generic [ref=e56]:
+      - button "open drawer" [ref=e57] [cursor=pointer]
+      - img "ORBI SEEDS" [ref=e61]
+      - link "View Store" [ref=e62] [cursor=pointer]:
+        - /url: /
+      - button "S" [ref=e65] [cursor=pointer]
+  - main [ref=e67]:
+    - generic [ref=e117]:
+      - navigation [ref=e118]:
+        - list [ref=e119]:
+          - listitem [ref=e120]:
+            - link "Pages" [ref=e121] [cursor=pointer]:
+              - /url: /admin/pages
+          - listitem [aria-hidden] [ref=e122]: /
+          - listitem [ref=e123]:
+            - paragraph [ref=e124]: New Page
+      - generic [ref=e125]:
+        - generic [ref=e126]:
+          - button [ref=e127] [cursor=pointer]
+          - heading "Create New Page" [level=1] [ref=e131]
+        - button "Save Page" [ref=e133] [cursor=pointer]
+      - generic [ref=e137]:
+        - generic [ref=e138]:
+          - generic [ref=e139]:
+            - generic [ref=e140]:
+              - generic: Page Title *
+              - generic [ref=e141]:
+                - textbox "Page Title *" [ref=e142]
+                - group [aria-hidden]:
+                  - generic: Page Title *
+            - tablist [ref=e146]:
+              - tab "Visual" [selected] [ref=e147] [cursor=pointer]
+              - tab "HTML Code" [ref=e150] [cursor=pointer]
+              - tab "Preview" [ref=e153] [cursor=pointer]
+            - generic [ref=e159]:
+              - toolbar [ref=e160]:
+                - generic [ref=e162]:
+                  - button "Normal" [ref=e163] [cursor=pointer]
+                  - text: Heading 1 Heading 2 Heading 3 Heading 4 Normal
+                - generic [ref=e167]:
+                  - button "bold" [ref=e168] [cursor=pointer]
+                  - button "italic" [ref=e172] [cursor=pointer]
+                  - button "underline" [ref=e175] [cursor=pointer]
+                  - button "strike" [ref=e179] [cursor=pointer]
+                  - button "blockquote" [ref=e184] [cursor=pointer]
+                - generic [ref=e190]:
+                  - 'button "list: ordered" [ref=e191] [cursor=pointer]'
+                  - 'button "list: bullet" [ref=e196] [cursor=pointer]'
+                - generic [ref=e198]:
+                  - 'button "indent: -1" [ref=e199] [cursor=pointer]'
+                  - 'button "indent: +1" [ref=e202] [cursor=pointer]'
+                - button [ref=e207] [cursor=pointer]
+                - generic [ref=e209]:
+                  - button "link" [ref=e210] [cursor=pointer]
+                  - button "image" [ref=e215] [cursor=pointer]
+                - generic [ref=e220]:
+                  - button [ref=e222] [cursor=pointer]
+                  - button [ref=e226] [cursor=pointer]
+                - button "clean" [ref=e277] [cursor=pointer]
+              - generic [ref=e283]:
+                - generic [ref=e284]:
+                  - text: Start writing…
+                  - paragraph [ref=e285]
+                - text: "Visit URL: EditRemove"
+          - generic [ref=e286]:
+            - heading "SEO" [level=6] [ref=e287]
+            - generic [ref=e288]:
+              - generic: Meta Title
+              - generic [ref=e289]:
+                - textbox "Meta Title" [ref=e290]:
+                  - /placeholder: Leave blank to use page title
+                - group [aria-hidden]:
+                  - generic: Meta Title
+            - generic [ref=e291]:
+              - generic: Meta Description
+              - generic [ref=e292]:
+                - textbox "Meta Description" [ref=e293]:
+                  - /placeholder: Brief description for search engines (150–160 chars recommended)
+                - group [aria-hidden]:
+                  - generic: Meta Description
+        - generic [ref=e294]:
+          - generic [ref=e295]:
+            - heading "Settings" [level=6] [ref=e296]
+            - generic [ref=e297]:
+              - generic [ref=e298]: Status
+              - generic [ref=e299]:
+                - combobox "Draft" [ref=e300] [cursor=pointer]
+                - textbox [aria-hidden]: draft
+                - group [aria-hidden]:
+                  - generic: Status
+            - generic [ref=e301]:
+              - generic [ref=e302]: Sort Order
+              - generic [ref=e303]:
+                - spinbutton "Sort Order" [ref=e304]: "0"
+                - group [aria-hidden]:
+                  - generic: Sort Order
+              - paragraph [ref=e305]: Lower numbers appear first
+            - separator [ref=e306]
+            - heading "Storefront Link Placement" [level=6] [ref=e307]
+            - generic [ref=e308]:
+              - generic [ref=e309]: Position
+              - generic [ref=e310]:
+                - combobox "None (Hidden from menus)" [ref=e311] [cursor=pointer]
+                - textbox [aria-hidden]: none
+                - group [aria-hidden]:
+                  - generic: Position
+          - generic [ref=e312]:
+            - heading "Page Banner" [level=6] [ref=e313]
+            - button "Select or Upload Banner" [ref=e315] [cursor=pointer]
+            - generic [ref=e316]: "Recommended: 1920×400px. Shown as a full-width hero on the page."
