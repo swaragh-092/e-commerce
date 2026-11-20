@@ -25,23 +25,49 @@
   object-fit: cover;
 }
 
-.cms-content {
+.cms-content-wrapper {
   flex: 1 0 auto;
-  max-width: 1000px;
-  min-height: 200px;
-  padding-block: clamp(32px, 5vw, 64px);
-  overflow-wrap: break-word;
+  padding-block: clamp(36px, 5vw, 60px);
 }
 
-.cms-content :is(h2, h3, h4, p, ul, ol, figure, blockquote, table, pre) {
+.cms-content {
+  overflow-wrap: anywhere;
+}
+
+.cms-content :is(h2, h3, h4, h5, h6) {
+  color: var(--color-ink);
+  line-height: 1.25;
+  margin-block: 1.1em 0.35em;
+}
+
+.cms-content h3 { font-size: clamp(20px, 2.5vw, 26px); }
+
+.cms-content :is(p, ul, ol, blockquote) {
+  max-inline-size: 100ch;
+  line-height: 1.75;
+}
+
+.cms-content p {
   margin-block: 0 1rem;
+  text-align: left;
+}
+
+.cms-content :is(ul, ol, figure, blockquote, table, pre) { margin-block: 1rem; }
+
+:is(.cms-content, .cms-content > [data-orbi-cms-rendered]) > :first-child {
+  margin-block-start: 0;
+}
+
+:is(.cms-content, .cms-content > [data-orbi-cms-rendered]) > :last-child {
+  margin-block-end: 0;
 }
 
 .cms-content :is(ul, ol) { padding-inline-start: 1.5em; }
-.cms-content ul li { list-style: disc; }
-.cms-content ol li { list-style: decimal; }
+.cms-content ul > li { list-style: disc; }
+.cms-content ol > li { list-style: decimal; }
 .cms-content img { max-width: 100%; height: auto; }
 .cms-content table { display: block; overflow-x: auto; }
 .cms-content :is(th, td) { padding: 0.5rem; border: 1px solid var(--color-border); }
 .cms-content pre { overflow: auto; }
-.cms-content a { color: var(--color-link); text-decoration: underline !important; }
+.cms-content a { display: inline; font-size: inherit; color: var(--color-link); text-decoration: underline !important; }
+.cms-content a:hover { color: var(--color-link-hover); }

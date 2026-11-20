@@ -139,6 +139,29 @@ describe('Orbi storefront SEO', () => {
     expect(hidden.body).not.toContain('product:price:amount');
   });
 
+  it('uses Store Identity on category pages with legacy SEO branding', async () => {
+    db.Setting.findAll.mockResolvedValue([
+      { group: 'general', key: 'storeName', value: 'ORBI SEEDS' },
+      { group: 'seo', key: 'siteName', value: 'My Store' },
+      { group: 'seo', key: 'titleTemplate', value: '%s | My Store' },
+      { group: 'seo', key: 'titleSuffix', value: ' | My Store' },
+    ]);
+    categoryService.getCategoryTree.mockResolvedValue([
+      { name: 'Marigold', slug: 'marigold', metaTitle: 'Marigold Seeds | Hybrid & High Yield', children: [] },
+    ]);
+
+    const path = '/products.html?category=marigold';
+    const title = 'Marigold Seeds | Hybrid & High Yield | ORBI SEEDS';
+    const html = await get(path);
+    expect(html.body).toContain(`<title>${escapeHtml(title)}</title>`);
+
+    const res = response();
+    await api({ query: { path } }, res, (error) => { throw error; });
+    expect(res.body.data.title).toBe(title);
+    expect(res.body.data.tags).toContain('property="og:site_name" content="ORBI SEEDS"');
+    expect(res.body.data.tags).not.toContain('My Store');
+  });
+
   it('uses the same canonical rules for server HTML and browser navigation metadata', async () => {
     categoryService.getCategoryTree.mockResolvedValue([{ name: 'Vegetables', slug: 'vegetables', children: [
       { name: 'Tomato', slug: 'tomato', children: [], metaTitle: 'Tomato varieties', metaDescription: 'Browse tomato varieties', ogImage: '/uploads/tomato.jpg' },

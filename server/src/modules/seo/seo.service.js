@@ -71,7 +71,7 @@ const formatPageTitle = (title, defaults = {}) => {
   const pageTitle = String(title || defaults.title || defaults.siteName || 'Store').trim();
   if (pageTitle.toLowerCase() === String(defaults.siteName || '').trim().toLowerCase()) return pageTitle;
   const template = String(defaults.titleTemplate || '').trim();
-  if (template.includes('%s')) return template.replace(/%s/g, pageTitle);
+  if (template.includes('%s')) return template.replace(/%s/g, () => pageTitle);
 
   const suffix = String(defaults.titleSuffix || '').trim();
   if (suffix) {
@@ -509,7 +509,12 @@ class SeoService {
     const settingsMap = {};
     settings.forEach((setting) => (settingsMap[`${setting.group}.${setting.key}`] = setting.value));
 
-    const siteName = settingsMap['seo.siteName'] || settingsMap['general.storeName'] || fallback.siteName || 'E-Commerce Store';
+    const seoSiteName = String(settingsMap['seo.siteName'] || '').trim();
+    const titleSuffix = String(settingsMap['seo.titleSuffix'] || '').trim();
+    const titleTemplate = String(settingsMap['seo.titleTemplate'] || '').trim();
+    // Older installations may have persisted the starter SEO settings.
+    const siteName = (/^my store$/i.test(seoSiteName) ? '' : seoSiteName)
+      || String(settingsMap['general.storeName'] || '').trim() || fallback.siteName || 'E-Commerce Store';
     let heroSlides = settingsMap['homepage.heroSlides'];
     if (typeof heroSlides === 'string') {
       try { heroSlides = JSON.parse(heroSlides); } catch (_) { heroSlides = []; }
@@ -520,8 +525,8 @@ class SeoService {
       title: homeTitle,
       homeTitle,
       homeDescription: settingsMap['homepage.seoDescription'] || heroSlides?.[0]?.subtitle || settingsMap['seo.defaultDescription'] || fallback.description || 'Shop the best products online at our store.',
-      titleSuffix: settingsMap['seo.titleSuffix'] || fallback.titleSuffix || ` | ${siteName}`,
-      titleTemplate: settingsMap['seo.titleTemplate'] || '',
+      titleSuffix: (/^(?:\|\s*)?my store$/i.test(titleSuffix) ? '' : titleSuffix) || `| ${siteName}`,
+      titleTemplate: /^%s\s*\|\s*my store$/i.test(titleTemplate) ? '' : titleTemplate,
       description: settingsMap['seo.defaultDescription'] || fallback.description || 'Shop the best products online at our store.',
       keywords: settingsMap['seo.defaultKeywords'] || (fallback.keywords ?? 'ecommerce, shop, online'),
       ogImage: settingsMap['seo.defaultOgImage'] || settingsMap['seo.ogImage'] || '',

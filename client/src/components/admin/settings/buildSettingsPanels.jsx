@@ -126,11 +126,11 @@ export default function buildSettingsPanels(ctx) {
             <Alert severity="info" sx={{ mb: 2.5 }}>
               These settings act as the global fallback. Individual products and categories can have their own SEO overrides.
             </Alert>
-            {field('seo.titleSuffix', 'Title Suffix (e.g. | My Store Name)', 'text', { helperText: 'Appears after the page name in browser tabs.' })}
+            {field('seo.titleSuffix', 'Title Suffix', 'text', { helperText: 'Leave blank to append the configured store name.' })}
             {field('seo.defaultTitle', 'Default Home Title', 'text', { helperText: 'Title for the homepage if no override exists.' })}
             {field('seo.defaultDescription', 'Default Meta Description', 'text', { multiline: true, rows: 3 })}
             {field('seo.defaultKeywords', 'Default Keywords (Internal)', 'text', { helperText: 'Separated by commas. Used for internal search fallback.' })}
-            {field('seo.canonicalBaseUrl', 'Canonical Base URL', 'text', { placeholder: 'https://mystore.com', helperText: 'Crucial for automatic canonical URL generation. Include https://' })}
+            {field('seo.canonicalBaseUrl', 'Canonical Base URL', 'text', { placeholder: 'https://example.com', helperText: 'Crucial for automatic canonical URL generation. Include https://' })}
             {imageField('seo.defaultOgImage', 'Default Social Share Image')}
             <Divider sx={{ my: 2 }} />
             <Typography variant="subtitle2" sx={{ mb: 1 }}>Analytics & Tracking</Typography>
@@ -667,7 +667,7 @@ function buildAdvancedPanel(ctx) {
       'SEO & Discovery',
       'Set defaults for search engines, social sharing, and analytics snippets.',
       <>
-        {field('seo.titleTemplate', 'Page Title Template (use %s for page name, e.g. %s | My Store)')}
+        {field('seo.titleTemplate', 'Page Title Template', 'text', { helperText: 'Use %s for the page title. Leave blank to use the title suffix.' })}
         {field('seo.defaultDescription', 'Default Meta Description')}
         {imageField('seo.ogImage', 'Default OG / Social Share Image')}
         {field('seo.googleAnalyticsId', 'Google Analytics ID (e.g. G-XXXXXXXX)')}

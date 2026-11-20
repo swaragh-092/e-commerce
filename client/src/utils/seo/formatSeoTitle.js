@@ -1,13 +1,24 @@
+import { DEFAULT_STORE_NAME } from '../store';
+
+export const getSeoSiteName = (settings) => {
+  const siteName = String(settings?.seo?.siteName || '').trim();
+  return (/^my store$/i.test(siteName) ? '' : siteName)
+    || String(settings?.general?.storeName || '').trim() || DEFAULT_STORE_NAME;
+};
+
 export const formatSeoTitle = (title, settings = {}) => {
   const seo = settings?.seo || {};
-  const storeName = String(seo.siteName || settings?.general?.storeName || 'Store').trim();
+  const storeName = getSeoSiteName(settings);
   const pageTitle = String(title || seo.defaultTitle || storeName).trim();
   const template = String(seo.titleTemplate || '').trim();
 
   if (pageTitle.toLowerCase() === storeName.toLowerCase()) return pageTitle;
-  if (template.includes('%s')) return template.replace(/%s/g, pageTitle);
+  if (template.includes('%s') && !/^%s\s*\|\s*my store$/i.test(template)) {
+    return template.replace(/%s/g, () => pageTitle);
+  }
 
-  const suffix = String(seo.titleSuffix || '').trim() || `| ${storeName}`;
+  const configuredSuffix = String(seo.titleSuffix || '').trim();
+  const suffix = (/^(?:\|\s*)?my store$/i.test(configuredSuffix) ? '' : configuredSuffix) || `| ${storeName}`;
   return pageTitle.toLowerCase().endsWith(suffix.toLowerCase()) ? pageTitle : `${pageTitle} ${suffix}`;
 };
 

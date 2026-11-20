@@ -121,12 +121,12 @@ function mountOrbiStorefront(app) {
     const fallbackData = fallback(route);
     const global = await seo._getGlobalDefaults({
       siteName, title: fallbackData.title, description: fallbackData.description,
-      keywords: '', titleSuffix: ' | Orbi Seeds',
+      keywords: '',
     });
     const defaults = {
       ...global, canonicalBaseUrl: publicUrl.origin, siteUrl: publicUrl.href, organizationType: 'Organization',
       mediaBaseUrl: apiOrigin, ogImage: global.ogImage || fallbackData.ogImage,
-      ogImageAlt: global.ogImage ? '' : siteName,
+      ogImageAlt: global.ogImage ? '' : global.siteName,
     };
     if (route.kind === 'category') {
       entity = flatten(await categoryService.getCategoryTree({ hideEmpty: true })).find((category) => category.slug === route.slug);

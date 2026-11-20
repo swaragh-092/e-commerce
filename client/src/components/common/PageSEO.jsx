@@ -1,15 +1,14 @@
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useSettings } from '../../hooks/useSettings';
-import { getStoreName } from '../../utils/store';
 import { useLocation } from 'react-router-dom';
-import { formatSeoTitle, resolveCanonicalUrl } from '../../utils/seo/formatSeoTitle';
+import { formatSeoTitle, getSeoSiteName, resolveCanonicalUrl } from '../../utils/seo/formatSeoTitle';
 import { getMediaUrl } from '../../utils/media';
 
 const PageSEO = ({ title, description, keywords, image, url, type = 'website', structuredData, articlePublishedTime }) => {
   const { settings } = useSettings();
   const location = useLocation();
-  const siteName = settings?.seo?.siteName || getStoreName(settings);
+  const siteName = getSeoSiteName(settings);
   const fullTitle = formatSeoTitle(title || siteName, settings);
   const canonicalUrl = type === 'noindex' ? null : resolveCanonicalUrl({ url, pathname: location.pathname, settings });
   const imageUrl = (() => {
