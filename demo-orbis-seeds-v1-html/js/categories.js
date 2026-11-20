@@ -173,7 +173,7 @@ function displayCategories(list, parentName, targetCategory, path) {
 
     // Update Heading (located above breadcrumb inside inner-banner)
     const heading = document.querySelector(".product-heading");
-    if (heading) heading.textContent = parentName;
+    if (heading) heading.textContent = targetCategory?.customHeading?.trim() || parentName;
 
     // Update Banner Image from backend or default
     updateCategoryBanner(targetCategory, path);

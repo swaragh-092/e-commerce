@@ -16,7 +16,7 @@ const logger = require('../../utils/logger');
 const AppError = require('../../utils/AppError');
 const { isBrandVisible } = require('../../utils/brandVisibility');
 const seo = require('./seo.service');
-const { pages, siteName, pagePath, resolve } = require('../../../../demo-orbis-seeds-v1-html/js/seo-routes');
+const { pages, siteName, pagePath, resolve, resolveApprovedCopy } = require('../../../../demo-orbis-seeds-v1-html/js/seo-routes');
 
 const directory = path.resolve(__dirname, '../../../../demo-orbis-seeds-v1-html');
 const mount = '/demo-orbis-seeds-v1-html';
@@ -153,8 +153,9 @@ function mountOrbiStorefront(app) {
     const paths = overridePaths(publicPath.split(/[&?]page=/)[0], route.key);
     const overrides = await SeoOverride.findAll({ where: { path: { [Op.in]: paths } } });
     const override = selectOverride(new Map(overrides.map((row) => [row.path, row])), paths);
-    if (route.approvedCopy) {
-      entity = { ...entity, ...route.approvedCopy };
+    const copy = resolveApprovedCopy(route, entity);
+    if (copy) {
+      entity = { ...entity, ...copy };
       if (!override?.metaTitle) {
         defaults.titleTemplate = '';
         defaults.titleSuffix = '';

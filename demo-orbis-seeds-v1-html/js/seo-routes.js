@@ -124,5 +124,14 @@
         return route;
     }
 
-    return { pages, siteName, pagePath, resolve };
+    function resolveApprovedCopy(route, entity) {
+        const copy = route.approvedCopy;
+        if (!copy || route.kind !== 'category') return copy;
+        return {
+            metaTitle: entity?.metaTitle?.trim() || copy.metaTitle,
+            metaDescription: entity?.metaDescription?.trim() || copy.metaDescription,
+        };
+    }
+
+    return { pages, siteName, pagePath, resolve, resolveApprovedCopy };
 });

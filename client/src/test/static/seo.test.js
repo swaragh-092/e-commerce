@@ -38,8 +38,9 @@ it.each([
     window.API_URL = 'https://backend.test/api/';
     window.fetch = vi.fn().mockResolvedValue({ ok: false });
     for (const script of ['seo-routes.js', 'seo.js']) window.eval(source('js/' + script));
-    window.OrbiSEO.refresh({ name: 'Backend name', metaTitle: 'Old title', metaDescription: 'Old description' });
     expect(window.document.title).toBe(approvedCopy.metaTitle);
+    window.OrbiSEO.refresh({ name: 'Backend name', metaTitle: 'Saved title', metaDescription: ' ' });
+    expect(window.document.title).toBe(file === 'product.html' ? 'Saved title' : approvedCopy.metaTitle);
     expect(window.document.querySelector('meta[name="description"]').content).toBe(approvedCopy.metaDescription);
   } finally {
     window.close();

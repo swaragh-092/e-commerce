@@ -15,9 +15,9 @@ const form = `<div class="enquiry-popup-wrapper"><form class="enquiry-form">
   <input name="txtName"><input name="txtPhone"><input name="txtEmail"><input name="orbis"><textarea name="txtMessage"></textarea>
   <input name="chkNewsletter" type="checkbox"><button type="submit">Submit</button></form></div>`;
 let dom;
-async function mount({ list = false, query = '?category=flowers', products = [product], detailProduct, saved = [], cart = [], fail = '', deferSubmission, features = { wishlist: true, enquiry: true } } = {}) {
+async function mount({ list = false, query = '?category=flowers', products = [product], categories = [], detailProduct, saved = [], cart = [], fail = '', deferSubmission, features = { wishlist: true, enquiry: true } } = {}) {
   dom = new JSDOM(`<div id="header-wishlist-count"></div><div id="header-enquiry-count"></div>
-    ${list ? '<div class="cart-wrapper"><h1>Enquiry List</h1><div id="dynamic-cart-container"></div><div class="cart-buttons"><button id="cart-enquiry-btn">Submit enquiry</button></div></div>' : '<div class="products-content"></div><ul class="products-list"></ul>'}
+    ${list ? '<div class="cart-wrapper"><h1>Enquiry List</h1><div id="dynamic-cart-container"></div><div class="cart-buttons"><button id="cart-enquiry-btn">Submit enquiry</button></div></div>' : '<header class="inner-banner"><h1 class="product-heading"></h1><ol class="breadcrumb"><li><span></span></li></ol></header><div class="products-content"></div><ul class="products-list"></ul>'}
     <div id="dynamic-wishlist-container"></div><div class="cart-buttons"><button id="move-all-to-cart-btn">Move all</button><button id="clear-wishlist-btn">Clear</button></div>${form}`, {
     url: `http://localhost:3000/${list ? 'enquiry-list' : 'products'}.html${query}`, runScripts: 'outside-only',
   });
@@ -29,7 +29,7 @@ async function mount({ list = false, query = '?category=flowers', products = [pr
   let wishlist = saved;
   w.fetch = vi.fn(async (url, options = {}) => {
     if (url.endsWith('settings/features')) return response({ success: true, data: { features } });
-    if (url.includes('/categories')) return response({ success: true, data: [] });
+    if (url.includes('/categories')) return response({ success: true, data: categories });
     if (url.includes('/products?')) return response({ success: true, data: products, meta: { totalPages: 1 } });
     if (/\/products\//.test(url)) return response({ success: true, data: detailProduct || products[0] });
     if (url.endsWith('/enquiries')) {
@@ -73,6 +73,14 @@ const writes = w => w.fetch.mock.calls.filter(([, o]) => o?.method === 'POST');
 afterEach(() => dom?.window.close());
 
 describe('Orbi product choices', () => {
+  it('uses category Custom Heading in the H1 and the category name in breadcrumbs', async () => {
+    const category = { slug: 'flowers', name: 'Flowers', customHeading: 'Hybrid flowers for growers' };
+    const listingProduct = { ...product, categories: [category] };
+    const w = await mount({ products: [listingProduct], categories: [category] });
+    expect(w.document.querySelector('h1').textContent).toBe('Hybrid flowers for growers');
+    expect(w.document.querySelector('.breadcrumb li:last-child').textContent).toBe('Flowers');
+  });
+
   it('loads variant metadata, blocks unselected actions, updates the image and disables impossible combinations', async () => {
     const w = await mount();
     expect(w.fetch.mock.calls.some(([url]) => url.includes('include=attributes,variants'))).toBe(true);
