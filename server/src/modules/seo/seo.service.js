@@ -8,6 +8,7 @@ const {
   ProductVariant,
   Category,
   Brand,
+  Gallery,
   BlogPost,
   Page,
   SeoOverride,
@@ -16,6 +17,7 @@ const {
   Media,
 } = require('../index');
 const tagService = require('../product/tag.service');
+const { isGalleryPath, normalizeSeoPath } = require('./seoPaths');
 const { buildFeatures } = require('../../config/modes');
 const featureGate = require('../../middleware/featureGate.middleware');
 const { getEffectivePrice, getVariantUnitPrice, isSaleActive, resolveSaleLabel } = require('../product/product.pricing');
@@ -194,11 +196,7 @@ class SeoService {
     if (typeof urlPath !== 'string' || !urlPath.startsWith('/') || urlPath.startsWith('//')) {
       throw new AppError('VALIDATION_ERROR', 400, 'A local page path is required.');
     }
-    const queryIndex = urlPath.indexOf('?');
-    const hashIndex = urlPath.indexOf('#');
-    const delimiterIndex = [queryIndex, hashIndex].filter((index) => index !== -1).reduce((first, index) => Math.min(first, index), urlPath.length);
-    urlPath = urlPath.slice(0, delimiterIndex);
-    while (urlPath.length > 1 && urlPath.endsWith('/')) urlPath = urlPath.slice(0, -1);
+    urlPath = normalizeSeoPath(urlPath);
     // Validate public visibility before resolving overrides for tag URLs.
     let tag = null;
     if (urlPath.startsWith('/tags/')) {
@@ -226,6 +224,21 @@ class SeoService {
     if (context.entity) return formatEntity(context.entity, context.kind, urlPath);
 
     if (tag) return formatEntity(tag, 'tag', `/tags/${encodeURIComponent(tag.slug)}`);
+
+    const galleryUrl = new URL(urlPath, 'http://localhost');
+    if (isGalleryPath(galleryUrl.pathname)) {
+      if (!(await featureGate.getResolvedFeature('gallery'))) throw new AppError('NOT_FOUND', 404, 'Gallery not found.');
+      const slug = galleryUrl.searchParams.get('album');
+      if (slug) {
+        const gallery = await Gallery.findOne({
+          where: { slug, isActive: true, isShowcase: true },
+          include: [{ model: Media, as: 'coverImage', attributes: ['url'], required: false }],
+        });
+        if (!gallery) throw new AppError('NOT_FOUND', 404, 'Gallery not found.');
+        return formatEntity(gallery, 'gallery', urlPath);
+      }
+      return formatEntity({ metaTitle: 'Gallery', metaDescription: 'Browse our photo galleries.' }, 'general', urlPath);
+    }
 
     // 2. Resolve public content metadata used by crawlers before the app loads.
     // Extract slug from common patterns: /products/slug or the legacy /product/slug
@@ -771,7 +784,7 @@ class SeoService {
     let cleanPath = '/';
     try {
       const parsed = new URL(String(urlPath || '/'), 'http://localhost');
-      cleanPath = parsed.pathname;
+      cleanPath = normalizeSeoPath(parsed.pathname + parsed.search);
     } catch {
       cleanPath = '/';
     }

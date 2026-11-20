@@ -395,6 +395,29 @@ Send `Idempotency-Key` as a UUID for one order submission (the same value is als
 
 ---
 
+### Brand and gallery SEO fields
+
+Brand and gallery create/update payloads accept these optional fields:
+
+| Field | Limit | Value |
+| --- | --- | --- |
+| `metaTitle` | 255 characters | Search and social title |
+| `metaDescription` | 500 characters | Search and social description |
+| `metaKeywords` | 500 characters | Comma-separated keywords |
+| `ogImage` | 500 characters | HTTP(S) or relative image URL |
+
+Omitting a field on update preserves its saved value. An empty string or `null`
+clears that field so entity and storefront defaults apply. These values do not
+change public visibility: gallery metadata requires an active showcase album
+and the gallery feature to be enabled. The public gallery list and detail
+responses include the saved fields.
+
+Apply `20261120100000-add-brand-gallery-seo.js` with `npm --prefix server run migrate`
+before deploying the updated server. It adds nullable columns to brands and
+galleries without changing existing records' metadata overrides.
+
+---
+
 ## Shipping
 
 | Method | Endpoint                     | Auth | Role  | Description                            |

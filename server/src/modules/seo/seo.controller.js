@@ -3,6 +3,7 @@
 const seoService = require('./seo.service');
 const { success, error } = require('../../utils/response');
 const logger = require('../../utils/logger');
+const { normalizeSeoPath } = require('./seoPaths');
 
 class SeoController {
   async getSitemap(req, res, next) {
@@ -50,7 +51,7 @@ class SeoController {
       let cleanTarget = '/';
       try {
         const parsed = new URL(String(rawTarget), 'http://localhost');
-        cleanTarget = parsed.pathname;
+        cleanTarget = normalizeSeoPath(parsed.pathname + parsed.search);
       } catch {
         cleanTarget = '/';
       }

@@ -1,3 +1,5 @@
+import EntitySeoFields from '../../components/admin/EntitySeoFields';
+import { useFeature } from '../../hooks/useSettings';
 import { useEffect, useState, useRef } from 'react';
 import {
   Alert, Box, Button, Card, CardMedia, Chip, CircularProgress, Dialog, DialogActions,
@@ -18,12 +20,13 @@ import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getMediaUrl } from '../../utils/media';
 import { galleryService } from '../../services/galleryService';
 
-const emptyForm = { title: '', slug: '', description: '', isActive: true };
+const emptyForm = { metaTitle: '', metaDescription: '', metaKeywords: '', ogImage: '', title: '', slug: '', description: '', isActive: true };
 const slugify = (value) => String(value || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const messageFor = (error) => getApiErrorMessage(error, 'Something went wrong. Please try again.');
 
 const GalleryPage = () => {
   const { hasPermission } = useAuth();
+  const seoEnabled = useFeature('seo');
   const { notify, confirm } = useNotification();
   const canManage = hasPermission(PERMISSIONS.GALLERY_MANAGE);
   const canDelete = hasPermission(PERMISSIONS.GALLERY_DELETE);
@@ -86,7 +89,7 @@ const GalleryPage = () => {
   const openEdit = () => {
     if (!selected) return;
     setEditingId(selected.id);
-    setForm({ title: selected.title, slug: selected.slug, description: selected.description || '', isActive: selected.isActive });
+    setForm({ metaTitle: selected.metaTitle || '', metaDescription: selected.metaDescription || '', metaKeywords: selected.metaKeywords || '', ogImage: selected.ogImage || '', title: selected.title, slug: selected.slug, description: selected.description || '', isActive: selected.isActive });
     setDialogOpen(true);
   };
 
@@ -94,6 +97,7 @@ const GalleryPage = () => {
     if (!access.current.canManage) return;
     const payload = { ...form, title: form.title.trim(), slug: slugify(form.slug), description: form.description.trim() };
     if (!payload.title || !payload.slug) return;
+    if (!seoEnabled) for (const key of ['metaTitle', 'metaDescription', 'metaKeywords', 'ogImage']) delete payload[key];
     setBusy(true);
     try {
       if (editingId) {
@@ -276,6 +280,7 @@ const GalleryPage = () => {
           <TextField label="URL slug" value={form.slug} onChange={(event) => setForm((current) => ({ ...current, slug: slugify(event.target.value) }))} helperText="Used in the public gallery URL" required fullWidth />
           <TextField label="Description" value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} multiline minRows={2} fullWidth />
           <FormControlLabel control={<Switch checked={form.isActive} onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))} />} label="Visible on public gallery" />
+          {seoEnabled && <EntitySeoFields value={form} onChange={setForm} title={form.title} description={form.description} canSelectMedia={canSelectMedia} />}
         </Stack></DialogContent>
         <DialogActions><Button onClick={() => setDialogOpen(false)} disabled={busy}>Cancel</Button><Button variant="contained" onClick={saveGallery} disabled={busy || !form.title.trim() || !slugify(form.slug)}>{editingId ? 'Save changes' : 'Create gallery'}</Button></DialogActions>
       </Dialog>

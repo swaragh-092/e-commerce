@@ -6,7 +6,7 @@ import { useLocation } from 'react-router-dom';
 import { formatSeoTitle, resolveCanonicalUrl } from '../../utils/seo/formatSeoTitle';
 import { getMediaUrl } from '../../utils/media';
 
-const PageSEO = ({ title, description, image, url, type = 'website', structuredData, articlePublishedTime }) => {
+const PageSEO = ({ title, description, keywords, image, url, type = 'website', structuredData, articlePublishedTime }) => {
   const { settings } = useSettings();
   const location = useLocation();
   const siteName = settings?.seo?.siteName || getStoreName(settings);
@@ -68,6 +68,7 @@ const PageSEO = ({ title, description, image, url, type = 'website', structuredD
       {description && <meta name="twitter:description" content={description} />}
       {imageUrl && <meta name="twitter:image" content={imageUrl} />}
       
+      {keywords && <meta name="keywords" content={keywords} />}
       {/* Canonical URL */}
       {canonicalUrl ? <link rel="canonical" href={canonicalUrl} /> : null}
 
