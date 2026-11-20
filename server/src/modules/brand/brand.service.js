@@ -8,7 +8,7 @@ const AppError = require('../../utils/AppError');
 const createBrand = async (data) => {
     const transaction = await Brand.sequelize.transaction();
     try {
-        const { name, slug, description, image, isActive = true, isPromoted = false, isFeatured = false } = data;
+        const { name, slug, description, image, metaTitle, metaDescription, metaKeywords, ogImage, isActive = true, isPromoted = false, isFeatured = false } = data;
         
         // Use text from slug if provided, otherwise name, and ensure uniqueness
         const finalSlug = await generateSlug(slug || name, Brand, 'slug', { transaction });
@@ -18,6 +18,7 @@ const createBrand = async (data) => {
             slug: finalSlug,
             description,
             image,
+            metaTitle, metaDescription, metaKeywords, ogImage,
             isActive,
             isPromoted,
             isFeatured,
@@ -218,6 +219,7 @@ const updateBrand = async (id, data) => {
         await brand.update({
             name: name || brand.name,
             slug: finalSlug,
+            ...Object.fromEntries(['metaTitle', 'metaDescription', 'metaKeywords', 'ogImage'].filter(key => data[key] !== undefined).map(key => [key, data[key]])),
             description: description !== undefined ? description : brand.description,
             image: image !== undefined ? image : brand.image,
             isActive: isActive !== undefined ? isActive : brand.isActive,

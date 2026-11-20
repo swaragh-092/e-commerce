@@ -1,8 +1,16 @@
 'use strict';
 
 const Joi = require('joi');
+const seoFields = {
+  metaTitle: Joi.string().trim().max(255).allow('', null),
+  metaDescription: Joi.string().trim().max(500).allow('', null),
+  metaKeywords: Joi.string().trim().max(500).allow('', null),
+  ogImage: Joi.string().uri({ scheme: ['http', 'https'], allowRelative: true }).max(500).allow('', null),
+};
+
 
 const createBrandSchema = Joi.object({
+    ...seoFields,
     name: Joi.string().max(255).required(),
     slug: Joi.string().max(255).lowercase().allow('').optional(),
     description: Joi.string().max(2000).allow('', null).optional(),
@@ -13,6 +21,7 @@ const createBrandSchema = Joi.object({
 });
 
 const updateBrandSchema = Joi.object({
+    ...seoFields,
     name: Joi.string().max(255).optional(),
     slug: Joi.string().max(255).lowercase().allow('').optional(),
     description: Joi.string().max(2000).allow('', null).optional(),

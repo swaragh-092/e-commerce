@@ -60,10 +60,18 @@ content and banner images from the Pages API in the browser. The Orbi storefront
 brand or tag collection routes.
 
 Selected storefront URLs use the SEO team's approved titles and descriptions
-from `demo-orbis-seeds-v1-html/js/seo-routes.js`. On category URLs, each field
-uses a matching SEO URL Override first, then the saved Edit Category value,
-then the approved copy, then the storefront fallback. The approved copy on
-other selected URLs can still be replaced by an explicit SEO URL Override.
+from `demo-orbis-seeds-v1-html/js/seo-routes.js`. On category and gallery album
+URLs, each field uses a matching SEO URL Override first, then the saved entity
+value, then the approved copy, then the storefront fallback. The approved copy
+on other selected URLs can still be replaced by an explicit SEO URL Override.
+
+With SEO enabled, open an album in **Catalog → Gallery** and use **SEO
+Configuration** to save its meta title, description, keywords and social sharing
+image. Clear a field to restore its fallback; select **Use default image** to
+restore the album cover. Apply migration
+`20261120100000-add-brand-gallery-seo.js` before deploying the updated server.
+The Express entry point remains responsible for album metadata and Media Library
+image alternatives.
 
 Product and variant images use Media Library alt text first, then descriptive
 alt text saved on the product image. Legacy filenames and the generic Product

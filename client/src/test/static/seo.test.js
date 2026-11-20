@@ -40,7 +40,7 @@ it.each([
     for (const script of ['seo-routes.js', 'seo.js']) window.eval(source('js/' + script));
     expect(window.document.title).toBe(approvedCopy.metaTitle);
     window.OrbiSEO.refresh({ name: 'Backend name', metaTitle: 'Saved title', metaDescription: ' ' });
-    expect(window.document.title).toBe(file === 'product.html' ? 'Saved title' : approvedCopy.metaTitle);
+    expect(window.document.title).toBe('Saved title');
     expect(window.document.querySelector('meta[name="description"]').content).toBe(approvedCopy.metaDescription);
   } finally {
     window.close();

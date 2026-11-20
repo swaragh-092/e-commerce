@@ -1221,7 +1221,13 @@ const placeOrder = async (userId, payload) => {
     if (!userId && !features.guestCheckout) {
         throw new AppError('FORBIDDEN', 403, 'Guest checkout is disabled. Please log in or register to place an order.');
     }
-    await ensurePaymentMethodEnabled(paymentMethod);
+    let paymentMethodError;
+    try {
+        await ensurePaymentMethodEnabled(paymentMethod);
+    } catch (error) {
+        if (!payload.giftCardCode || !(error instanceof AppError)) throw error;
+        paymentMethodError = error;
+    }
 
     if (buyNowItem?.productId) {
         checkoutItems = [await loadBuyNowItem(buyNowItem)];
@@ -1582,6 +1588,9 @@ const placeOrder = async (userId, payload) => {
             }
             giftCard = await giftCards.findCard(payload.giftCardCode, t);
             giftCardAmountPaise = Math.min(Math.round(total * 100), giftCard.balance - giftCard.held) || null;
+            if (paymentMethodError && (!giftCardAmountPaise || giftCardAmountPaise < Math.round(total * 100))) {
+                throw paymentMethodError;
+            }
         }
         const isFreeOnlineOrder = paymentMethod !== 'cod' && Math.round(total * 100) === (giftCardAmountPaise || 0);
         const initialOrderStatus = paymentMethod === 'cod' ? ORDER_DEFAULT_STATUS : (isFreeOnlineOrder ? 'processing' : 'pending_payment');

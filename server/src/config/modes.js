@@ -130,6 +130,7 @@ const buildFeatures = (dbFeatures, appMode) => {
   // 4. If checkout is disabled (e.g. in catalog mode), guestCheckout cannot function:
   if (!resolved.checkout) {
     resolved.guestCheckout = false;
+    resolved.giftCards = false;
   }
 
   // 5. If pricing is disabled (e.g. in catalog mode), showPrice cannot function:

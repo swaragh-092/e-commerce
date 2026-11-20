@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented here.
 
+## [1.9.0.1] - 2026-11-20
+
+### Fixed
+
+- Use a pure white background on the admin sign-in page.
+
+## [1.9.0.0] - 2026-11-20
+
+### Added
+
+- Customize search titles, descriptions, keywords, and sharing images for brands and gallery albums from their admin editors.
+
+### Fixed
+
+- Use saved gallery SEO ahead of preset storefront copy while preserving canonical URLs, image alt text, and public visibility checks.
+
+## [1.8.0.0] - 2026-11-20
+
+### Added
+
+- Let authorized staff issue digital gift cards without collecting payment, with an audited reason and recipient email delivery.
+- Register gift card permissions in Access Control and add an E-commerce-only issuance switch in Platform Features.
+- Track delayed permanent gift card email bounces through an authenticated mail event relay.
+
+### Fixed
+
+- Require CSRF tokens for browser API writes and cookie-authenticated API writes.
+
 ## [1.7.0.0] - 2026-11-20
 
 ### Added

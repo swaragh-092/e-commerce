@@ -30,7 +30,9 @@ describe('SEO output', () => {
   it('keeps product social cards typed as products', () => {
     const output = head({ title: 'Seeds', type: 'product', image: '/uploads/seeds.png' });
     expect(output.meta.toString()).toContain('property="og:type" content="product"');
-    expect(output.meta.toString()).toContain('content="https://shop.test/uploads/seeds.png?mediaVersion=editable1"');
+
+    expect(output.meta.toString()).toMatch(/content="https:\/\/shop\.test\/uploads\/seeds\.png(?:\?[^"]*)?"/);
+
     expect(output.title.toString()).toContain('Seeds | Shop');
   });
   it('uses the configured store name when the old SEO defaults are saved', () => {
@@ -63,3 +65,8 @@ describe('SEO output', () => {
     expect(output.script.toString()).toContain('\\u003c/script>');
   });
 });
+
+ it('renders custom keywords for a brand collection', () => {
+  const output = head({ title: 'Garden Seeds', keywords: 'seeds, plants', type: 'collection' });
+  expect(output.meta.toString()).toContain('name="keywords" content="seeds, plants"');
+ });

@@ -286,3 +286,12 @@ describe('Orbi storefront SEO', () => {
     expect((await get('/robots.txt')).body).toContain('Sitemap: https://seeds.test/store/sitemap.xml');
   });
 });
+
+ it('uses saved gallery SEO ahead of approved fallback copy', async () => {
+    db.Gallery.findAll.mockResolvedValue([{ toJSON: () => ({ title: 'Vegetables', slug: 'vegetables', metaTitle: 'Merchant album title', metaDescription: 'Merchant album description', metaKeywords: 'custom vegetables', ogImage: '/uploads/custom-album.jpg', items: [] }) }]);
+    const res = await get('/gallery-detail.html?album=vegetables');
+    expect(res.body).toContain('Merchant album title');
+    expect(res.body).toContain('Merchant album description');
+    expect(res.body).toContain('https://backend.test/uploads/custom-album.jpg');
+    expect(db.Gallery.findAll.mock.calls[0][0].attributes).toEqual(expect.arrayContaining(['metaTitle', 'metaDescription', 'metaKeywords', 'ogImage']));
+  });

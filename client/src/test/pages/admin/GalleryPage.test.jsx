@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import GalleryPage from '../../../pages/admin/GalleryPage';
 import { galleryService } from '../../../services/galleryService';
 
+vi.mock('../../../hooks/useSettings', () => ({ useFeature: () => true }));
+
 const { notify, confirm, grants } = vi.hoisted(() => ({ grants: new Set(), notify: vi.fn(), confirm: vi.fn().mockResolvedValue(true) }));
 
 vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: (permission) => grants.has(permission) }) }));
@@ -102,5 +104,19 @@ describe('Catalog Gallery page', () => {
     expect(screen.getByRole('button', { name: 'Add images' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Edit gallery' })).toBeEnabled();
   });
+
+
+ it('loads and saves custom album SEO, including clearing saved values', async () => {
+  galleryService.list.mockResolvedValue({ data: [{ ...album, metaTitle: 'Flower seeds', metaDescription: 'Flower photos', metaKeywords: 'flowers', ogImage: '/social.jpg' }], meta: { totalPages: 1 } });
+  galleryService.update.mockResolvedValue({ data: album });
+  render(<GalleryPage />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit gallery' }));
+  expect(screen.getByRole('textbox', { name: 'Meta title' })).toHaveValue('Flower seeds');
+  fireEvent.change(screen.getByRole('textbox', { name: 'Meta title' }), { target: { value: 'Updated flowers' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Meta description' }), { target: { value: '' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Use default image' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+  await waitFor(() => expect(galleryService.update).toHaveBeenCalledWith('gallery-1', expect.objectContaining({ metaTitle: 'Updated flowers', metaDescription: '', ogImage: '', metaKeywords: 'flowers' })));
+ });
 
 });

@@ -14,6 +14,7 @@ const graph = (html) => JSON.parse(html.match(/<script type="application\/ld\+js
 const template = '<html><head></head><body><div id="root"></div></body></html>';
 beforeEach(() => {
   vi.spyOn(seo, '_getGlobalDefaults').mockResolvedValue(defaults);
+  vi.spyOn(db.Gallery, 'findAll').mockResolvedValue([]);
   vi.spyOn(db.Setting, 'findAll').mockResolvedValue([]);
   vi.spyOn(db.Setting, 'findOne').mockResolvedValue(null);
   vi.spyOn(db.SeoOverride, 'findOne').mockResolvedValue(null);
