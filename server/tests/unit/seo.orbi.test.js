@@ -69,7 +69,7 @@ describe('Orbi storefront SEO', () => {
       { group: 'seo', key: 'titleTemplate', value: 'Template: %s' },
     ]);
     categoryService.getCategoryTree.mockResolvedValue(['fruit', 'vegetables', 'flowers'].map((slug) => ({
-      slug, name: slug, metaTitle: 'Saved category title', metaDescription: 'Saved category description',
+      slug, name: slug, metaTitle: '', metaDescription: null,
       children: [{ slug: slug + '-child', children: [] }],
     })));
     db.Gallery.findAll.mockImplementation(async ({ where }) => [{
@@ -83,6 +83,24 @@ describe('Orbi storefront SEO', () => {
     expect(res.body).toContain(`<title>${escapeHtml(approvedCopy.metaTitle)}</title>`);
     expect(res.body).toContain(`name="description" content="${escapeHtml(approvedCopy.metaDescription)}"`);
     expect(res.body).toContain(`property="og:title" content="${escapeHtml(approvedCopy.metaTitle)}"`);
+  });
+
+  it('uses saved category SEO before the approved copy and applies overrides per field', async () => {
+    const category = {
+      name: 'Flowers', slug: 'flowers', metaTitle: 'Flower Research | Quality Flower Seeds', metaDescription: '   ',
+      children: [{ slug: 'marigold', children: [] }],
+    };
+    categoryService.getCategoryTree.mockResolvedValue([category]);
+    const path = '/product.html?cat=flowers';
+    const defaults = await get(path);
+    expect(defaults.body).toContain('<title>Flower Research | Quality Flower Seeds</title>');
+    expect(defaults.body).toContain('name="description" content="Explore quality flower seeds from Orbi Seeds,');
+
+    category.metaDescription = 'Saved description from Edit Category';
+    db.SeoOverride.findAll.mockResolvedValue([{ path, metaTitle: 'Campaign flowers' }]);
+    const override = await get(path);
+    expect(override.body).toContain('<title>Campaign flowers | Orbi Seeds</title>');
+    expect(override.body).toContain('name="description" content="Saved description from Edit Category"');
   });
 
   it('allows an explicit SEO override to replace part of the approved copy', async () => {

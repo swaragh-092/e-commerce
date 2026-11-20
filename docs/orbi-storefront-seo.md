@@ -59,9 +59,10 @@ Pages require the Express entry point. The Orbi storefront has no dedicated
 brand or tag collection routes.
 
 Selected storefront URLs use the SEO team's approved titles and descriptions
-from `demo-orbis-seeds-v1-html/js/seo-routes.js`. For those URLs, the approved copy
-takes precedence over global title formatting and saved category copy. An
-explicit matching SEO URL Override can still replace either field.
+from `demo-orbis-seeds-v1-html/js/seo-routes.js`. On category URLs, each field
+uses a matching SEO URL Override first, then the saved Edit Category value,
+then the approved copy, then the storefront fallback. The approved copy on
+other selected URLs can still be replaced by an explicit SEO URL Override.
 
 Product and variant images use Media Library alt text first, then descriptive
 alt text saved on the product image. Legacy filenames and the generic Product

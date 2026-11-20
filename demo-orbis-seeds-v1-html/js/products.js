@@ -182,7 +182,7 @@ function fetchProducts(categorySlug, requestedProductSlug, page) {
                     first.prepend(label);
                 }
                 var category = products[0].categories && products[0].categories.find(function (item) { return item.slug === categorySlug; });
-                if (category && !requestedProductSlug) updateCategoryUi(category.name);
+                if (category && !requestedProductSlug) updateCategoryUi(category.name, category.customHeading);
             } else {
                 renderEmptyState(content, list);
             }
@@ -233,14 +233,14 @@ function formatCategorySlug(slug) {
         .join(" ");
 }
 
-function updateCategoryUi(categoryName) {
+function updateCategoryUi(categoryName, customHeading) {
     const categoryTitle = document.querySelector(".ip-products-list p");
     const breadcrumbSpan = document.querySelector(".breadcrumb li span");
     const heading = document.querySelector(".inner-banner .product-heading");
 
     if (categoryTitle) categoryTitle.textContent = categoryName;
     if (breadcrumbSpan) breadcrumbSpan.textContent = categoryName;
-    if (heading) heading.textContent = categoryName;
+    if (heading) heading.textContent = customHeading?.trim() || categoryName;
 }
 
 function updateCategoryBanner(path) {
@@ -290,7 +290,7 @@ function findCategoryPath(categories, slug, currentPath) {
     return null;
 }
 
-function renderBreadcrumbWithHierarchy(path, defaultName) {
+function renderBreadcrumbWithHierarchy(path, defaultName, preserveHeading) {
     const breadcrumb = document.querySelector(".breadcrumb");
     if (!breadcrumb) return;
 
@@ -308,13 +308,13 @@ function renderBreadcrumbWithHierarchy(path, defaultName) {
 
         const categoryTitle = document.querySelector(".ip-products-list p");
         if (categoryTitle) categoryTitle.textContent = currentCategory.name;
-        if (bannerHeading) bannerHeading.textContent = currentCategory.name;
+        if (bannerHeading && !preserveHeading) bannerHeading.textContent = currentCategory.customHeading?.trim() || currentCategory.name;
     } else {
         var label = (defaultName && defaultName !== 'Products' && defaultName !== 'All Products') ? defaultName : 'Our Products';
         html += '<li>/</li><li><span>' + OrbiCatalog.escape(label) + '</span></li>';
         const categoryTitle = document.querySelector(".ip-products-list p");
         if (categoryTitle) categoryTitle.textContent = label;
-        if (bannerHeading) bannerHeading.textContent = label;
+        if (bannerHeading && !preserveHeading) bannerHeading.textContent = label;
     }
 
     breadcrumb.innerHTML = html;
@@ -337,7 +337,7 @@ function updateCategoryBreadcrumbs(categorySlug, fallbackName) {
         var activeCategory = params.get('category') || params.get('cat') || productsState.detailCategory || '';
         if (activeCategory !== (categorySlug || '')) return;
         var path = findCategoryPath(categories, categorySlug);
-        renderBreadcrumbWithHierarchy(path, fallbackName);
+        renderBreadcrumbWithHierarchy(path, fallbackName, params.has('slug'));
         updateCategoryBanner(path);
         updateBackButtonPath(path);
         var currentCat = path && path[path.length - 1];
@@ -357,7 +357,7 @@ function updateCategoryBreadcrumbs(categorySlug, fallbackName) {
     productCategoriesRequest.then(apply).catch(function () {
         var params = new URLSearchParams(window.location.search);
         if ((params.get('category') || productsState.detailCategory || '') !== (categorySlug || '')) return;
-        renderBreadcrumbWithHierarchy(null, fallbackName);
+        renderBreadcrumbWithHierarchy(null, fallbackName, params.has('slug'));
         updateCategoryBanner(null);
     });
 }
