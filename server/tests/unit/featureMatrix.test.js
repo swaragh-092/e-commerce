@@ -43,6 +43,7 @@ const TIER2_KEYS = Object.keys(TIER2_DEFAULTS.ecommerce);
 const CATALOG_FORCED_OFF = new Set([
   'coupons',
   'guestCheckout',
+  'giftCards',
   'requirePurchaseForReview',
   'showAvailableCoupons',
   'showPrice',
@@ -505,4 +506,10 @@ describe('Review gate route isolation', () => {
     });
     expect(error).toMatchObject({ code: 'FEATURE_DISABLED', statusCode: 403 });
   });
+});
+
+it('allows gift card issuance to be paused in Ecommerce and locks it off in Catalog', () => {
+  expect(buildFeatures({}, 'ecommerce').giftCards).toBe(true);
+  expect(buildFeatures({ giftCards: false }, 'ecommerce')).toMatchObject({ giftCards: false, checkout: true });
+  expect(buildFeatures({ giftCards: true }, 'catalog')).toMatchObject({ giftCards: false, checkout: false });
 });

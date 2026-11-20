@@ -96,7 +96,7 @@ const FeaturesPage = () => {
           key: flatKey.slice('features.'.length),
           value,
         }))
-        .filter(({ key }) => !tier1Keys.includes(key));
+        .filter(({ key }) => !tier1Keys.includes(key) && !(key === 'giftCards' && form['general.mode'] === 'catalog'));
 
       const visibilityKeys = Object.entries(form)
         .filter(([k]) => k.startsWith('visibility.'))
@@ -271,7 +271,7 @@ const FeaturesPage = () => {
               } else if (key === 'features.coupons' && isCatalog) {
                 isEffectiveLockedOff = true;
                 lockReason = 'Locked OFF in Catalog mode (Cart & Checkout disabled)';
-              } else if (key === 'features.guestCheckout' && isCatalog) {
+              } else if (['features.guestCheckout', 'features.giftCards'].includes(key) && isCatalog) {
                 isEffectiveLockedOff = true;
                 lockReason = 'Locked OFF in Catalog mode (Checkout disabled)';
               } else if (key === 'features.requirePurchaseForReview') {

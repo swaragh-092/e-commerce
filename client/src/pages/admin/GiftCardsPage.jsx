@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography } from '@mui/material';
 import api from '../../services/api';
+import { useAuth } from '../../hooks/useAuth';
+import { PERMISSIONS } from '../../utils/permissions';
 
 const unwrap = ({ data }) => data.data;
 const money = (paise) => paise == null ? '—' : `₹${(paise / 100).toFixed(2)}`;
@@ -8,7 +10,13 @@ const errorText = (error) => error.response?.data?.error?.message || error.messa
 const date = (value) => value ? new Date(value).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST' : '—';
 
 export default function GiftCardsPage() {
+    const { hasPermission } = useAuth();
+    const canIssue = hasPermission(PERMISSIONS.GIFT_CARDS_ISSUE);
+    const canManage = hasPermission(PERMISSIONS.GIFT_CARDS_MANAGE);
+    const canRefund = hasPermission(PERMISSIONS.GIFT_CARDS_REFUND);
     const [policy, setPolicy] = useState(null);
+    const [issuance, setIssuance] = useState(null);
+    const [issuedId, setIssuedId] = useState(null);
     const [rows, setRows] = useState([]);
     const [health, setHealth] = useState(null);
     const [ledger, setLedger] = useState(null);
@@ -20,7 +28,7 @@ export default function GiftCardsPage() {
     const [busy, setBusy] = useState(false);
     const refresh = useCallback(async (search = '') => {
         const [settings, cards, health] = await Promise.all([
-            api.get('/gift-cards/policy').then(unwrap),
+            api.get('/gift-cards/admin/policy').then(unwrap),
             api.get('/gift-cards/admin/cards', { params: { search } }).then(unwrap),
             api.get('/gift-cards/admin/health').then(unwrap),
         ]);
@@ -70,10 +78,29 @@ export default function GiftCardsPage() {
         });
     };
 
+    const submitIssuance = (event) => {
+        event.preventDefault();
+        run(async () => {
+            const result = unwrap(await api.post('/gift-cards/admin/issue', { ...issuance, amount: Number(issuance.amount) }));
+            setIssuance(null);
+            setIssuedId(result.id);
+            setFilter('');
+            await refresh();
+        });
+    };
+
     return (
         <Stack spacing={3}>
-            <Typography variant="h4" component="h1">Digital gift cards</Typography>
+            <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={2}>
+                <Typography variant="h4" component="h1">Digital gift cards</Typography>
+                {canIssue && <Button variant="contained" disabled={busy || !policy?.issuanceAvailable} onClick={() => {
+                    setError('');
+                    setIssuance({ id: crypto.randomUUID(), amount: '', recipientEmail: '', message: '', reason: '' });
+                }}>Create gift card</Button>}
+            </Stack>
+            {issuedId && <Alert severity="success" onClose={() => setIssuedId(null)}>Gift card created and queued for email. Reference {issuedId}</Alert>}
             {error && <Alert severity="error">{error}</Alert>}
+            {policy && !policy.issuanceAvailable && <Alert severity="info">New gift card purchases and staff issuance are paused in Platform Features.</Alert>}
             {policy && (
                 <Paper variant="outlined" sx={{ p: 2 }}>
                     <Stack component="form" spacing={2} onSubmit={(event) => {
@@ -86,19 +113,19 @@ export default function GiftCardsPage() {
                             await refresh(filter.trim());
                         });
                     }}>
-                        <FormControlLabel label="Enable new gift card sales" control={<Checkbox checked={policy.enabled}
+                        <FormControlLabel label="Enable new gift card sales" control={<Checkbox disabled={!canManage} checked={policy.enabled}
                             onChange={(event) => setPolicy({ ...policy, enabled: event.target.checked })} />} />
                         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                             {[
                                 ['minimum', 'Minimum ₹', 1000000], ['maximum', 'Maximum ₹', 1000000], ['validity_days', 'Validity in days', 36500],
                             ].map(([key, label, max]) => (
                                 <TextField key={key} label={label} type="number" value={policy[key] ?? ''}
-                                    required={key !== 'validity_days'} inputProps={{ min: 1, max, step: 1 }}
+                                    disabled={!canManage} required={key !== 'validity_days'} inputProps={{ min: 1, max, step: 1 }}
                                     helperText={key === 'validity_days' ? 'Leave blank for no expiry' : undefined}
                                     onChange={(event) => setPolicy({ ...policy, [key]: event.target.value })} />
                             ))}
                         </Stack>
-                        <Button type="submit" variant="contained" disabled={busy} sx={{ alignSelf: 'start' }}>Save policy</Button>
+                        <Button type="submit" variant="contained" disabled={busy || !canManage} sx={{ alignSelf: 'start' }}>Save policy</Button>
                     </Stack>
                 </Paper>
             )}
@@ -118,12 +145,15 @@ export default function GiftCardsPage() {
             <Paper variant="outlined" sx={{ overflowX: 'auto' }}>
                 <Table size="small">
                     <TableHead><TableRow>
-                        {['Purchase', 'Card', 'Face value', 'Balance', 'Held', 'Delivery', 'Refund', 'Actions'].map((label) => <TableCell key={label}>{label}</TableCell>)}
+                        {['Reference', 'Card', 'Face value', 'Balance', 'Held', 'Delivery', 'Refund', 'Actions'].map((label) => <TableCell key={label}>{label}</TableCell>)}
                     </TableRow></TableHead>
                     <TableBody>
                         {rows.map((row) => (
                                 <TableRow key={row.id}>
-                                    <TableCell>{row.id}</TableCell>
+                                    <TableCell>
+                                        {row.id}
+                                        {row.issued_manually && <Typography variant="caption" display="block">Issued by staff</Typography>}
+                                    </TableCell>
                                     <TableCell>{row.suffix ? `•••• ${row.suffix}${row.suspended ? ' · Suspended' : ''}` : '—'}</TableCell>
                                     <TableCell>{money(row.amount)}</TableCell>
                                     <TableCell>{money(row.balance)}</TableCell>
@@ -137,9 +167,9 @@ export default function GiftCardsPage() {
                                         {row.card_id && (
                                             <Stack direction="row">
                                                 <Button disabled={busy} onClick={() => run(async () => setLedger(unwrap(await api.get(`/gift-cards/admin/card/${row.card_id}`))))}>Ledger</Button>
-                                                <Button disabled={busy} onClick={() => open('delivery', row)}>Delivery</Button>
-                                                <Button disabled={busy} onClick={() => open('suspension', row)}>{row.suspended ? 'Resume' : 'Suspend'}</Button>
-                                                <Button disabled={busy || !!row.held || row.balance !== row.amount} onClick={() => open('refund', row)}>Refund</Button>
+                                                {canManage && <Button disabled={busy} onClick={() => open('delivery', row)}>Delivery</Button>}
+                                                {canManage && <Button disabled={busy} onClick={() => open('suspension', row)}>{row.suspended ? 'Resume' : 'Suspend'}</Button>}
+                                                {canRefund && !row.issued_manually && <Button disabled={busy || !!row.held || row.balance !== row.amount} onClick={() => open('refund', row)}>Refund</Button>}
                                             </Stack>
                                         )}
                                     </TableCell>
@@ -148,11 +178,38 @@ export default function GiftCardsPage() {
                     </TableBody>
                 </Table>
             </Paper>
+            <Dialog open={!!issuance && canIssue} onClose={() => !busy && setIssuance(null)} fullWidth maxWidth="sm">
+                {issuance && (
+                    <form onSubmit={submitIssuance}>
+                        <DialogTitle>Create gift card</DialogTitle>
+                        <DialogContent>
+                            <Stack spacing={2} sx={{ pt: 1 }}>
+                                <Typography variant="body2">The store will email the code to the recipient. No payment is collected.</Typography>
+                                {error && <Alert severity="error">{error}</Alert>}
+                                <TextField label="Amount in ₹" type="number" required value={issuance.amount}
+                                    inputProps={{ min: policy?.minimum, max: policy?.maximum, step: 1 }}
+                                    onChange={(event) => setIssuance({ ...issuance, amount: event.target.value })} />
+                                <TextField label="Recipient email" type="email" required value={issuance.recipientEmail}
+                                    onChange={(event) => setIssuance({ ...issuance, recipientEmail: event.target.value })} />
+                                <TextField label="Message to recipient" multiline inputProps={{ maxLength: 500 }} value={issuance.message}
+                                    onChange={(event) => setIssuance({ ...issuance, message: event.target.value })} />
+                                <TextField label="Internal reason" required inputProps={{ minLength: 3, maxLength: 250 }} value={issuance.reason}
+                                    onChange={(event) => setIssuance({ ...issuance, reason: event.target.value })} />
+                            </Stack>
+                        </DialogContent>
+                        <DialogActions>
+                            <Button onClick={() => setIssuance(null)} disabled={busy}>Cancel</Button>
+                            <Button type="submit" variant="contained" disabled={busy}>Create and email</Button>
+                        </DialogActions>
+                    </form>
+                )}
+            </Dialog>
             <Dialog open={!!ledger} onClose={() => setLedger(null)} fullWidth>
                 <DialogTitle>Card ledger</DialogTitle>
                 <DialogContent>
                     {ledger?.map((entry) => <Typography key={`${entry.kind}-${entry.reference}`} variant="body2" sx={{ my: 1 }}>
                         {new Date(entry.created_at).toLocaleString()} · {entry.kind} · {money(entry.balance_delta)} · Held {money(entry.hold_delta)}
+                        {entry.actor_id ? ` · Staff ${entry.actor_id}` : ''}
                         {entry.reason ? ` · ${entry.reason}` : ''}
                     </Typography>)}
                 </DialogContent>

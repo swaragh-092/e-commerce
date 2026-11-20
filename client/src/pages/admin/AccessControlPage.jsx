@@ -68,7 +68,7 @@ import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const permissionGroupLabels = {
   account: 'My account', api_builder: 'API Builder', attributes: 'Product attributes', tags: 'Product tags',
-  menus: 'Store navigation', roles: 'Role management', users: 'Staff accounts',
+  gift_cards: 'Digital gift cards', menus: 'Store navigation', roles: 'Role management', users: 'Staff accounts',
 };
 const formatPermissionGroup = (group) => permissionGroupLabels[group]
   || group.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -87,6 +87,10 @@ const permissionLabels = {
   'reviews.create': 'Write reviews',
   'orders.update_status': 'Update order status',
   'orders.refund': 'Refund orders',
+  'gift_cards.read': 'View gift cards',
+  'gift_cards.manage': 'Manage gift cards',
+  'gift_cards.issue': 'Issue gift cards',
+  'gift_cards.refund': 'Refund gift card purchases',
   'products.bulk_sale': 'Apply bulk sale pricing',
   'settings.advanced': 'Access advanced settings',
   'roles.read': 'View roles',

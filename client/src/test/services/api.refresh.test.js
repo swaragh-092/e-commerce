@@ -4,6 +4,7 @@ let api;
 const denied = config => Object.assign(new Error('Unauthorized'), { config, response: { status: 401, data: {} } });
 beforeEach(async () => {
   vi.resetModules();
+  vi.spyOn(axios, 'get').mockResolvedValue({ data: { token: 'test-csrf-token' } });
   localStorage.clear();
   let tail = Promise.resolve();
   vi.stubGlobal('navigator', { locks: { request: (_key, cb) => {
@@ -157,4 +158,21 @@ describe('API refresh retry behavior', () => {
     window.removeEventListener('auth:unauthorized', unauthorized);
     deactivate();
   });
+});
+
+it('refreshes a stale CSRF token and retries a write once', async () => {
+  vi.mocked(axios.get).mockResolvedValueOnce({ data: { token: 'old-token' } })
+    .mockResolvedValueOnce({ data: { token: 'new-token' } });
+  const sentTokens = [];
+  api.defaults.adapter = vi.fn(async config => {
+    sentTokens.push(config.headers['X-CSRF-Token']);
+    if (!config._csrfRetry) {
+      throw Object.assign(new Error('Invalid CSRF token'), {
+        config, response: { status: 403, data: { error: { code: 'CSRF_TOKEN_INVALID' } } },
+      });
+    }
+    return { data: { ok: true }, status: 200, headers: {}, config };
+  });
+  await expect(api.post('/gift-cards/admin/issue', {})).resolves.toMatchObject({ data: { ok: true } });
+  expect(sentTokens).toEqual(['old-token', 'new-token']);
 });
