@@ -17,6 +17,7 @@
         'resource.html': ['Agricultural Article', 'Read articles on seed varieties, crop cultivation and agricultural research from Orbi Seeds International.', 'about-us.jpg'],
         'gallery.html': ['Photo Gallery', 'Browse photo albums from Orbi Seeds International, including crops, seed trials and research facilities.', 'research.jpg', 'CollectionPage'],
         'gallery-detail.html': ['Photo Album', 'View photographs from the Orbi Seeds International gallery.', 'research.jpg', 'CollectionPage'],
+        'page.html': ['Information', 'Published information from Orbi Seeds International.'],
         'sitemap.html': ['Site Map', 'Find seed categories, research, agricultural resources and contact information on the Orbi Seeds website.', 'home-banner.jpg'],
         'wishlist.html': ['Wishlist', 'Review your saved Orbi Seeds varieties.'],
         'enquiry-list.html': ['Enquiry List', 'Review the seed varieties in your Orbi Seeds enquiry.'],
@@ -42,6 +43,9 @@
             route = { ...route, kind: 'product', slug, publicPath: pagePath(file, { slug }), key: '/products/' + encodeURIComponent(slug) };
         } else if ((file === 'product.html' || file === 'products.html') && category) {
             route = { ...route, kind: 'category', slug: category, publicPath: pagePath(file, { [file === 'product.html' ? 'cat' : 'category']: category }), key: '/category/' + encodeURIComponent(category) };
+        } else if (file === 'page.html') {
+            if (slug) route = { ...route, kind: 'page', slug, publicPath: pagePath(file, { slug }), key: '/p/' + encodeURIComponent(slug) };
+            else route.missing = route.noIndex = true;
         } else if (file === 'resource.html') {
             if (slug) route = { ...route, kind: 'blog', slug, publicPath: pagePath(file, { slug }), key: '/blogs/' + encodeURIComponent(slug) };
             else route.noIndex = true;

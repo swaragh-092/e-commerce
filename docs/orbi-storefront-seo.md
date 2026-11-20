@@ -32,14 +32,31 @@ Plain static hosting can display the default page metadata and update it in
 the browser. Dynamic link previews and the XML sitemap require the Express
 entry point.
 
-Existing SEO settings supply the storefront defaults. Product, category, and
-article fields supply detail metadata. The storefront URL override takes
-precedence when present. For example, use `/products.html?slug=tomato` to
-override that storefront page or `/products/tomato` as the shared backend path.
-Use the published file and identifying query parameter for other storefront
-overrides. The XML sitemap omits noindex pages and URLs that canonicalize to a
-different page. Product links with a saved variant or category canonicalize to
-the product's slug URL. Clean listing pagination keeps its page parameter.
+Existing SEO settings supply the storefront defaults. The Express entry point
+uses saved SEO fields and public content from these backend modules.
+
+| Content | Orbi detail route | Shared backend override path |
+| --- | --- | --- |
+| Product | `/products.html?slug=tomato` | `/products/tomato` |
+| Category | `/product.html?cat=vegetables` for a parent, or `/products.html?category=tomato` for a leaf | `/category/<slug>` |
+| Article | `/resource.html?slug=growing-tips` | `/blogs/growing-tips` |
+| Gallery album | `/gallery-detail.html?album=field-trials` | `/gallery/field-trials` |
+| CMS Page | `/page.html?slug=shipping-policy` | `/p/shipping-policy` |
+
+Use the published URL path and identifying query parameter in **SEO URL
+Overrides**, including the public prefix when the site is hosted below a path.
+For example, `/store/products.html?slug=tomato` takes precedence over
+`/products.html?slug=tomato`, then `/products/tomato`. Static pages also accept
+their published path, such as `/store/about-orbis.html`. The XML sitemap uses
+the same precedence and omits noindex pages and URLs that canonicalize
+elsewhere. Product links with a saved variant or category canonicalize to the
+product's slug URL. Clean listing pagination keeps its page parameter.
+
+Published CMS Pages render their saved title, content and banner at the Orbi
+detail route when the backend Pages feature is enabled. The HTML site map links
+to published pages and the XML sitemap includes their indexable URLs. CMS
+Pages require the Express entry point. The Orbi storefront has no dedicated
+brand or tag collection routes.
 
 Product and variant image rows use their saved alt text first and Media
 Library alt text second. Blog photos and album covers use Media Library alt
@@ -51,5 +68,6 @@ Check these URLs on the published host after deployment.
 - `/robots.txt` and `/sitemap.xml`
 - `/products.html?slug=<published-slug>&variant=<variant-id>`
 - `/resource.html?slug=<published-slug>`
+- `/page.html?slug=<published-cms-slug>`
 - `/gallery-detail.html?album=<public-slug>`
 - `/wishlist.html` and `/products.html?slug=<missing-slug>`

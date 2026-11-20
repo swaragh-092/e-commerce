@@ -113,6 +113,23 @@ window.setActiveLinks = setActiveLinks;
 function formatMenuUrl(url) {
     if (!url || url === "#") return "javascript:;";
 
+    // Menu Builder emits backend routes for entity targets. Keep those links on the Orbi storefront.
+    if (url.startsWith('/') && !url.startsWith('//')) {
+        var local = new URL(url, window.location.origin);
+        var entity = local.pathname.match(/^\/(p|products?|category|blogs)\/([^/]+)\/?$/);
+        var files = { p: 'page.html', product: 'products.html', products: 'products.html',
+            category: 'products.html', blogs: 'resource.html' };
+        if (entity) {
+            // Read the path segment as URL-encoded text and decode it before building the query.
+            var slug;
+            try { slug = decodeURIComponent(entity[2]); } catch (_) { slug = entity[2]; }
+            local.searchParams.set(entity[1] === 'category' ? 'category' : 'slug', slug);
+            return files[entity[1]] + local.search + local.hash;
+        }
+        if (local.pathname === '/blogs') return 'resources.html' + local.search + local.hash;
+        if (local.pathname === '/') return 'index.html' + local.search + local.hash;
+    }
+
     var formattedUrl = url;
 
     try {
@@ -167,7 +184,7 @@ function getMenuItemUrl(item) {
     if (hasMenuChildren(item) && /^products?\.html\?/.test(url)) {
         var params = new URL(url, window.location.href).searchParams;
         var slug = params.get('category') || params.get('cat');
-        if (slug) return 'product.html?cat=' + encodeURIComponent(slug);
+        if (slug && !params.has('slug')) return 'product.html?cat=' + encodeURIComponent(slug);
     }
     return url;
 }

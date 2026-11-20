@@ -320,7 +320,7 @@ li.dropdown-wrapper-li:hover > .dropdown-wrapper, li.dropdown-wrapper-li:focus-w
 @keyframes rotate{
     100%{transform: translate(-50%,50%) rotate(360deg);}
 } */
-.moon{width: 120px;height: 120px;background: url('../images/innovation-plant.png');background-size: 220px;background-position: center;border-radius: 50%;position: absolute;top: 30px;}
+.moon{width: 120px;height: 120px;border-radius: 50%;position: absolute;top: 30px;}
 .about-left{width: 100%;max-width: 350px;display: flex;justify-content: center;align-items: center;position: relative;}
 .about-left img{border-radius: 50%;width: 100%;max-width: 350px;}
 
@@ -918,7 +918,7 @@ li.dropdown-wrapper-li:hover > .dropdown-wrapper, li.dropdown-wrapper-li:focus-w
 .products-list.tap-section li a {width: 100%;color: var(--green);display: flex;justify-content: space-between;align-items: center;padding: 10px;position: relative;}
 .products-list.tap-section li a:hover {background: #27503787;color: #fff;border-radius: 10px;}
 .products-list.tap-section li {margin: 10px 0;}
-.products-list.tap-section li a::after {content: "";position: absolute;width: 20px;height: 100%;border-top: none;right: 15px;top: 0;margin: auto;bottom: 0;background: url(../images/icons/arrow.webp) no-repeat center center/contain;z-index: 1;transition: 1s all ease;transform: rotate(55deg);}
+.products-list.tap-section li a::after {content: "";position: absolute;width: 20px;height: 100%;border-top: none;right: 15px;top: 0;margin: auto;bottom: 0;background: url(../images/side-arrow.png) no-repeat center center/contain;z-index: 1;transition: 1s all ease;transform: rotate(55deg);}
 
 .products-list.tap-section li a.act::after {transform: rotate(0deg);transition: 1s all ease;}
 .products-list.tap-section li a.act {background: #58AE68;color: #fff;border-radius: 10px;}

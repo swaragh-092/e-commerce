@@ -15,9 +15,10 @@ const sanitizeRichText = (html) => {
  * Allows full block-level HTML (divs, tables, headings, spans etc.)
  * while still blocking dangerous elements (script, iframe, object).
  */
-const sanitizePageContent = (html) => {
+const sanitizePageContent = (html, { transformTags } = {}) => {
   if (!html) return html;
   return sanitizeHtml(html, {
+    transformTags,
     allowedTags: sanitizeHtml.defaults.allowedTags.concat([
       'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
       'b', 'i', 'u', 'em', 'strong', 's', 'strike', 'sub', 'sup',

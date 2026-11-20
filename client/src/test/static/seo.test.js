@@ -55,3 +55,26 @@ it('keeps metadata already rendered by the server until the URL changes', () => 
     dom.window.close();
   }
 });
+
+it('keeps public menu entity links on the Orbi storefront', () => {
+  const dom = new JSDOM('<span id="current-year"></span>', {
+    url: 'https://seeds.test/store/index.html', runScripts: 'outside-only',
+  });
+  try {
+    const { window } = dom;
+    window.$ = () => ({ length: 0, ready() {}, on() {} });
+    window.eval(source('js/common.js'));
+
+    expect(window.getMenuItemUrl({ targetType: 'page', url: '/p/shipping-policy' })).toBe('page.html?slug=shipping-policy');
+    expect(window.getMenuItemUrl({
+      targetType: 'product', url: '/products/cherry-tomato?variant=packet&category=tomatoes',
+      children: [{ label: 'Details' }],
+    })).toBe('products.html?variant=packet&category=tomatoes&slug=cherry-tomato');
+    expect(window.getMenuItemUrl({
+      targetType: 'category', url: '/products?category=vegetables', children: [{ label: 'Tomatoes' }],
+    })).toBe('product.html?cat=vegetables');
+    expect(window.formatMenuUrl('/blogs/seed-guide#tips')).toBe('resource.html?slug=seed-guide#tips');
+  } finally {
+    dom.window.close();
+  }
+});
