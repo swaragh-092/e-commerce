@@ -1,3 +1,5 @@
+import EntitySeoFields from '../../components/admin/EntitySeoFields';
+import { useFeature } from '../../hooks/useSettings';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
@@ -43,6 +45,7 @@ import { generateSlug } from '../../utils/strings';
 
 const BrandsPage = () => {
   const { notify } = useNotification();
+  const seoEnabled = useFeature('seo');
   const { hasPermission } = useAuth();
   const { refreshBrands } = useBrands();
 
@@ -71,6 +74,7 @@ const BrandsPage = () => {
     slug: '',
     description: '',
     image: '',
+    metaTitle: '', metaDescription: '', metaKeywords: '', ogImage: '',
     isActive: true,
     isPromoted: false,
     isFeatured: false,
@@ -124,6 +128,8 @@ const BrandsPage = () => {
         slug: brand.slug,
         description: brand.description || '',
         image: brand.image || '',
+        metaTitle: brand.metaTitle || '', metaDescription: brand.metaDescription || '',
+        metaKeywords: brand.metaKeywords || '', ogImage: brand.ogImage || '',
         isActive: brand.isActive,
         isPromoted: Boolean(brand.isPromoted),
         isFeatured: Boolean(brand.isFeatured),
@@ -135,6 +141,7 @@ const BrandsPage = () => {
         slug: '',
         description: '',
         image: '',
+        metaTitle: '', metaDescription: '', metaKeywords: '', ogImage: '',
         isActive: true,
         isPromoted: false,
         isFeatured: false,
@@ -170,6 +177,8 @@ const BrandsPage = () => {
       description: formData.description.trim() || null,
       image: formData.image || null,
     };
+
+    if (!seoEnabled) for (const key of ['metaTitle', 'metaDescription', 'metaKeywords', 'ogImage']) delete payload[key];
 
     setSaving(true);
     try {
@@ -601,6 +610,7 @@ const BrandsPage = () => {
             <Typography variant="caption" color="text.secondary" sx={{ mt: -2 }}>
               Featured brands are highlighted across storefront showcases and homepage brand sections.
             </Typography>
+            {seoEnabled && <EntitySeoFields value={formData} onChange={setFormData} title={formData.name} description={formData.description} canSelectMedia={hasPermission(PERMISSIONS.MEDIA_READ)} />}
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>

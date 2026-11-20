@@ -95,9 +95,10 @@ const BrandDetailPage = () => {
   return (
     <Container maxWidth="xl" sx={{ py: 6 }}>
       <PageSEO
-        title={brand?.name || 'Brand'}
-        description={brand?.description || `Shop products from ${brand?.name || 'this brand'}.`}
-        image={brand?.image || undefined}
+        title={brand?.metaTitle || brand?.name || 'Brand'}
+        description={brand?.metaDescription || brand?.description || `Shop products from ${brand?.name || 'this brand'}.`}
+        image={brand?.ogImage || brand?.image || undefined}
+        keywords={brand?.metaKeywords}
         type="collection"
       />
 

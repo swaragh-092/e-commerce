@@ -7,6 +7,10 @@ module.exports = (sequelize, DataTypes) => {
     slug: { type: DataTypes.STRING(255), allowNull: false, unique: true },
     coverMediaId: { type: DataTypes.UUID, allowNull: true, field: 'cover_media_id' },
     description: { type: DataTypes.TEXT, allowNull: true },
+    metaTitle: { type: DataTypes.STRING(255), field: 'meta_title' },
+    metaDescription: { type: DataTypes.TEXT, field: 'meta_description' },
+    metaKeywords: { type: DataTypes.STRING(500), field: 'meta_keywords' },
+    ogImage: { type: DataTypes.STRING(500), field: 'og_image' },
     isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true, field: 'is_active' },
     isShowcase: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, field: 'is_showcase' },
   }, {

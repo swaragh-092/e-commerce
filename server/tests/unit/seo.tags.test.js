@@ -45,7 +45,8 @@ describe('tag SEO', () => {
     expect(metadata.canonicalUrl).toBe('https://shop.example.test/tags/summer');
   });
   it('adds only public tag slugs to the sitemap using the configured canonical origin', async () => {
-    vi.spyOn(db.Setting, 'findAll').mockResolvedValue([]);
+    vi.spyOn(db.Gallery, 'findAll').mockResolvedValue([]);
+  vi.spyOn(db.Setting, 'findAll').mockResolvedValue([]);
     vi.spyOn(db.Setting, 'findOne').mockResolvedValue(null);
     vi.spyOn(db.SeoOverride, 'findAll').mockResolvedValue([]);
     vi.spyOn(db.Page, 'findAll').mockResolvedValue([]);

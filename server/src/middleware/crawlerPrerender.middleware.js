@@ -2,6 +2,7 @@
 
 const seoService = require('../modules/seo/seo.service');
 const logger = require('../utils/logger');
+const { isGalleryPath, normalizeSeoPath } = require('../modules/seo/seoPaths');
 
 // Known social media crawlers and search engine indexing bots
 const CRAWLER_USER_AGENTS = [
@@ -69,12 +70,12 @@ const crawlerPrerender = async (req, res, next) => {
 
   if (isCrawler(userAgent) || forcePrerender) {
     try {
-      const html = await seoService.renderHtmlForPath(cleanPath);
+      const html = await seoService.renderHtmlForPath(normalizeSeoPath(rawPath));
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600');
       return res.status(200).send(html);
     } catch (err) {
-      if (err.statusCode === 404 && /^\/(tags|products?|category|p|blogs|brands)\//.test(cleanPath)) {
+      if (err.statusCode === 404 && (isGalleryPath(cleanPath) || /^\/(tags|products?|category|p|blogs|brands)\//.test(cleanPath))) {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'no-store');
         res.setHeader('X-Robots-Tag', 'noindex');

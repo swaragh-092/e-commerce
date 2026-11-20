@@ -24,7 +24,7 @@ exports.listAdmin = async (page, limit) => {
 exports.listPublic = async (slug) => {
   const galleries = await Gallery.findAll({
     where: { isActive: true, isShowcase: true, ...(slug && { slug }) },
-    attributes: ['id', 'title', 'slug', 'description'],
+    attributes: ['id', 'title', 'slug', 'description', 'metaTitle', 'metaDescription', 'metaKeywords', 'ogImage'],
     order: [['createdAt', 'ASC'], ['id', 'ASC']],
     include: [coverInclude, {
       model: GalleryItem, as: 'items', separate: true, limit: 1,
@@ -119,7 +119,7 @@ exports.reorderItems = async (galleryId, itemIds = []) => {
 };
 
 exports.getPublicGallery = async (slug, page, limit) => {
-  const gallery = await Gallery.findOne({ where: { slug, isActive: true, isShowcase: true } });
+  const gallery = await Gallery.findOne({ where: { slug, isActive: true, isShowcase: true }, include: [coverInclude] });
   if (!gallery) throw new AppError('NOT_FOUND', 404, 'Gallery not found');
 
   const { limit: queryLimit, offset } = getPagination(page, limit);

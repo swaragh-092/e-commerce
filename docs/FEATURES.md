@@ -290,7 +290,7 @@ pending_payment → confirmed → processing → shipped → delivered
 | Feature | Description |
 |---------|-------------|
 | **Global SEO Defaults** | Site-wide meta title, description, OG image |
-| **Per-Entity SEO** | Product-level and page-level meta tags |
+| **Per-Entity SEO** | Meta tags for products, categories, brands, gallery albums, blog posts and pages |
 | **URL Overrides** | Override SEO for any URL path |
 | **Canonical URLs** | Automatic canonical URL generation with manual override |
 | **Noindex Control** | Prevent specific pages from being indexed |
@@ -299,7 +299,7 @@ pending_payment → confirmed → processing → shipped → delivered
 | **Dynamic OG Tags** | Auto-generated social tags with product price and availability |
 **SEO Resolution Hierarchy:**
 1. URL Override (highest priority)
-2. Entity SEO (product/page-specific)
+2. Entity SEO (saved fields for the content being viewed)
 3. Global Defaults (lowest priority)
 ---
 ### 2.15 Settings & Customization
@@ -988,3 +988,7 @@ e-commerce/
 Products, categories, product attributes, media storage, content pages, menus, customer accounts, and access control are structural services. They retain permission controls rather than independent global disable switches. Store Designer is covered by `themes`; payment/shipping capabilities follow the store mode. Newsletter opt-out remains available while the newsletter capability is disabled.
 
 The legacy HTML storefront reads the same public resolved feature map and hides Newsletter, Gallery, and Blog links/forms. Public endpoints continue to work anonymously when their feature is ON. Newsletter campaign generation and queued delivery both pause while OFF; transactional order/account mail is independent. Feature changes invalidate the server cache; other already-open storefront tabs adopt UI changes when settings are fetched again.
+
+### Brand and gallery SEO
+
+With SEO enabled, the brand and gallery create/edit dialogs include **SEO Configuration** for a meta title, meta description, keywords, and a social sharing image selected from the Media Library. Empty fields use the brand/album name, description, and image defaults. Saving a blank field clears its override. The public brand page and gallery album page use these values; crawler previews and gallery sitemap entries use the same public visibility checks. Apply `20261120100000-add-brand-gallery-seo.js` before deploying the updated server.
