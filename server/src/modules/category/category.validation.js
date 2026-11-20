@@ -43,8 +43,14 @@ const getCategoryProductsQuerySchema = Joi.object({
     includeSubcategories: Joi.boolean().truthy('1', 'true', 'yes').falsy('0', 'false', 'no').default(true),
 });
 
+const moveCategorySchema = Joi.object({
+    parentId: Joi.string().uuid().allow(null).required(),
+    position: Joi.number().integer().min(0).required(),
+});
+
 module.exports = {
     createCategorySchema,
     updateCategorySchema,
     getCategoryProductsQuerySchema,
+    moveCategorySchema,
 };

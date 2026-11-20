@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import {
-  Box, Button, Dialog, DialogTitle, DialogContent, Popover, Stack, TextField, Typography,
+  Box, Button, Dialog, DialogTitle, DialogContent, IconButton, Popover, Stack, TextField, Typography,
 } from '@mui/material';
 import DashboardCustomizeOutlinedIcon from '@mui/icons-material/DashboardCustomizeOutlined';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import { SECTION_DEFINITIONS, SECTION_VARIANTS } from '../../storefront/sections/sectionRegistry';
 import { createDefaultSection, getSectionPresetGallery, SECTION_PRESET_GOALS } from '../../../utils/sectionPresets';
+import SectionLayoutPreview from './SectionLayoutPreview';
 
 const productChoices = [
   { key: 'products-most-viewed', label: 'Most Viewed', source: 'mostViewed', link: '/products?sort=most-viewed' },
@@ -44,6 +46,7 @@ const generateId = (type, existingIds) => {
 
 const AddSectionDialog = ({ open, anchorEl, onClose, onAdd, existingIds = [], sectionPresets = {}, allowedTypes, insertLabel = 'this template' }) => {
   const [query, setQuery] = useState('');
+  const [previewKey, setPreviewKey] = useState(null);
   const gallery = new Map(getSectionPresetGallery(sectionPresets).map((preset) => [preset.type, preset]));
   const options = [...productChoices, ...sectionOptions.flatMap((option) => {
     const preset = gallery.get(option.type) || option;
@@ -64,6 +67,10 @@ const AddSectionDialog = ({ open, anchorEl, onClose, onAdd, existingIds = [], se
     groups.get(group).push(option);
   });
 
+  const visibleOptions = [...groups.values()].flat();
+  const previewOption = visibleOptions.find((option) => (option.key || option.type) === previewKey) || visibleOptions[0];
+  const reset = () => { setQuery(''); setPreviewKey(null); };
+
   const handleAdd = (option) => {
     const section = createDefaultSection(option.type, {
       variant: option.variant,
@@ -71,7 +78,7 @@ const AddSectionDialog = ({ open, anchorEl, onClose, onAdd, existingIds = [], se
     });
     // A reusable preset must not override the ID allocated for this instance.
     section.id = generateId(option.type, existingIds);
-    setQuery('');
+    reset();
     onAdd(option.source ? {
       ...section,
       source: option.source,
@@ -84,30 +91,40 @@ const AddSectionDialog = ({ open, anchorEl, onClose, onAdd, existingIds = [], se
     } : section);
   };
 
-  const handleClose = () => { setQuery(''); onClose(); };
+  const handleClose = () => { reset(); onClose(); };
   const content = <Stack spacing={1} sx={{ p: 1 }}>
-    <TextField autoFocus size="small" label="Search sections" value={query} onChange={(event) => setQuery(event.target.value)} />
+    <TextField autoFocus size="small" label="Search sections" value={query} onChange={(event) => { setQuery(event.target.value); setPreviewKey(null); }} />
     <Typography variant="caption" color="text.secondary" sx={{ px: 0.5 }}>Insert in {insertLabel}</Typography>
-    <Box sx={{ maxHeight: 'min(52vh, 420px)', overflowY: 'auto', overscrollBehavior: 'contain' }}>
+    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'repeat(2, minmax(0, 1fr))' }, alignItems: 'start', gap: 1 }}>
+    <Box sx={{ maxHeight: { xs: 'min(32vh, 240px)', sm: 'min(52vh, 420px)' }, overflowY: 'auto', overscrollBehavior: 'contain' }}>
       {groups.size === 0 && <Typography role="status" variant="body2" sx={{ p: 1 }}>No matching sections</Typography>}
       {[...groups].map(([group, choices]) => <Box component="section" aria-label={group} key={group} sx={{ py: 0.5, borderTop: 1, borderColor: 'divider' }}>
         <Typography component="h3" variant="caption" fontWeight={700} sx={{ px: 1 }}>{group}</Typography>
-        {choices.map((option) => <Button key={option.key || option.type} fullWidth color="inherit" size="small"
+        {choices.map((option) => <Stack direction="row" key={option.key || option.type}>
+        <Button fullWidth color="inherit" size="small"
           title={option.description} onClick={() => handleAdd(option)} startIcon={<DashboardCustomizeOutlinedIcon />}
-          sx={{ justifyContent: 'flex-start', textTransform: 'none', textAlign: 'left' }}>
+          onFocus={() => setPreviewKey(option.key || option.type)} onPointerEnter={() => setPreviewKey(option.key || option.type)}
+          sx={{ justifyContent: 'flex-start', textTransform: 'none', textAlign: 'left', bgcolor: option === previewOption ? 'action.hover' : undefined }}>
           {option.label}
-        </Button>)}
+        </Button>
+        <IconButton size="small" aria-label={`Preview ${option.label}`} onClick={() => setPreviewKey(option.key || option.type)}
+          sx={{ display: 'none', '@media (hover: none)': { display: 'inline-flex' }, flexShrink: 0 }}>
+          <VisibilityOutlinedIcon fontSize="small" />
+        </IconButton>
+        </Stack>)}
       </Box>)}
+    </Box>
+    <SectionLayoutPreview option={previewOption} />
     </Box>
   </Stack>;
 
   if (anchorEl) return <Popover open={open} anchorEl={anchorEl} onClose={handleClose}
     anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-    slotProps={{ paper: { role: 'dialog', 'aria-label': 'Add section', sx: { width: 304 } } }}>
+    slotProps={{ paper: { role: 'dialog', 'aria-label': 'Add section', sx: { width: 560 } } }}>
     {content}
   </Popover>;
 
-  return <Dialog open={open} onClose={handleClose} aria-label="Add section" maxWidth="xs" fullWidth>
+  return <Dialog open={open} onClose={handleClose} aria-label="Add section" maxWidth="sm" fullWidth>
     <DialogTitle>Add section</DialogTitle>
     <DialogContent sx={{ p: 1 }}>{content}</DialogContent>
   </Dialog>;

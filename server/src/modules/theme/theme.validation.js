@@ -372,7 +372,7 @@ const pageLayoutSectionsSchema = (...types) => Joi.array().items(
 ).max(6);
 
 const pageProductRowsSchema = pageLayoutSectionsSchema();
-const contentPageLayoutSchema = pageLayoutSectionsSchema('editorial-image-text', 'faq', 'promo-banners');
+const contentPageLayoutSchema = pageLayoutSectionsSchema('composed-hero', 'editorial-image-text', 'faq', 'promo-banners');
 
 const pageSectionsSchema = (systemTypes) => Joi.array().items(
   homepageSectionSchema.keys({ type: Joi.string().valid(...SECTION_TYPES, ...systemTypes).required() }),
@@ -417,7 +417,7 @@ const categoryPageTemplateSchema = Joi.object({
 }).unknown(false);
 
 const brandPageTemplateSchema = Joi.object({
-  productRows: pageProductRowsSchema,
+  productRows: contentPageLayoutSchema,
   sections: pageSectionsSchema(['brands-header', 'brands-list']),
   layout: Joi.string().valid('standard', 'overlay', 'minimal').required(),
   title: safeText,
@@ -435,7 +435,10 @@ const brandPageTemplateSchema = Joi.object({
 }).unknown(false);
 
 const cartPageTemplateSchema = Joi.object({
-  productRows: pageProductRowsSchema,
+  showCartTitle: Joi.boolean(),
+  showCartProducts: Joi.boolean(),
+  showCartSummary: Joi.boolean(),
+  productRows: contentPageLayoutSchema,
   sections: pageSectionsSchema(['cart-main']),
   layout: Joi.string().valid('standard', 'compact').required(),
   showCrossSells: Joi.boolean(),
@@ -444,7 +447,7 @@ const cartPageTemplateSchema = Joi.object({
 }).unknown(false);
 
 const accountPageTemplateSchema = Joi.object({
-  productRows: pageProductRowsSchema,
+  productRows: contentPageLayoutSchema,
   sections: pageSectionsSchema(['account-main']),
   layout: Joi.string().valid('tabs', 'sidebar').required(),
   orderCardStyle: Joi.string().valid('detailed', 'compact'),
@@ -618,10 +621,10 @@ const packageSchema = Joi.object({
     account: accountPageTemplateSchema,
     blog: blogPageTemplateSchema,
     'checkout': Joi.object({ productRows: pageProductRowsSchema }).unknown(false),
-    'wishlist': Joi.object({ productRows: pageProductRowsSchema }).unknown(false),
-    'search': Joi.object({ productRows: pageProductRowsSchema }).unknown(false),
-    'not-found': Joi.object({ productRows: pageProductRowsSchema }).unknown(false),
-    'orders': Joi.object({ productRows: pageProductRowsSchema }).unknown(false),
+    'wishlist': Joi.object({ productRows: contentPageLayoutSchema }).unknown(false),
+    'search': Joi.object({ productRows: contentPageLayoutSchema }).unknown(false),
+    'not-found': Joi.object({ productRows: contentPageLayoutSchema }).unknown(false),
+    'orders': Joi.object({ productRows: contentPageLayoutSchema }).unknown(false),
 
     page: pageTemplateSchema,
   }).unknown(false),

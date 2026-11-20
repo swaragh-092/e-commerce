@@ -109,13 +109,14 @@ const CartSkeleton = () => (
 // ── Empty Cart ─────────────────────────────────────────────────────────────────
 const safeStorePath = (value, fallback) => typeof value === 'string' && /^\/(?!\/)[^\\\s]*$/.test(value) ? value : fallback;
 
-const EmptyCart = ({ title, message, buttonLabel, buttonLink }) => (
+const EmptyCart = ({ title, message, buttonLabel, buttonLink, showTitle, showProducts }) => (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 14, px: 2 }}>
         <PageSEO title="Cart" type="noindex" />
         <Box sx={{ width: 72, height: 72, borderRadius: '50%', border: '1.5px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2.5 }}>
             <ShoppingBagOutlinedIcon sx={{ fontSize: 30, color: 'text.disabled' }} />
         </Box>
-        <Typography variant="h6" fontWeight={700} letterSpacing={-0.4} gutterBottom>{title || 'Your cart is empty'}</Typography>
+        {showTitle && <Typography variant="h6" fontWeight={700} letterSpacing={-0.4} gutterBottom>{title || 'Your cart is empty'}</Typography>}
+        {showProducts && <>
         <Typography color="text.secondary" sx={{ fontSize: '0.85rem', mb: 4, textAlign: 'center', maxWidth: 260, lineHeight: 1.6 }}>
             {message || "Haven't added anything yet. Let's fix that."}
         </Typography>
@@ -124,6 +125,7 @@ const EmptyCart = ({ title, message, buttonLabel, buttonLink }) => (
             sx={{ borderRadius: 1.5, px: 3.5, py: 1.3, fontWeight: 700, boxShadow: 'none', '&:hover': { boxShadow: 'none' } }}>
             {buttonLabel || 'Browse Products'}
         </Button>
+        </>}
     </Box>
 );
 
@@ -285,7 +287,7 @@ const OrderSummary = ({ visibleCount, subtotal, shippingCost, shippingPending, s
     const headerBg = checkoutBlockStyle.headerStyle === 'accent' ? 'primary.main' : checkoutBlockStyle.headerStyle === 'plain' ? 'background.paper' : 'action.selected';
     const headerColor = checkoutBlockStyle.headerStyle === 'accent' ? 'primary.contrastText' : 'text.secondary';
     return (
-        <Box sx={{ position: { md: 'sticky' }, top: { md: 80 }, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        <Box data-store-component="checkoutBlock" sx={{ position: { md: 'sticky' }, top: { md: 80 }, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
 
             {/* Main card */}
             <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: blockRadius, boxShadow: blockShadow, overflow: 'hidden' }}>
@@ -441,6 +443,9 @@ const CartPage = () => {
     const showPrice = useFeature('showPrice');
     const showPrices = pricingVisible && showPrice !== false;
     const cartPage = settings?.cartPage || {};
+    const showCartTitle = cartPage.showCartTitle !== false;
+    const showCartProducts = cartPage.showCartProducts !== false;
+    const showCartSummary = cartPage.showCartSummary !== false;
     const cartItemStyle = useComponentStyles('cartItem');
     const checkoutBlockStyle = useComponentStyles('checkoutBlock');
     const cartLayout = cartPage.layout || 'standard';
@@ -523,6 +528,8 @@ const CartPage = () => {
     );
     if (items.length === 0) return <>
         <EmptyCart
+            showTitle={showCartTitle}
+            showProducts={showCartProducts}
             title={cartPage.emptyStateTitle}
             message={emptyStateText}
             buttonLabel={cartPage.emptyStateButtonLabel}
@@ -539,7 +546,7 @@ const CartPage = () => {
 
             {/* Header */}
             <Box sx={{ mb: { xs: 3, md: 4 }, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
-                <Box>
+                {showCartTitle && <Box>
                     <Typography sx={{ fontSize: '0.63rem', fontWeight: 800, letterSpacing: 2.5, textTransform: 'uppercase', color: 'text.disabled', mb: 0.25, display: 'block' }}>
                         {cartPage.cartSubtitle || 'Review your order'}
                     </Typography>
@@ -549,17 +556,17 @@ const CartPage = () => {
                             ({visibleCount})
                         </Box>
                     </Typography>
-                </Box>
+                </Box>}
                 {showContinueShopping && <Button component={Link} to="/products" size="small"
                     sx={{ color: 'text.secondary', fontSize: '0.78rem', fontWeight: 500 }}>
                     ← {cartPage.continueShoppingLabel || 'Continue shopping'}
                 </Button>}
             </Box>
 
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: isCompactCart ? '1fr' : 'minmax(0, 1fr) 400px' }, gap: { xs: 3, md: 3.5 }, alignItems: 'start' }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: isCompactCart || !showCartProducts || !showCartSummary ? '1fr' : 'minmax(0, 1fr) 400px' }, gap: { xs: 3, md: 3.5 }, alignItems: 'start' }}>
 
                 {/* Items */}
-                <Box>
+                {showCartProducts && <Box data-store-component="cartItem">
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                         {items.map(item => (
                             <CartItem key={item.id} item={item} getQty={getQty}
@@ -601,10 +608,10 @@ const CartPage = () => {
                             </Paper>
                         </Fade>
                     )}
-                </Box>
+                </Box>}
 
                 {/* Summary */}
-                <OrderSummary
+                {showCartSummary && <OrderSummary
                     visibleCount={visibleCount} subtotal={subtotal}
                     shippingCost={shippingCost} shippingPending={shippingPending} shippingMethod={shippingMethod} freeThreshold={freeThreshold}
                     taxRows={taxRows} taxInclusive={taxInclusive}
@@ -626,7 +633,7 @@ const CartPage = () => {
                     showShipping={showShipping}
                     showPayments={showPaymentMethods}
                     showPrices={showPrices}
-                />
+                />}
             </Box>
 
 

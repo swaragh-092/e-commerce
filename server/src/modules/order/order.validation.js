@@ -40,6 +40,20 @@ const updateOrderStatusSchema = Joi.object({
 const updateOrderContactEmailSchema = Joi.object({
     email: Joi.string().trim().email().max(255).required(),
 });
+const updateOrderDetailsSchema = Joi.object({
+    shippingAddress: Joi.object({
+        fullName: Joi.string().trim().min(1).max(255),
+        phone: Joi.string().trim().allow('').max(20),
+        addressLine1: Joi.string().trim().min(1).max(255),
+        addressLine2: Joi.string().trim().allow('').max(255),
+        city: Joi.string().trim().min(1).max(100),
+        state: Joi.string().trim().allow('').max(100),
+        postalCode: Joi.string().trim().min(1).max(20),
+        country: Joi.string().trim().min(1).max(100),
+        email: Joi.string().trim().email().max(255),
+    }).min(1),
+    notes: Joi.string().trim().allow('', null).max(1000),
+}).or('shippingAddress', 'notes');
 const cancelOrderSchema = Joi.object({
     reason: Joi.string().valid(...Object.keys(CANCELLATION_REASONS)).required(),
     reasonDetails: Joi.string().trim().max(500).allow('').when('reason', {
@@ -146,6 +160,7 @@ module.exports = {
     placeOrderSchema,
     updateOrderStatusSchema,
     updateOrderContactEmailSchema,
+    updateOrderDetailsSchema,
     cancelOrderSchema,
     createFulfillmentSchema,
     updateFulfillmentStatusSchema,

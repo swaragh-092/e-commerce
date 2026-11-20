@@ -63,6 +63,7 @@ const enable = async (userId, totpCode, { createSession = false, ipAddress } = {
   let secret;
   try {
     secret = decrypt(user.twoFactorSecret);
+    if (!secret) throw new Error('Empty authenticator secret');
   } catch {
     throw new AppError('VALIDATION_ERROR', 400, '2FA setup expired or corrupted. Please run setup again.');
   }
@@ -112,7 +113,7 @@ const disable = async (userId, totpCode, { createSession = false, ipAddress } = 
   // permanent lockout. Backup codes are single-use and consumed here.
   let valid = false;
   try {
-    valid = authenticator.verify({ token: totpCode, secret });
+    valid = Boolean(secret) && authenticator.verify({ token: totpCode, secret });
   } catch { valid = false; }
   if (!valid) {
     valid = await verifyBackupCode(user, totpCode);
@@ -143,6 +144,7 @@ const verify = (user, totpCode) => {
   if (!user.twoFactorSecret) return false;
   try {
     const secret = decrypt(user.twoFactorSecret);
+    if (!secret) return false;
     return authenticator.verify({ token: totpCode, secret });
   } catch (e) {
     throw new AppError('VALIDATION_ERROR', 400, '2FA secret is corrupted. Please disable and re-enable 2FA.');
@@ -180,6 +182,7 @@ const regenerateBackupCodes = async (userId, totpCode) => {
   let secret;
   try {
     secret = decrypt(user.twoFactorSecret);
+    if (!secret) throw new Error('Missing authenticator secret');
   } catch {
     throw new AppError('VALIDATION_ERROR', 400, '2FA secret is corrupted. Please disable and re-enable 2FA.');
   }
@@ -189,7 +192,15 @@ const regenerateBackupCodes = async (userId, totpCode) => {
 
   const plainCodes = generateBackupCodes();
   const hashedCodes = plainCodes.map(c => hashCode(c));
-  await user.update({ twoFactorBackupCodes: hashedCodes });
+  await sequelize.transaction(async transaction => {
+    const locked = await User.scope('withPassword').findByPk(userId, { transaction, lock: transaction.LOCK.UPDATE });
+    if (!locked || locked.status !== 'active' || !locked.twoFactorEnabled
+        || !sameSecret(locked.twoFactorSecret, user.twoFactorSecret)
+        || JSON.stringify(locked.twoFactorBackupCodes) !== JSON.stringify(user.twoFactorBackupCodes)) {
+      throw new AppError('CONFLICT', 409, 'MFA or backup codes changed. Check your latest codes before trying again.');
+    }
+    await locked.update({ twoFactorBackupCodes: hashedCodes }, { transaction });
+  });
 
   return { backupCodes: plainCodes };
 };
