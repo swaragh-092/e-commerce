@@ -150,6 +150,7 @@ const getWishlist = async (userId, sessionId) => {
           as: 'images',
           where: { isPrimary: true },
           required: false,
+          include: [{ model: Media, as: 'media', attributes: ['url', 'alt'], required: false }],
         }],
         required: false,
       }, variantInclude],

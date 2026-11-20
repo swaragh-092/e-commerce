@@ -9,8 +9,11 @@
 
     function toAbsoluteMediaUrl(url) {
         if (!url) return "images/about-us.jpg";
-        if (/^https?:\/\//i.test(url)) return url;
-        return (APP_URL || "").replace(/\/$/, "") + url;
+        try {
+            var resolved = new URL(url, APP_URL);
+            if (/^https?:$/.test(resolved.protocol)) return resolved.href;
+        } catch (_) { /* Use the local fallback below. */ }
+        return "images/about-us.jpg";
     }
 
     function formatDate(dateValue) {
@@ -57,11 +60,11 @@
             var blogLink = "resource.html?slug=" + encodeURIComponent(post.slug || "");
             var cardHtml = "" +
                 '<a href="' + blogLink + '" class="blog-inner">' +
-                '  <div class="blog-image"><img src="' + imageUrl + '" alt="' + (post.title || "Blog Image") + '"></div>' +
+                '  <div class="blog-image"><img src="' + OrbiCatalog.escape(imageUrl) + '" alt="' + OrbiCatalog.escape(OrbiCatalog.imageAlt(post.featuredImage, post.title || 'Article image')) + '" loading="lazy"></div>' +
                 '  <div class="blog-content">' +
                 '    <span class="date">' + dateText + "</span>" +
-                "    <h2>" + (post.title || "") + "</h2>" +
-                "    <p>" + summaryText + "</p>" +
+                "    <h2>" + OrbiCatalog.escape(post.title) + "</h2>" +
+                "    <p>" + OrbiCatalog.escape(summaryText) + "</p>" +
                 '    <span class="read-btn">Read Article</span>' +
                 "  </div>" +
                 "</a>";
@@ -91,8 +94,5 @@
 
     var currentPage = parseInt(getQueryParam("page"), 10) || 1;
     if (currentPage < 1) currentPage = 1;
-    if (window.OrbiSEO) {
-        window.OrbiSEO.setBlogListSEO();
-    }
     fetchPosts(currentPage);
 })();

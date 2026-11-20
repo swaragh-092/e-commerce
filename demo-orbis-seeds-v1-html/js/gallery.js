@@ -117,7 +117,7 @@
         });
     }
 
-    function renderCover(slot, imageUrl, title) {
+    function renderCover(slot, imageUrl, alt) {
         slot.innerHTML = '';
         if (!imageUrl) {
             slot.className = 'gallery-album-cover gallery-cover-empty';
@@ -127,9 +127,9 @@
         slot.className = 'gallery-album-cover';
         var img = document.createElement('img');
         img.src = imageUrl;
-        img.alt = title;
+        img.alt = alt;
         img.loading = 'lazy';
-        img.addEventListener('error', function () { renderCover(slot, '', title); }, { once: true });
+        img.addEventListener('error', function () { renderCover(slot, '', alt); }, { once: true });
         slot.appendChild(img);
     }
 
@@ -140,7 +140,7 @@
         var title = safeText(album.title, 'Gallery');
         card.setAttribute('aria-label', 'View ' + title + ' gallery');
         var cover = document.createElement('div');
-        renderCover(cover, readImage(album.coverImage), title);
+        renderCover(cover, readImage(album.coverImage), safeText(album.coverImage?.alt, title));
         card.appendChild(cover);
         var heading = document.createElement('h3');
         heading.textContent = title;
@@ -155,7 +155,10 @@
         // Older API deployments omit coverImage; obtain just their first image.
         if (!Object.prototype.hasOwnProperty.call(album, 'coverImage')) {
             return fetchJson(galleryApiUrl + 'galleries/public/' + encodeURIComponent(album.slug) + '?page=1&limit=1')
-                .then(function (result) { renderCover(cover, readImage(readItems(result)[0]), title); })
+                .then(function (result) {
+                    var item = readItems(result)[0];
+                    renderCover(cover, readImage(item), OrbiCatalog.imageAlt(item, title));
+                })
                 .catch(function () { renderCover(cover, '', title); });
         }
         return Promise.resolve();
@@ -183,7 +186,7 @@
         items.forEach(function (item) {
             var imageUrl = readImage(item);
             if (!imageUrl) return;
-            var title = safeText(item.title || item.alt || (item.media && (item.media.alt || item.media.caption)), 'Gallery image');
+            var title = OrbiCatalog.imageAlt(item, item.title || item.media?.caption || 'Gallery image');
             var link = document.createElement('a');
             link.href = imageUrl;
             link.setAttribute('data-fancybox', 'album-images');
@@ -247,7 +250,7 @@
                 var title = safeText(gallery && gallery.title, 'Gallery');
                 var heading = document.getElementById('gallery-title');
                 if (heading) heading.textContent = title;
-                document.title = title + ' | Orbi Seeds';
+
                 var breadcrumb = document.getElementById('gallery-breadcrumb-title');
                 if (breadcrumb) breadcrumb.textContent = title;
                 var description = document.getElementById('gallery-description');
@@ -272,6 +275,7 @@
             .catch(function (error) {
                 if (activeRequest !== requestId) return;
                 console.error('Error fetching gallery:', error);
+                if (error.status === 404 && window.OrbiSEO) window.OrbiSEO.unavailable();
                 setMessage(error.status === 404 ? 'This gallery is unavailable or no longer public.' : 'Unable to load gallery images. Please try again.', error.status !== 404);
             })
             .finally(function () {

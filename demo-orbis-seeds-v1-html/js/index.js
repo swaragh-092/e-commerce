@@ -46,7 +46,7 @@ function renderHomeCategories(categories, uploadUrl) {
         if (!cat.children || !cat.children.length) return;
 
         html += '<div class="vegetables">';
-        html += '    <a href="product.html?cat=' + encodeURIComponent(cat.slug || '') + '" class="category-label">' + (cat.name || '') + '</a>';
+        html += '    <a href="product.html?cat=' + encodeURIComponent(cat.slug || '') + '" class="category-label">' + OrbiCatalog.escape(cat.name) + '</a>';
 
         var children = cat.children.slice().sort(function (a, b) {
             var aHasImg = (a.icon || a.image || (a.media && a.media.url) || (a.images && a.images.length) || (a.gallery && a.gallery.length)) ? 1 : 0;
@@ -63,13 +63,13 @@ function renderHomeCategories(categories, uploadUrl) {
             html += '<a href="' + subUrl + '" class="variety-of-seeds-1">';
             html += '    <div class="variety-of-seeds-img-parent">';
             html += '        <div class="variety-of-seeds-img">';
-            html += '            <img src="' + iconUrl + '" alt="' + (sub.name || 'Image') + '" onerror="this.onerror=null;this.src=\'' + fallback + '\';">';
+            html += '            <img src="' + OrbiCatalog.escape(iconUrl) + '" alt="' + OrbiCatalog.escape(sub.name) + '" onerror="this.onerror=null;this.src=\'' + fallback + '\';">';
             html += '        </div>';
             html += '    </div>';
             html += '    <div class="variety-of-text">';
-            html += '        <h3>' + (sub.name || '') + '</h3>';
+            html += '        <h3>' + OrbiCatalog.escape(sub.name) + '</h3>';
             html += '        <div class="arrow">';
-            html += '            <img src="images/icons/next.png" alt="Image">';
+            html += '            <img src="images/icons/next.png" alt="">';
             html += '        </div>';
             html += '    </div>';
             html += '</a>';

@@ -18,7 +18,7 @@ const {
 const tagService = require('../product/tag.service');
 const { buildFeatures } = require('../../config/modes');
 const featureGate = require('../../middleware/featureGate.middleware');
-const { getEffectivePrice, getVariantUnitPrice, resolveSaleLabel } = require('../product/product.pricing');
+const { getEffectivePrice, getVariantUnitPrice, isSaleActive, resolveSaleLabel } = require('../product/product.pricing');
 const AppError = require('../../utils/AppError');
 
 function escapeHtml(string) {
@@ -190,7 +190,7 @@ class SeoService {
     return robots;
   }
 
-  async getMetadataByPath(urlPath) {
+  async getMetadataByPath(urlPath, context = {}) {
     if (typeof urlPath !== 'string' || !urlPath.startsWith('/') || urlPath.startsWith('//')) {
       throw new AppError('VALIDATION_ERROR', 400, 'A local page path is required.');
     }
@@ -211,14 +211,20 @@ class SeoService {
     }
     // Merge overrides only after resolving a publicly available entity, so an
     // override cannot expose draft content or remove its product/article type.
-    const override = await SeoOverride.findOne({ where: { path: urlPath } });
+    const storefrontOverride = context.overridePath && context.overridePath !== urlPath
+      ? await SeoOverride.findOne({ where: { path: context.overridePath } })
+      : null;
+    const override = storefrontOverride || await SeoOverride.findOne({ where: { path: urlPath } });
     const overrideData = override && (typeof override.toJSON === 'function' ? override.toJSON() : override);
     const overrides = Object.fromEntries(['metaTitle', 'metaDescription', 'metaKeywords', 'ogImage', 'canonicalUrl', 'noIndex']
       .filter((key) => overrideData?.[key] != null && overrideData[key] !== '')
       .map((key) => [key, overrideData[key]]));
     const formatEntity = (entity, type, pathname, defaults = null) => this._formatMetadata({
       ...(typeof entity.toJSON === 'function' ? entity.toJSON() : entity), ...overrides,
-    }, type, pathname, defaults);
+      ...(context.noIndex && { noIndex: true }),
+    }, type, context.publicPath ?? pathname, context.defaults || defaults);
+
+    if (context.entity) return formatEntity(context.entity, context.kind, urlPath);
 
     if (tag) return formatEntity(tag, 'tag', `/tags/${encodeURIComponent(tag.slug)}`);
 
@@ -243,7 +249,9 @@ class SeoService {
           {
             model: ProductImage,
             as: 'images',
-            attributes: ['url', 'isPrimary', 'sortOrder'],
+            where: { variantId: null },
+            attributes: ['url', 'alt', 'isPrimary', 'sortOrder'],
+            include: [{ model: Media, as: 'media', attributes: ['url', 'alt'], required: false }],
             required: false,
           },
           {
@@ -287,7 +295,7 @@ class SeoService {
       try { slug = decodeURIComponent(blogMatch[1]); } catch (_) { slug = blogMatch[1]; }
       const post = await BlogPost.findOne({
         where: { slug, status: 'published', publishedAt: { [Op.lte]: new Date() } },
-        include: [{ model: Media, as: 'featuredImage', attributes: ['url'], required: false }],
+        include: [{ model: Media, as: 'featuredImage', attributes: ['url', 'alt'], required: false }],
       });
       if (post) return formatEntity(post, 'blog', `/blogs/${encodeURIComponent(slug)}`);
       throw new AppError('NOT_FOUND', 404, 'Blog post not found.');
@@ -360,7 +368,7 @@ class SeoService {
       if (description.length > 160) {
         description = `${description.slice(0, 157)}...`;
       }
-    } else if (!description && ['category', 'tag'].includes(type)) {
+    } else if (!description && ['category', 'tag', 'gallery'].includes(type)) {
       description = stripHtml(entity.description || '');
       if (description.length > 160) {
         description = `${description.slice(0, 157)}...`;
@@ -380,13 +388,20 @@ class SeoService {
     }
 
     let ogImage = entity.ogImage;
+    let ogImageAlt;
     if (!ogImage && type === 'product' && Array.isArray(entity.images) && entity.images.length > 0) {
-      const primary = entity.images.find((img) => img.isPrimary) || entity.images[0];
-      ogImage = primary?.url || null;
+      const images = [...entity.images].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+      const primary = images.find((img) => img.isPrimary) || images[0];
+      ogImage = primary.url || primary.media?.url;
+      ogImageAlt = primary.alt?.trim() || primary.media?.alt?.trim();
     } else if (!ogImage && type === 'category') {
       ogImage = entity.bannerImage || entity.image || null;
     } else if (!ogImage && type === 'blog') {
       ogImage = entity.featuredImage?.url || null;
+      ogImageAlt = entity.featuredImage?.alt?.trim();
+    } else if (!ogImage && type === 'gallery') {
+      ogImage = entity.coverImage?.url;
+      ogImageAlt = entity.coverImage?.alt?.trim();
     } else if (!ogImage && type === 'brand') {
       ogImage = entity.image || null;
     } else if (!ogImage && type === 'page') {
@@ -394,11 +409,16 @@ class SeoService {
     }
     if (!ogImage) {
       ogImage = defaults.ogImage;
+      ogImageAlt = defaults.ogImageAlt;
     }
 
-    // Ensure absolute image URL for external social crawlers (WhatsApp/FB/Twitter)
-    if (ogImage && typeof ogImage === 'string' && !ogImage.startsWith('http://') && !ogImage.startsWith('https://')) {
-      ogImage = toAbsoluteUrl(baseUrl, ogImage.startsWith('/') ? ogImage : `/${ogImage}`);
+    if (ogImage) {
+      try {
+        const imageUrl = new URL(ogImage, defaults.mediaBaseUrl || baseUrl);
+        ogImage = ['http:', 'https:'].includes(imageUrl.protocol) ? imageUrl.href : '';
+      } catch (_) {
+        ogImage = '';
+      }
     }
 
     let canonicalUrl = entity.canonicalUrl;
@@ -412,10 +432,11 @@ class SeoService {
     if (!canonicalUrl && urlPath) canonicalUrl = toAbsoluteUrl(baseUrl, urlPath);
 
     const metadata = {
-      title: entity.metaTitle || (type === 'category' ? entity.customHeading || entity.name : (['product', 'category', 'tag', 'blog', 'page', 'brand'].includes(type) ? entity.name || entity.title : defaults.title)),
+      title: entity.metaTitle || (type === 'category' ? entity.customHeading || entity.name : (['product', 'category', 'tag', 'blog', 'page', 'brand', 'gallery'].includes(type) ? entity.name || entity.title : defaults.title)),
       description,
       keywords: entity.metaKeywords || defaults.keywords,
       ogImage: ogImage || '',
+      ogImageAlt: ogImageAlt || '',
       canonicalUrl: entity.noIndex ? '' : (canonicalUrl || baseUrl),
       noIndex: entity.noIndex || false,
       siteName: defaults.siteName,
@@ -430,7 +451,11 @@ class SeoService {
       ...(type === 'brand' && { schemaType: 'CollectionPage' }),
       ...(type === 'category' && { schemaType: 'CollectionPage' }),
       ...(type === 'page' && { schemaType: 'WebPage' }),
-      ...(type === 'blog' && { publishedAt: entity.publishedAt || null }),
+      ...(type === 'gallery' && { schemaType: 'ImageGallery' }),
+      ...(entity.schemaType && { schemaType: entity.schemaType }),
+      ...(defaults.organizationType && { organizationType: defaults.organizationType }),
+      ...(defaults.siteUrl && { siteUrl: defaults.siteUrl }),
+      ...(type === 'blog' && { articleTitle: entity.title, publishedAt: entity.publishedAt, modifiedAt: entity.updatedAt }),
     };
 
     if (type === 'product') {
@@ -439,9 +464,15 @@ class SeoService {
       const available = variants.length
         ? variants.some((variant) => Number(variant.stockQty || 0) - Number(variant.reservedQty || 0) > 0)
         : Number(entity.quantity || 0) - Number(entity.reservedQty || 0) > 0;
-      const variantPrices = variants.map((variant) => getVariantUnitPrice(pricedEntity, variant)).filter(Number.isFinite);
+      const hasProductPrice = entity.price != null || isSaleActive(pricedEntity);
+      const priceFor = (variant) => {
+        if (variant?.price == null && !hasProductPrice) return null;
+        const price = variant ? getVariantUnitPrice(pricedEntity, variant) : getEffectivePrice(pricedEntity);
+        return Number.isFinite(price) ? price : null;
+      };
+      const variantPrices = variants.map(priceFor).filter(Number.isFinite);
       metadata.productData = {
-        price: variantPrices.length ? Math.min(...variantPrices) : getEffectivePrice(pricedEntity),
+        price: variantPrices.length ? Math.min(...variantPrices) : priceFor(),
         availability: available ? 'in stock' : 'out of stock',
         currency: defaults.currency || 'INR',
         sku: entity.sku || '',
@@ -449,7 +480,7 @@ class SeoService {
         brand: entity.brand?.name || '',
         variants: variants.map((variant) => ({
           sku: variant.sku || '',
-          price: getVariantUnitPrice(pricedEntity, variant),
+          price: priceFor(variant),
           availability: Number(variant.stockQty || 0) - Number(variant.reservedQty || 0) > 0 ? 'in stock' : 'out of stock',
         })),
       };
@@ -458,27 +489,27 @@ class SeoService {
     return metadata;
   }
 
-  async _getGlobalDefaults() {
+  async _getGlobalDefaults(fallback = {}) {
     const settings = await Setting.findAll({ where: { group: { [Op.in]: ['seo', 'general', 'homepage', 'sales'] } } });
 
     const settingsMap = {};
     settings.forEach((setting) => (settingsMap[`${setting.group}.${setting.key}`] = setting.value));
 
-    const siteName = settingsMap['seo.siteName'] || settingsMap['general.storeName'] || 'E-Commerce Store';
+    const siteName = settingsMap['seo.siteName'] || settingsMap['general.storeName'] || fallback.siteName || 'E-Commerce Store';
     let heroSlides = settingsMap['homepage.heroSlides'];
     if (typeof heroSlides === 'string') {
       try { heroSlides = JSON.parse(heroSlides); } catch (_) { heroSlides = []; }
     }
-    const homeTitle = settingsMap['homepage.seoTitle'] || settingsMap['seo.defaultTitle'] || 'Best Products Online';
+    const homeTitle = settingsMap['homepage.seoTitle'] || settingsMap['seo.defaultTitle'] || fallback.title || 'Best Products Online';
     return {
       siteName,
       title: homeTitle,
       homeTitle,
-      homeDescription: settingsMap['homepage.seoDescription'] || heroSlides?.[0]?.subtitle || settingsMap['seo.defaultDescription'] || 'Shop the best products online at our store.',
-      titleSuffix: settingsMap['seo.titleSuffix'] || ` | ${siteName}`,
+      homeDescription: settingsMap['homepage.seoDescription'] || heroSlides?.[0]?.subtitle || settingsMap['seo.defaultDescription'] || fallback.description || 'Shop the best products online at our store.',
+      titleSuffix: settingsMap['seo.titleSuffix'] || fallback.titleSuffix || ` | ${siteName}`,
       titleTemplate: settingsMap['seo.titleTemplate'] || '',
-      description: settingsMap['seo.defaultDescription'] || 'Shop the best products online at our store.',
-      keywords: settingsMap['seo.defaultKeywords'] || 'ecommerce, shop, online',
+      description: settingsMap['seo.defaultDescription'] || fallback.description || 'Shop the best products online at our store.',
+      keywords: settingsMap['seo.defaultKeywords'] || (fallback.keywords ?? 'ecommerce, shop, online'),
       ogImage: settingsMap['seo.defaultOgImage'] || settingsMap['seo.ogImage'] || '',
       twitterHandle: settingsMap['seo.twitterHandle'] || '',
       currency: settingsMap['general.currency'] || 'INR',
@@ -530,8 +561,7 @@ class SeoService {
 </html>`;
   }
 
-  injectMetadataIntoHtml(metadata, template = null) {
-    const rawTemplate = template || this.getHtmlTemplate();
+  buildHead(metadata) {
     const rawTitle = metadata.title || metadata.siteName || 'Store';
     const fullTitle = formatPageTitle(rawTitle, metadata);
 
@@ -557,32 +587,33 @@ class SeoService {
     }
     if (metadata.ogImage) {
       tags.push(`<meta property="og:image" content="${escapeHtml(metadata.ogImage)}" />`);
-      tags.push(`<meta property="og:image:alt" content="${escapeHtml(rawTitle)}" />`);
+      tags.push(`<meta property="og:image:alt" content="${escapeHtml(metadata.ogImageAlt || rawTitle)}" />`);
     }
     if (metadata.type === 'article' && metadata.publishedAt && !Number.isNaN(new Date(metadata.publishedAt).getTime())) {
       tags.push(`<meta property="article:published_time" content="${escapeHtml(new Date(metadata.publishedAt).toISOString())}" />`);
     }
 
     // Twitter Card
-    tags.push(`<meta name="twitter:card" content="summary_large_image" />`);
+    tags.push(`<meta name="twitter:card" content="${metadata.ogImage ? 'summary_large_image' : 'summary'}" />`);
     tags.push(`<meta name="twitter:title" content="${escapeHtml(fullTitle)}" />`);
     tags.push(`<meta name="twitter:description" content="${escapeHtml(metadata.description)}" />`);
     if (metadata.ogImage) {
       tags.push(`<meta name="twitter:image" content="${escapeHtml(metadata.ogImage)}" />`);
+      tags.push(`<meta name="twitter:image:alt" content="${escapeHtml(metadata.ogImageAlt || rawTitle)}" />`);
     }
     if (metadata.twitterHandle) {
       tags.push(`<meta name="twitter:site" content="${escapeHtml(metadata.twitterHandle)}" />`);
     }
 
     // Product rich tags for WhatsApp / FB Product Catalog / Google
-    if (metadata.type === 'product' && metadata.productData) {
+    if (!metadata.noIndex && metadata.type === 'product' && metadata.productData) {
       if (metadata.productData.price != null) {
         tags.push(`<meta property="product:price:amount" content="${escapeHtml(metadata.productData.price)}" />`);
       }
-      if (metadata.productData.currency) {
+      if (metadata.productData.price != null && metadata.productData.currency) {
         tags.push(`<meta property="product:price:currency" content="${escapeHtml(metadata.productData.currency)}" />`);
       }
-      if (metadata.productData.availability) {
+      if (metadata.productData.price != null && metadata.productData.availability) {
         tags.push(`<meta property="product:availability" content="${escapeHtml(metadata.productData.availability)}" />`);
       }
     }
@@ -590,6 +621,13 @@ class SeoService {
     // Schema.org JSON-LD
     let pageSchema = null;
     if (metadata.type === 'product' && metadata.productData) {
+      const offer = (data) => data.price == null ? undefined : {
+        '@type': 'Offer',
+        price: data.price,
+        priceCurrency: metadata.productData.currency,
+        availability: data.availability === 'in stock' ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+        url: metadata.canonicalUrl,
+      };
       const variants = metadata.productData.variants || [];
       pageSchema = {
         '@context': 'https://schema.org',
@@ -600,15 +638,7 @@ class SeoService {
         image: metadata.ogImage ? [metadata.ogImage] : [],
         ...(metadata.productData.sku ? { sku: metadata.productData.sku } : {}),
         ...(metadata.productData.brand ? { brand: { '@type': 'Brand', name: metadata.productData.brand } } : {}),
-        offers: {
-          '@type': 'Offer',
-          price: metadata.productData.price,
-          priceCurrency: metadata.productData.currency,
-          availability: metadata.productData.availability === 'in stock'
-            ? 'https://schema.org/InStock'
-            : 'https://schema.org/OutOfStock',
-          url: metadata.canonicalUrl,
-        },
+        offers: offer(metadata.productData),
       };
       if (variants.length) {
         pageSchema = {
@@ -624,13 +654,7 @@ class SeoService {
             '@type': 'Product',
             name: metadata.productData.name || rawTitle,
             ...(variant.sku ? { sku: variant.sku } : {}),
-            offers: {
-              '@type': 'Offer',
-              price: variant.price,
-              priceCurrency: metadata.productData.currency,
-              availability: variant.availability === 'in stock' ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
-              url: metadata.canonicalUrl,
-            },
+            offers: offer(variant),
           })),
         };
       }
@@ -642,10 +666,11 @@ class SeoService {
     } else if (metadata.type === 'article') {
       pageSchema = {
         '@context': 'https://schema.org', '@type': 'BlogPosting',
-        headline: rawTitle,
+        headline: metadata.articleTitle || rawTitle,
         description: metadata.description,
         ...(metadata.ogImage ? { image: [metadata.ogImage] } : {}),
         ...(metadata.publishedAt ? { datePublished: metadata.publishedAt } : {}),
+        ...(metadata.modifiedAt ? { dateModified: metadata.modifiedAt } : {}),
         mainEntityOfPage: metadata.canonicalUrl,
       };
     } else {
@@ -655,19 +680,21 @@ class SeoService {
         name: rawTitle,
         url: metadata.canonicalUrl,
         description: metadata.description,
+        ...(metadata.schemaType === 'ImageGallery' && metadata.ogImage ? { image: metadata.ogImage } : {}),
       };
     }
+    const siteUrl = metadata.siteUrl || getPublicBaseUrl(metadata);
     const websiteSchema = {
       '@type': 'WebSite',
-      '@id': `${getPublicBaseUrl(metadata)}#website`,
+      '@id': `${siteUrl}#website`,
       name: metadata.siteName,
-      url: getPublicBaseUrl(metadata),
+      url: siteUrl,
     };
     const organizationSchema = {
-      '@type': 'OnlineStore',
-      '@id': `${getPublicBaseUrl(metadata)}#organization`,
+      '@type': metadata.organizationType || 'OnlineStore',
+      '@id': `${siteUrl}#organization`,
       name: metadata.siteName,
-      url: getPublicBaseUrl(metadata),
+      url: siteUrl,
     };
     const schemaGraphItems = [websiteSchema, organizationSchema, pageSchema];
     const pathSegments = metadata.path?.split('/').filter(Boolean) || [];
@@ -678,7 +705,12 @@ class SeoService {
       blogs: { name: 'Blogs', path: '/blogs' },
       brands: { name: 'Brands', path: '/brands' },
     }[pathSegments[0]];
-    if (pathSegments.length > 1 && metadata.canonicalUrl) {
+    if (metadata.breadcrumbs?.length && metadata.canonicalUrl) {
+      schemaGraphItems.push({
+        '@type': 'BreadcrumbList',
+        itemListElement: metadata.breadcrumbs.map((crumb, index) => ({ '@type': 'ListItem', position: index + 1, ...crumb })),
+      });
+    } else if (!metadata.siteUrl && pathSegments.length > 1 && metadata.canonicalUrl) {
       const baseUrl = getPublicBaseUrl(metadata);
       const crumbs = [{ name: 'Home', item: `${baseUrl}/` }];
       if (collectionCrumb) crumbs.push({ name: collectionCrumb.name, item: `${baseUrl}${collectionCrumb.path}` });
@@ -689,27 +721,32 @@ class SeoService {
       });
     }
     const schemaGraph = { '@context': 'https://schema.org', '@graph': schemaGraphItems };
-    tags.push(`<script type="application/ld+json">${JSON.stringify(schemaGraph).replace(/</g, '\\u003c')}</script>`);
+    if (!metadata.noIndex) tags.push(`<script type="application/ld+json">${JSON.stringify(schemaGraph).replace(/</g, '\\u003c')}</script>`);
 
-    const injectedMeta = '\n    ' + tags.join('\n    ') + '\n  ';
+    return { title: fullTitle, tags: tags.join('\n    ') };
+  }
 
-    let html = rawTemplate;
+  injectMetadataIntoHtml(metadata, template = null) {
+    const rawTitle = metadata.title || metadata.siteName || 'Store';
+    const { title: fullTitle, tags } = this.buildHead(metadata);
+    const injectedMeta = '\n    ' + tags + '\n  ';
+    let html = template || this.getHtmlTemplate();
 
     // Replace or insert <title>
     if (/<title>[\s\S]*?<\/title>/i.test(html)) {
-      html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(fullTitle)}</title>`);
+      html = html.replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${escapeHtml(fullTitle)}</title>`);
     } else {
-      html = html.replace(/<\/head>/i, `  <title>${escapeHtml(fullTitle)}</title>\n</head>`);
+      html = html.replace(/<\/head>/i, () => `  <title>${escapeHtml(fullTitle)}</title>\n</head>`);
     }
 
     // Strip default placeholder meta description if present
     html = html.replace(/<meta\s+name=["']description["'][^>]*>/gi, '');
 
     // Insert all meta tags before </head>
-    html = html.replace(/<\/head>/i, `${injectedMeta}</head>`);
+    html = html.replace(/<\/head>/i, () => `${injectedMeta}</head>`);
 
     // Add semantic noscript preview inside #root for crawlers that don't execute JS
-    const noscriptContent = `<noscript><div style="padding:20px;font-family:sans-serif;"><h1>${escapeHtml(fullTitle)}</h1><p>${escapeHtml(metadata.description)}</p>${metadata.ogImage ? `<p><img src="${escapeHtml(metadata.ogImage)}" alt="${escapeHtml(rawTitle)}" style="max-width:320px;" /></p>` : ''}${metadata.productData ? `<p>Price: ${escapeHtml(metadata.productData.currency)} ${escapeHtml(metadata.productData.price)} &middot; Status: ${escapeHtml(metadata.productData.availability)}</p>` : ''}</div></noscript>`;
+    const noscriptContent = `<noscript><div style="padding:20px;font-family:sans-serif;"><h1>${escapeHtml(fullTitle)}</h1><p>${escapeHtml(metadata.description)}</p>${metadata.ogImage ? `<p><img src="${escapeHtml(metadata.ogImage)}" alt="${escapeHtml(metadata.ogImageAlt || rawTitle)}" style="max-width:320px;" /></p>` : ''}${metadata.productData ? `<p>Price: ${escapeHtml(metadata.productData.currency)} ${escapeHtml(metadata.productData.price)} &middot; Status: ${escapeHtml(metadata.productData.availability)}</p>` : ''}</div></noscript>`;
 
     if (html.includes('<div id="root"></div>')) {
       html = html.replace('<div id="root"></div>', `<div id="root">${noscriptContent}</div>`);

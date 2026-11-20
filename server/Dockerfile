@@ -20,6 +20,7 @@ COPY server/.sequelizerc ./
 COPY server/public/ ./public/
 COPY shared/ /app/shared/
 COPY config/ /app/config/
+COPY demo-orbis-seeds-v1-html/ /app/demo-orbis-seeds-v1-html/
 RUN mkdir -p /app/server/uploads && chown -R node:node /app
 USER node
 EXPOSE 5000

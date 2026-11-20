@@ -70,7 +70,7 @@
             var line = lineOf(item), esc = C.escape;
             var $row = $('<div class="cart-inner">').attr('data-key', C.key(line)).data('line', line);
             $row.html('<button type="button" class="close-btn remove-wishlist-item" aria-label="Remove from wishlist">&times;</button>' +
-                '<div class="cart-image"><a href="' + esc(C.productUrl(line)) + '"><img src="' + esc(line.image) + '" alt="' + esc(line.name) + '"></a></div>' +
+                '<div class="cart-image"><a href="' + esc(C.productUrl(line)) + '"><img src="' + esc(line.image) + '" alt="' + esc(line.imageAlt || line.name) + '"></a></div>' +
                 '<div class="cart-content"><h2><a href="' + esc(C.productUrl(line)) + '">' + esc(line.name) + '</a></h2>' +
                 (line.variantLabel ? '<p class="cart-variant">' + esc(line.variantLabel) + '</p>' : '') +
                 (line.sku ? '<p class="cart-variant">SKU: ' + esc(line.sku) + '</p>' : '') +

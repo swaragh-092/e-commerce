@@ -9,9 +9,11 @@
 
     function toAbsoluteMediaUrl(url) {
         if (!url) return "images/about-us.jpg";
-        if (/^https?:\/\//i.test(url)) return url;
-        var base = (typeof APP_URL !== "undefined" ? APP_URL : "https://eshopadmin.swaragh.org.in/");
-        return base.replace(/\/$/, "") + (url.charAt(0) === "/" ? "" : "/") + url;
+        try {
+            var resolved = new URL(url, APP_URL);
+            if (/^https?:$/.test(resolved.protocol)) return resolved.href;
+        } catch (_) { /* Use the local fallback below. */ }
+        return "images/about-us.jpg";
     }
 
     function formatDate(dateValue) {
@@ -50,11 +52,7 @@
         var imageUrl = toAbsoluteMediaUrl(post.featuredImage && post.featuredImage.url);
         var galleryItems = post.gallery && post.gallery.items ? post.gallery.items : [];
 
-        if (window.OrbiSEO) {
-            window.OrbiSEO.setBlogSEO(post);
-        } else {
-            document.title = title + " | Orbi Seeds";
-        }
+        if (window.OrbiSEO) window.OrbiSEO.refresh(post);
         $("#breadcrumb-blog-title").text(title);
         $("#single-blog-message").hide();
         $("#blog-date").text(dateText).show();
@@ -66,7 +64,7 @@
             $("#blog-summary").hide();
         }
 
-        $("#blog-main-image").attr("src", imageUrl).attr("alt", title);
+        $("#blog-main-image").attr("src", imageUrl).attr("alt", OrbiCatalog.imageAlt(post.featuredImage, title));
         $("#blog-main-image-wrapper").show();
         $("#blog-content").html(content).show();
 
@@ -75,8 +73,10 @@
         if (galleryItems.length) {
             galleryItems.forEach(function (item) {
                 var mediaUrl = toAbsoluteMediaUrl(item.media && item.media.url);
-                var alt = (item.media && (item.media.alt || item.media.originalName)) || title;
-                $gallery.append('<a href="' + mediaUrl + '" data-fancybox="blog-gallery"><img src="' + mediaUrl + '" alt="' + alt + '"></a>');
+                if (!item.media || !item.media.url) return;
+                var alt = OrbiCatalog.imageAlt(item, item.title || item.media.caption || title);
+                var image = $('<img>').attr({ src: mediaUrl, alt: alt, loading: 'lazy' });
+                $gallery.append($('<a>').attr({ href: mediaUrl, 'data-fancybox': 'blog-gallery' }).append(image));
             });
             $("#blog-gallery-wrapper").show();
         } else {
@@ -188,13 +188,13 @@
             var cardHtml = "" +
                 '<a href="' + blogLink + '" class="blog-inner">' +
                 '  <div class="blog-image">' +
-                '    <img src="' + imageUrl + '" alt="' + (post.title || "Blog Image") + '">' +
+                '    <img src="' + OrbiCatalog.escape(imageUrl) + '" alt="' + OrbiCatalog.escape(OrbiCatalog.imageAlt(post.featuredImage, post.title || 'Article image')) + '" loading="lazy">' +
                 '  </div>' +
                 '  <div class="blog-content">' +
-                (categoryName ? '    <span class="blog-category-badge">' + categoryName + '</span>' : '') +
+                (categoryName ? '    <span class="blog-category-badge">' + OrbiCatalog.escape(categoryName) + '</span>' : '') +
                 '    <span class="date">' + dateText + '</span>' +
-                '    <h2>' + (post.title || "") + '</h2>' +
-                '    <p>' + summaryText + '</p>' +
+                '    <h2>' + OrbiCatalog.escape(post.title) + '</h2>' +
+                '    <p>' + OrbiCatalog.escape(summaryText) + '</p>' +
                 '    <span class="read-btn">Read Article &rarr;</span>' +
                 '  </div>' +
                 '</a>';
@@ -229,6 +229,7 @@
     if (slug) {
         fetch(BLOGS_API_URL + "/" + encodeURIComponent(slug))
             .then(function (response) {
+                if (response.status === 404 && window.OrbiSEO) window.OrbiSEO.unavailable();
                 if (!response.ok) throw new Error("Failed to load blog");
                 return response.json();
             })

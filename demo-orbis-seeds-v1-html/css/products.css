@@ -330,3 +330,8 @@
     font-size: 13px;
   }
 }
+
+.catalog-products-page .products-right h3 a {
+    color: inherit;
+    text-decoration: none;
+}

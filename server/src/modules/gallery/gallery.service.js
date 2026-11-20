@@ -21,9 +21,9 @@ exports.listAdmin = async (page, limit) => {
   return getPagingData(rows, count, page, queryLimit);
 };
 
-exports.listPublic = async () => {
+exports.listPublic = async (slug) => {
   const galleries = await Gallery.findAll({
-    where: { isActive: true, isShowcase: true },
+    where: { isActive: true, isShowcase: true, ...(slug && { slug }) },
     attributes: ['id', 'title', 'slug', 'description'],
     order: [['createdAt', 'ASC'], ['id', 'ASC']],
     include: [coverInclude, {

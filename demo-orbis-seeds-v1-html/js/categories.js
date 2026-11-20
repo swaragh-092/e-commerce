@@ -181,18 +181,7 @@ function displayCategories(list, parentName, targetCategory, path) {
     // Update Breadcrumbs
     updateBreadcrumbs(parentName);
 
-    // Update Dynamic SEO
-    if (window.OrbiSEO) {
-        if (targetCategory) {
-            window.OrbiSEO.setCategorySEO(targetCategory, path);
-        } else {
-            window.OrbiSEO.setMeta({
-                title: 'Our Products',
-                description: 'Explore high-yield vegetable, fruit, and flower seed categories from Orbi Seeds International.',
-                keywords: 'seed categories, vegetable seeds, fruit seeds, flower seeds, hybrid seeds, Orbi Seeds'
-            });
-        }
-    }
+    if (window.OrbiSEO) window.OrbiSEO.refresh(targetCategory);
 
     // Update Back Button
     const backBtnWrapper = document.getElementById('back-btn-wrapper');
