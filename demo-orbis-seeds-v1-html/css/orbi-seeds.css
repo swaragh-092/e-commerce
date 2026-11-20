@@ -1642,13 +1642,9 @@ li.dropdown-wrapper-li:hover > .dropdown-wrapper, li.dropdown-wrapper-li:focus-w
 /* testimonial css  */
 
 /* Actions share one palette; secondary and destructive actions override only their role. */
-:is(.common-btn-parent a, .common-btn button, .contact-us-right button,
-    .view-product-btn, .core-value-btn, .catalog-search-button, .catalog-clear,
-    .quantity button, .enquiry-empty-actions a, .wishlist-empty-actions a,
-    .gallery-back, :where(#gallery-retry), .gallery-retry, .custom-confirm-cancel,
-    .custom-confirm-ok, .thank-you-actions a) {
+:is(.common-btn-parent a, .common-btn button, .contact-us-right button, .view-product-btn, .core-value-btn, .catalog-search-button, .catalog-clear, .quantity button, .enquiry-empty-actions a, .wishlist-empty-actions a, .gallery-back, :where(#gallery-retry), .gallery-retry, .custom-confirm-cancel, .custom-confirm-ok, .thank-you-actions a) {
   background: var(--button-bg);
-  color: var(--button-text);
+  color: #fff;
   border: 1px solid var(--button-border);
   font-weight: var(--button-font-weight);
   transition: background-color .2s, color .2s, border-color .2s;

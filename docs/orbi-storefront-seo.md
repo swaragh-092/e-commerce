@@ -63,8 +63,9 @@ from `demo-orbis-seeds-v1-html/js/seo-routes.js`. For those URLs, the approved c
 takes precedence over global title formatting and saved category copy. An
 explicit matching SEO URL Override can still replace either field.
 
-Product and variant image rows use their saved alt text first and Media
-Library alt text second. Blog photos and album covers use Media Library alt
+Product and variant images use Media Library alt text first, then descriptive
+alt text saved on the product image. Legacy filenames and the generic Product
+Image placeholder fall back to the product or variant name. Blog photos and album covers use Media Library alt
 text. Category records currently store image URLs, and the storefront uses
 the category name as the image alternative.
 

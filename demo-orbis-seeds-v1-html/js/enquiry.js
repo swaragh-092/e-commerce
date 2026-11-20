@@ -151,7 +151,7 @@ $(document).ready(function () {
             var esc = C.escape, url = esc(C.productUrl(item));
             var $row = $('<div class="cart-inner">').attr('data-key', C.key(item));
             $row.html('<button type="button" class="close-btn remove-item" aria-label="Remove from enquiry list">&times;</button>' +
-                '<div class="cart-image"><a href="' + url + '"><img src="' + esc(C.imageUrl(item.image)) + '" alt="' + esc(item.imageAlt || item.name) + '"></a></div>' +
+                '<div class="cart-image"><a href="' + url + '"><img src="' + esc(C.imageUrl(item.image)) + '" alt="' + esc(C.imageAlt({ alt: item.imageAlt }, item.name)) + '"></a></div>' +
                 '<div class="cart-content"><h2><a href="' + url + '">' + esc(item.name) + '</a></h2>' +
                 (item.variantLabel ? '<p class="cart-variant">' + esc(item.variantLabel) + '</p>' : '') +
                 (item.sku ? '<p class="cart-variant">SKU: ' + esc(item.sku) + '</p>' : '') +

@@ -392,7 +392,9 @@ class SeoService {
       const images = [...entity.images].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
       const primary = images.find((img) => img.isPrimary) || images[0];
       ogImage = primary.url || primary.media?.url;
-      ogImageAlt = primary.alt?.trim() || primary.media?.alt?.trim();
+      const imageAlt = primary.alt?.trim() || '';
+      const isFilenameOrPlaceholder = /\.(?:avif|gif|heic|heif|ico|jpe?g|png|svg|tiff?|webp)$/i.test(imageAlt) || /^product image$/i.test(imageAlt);
+      ogImageAlt = primary.media?.alt?.trim() || (isFilenameOrPlaceholder ? '' : imageAlt) || entity.name;
     } else if (!ogImage && type === 'category') {
       ogImage = entity.bannerImage || entity.image || null;
     } else if (!ogImage && type === 'blog') {

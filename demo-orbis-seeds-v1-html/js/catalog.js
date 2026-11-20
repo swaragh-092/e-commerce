@@ -9,8 +9,14 @@
         });
     };
     C.imageAlt = function (image, fallback) {
-        var candidates = image && [image.alt, image.media && image.media.alt];
-        return (candidates && candidates.find(function (alt) { return typeof alt === 'string' && alt.trim(); }) || fallback || '').trim();
+        var mediaAlt = image && image.media && image.media.alt;
+        if (typeof mediaAlt === 'string' && mediaAlt.trim()) return mediaAlt.trim();
+        var imageAlt = typeof image?.alt === 'string' ? image.alt.trim() : '';
+        // Older product records copied the upload's filename into the alt field.
+        if (imageAlt && !/\.(?:avif|gif|heic|heif|ico|jpe?g|png|svg|tiff?|webp)$/i.test(imageAlt) && !/^product image$/i.test(imageAlt)) {
+            return imageAlt;
+        }
+        return (fallback || '').trim();
     };
     C.imageUrl = function (url) {
         if (typeof url !== 'string' || !url.trim()) return 'images/orbi-seeds-logo.png';
