@@ -30,6 +30,16 @@ describe('Orbi variant and enquiry identities', () => {
     expect(c.productUrl(c.getCart()[0])).toContain('variant=v1');
     expect(c.getCart()[0].image).toBe('https://api.example.com/red.jpg');
   });
+  it('uses live Media Library alt text instead of legacy filenames for products and variants', () => {
+    const c = mount();
+    const image = { url: '/uploads/beetroot.jpg', alt: 'AI-madhuraj-2.jpg', media: { alt: 'beetroot image' } };
+    const beetroot = { id: 'beetroot', name: 'MADHURAJ', images: [image] };
+    expect(c.line(beetroot).imageAlt).toBe('beetroot image');
+    expect(c.line(beetroot, { id: 'small', images: [{ ...image, media: { alt: 'Small beetroot packet' } }] }).imageAlt)
+      .toBe('Small beetroot packet');
+    expect(c.imageAlt({ alt: 'sunrise.jpg' }, 'SUNRISE')).toBe('SUNRISE');
+    expect(c.imageAlt({ alt: 'Whole and sliced beetroot' }, 'MADHURAJ')).toBe('Whole and sliced beetroot');
+  });
   it('recovers from invalid storage without inventing a variant for legacy items', () => {
     const c = mount();
     dom.window.localStorage.setItem('enquiryCart', '{invalid');

@@ -97,7 +97,7 @@ describe('Orbi storefront SEO', () => {
   it('renders saved SEO fields and image alt in the initial product HTML', async () => {
     db.Product.findOne.mockResolvedValue({
       name: 'Dwarf tomato', metaTitle: 'Dwarf tomato seeds', metaDescription: 'Compact tomato plants',
-      images: [{ isPrimary: true, media: { url: '/uploads/tomato.jpg', alt: 'Tomatoes on a vine' } }],
+      images: [{ isPrimary: true, alt: 'tomato.jpg', media: { url: '/uploads/tomato.jpg', alt: 'Tomatoes on a vine' } }],
       price: 25, quantity: 2,
     });
     db.SeoOverride.findAll.mockResolvedValue([
