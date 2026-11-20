@@ -11,9 +11,39 @@ const api = axios.create({
   },
 });
 
+const safeMethods = new Set(['get', 'head', 'options']);
+let csrfTokenPromise;
+
+function getCsrfToken() {
+  csrfTokenPromise ||= axios.get(`${api.defaults.baseURL}/csrf-token`, {
+    withCredentials: true,
+    timeout: 15000,
+  }).then(({ data }) => data.token).catch((error) => {
+    csrfTokenPromise = undefined;
+    throw error;
+  });
+  return csrfTokenPromise;
+}
+
+const isCsrfRejection = (error) => error.response?.status === 403 &&
+  error.response.data?.error?.code === 'CSRF_TOKEN_INVALID';
+
+async function refreshAuth() {
+  const send = async () => axios.post(`${api.defaults.baseURL}/auth/refresh`, {}, {
+    withCredentials: true, timeout: 15000, headers: { 'X-CSRF-Token': await getCsrfToken() },
+  });
+  try {
+    return await send();
+  } catch (error) {
+    if (!isCsrfRejection(error)) throw error;
+    csrfTokenPromise = undefined;
+    return send();
+  }
+}
+
 const refreshCoordinator = createRefreshCoordinator({
   key: `auth:refresh-generation:${api.defaults.baseURL}`,
-  refresh: () => axios.post(`${api.defaults.baseURL}/auth/refresh`, {}, { withCredentials: true, timeout: 15000 }),
+  refresh: refreshAuth,
 });
 export const changeAuthSession = (operation, options) => refreshCoordinator.changeSession(operation, options);
 export const beginAuthSessionChange = () => refreshCoordinator.beginSessionChange();
@@ -35,7 +65,7 @@ const handleAdminSessionExpiry = error => {
 };
 
 api.interceptors.request.use(
-  (config) => {
+  async (config) => {
     const authEndpoint = ['/auth/login', '/auth/2fa/', '/auth/otp/verify', '/auth/logout']
       .some(path => config.url?.includes(path));
     const adminStatusEndpoint = config.url?.replace(/\?.*$/, '') === '/auth/admin-session';
@@ -52,6 +82,12 @@ api.interceptors.request.use(
         }
       }
     } catch (_) {}
+    if (!safeMethods.has((config.method || 'get').toLowerCase())) {
+      config.headers['X-CSRF-Token'] = await getCsrfToken();
+      if (config._authRefreshVersion !== refreshCoordinator.getVersion()) {
+        throw Object.assign(new Error('Authentication session changed; request was not sent.'), { code: 'SESSION_CHANGED' });
+      }
+    }
     return config;
   },
   (error) => {
@@ -65,6 +101,12 @@ api.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config;
+    if (originalRequest && !originalRequest._csrfRetry && isCsrfRejection(error) &&
+        originalRequest._authRefreshVersion === refreshCoordinator.getVersion()) {
+      originalRequest._csrfRetry = true;
+      csrfTokenPromise = undefined;
+      return api(originalRequest);
+    }
 
     if (error.response?.status === 401 && getAdminSessionErrorCode(error) === 'ADMIN_SESSION_EXPIRED') {
       handleAdminSessionExpiry(error);

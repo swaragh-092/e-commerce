@@ -312,7 +312,7 @@ const AppRoutes = () => (
             <Route path="features" element={<FeaturesPage />} />
           </Route>
           <Route element={<ModeRoute requiredMode="ecommerce" />}>
-            <Route element={<ProtectedRoute permission={PERMISSIONS.SETTINGS_MANAGE} />}>
+            <Route element={<ProtectedRoute permission={PERMISSIONS.GIFT_CARDS_READ} />}>
               <Route path="gift-cards" element={<GiftCardsPage />} />
             </Route>
             <Route element={<FeatureRoute feature="payments" surface="admin" redirectTo="/admin" />}>

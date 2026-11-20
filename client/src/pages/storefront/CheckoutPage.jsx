@@ -449,13 +449,14 @@ const CheckoutPage = () => {
             setGiftCardBusy(false);
         }
     };
-    const [paymentMethod, setPaymentMethod] = useState(defaultPaymentMethod || 'razorpay');
+    const [preferredPaymentMethod, setPaymentMethod] = useState(defaultPaymentMethod || 'razorpay');
+    const paymentMethod = giftCard ? 'razorpay' : preferredPaymentMethod;
 
     useEffect(() => {
-        if (!enabledPaymentMethods.some((method) => method.id === paymentMethod)) {
+        if (!enabledPaymentMethods.some((method) => method.id === preferredPaymentMethod)) {
             setPaymentMethod(defaultPaymentMethod);
         }
-    }, [defaultPaymentMethod, enabledPaymentMethods, paymentMethod]);
+    }, [defaultPaymentMethod, enabledPaymentMethods, preferredPaymentMethod]);
 
 
     const subtotal = items.reduce((sum, item) => {
@@ -858,7 +859,6 @@ const CheckoutPage = () => {
             setError('Enter a valid email address.');
             return;
         }
-        if (giftCard && paymentMethod !== 'razorpay') { setError('Select Razorpay or remove the gift card.'); return; }
         if (!paymentMethod) { setError('No payment method is currently available.'); return; }
         if (!hasPhysicalItems && paymentMethod === 'cod') { setError('Cash on delivery is not available for digital products.'); return; }
         if (hasPhysicalItems && shippingLoading) { setError('Please wait while we confirm delivery availability.'); return; }
@@ -1405,7 +1405,7 @@ const CheckoutPage = () => {
                                             {' · '}Card balance after purchase {formatPrice((giftCard.available - giftAppliedPaise) / 100)}
                                             {' · '}Online due {formatPrice(onlineDuePaise / 100)}
                                         </Typography>
-                                        {paymentMethod !== 'razorpay' && <Alert severity="info">Select Razorpay to use the gift card.</Alert>}
+                                        {onlineDuePaise > 0 && <Typography variant="body2">The remaining amount is paid through Razorpay.</Typography>}
                                         <Button onClick={() => { setGiftCard(null); setGiftCardInput(''); }}>Remove gift card</Button>
                                     </>
                                 ) : (
@@ -1418,7 +1418,7 @@ const CheckoutPage = () => {
                                 {giftCardError && <Alert severity="error">{giftCardError}</Alert>}
                             </Stack>
                         )}
-                        {paymentsVisible && (
+                        {paymentsVisible && !giftCard && (
                         <RadioGroup
                             aria-label="Payment method"
                             value={paymentMethod}

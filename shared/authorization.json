@@ -20,6 +20,10 @@
     "ORDERS_REFUND": "orders.refund",
     "CUSTOMERS_READ": "customers.read",
     "CUSTOMERS_MANAGE": "customers.manage",
+    "GIFT_CARDS_READ": "gift_cards.read",
+    "GIFT_CARDS_MANAGE": "gift_cards.manage",
+    "GIFT_CARDS_ISSUE": "gift_cards.issue",
+    "GIFT_CARDS_REFUND": "gift_cards.refund",
     "COUPONS_READ": "coupons.read",
     "COUPONS_MANAGE": "coupons.manage",
     "REVIEWS_READ": "reviews.read",
@@ -89,6 +93,10 @@
     "products.update",
     "products.delete",
     "products.bulk_sale",
+    "gift_cards.read",
+    "gift_cards.manage",
+    "gift_cards.issue",
+    "gift_cards.refund",
     "tags.read",
     "tags.manage",
     "categories.read",
@@ -154,6 +162,10 @@
     "orders.refund": "Initiate and process order refunds",
     "customers.read": "View customer accounts and profiles",
     "customers.manage": "Edit customer details and manage accounts",
+    "gift_cards.read": "View gift cards, delivery status and reconciliation.",
+    "gift_cards.manage": "Set gift card sales policy and manage deliveries and suspensions.",
+    "gift_cards.issue": "Issue gift cards without collecting payment.",
+    "gift_cards.refund": "Refund eligible gift card purchases.",
     "coupons.read": "View discount coupons",
     "coupons.manage": "Create, edit, and delete coupons",
     "reviews.read": "View product reviews",
@@ -199,6 +211,9 @@
     "tags.manage": "Create and edit tags assigned to products."
   },
   "implies": {
+    "gift_cards.manage": ["gift_cards.read"],
+    "gift_cards.issue": ["gift_cards.read"],
+    "gift_cards.refund": ["gift_cards.read"],
     "categories.manage": [
       "categories.read"
     ],
