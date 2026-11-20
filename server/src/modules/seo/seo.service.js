@@ -211,10 +211,9 @@ class SeoService {
     }
     // Merge overrides only after resolving a publicly available entity, so an
     // override cannot expose draft content or remove its product/article type.
-    const storefrontOverride = context.overridePath && context.overridePath !== urlPath
-      ? await SeoOverride.findOne({ where: { path: context.overridePath } })
-      : null;
-    const override = storefrontOverride || await SeoOverride.findOne({ where: { path: urlPath } });
+    const override = context.override !== undefined
+      ? context.override
+      : await SeoOverride.findOne({ where: { path: urlPath } });
     const overrideData = override && (typeof override.toJSON === 'function' ? override.toJSON() : override);
     const overrides = Object.fromEntries(['metaTitle', 'metaDescription', 'metaKeywords', 'ogImage', 'canonicalUrl', 'noIndex']
       .filter((key) => overrideData?.[key] != null && overrideData[key] !== '')

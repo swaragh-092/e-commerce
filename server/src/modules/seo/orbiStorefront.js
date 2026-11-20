@@ -4,13 +4,16 @@ const express = require('express');
 const { readFile } = require('node:fs/promises');
 const path = require('node:path');
 const { Op } = require('sequelize');
-const { BlogPost, Gallery, Product, SeoOverride } = require('../index');
+const { BlogPost, Gallery, Page, Product, SeoOverride } = require('../index');
 const categoryService = require('../category/category.service');
+const pageService = require('../page/page.service');
+const { sanitizePageContent } = require('../../middleware/sanitize.middleware');
+const featureGate = require('../../middleware/featureGate.middleware');
 const settings = require('../settings/settings.service');
 const galleries = require('../gallery/gallery.service');
-const { getResolvedFeature } = require('../../middleware/featureGate.middleware');
 const { success, error } = require('../../utils/response');
 const logger = require('../../utils/logger');
+const AppError = require('../../utils/AppError');
 const { isBrandVisible } = require('../../utils/brandVisibility');
 const seo = require('./seo.service');
 const { pages, siteName, pagePath, resolve } = require('../../../../demo-orbis-seeds-v1-html/js/seo-routes');
@@ -40,6 +43,59 @@ function mountOrbiStorefront(app) {
   const absolute = (relative) => new URL(relative, publicUrl).href;
   const router = express.Router();
 
+  function overridePaths(relative, key) {
+    const target = new URL(relative, publicUrl);
+    return [...new Set([
+      target.pathname + target.search, '/' + relative, key,
+      ...(relative === '' ? [publicUrl.pathname + 'index.html', '/index.html'] : []),
+    ])];
+  }
+
+  function selectOverride(byPath, paths) {
+    return paths.map((path) => byPath.get(path)).find(Boolean) || null;
+  }
+
+  function isCanonical(relative, override) {
+    if (override?.noIndex) return false;
+    if (override?.canonicalUrl) {
+      try {
+        const canonical = new URL(override.canonicalUrl, publicUrl.origin);
+        if (['http:', 'https:'].includes(canonical.protocol)) return canonical.href === absolute(relative);
+      } catch { /* Invalid overrides fall back to the storefront URL. */ }
+    }
+    return true;
+  }
+
+  function cmsImageUrl(value) {
+    if (!value) return '';
+    try {
+      const url = new URL(value, apiOrigin);
+      return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+    } catch {
+      return '';
+    }
+  }
+
+  function cmsMarkup(page) {
+    const content = sanitizePageContent(page.content || '', {
+      transformTags: {
+        h1: 'h2',
+        img: (tagName, attributes) => {
+          const { src, ...rest } = attributes;
+          const url = cmsImageUrl(src);
+          return { tagName, attribs: { ...rest, ...(url && { src: url }), alt: attributes.alt ?? '' } };
+        },
+      },
+    });
+    const banner = cmsImageUrl(page.bannerUrl);
+    return `<h1>${escape(page.title)}</h1>${banner ? `<img src="${escape(banner)}" alt="">` : ''}${content || ''}`;
+  }
+
+  async function publishedPages(attributes) {
+    if (!(await featureGate.getResolvedFeature('pages'))) return [];
+    return Page.findAll({ where: { status: 'published' }, attributes, order: [['sortOrder', 'ASC'], ['title', 'ASC']] });
+  }
+
   function fallback(route) {
     const [title, description, image, schemaType] = pages[route.missing ? 'error.html' : route.file];
     return {
@@ -50,7 +106,7 @@ function mountOrbiStorefront(app) {
     };
   }
 
-  async function metadata(route) {
+  async function metadata(route, page) {
     let entity;
     let publicPath = route.publicPath;
     if (route.missing || ['wishlist.html', 'enquiry-list.html', 'thank-you.html'].includes(route.file)) return fallback(route);
@@ -69,13 +125,15 @@ function mountOrbiStorefront(app) {
       entity = flatten(await categoryService.getCategoryTree({ hideEmpty: true })).find((category) => category.slug === route.slug);
       if (!entity) return null;
       publicPath = categoryPath(entity) + (route.page ? '&page=' + route.page : '');
+    } else if (route.kind === 'page') {
+      entity = page;
     } else if (route.kind === 'gallery') {
-      if (!(await getResolvedFeature('gallery'))) return null;
+      if (!(await featureGate.getResolvedFeature('gallery'))) return null;
       [entity] = await galleries.listPublic(route.slug);
       if (!entity) return null;
     } else if (route.kind === 'general') {
       const enabled = { 'resources.html': 'blogs', 'gallery.html': 'gallery' }[route.file];
-      if (enabled && !(await getResolvedFeature(enabled))) return null;
+      if (enabled && !(await featureGate.getResolvedFeature(enabled))) return null;
       entity = {
         metaTitle: route.file === 'index.html' ? global.homeTitle : fallbackData.title,
         metaDescription: route.file === 'index.html' ? global.homeDescription : fallbackData.description,
@@ -86,12 +144,15 @@ function mountOrbiStorefront(app) {
     const collection = {
       product: ['Seed Catalogue', 'products.html'], category: ['Seed Categories', 'product.html'],
       blog: ['Agricultural Resources', 'resources.html'], gallery: ['Photo Gallery', 'gallery.html'],
+      page: ['Site Map', 'sitemap.html'],
     }[route.kind];
     const canonical = new URL(publicPath, publicUrl);
+    const paths = overridePaths(publicPath.split(/[&?]page=/)[0], route.key);
+    const overrides = await SeoOverride.findAll({ where: { path: { [Op.in]: paths } } });
     const data = await seo.getMetadataByPath(route.key, {
       defaults, entity, kind: route.kind, noIndex: route.noIndex,
       publicPath: canonical.pathname + canonical.search,
-      overridePath: '/' + publicPath.split(/[&?]page=/)[0],
+      override: selectOverride(new Map(overrides.map((row) => [row.path, row])), paths),
     });
     if (data.productData) {
       const { features } = await settings.getFeatures();
@@ -112,11 +173,19 @@ function mountOrbiStorefront(app) {
     return data;
   }
 
+  async function getPublishedPage(slug) {
+    if (!(await featureGate.getResolvedFeature('pages'))) {
+      throw new AppError('NOT_FOUND', 404, 'Page not found');
+    }
+    return pageService.getPageBySlug(slug);
+  }
+
   async function getPageMetadata(route) {
     try {
-      return await metadata(route);
+      const page = route.kind === 'page' ? await getPublishedPage(route.slug) : null;
+      return { data: await metadata(route, page), page };
     } catch (err) {
-      if (err.statusCode === 404) return null;
+      if (err.statusCode === 404) return { data: null, page: null };
       throw err;
     }
   }
@@ -129,7 +198,7 @@ function mountOrbiStorefront(app) {
     const parsed = new URL(target, 'http://localhost');
     try {
       const route = resolve(parsed.pathname.slice(1) || 'index.html', parsed.searchParams);
-      const data = await getPageMetadata(route);
+      const { data } = await getPageMetadata(route);
       if (!data || route.missing) return error(res, 'Page not found', 404, 'NOT_FOUND');
       return success(res, seo.buildHead(data));
     } catch (err) {
@@ -143,26 +212,21 @@ function mountOrbiStorefront(app) {
 
   router.get('/sitemap.xml', async (req, res, next) => {
     try {
-      const [blogsEnabled, galleriesEnabled] = await Promise.all([getResolvedFeature('blogs'), getResolvedFeature('gallery')]);
-      const [products, categories, posts, albums, overrides] = await Promise.all([
+      const [blogsEnabled, galleriesEnabled] = await Promise.all([featureGate.getResolvedFeature('blogs'), featureGate.getResolvedFeature('gallery')]);
+      const [products, categories, posts, albums, cmsPages, overrides] = await Promise.all([
         Product.findAll({ where: { status: 'published', isEnabled: true }, attributes: ['slug', 'updatedAt'] }),
         categoryService.getCategoryTree({ hideEmpty: true }),
         blogsEnabled ? BlogPost.findAll({ where: { status: 'published', publishedAt: { [Op.lte]: new Date() } }, attributes: ['slug', 'updatedAt'] }) : [],
         galleriesEnabled ? Gallery.findAll({ where: { isActive: true, isShowcase: true }, attributes: ['slug', 'updatedAt'] }) : [],
+        publishedPages(['slug', 'updatedAt']),
         SeoOverride.findAll({ attributes: ['path', 'noIndex', 'canonicalUrl'] }),
       ]);
-      const byPath = new Map(overrides.map((row) => [row.path, row]));
+      const overridesByPath = new Map(overrides.map((row) => [row.path, row]));
       const entries = new Map();
       function add(relative, key, updatedAt) {
-        const override = byPath.get('/' + relative) || byPath.get(key);
+        const override = selectOverride(overridesByPath, overridePaths(relative, key));
+        if (!isCanonical(relative, override)) return;
         const loc = absolute(relative);
-        if (override?.noIndex) return;
-        if (override?.canonicalUrl) {
-          try {
-            const canonical = new URL(override.canonicalUrl, publicUrl.origin);
-            if (['http:', 'https:'].includes(canonical.protocol) && canonical.href !== loc) return;
-          } catch { /* Invalid overrides fall back to the storefront URL. */ }
-        }
         const date = updatedAt && new Date(updatedAt);
         entries.set(loc, date && !Number.isNaN(date.getTime()) ? date.toISOString() : '');
       }
@@ -175,6 +239,7 @@ function mountOrbiStorefront(app) {
       for (const product of products) add(pagePath('products.html', { slug: product.slug }), '/products/' + encodeURIComponent(product.slug), product.updatedAt);
       for (const post of posts) add(pagePath('resource.html', { slug: post.slug }), '/blogs/' + encodeURIComponent(post.slug), post.updatedAt);
       for (const album of albums) add(pagePath('gallery-detail.html', { album: album.slug }), '/gallery/' + encodeURIComponent(album.slug), album.updatedAt);
+      for (const page of cmsPages) add(pagePath('page.html', { slug: page.slug }), '/p/' + encodeURIComponent(page.slug), page.updatedAt);
       const urls = Array.from(entries, ([loc, date]) => `  <url><loc>${escape(loc)}</loc>${date ? `<lastmod>${date}</lastmod>` : ''}</url>`);
       res.set('Cache-Control', 'public, max-age=300').type('application/xml')
         .send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>`);
@@ -197,8 +262,16 @@ function mountOrbiStorefront(app) {
     try {
       let status = route.missing ? 404 : 200;
       let data;
+      let cmsBody = '';
+      let cmsLinks = '';
       try {
-        data = await getPageMetadata(route);
+        const result = await getPageMetadata(route);
+        data = result.data;
+        if (result.page) cmsBody = cmsMarkup(result.page);
+        if (route.file === 'sitemap.html') {
+          const records = await publishedPages(['title', 'slug']);
+          cmsLinks = records.map(({ title, slug }) => `<li><a href="${escape(pagePath('page.html', { slug }))}">${escape(title)}</a></li>`).join('\n');
+        }
         if (!data) {
           status = 404;
           data = fallback({ ...route, missing: true, noIndex: true });
@@ -215,7 +288,7 @@ function mountOrbiStorefront(app) {
       const tags = head.tags.replace(/<(meta|link|script) /g, '<$1 data-orbi-seo ');
       const rendered = status !== 503 ? '<meta name="orbi-seo-rendered" content="true">' : '';
       const boot = `<script>var API_URL=${JSON.stringify(apiOrigin + '/api/')};var APP_URL=${JSON.stringify(apiOrigin + '/')};</script>`;
-      const preview = status === 200 && route.kind !== 'general'
+      const preview = status === 200 && !['general', 'page'].includes(route.kind)
         ? `<noscript><section><h2>${escape(data.productData?.name || data.title)}</h2><p>${escape(data.description)}</p>
           ${data.ogImage ? `<img src="${escape(data.ogImage)}" alt="${escape(data.ogImageAlt || data.title)}" style="max-width: min(100%, 320px)">` : ''}
           <p><a href="sitemap.html">Browse the Orbi Seeds site map</a></p></section></noscript>` : '';
@@ -230,7 +303,9 @@ function mountOrbiStorefront(app) {
       if (data.noIndex) res.set('X-Robots-Tag', 'noindex, nofollow');
       res.status(status).type('html').send(html
         .replace(/<!-- orbi-seo-start -->[\s\S]*?<!-- orbi-seo-end -->/, () => `<title>${escape(head.title)}</title>\n${tags}\n${rendered}\n${boot}`)
-        .replace('<!-- orbi-seo-preview -->', () => preview));
+        .replace('<!-- orbi-seo-preview -->', () => preview)
+        .replace('<!-- orbi-cms-links -->', () => cmsLinks)
+        .replace(/<!-- orbi-cms-start -->[\s\S]*?<!-- orbi-cms-end -->/, (original) => cmsBody || original));
     } catch (err) {
       next(err);
     }
