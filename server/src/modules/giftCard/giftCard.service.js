@@ -19,7 +19,7 @@ const digest = (purpose, value) => {
 const buyerToken = (id) => digest('gift-buyer-email', id);
 const validBuyerToken = (id, token) => Boolean(token && timingSafeEqual(Buffer.from(buyerToken(id), 'hex'), Buffer.from(token, 'hex')));
 const codeDigest = (code) => digest('gift-card', code.trim().toUpperCase());
-const policy = () => one('SELECT enabled, minimum, maximum, validity_days FROM gift_card_policy WHERE id = 1');
+const policy = (transaction) => one('SELECT enabled, minimum, maximum, validity_days FROM gift_card_policy WHERE id = 1', {}, transaction);
 
 function deliveryDate(date, now = Date.now()) {
     if (!date) return null;
@@ -81,6 +81,51 @@ async function createCard(purchase, balance, expires, transaction) {
         VALUES ($id, $purchase, $digest, $cipher, $suffix, $balance, $expires)`,
     { id, purchase, digest: codeDigest(code), cipher: JSON.stringify(encrypt(code)), suffix: code.slice(-4), balance, expires }, transaction);
     return id;
+}
+
+async function issueManually({ id, actor, reason, amount, recipientEmail, message }) {
+    const shop = await require('../settings/settings.service').getByGroup('general');
+    if (String(shop.currency || 'INR').toUpperCase() !== 'INR') {
+        throw new AppError('GIFT_CARD_UNAVAILABLE', 403, 'Manual gift cards require an INR store.');
+    }
+    const paise = amount * 100;
+    const requestDigest = digest('manual-gift-card', JSON.stringify([actor, id, reason, amount, recipientEmail, message]));
+    return sequelize.transaction(async (transaction) => {
+        const existing = await one('SELECT issued_manually, token_digest FROM gift_card_purchases WHERE id = $id', { id }, transaction);
+        const settings = await policy(transaction);
+        if (!existing && (amount < settings.minimum || amount > settings.maximum)) {
+            throw new AppError('INVALID_GIFT_CARD_AMOUNT', 400, 'Choose an amount within the store limits.');
+        }
+        const issued = await one(`INSERT INTO gift_card_purchases
+            (id, token_digest, buyer_email, recipient_email, sender_name, message, amount, validity_days, issued_manually)
+            VALUES ($id, $token, $recipientEmail, $recipientEmail, '', $message, $amount, $validity, true)
+            ON CONFLICT (id) DO NOTHING RETURNING created_at`,
+        { id, token: requestDigest, recipientEmail, message, amount: paise, validity: settings.validity_days }, transaction);
+        if (!issued) {
+            const prior = existing || await one('SELECT issued_manually, token_digest FROM gift_card_purchases WHERE id = $id', { id }, transaction);
+            if (prior?.issued_manually && prior.token_digest === requestDigest) return { id };
+            throw new AppError('GIFT_CARD_REQUEST_CONFLICT', 409, 'This issuance request was already used.');
+        }
+        const expiry = settings.validity_days ? new Date(+issued.created_at + settings.validity_days * day) : null;
+        const card = await createCard(id, paise, expiry, transaction);
+        await entry(card, 'manual_issue', id, paise, 0, transaction, actor, reason);
+        await query("INSERT INTO gift_card_deliveries (purchase_id, kind, due_at) VALUES ($id, 'recipient', now())", { id }, transaction);
+        return { id };
+    });
+}
+
+async function recordBounce(messageId) {
+    const normalized = messageId.replace(/^<|>$/g, '');
+    const match = /^gift-(recipient|receipt)-([a-f0-9-]{36})-[a-f0-9]{32}@[a-z0-9.-]+$/i.exec(normalized);
+    if (!match || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(match[2])) return;
+    const [, kind, id] = match;
+    await sequelize.transaction(async (transaction) => {
+        const delivery = await one('SELECT status, message_id FROM gift_card_deliveries WHERE purchase_id = $id AND kind = $kind FOR UPDATE',
+            { id, kind }, transaction);
+        if (delivery?.status !== 'sent' || delivery.message_id !== normalized) return;
+        await query("UPDATE gift_card_deliveries SET status = 'bounced' WHERE purchase_id = $id AND kind = $kind",
+            { id, kind }, transaction);
+    });
 }
 
 async function capture(id, payment) {
@@ -290,10 +335,12 @@ async function deliverOne() {
         }
         const email = require('../notification/channels/email.channel');
         let state = 'sent';
+        let messageId = null;
         try {
             const recipient = record.kind === 'recipient';
             const value = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format((recipient ? record.balance : record.amount) / 100);
             const baseUrl = require('../auth/authRedirects').getClientBaseUrl();
+            messageId = 'gift-' + record.kind + '-' + record.id + '-' + randomBytes(16).toString('hex') + '@' + new URL(baseUrl).hostname;
             const statusLink = baseUrl + '/gift-cards#' + record.id + '/' + buyerToken(record.id);
             const expiry = record.expires_at
                 ? 'Valid until ' + record.expires_at.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST.'
@@ -306,7 +353,7 @@ async function deliverOne() {
                         'Gift card code: ' + decrypt(record.code_cipher), expiry, 'Enter this code in the gift card field at checkout. ' + baseUrl + '/checkout'].filter(Boolean).join('\n\n')
                     : 'Your gift card purchase of ' + value + ' has been confirmed. Track delivery or correct the recipient email: ' + statusLink,
                 sensitive: true,
-                messageId: '<gift-' + record.kind + '-' + record.id + '-' + record.attempts + '@' + new URL(baseUrl).hostname + '>',
+                messageId: '<' + messageId + '>',
             });
         } catch (error) {
             state = Number(error.responseCode) >= 500 && Number(error.responseCode) < 600
@@ -314,8 +361,9 @@ async function deliverOne() {
         }
         await query(`UPDATE gift_card_deliveries SET status = $state, attempts = attempts + 1,
             due_at = now() + (attempts + 1) * interval '5 minutes',
-            sent_at = CASE WHEN $state = 'sent' THEN now() ELSE sent_at END
-            WHERE purchase_id = $id AND kind = $kind`, { state, id: record.id, kind: record.kind }, transaction);
+            sent_at = CASE WHEN $state = 'sent' THEN now() ELSE sent_at END,
+            message_id = CASE WHEN $state = 'sent' THEN $messageId ELSE NULL END
+            WHERE purchase_id = $id AND kind = $kind`, { state, messageId, id: record.id, kind: record.kind }, transaction);
         return true;
     });
 }
@@ -345,11 +393,11 @@ async function changeDelivery({ id, token, actor, recipientEmail, reason }) {
         }
         if (recipientEmail) await query('UPDATE gift_card_purchases SET recipient_email = $email WHERE id = $id',
             { id, email: recipientEmail }, transaction);
-        await query(`UPDATE gift_card_deliveries SET status = 'pending', attempts = 0,
+        await query(`UPDATE gift_card_deliveries SET status = 'pending', attempts = 0, message_id = NULL,
             due_at = GREATEST(now(), COALESCE((SELECT due_at FROM gift_card_purchases WHERE id = $id), now()))
             WHERE purchase_id = $id AND kind = 'recipient'`, { id }, transaction);
         return { delivery: 'pending' };
     });
 }
 
-module.exports = { dispute, resume, purchaseForProviderOrder, verify, failed, refundPurchase, reconcilePurchaseRefunds, restore, refundAllocation, changeDelivery, query, one, policy, purchase, purchaseStatus, capture, findCard, reserve, settle, deliverOne, deliveryDate, digest, entry, createCard };
+module.exports = { issueManually, recordBounce, dispute, resume, purchaseForProviderOrder, verify, failed, refundPurchase, reconcilePurchaseRefunds, restore, refundAllocation, changeDelivery, query, one, policy, purchase, purchaseStatus, capture, findCard, reserve, settle, deliverOne, deliveryDate, digest, entry, createCard };

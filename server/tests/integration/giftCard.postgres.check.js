@@ -102,6 +102,35 @@ async function run() {
     await gifts.deliverOne();
     assert.equal((await gifts.purchaseStatus(scheduled, token)).delivery, 'sent');
     assert.equal(delivered.at(-1).to, 'fixed@example.org');
+    const { Setting } = require('../../src/modules');
+    await Setting.upsert({ group: 'general', key: 'currency', value: 'INR' });
+    const manual = {
+        id: randomUUID(), actor: randomUUID(), reason: 'Customer goodwill',
+        amount: 500, recipientEmail: 'manual@example.org', message: 'Thank you',
+    };
+    await Promise.all([gifts.issueManually(manual), gifts.issueManually(manual)]);
+    await assert.rejects(() => gifts.issueManually({ ...manual, amount: 600 }), /already used/);
+    const manualCard = await gifts.one(`SELECT c.id, l.actor_id, l.reason, p.captured_at
+        FROM gift_cards c JOIN gift_card_purchases p ON p.id = c.purchase_id
+        JOIN gift_card_ledger l ON l.card_id = c.id AND l.kind = 'manual_issue' WHERE p.id = $id`, manual);
+    assert.equal(manualCard.actor_id, manual.actor);
+    assert.equal(manualCard.reason, manual.reason);
+    assert.equal(manualCard.captured_at, null);
+    await assert.rejects(() => gifts.refundPurchase(manual));
+    await gifts.deliverOne();
+    const firstMessage = delivered.at(-1);
+    assert.equal(firstMessage.to, manual.recipientEmail);
+    assert.ok(!firstMessage.text.includes(manual.reason));
+    const deliveryStatus = () => gifts.one("SELECT status FROM gift_card_deliveries WHERE purchase_id = $id AND kind = 'recipient'", manual);
+    await gifts.recordBounce(firstMessage.messageId);
+    await gifts.recordBounce(firstMessage.messageId);
+    assert.equal((await deliveryStatus()).status, 'bounced');
+    await gifts.changeDelivery({ ...manual, recipientEmail: undefined });
+    await gifts.deliverOne();
+    await gifts.recordBounce(firstMessage.messageId);
+    assert.equal((await deliveryStatus()).status, 'sent');
+    await gifts.recordBounce(delivered.at(-1).messageId);
+    assert.equal((await deliveryStatus()).status, 'bounced');
     console.log('Gift card issuance, scheduled email, bounce recovery, checkout holds, late settlement, refunds and ledger reconciliation passed.');
 }
 
