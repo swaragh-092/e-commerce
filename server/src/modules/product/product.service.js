@@ -44,6 +44,7 @@ const { events, PRODUCT_EVENTS } = require('../../utils/events');
 const { getSaleLabels } = require('../settings/saleLabel.service');
 const SettingsService = require('../settings/settings.service');
 const inventoryService = require('../inventory/inventory.service');
+const { normalizeInventoryThreshold } = require('../inventory/inventoryHealth.service');
 const { validateProductTypeChange } = require('./productType');
 const { normalizeSearchQuery, buildSearchPattern } = require('../search/search.utils');
 const { buildCategorySearchSql } = require('../search/search.category');
@@ -53,6 +54,19 @@ const {
   assertBrandFilterAllowed,
 } = require('../../utils/brandVisibility');
 
+const lowStockProductCondition = (threshold) => {
+  const qty = normalizeInventoryThreshold(threshold);
+  return Sequelize.literal(`(
+    ("Product"."type" = 'variable' AND EXISTS (
+      SELECT 1 FROM "product_variants" AS low_stock_variant
+      WHERE low_stock_variant.product_id = "Product"."id"
+        AND low_stock_variant.deleted_at IS NULL
+        AND low_stock_variant.is_active IS DISTINCT FROM FALSE
+        AND GREATEST(COALESCE(low_stock_variant.stock_qty, 0) - COALESCE(low_stock_variant.reserved_qty, 0), 0) <= ${qty}
+    )) OR
+    ("Product"."type" != 'variable' AND GREATEST(COALESCE("Product"."quantity", 0) - COALESCE("Product"."reserved_qty", 0), 0) <= ${qty})
+  )`);
+};
 
 // Fetch the active label catalog once per request (the service caches for 60 s)
 const getLabelPresets = () => getSaleLabels().catch(() => []);
@@ -528,10 +542,12 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     where[Op.and] = [...(where[Op.and] || []), ...priceFilterConditions];
   }
   if (filters.maxQty !== undefined && filters.maxQty !== null) {
-    const maxQty = parseInt(filters.maxQty, 10);
+    const maxQty = normalizeInventoryThreshold(filters.maxQty);
+    where.status = 'published';
+    where.isEnabled = true;
     where[Op.and] = [
       ...(where[Op.and] || []),
-      Sequelize.literal(`("Product"."quantity" - "Product"."reserved_qty") <= ${maxQty}`),
+      lowStockProductCondition(maxQty),
     ];
   }
   if (brandsVisible && filters.brand) {
@@ -756,9 +772,13 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
 
     // Low stock count
     const catalogSettings = await SettingsService.getByGroup('catalog', { maskSensitive: false });
-    const lowStockThreshold = parseInt(catalogSettings.lowStockThreshold, 10) || 10;
+    const lowStockThreshold = normalizeInventoryThreshold(catalogSettings.lowStockThreshold);
     counts.lowStock = await Product.count({
-      where: Sequelize.literal(`"Product"."quantity" - "Product"."reserved_qty" <= ${lowStockThreshold}`),
+      where: {
+        status: 'published',
+        isEnabled: true,
+        [Op.and]: [lowStockProductCondition(lowStockThreshold)],
+      },
     });
   }
 

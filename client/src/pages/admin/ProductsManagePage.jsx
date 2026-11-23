@@ -1088,6 +1088,7 @@ const ProductsManagePage = () => {
           tone="warning"
           active={lowStockOnly}
           onClick={() => {
+            setStatus('');
             setLowStockOnly(true);
             setPaginationModel(p => ({ ...p, page: 0 }));
           }}
