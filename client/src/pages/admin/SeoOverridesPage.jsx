@@ -97,7 +97,7 @@ const SeoOverridesPage = () => {
     } else {
       setEditingId(null);
       setFormData({
-        path: '/',
+        path: '',
         metaTitle: '',
         metaDescription: '',
         metaKeywords: '',
@@ -258,7 +258,7 @@ const SeoOverridesPage = () => {
                 disabled={submitting}
                 value={formData.path}
                 onChange={(e) => setFormData({ ...formData, path: e.target.value })}
-                helperText="Must start with / (e.g., /, /about, /search)"
+                helperText="Enter the exact path. Use / only for the homepage."
               />
               
               <Divider sx={{ my: 1 }}>Metadata</Divider>

@@ -34,7 +34,7 @@ const MenuSettings = ({
   return (
     <Paper sx={{ p: 2, mb: 2 }}>
       <Grid container spacing={2} alignItems="center">
-        <Grid item xs={12} md={3}>
+        <Grid item xs={12} sm={6} md={6}>
           <TextField
             fullWidth
             label="Name"
@@ -43,7 +43,7 @@ const MenuSettings = ({
             onChange={(e) => setSelectedMenu({ ...selectedMenu, name: e.target.value })}
           />
         </Grid>
-        <Grid item xs={12} md={2}>
+        <Grid item xs={12} sm={6} md={6}>
           <TextField
             fullWidth
             label="Slug"
@@ -56,7 +56,7 @@ const MenuSettings = ({
           />
         </Grid>
 
-        <Grid item xs={12} md={2}>
+        <Grid item xs={12} sm={6} md={3}>
           <FormControl fullWidth>
             <InputLabel>Location</InputLabel>
             <Select
@@ -72,7 +72,7 @@ const MenuSettings = ({
             </Select>
           </FormControl>
         </Grid>
-        <Grid item xs={12} md={2}>
+        <Grid item xs={12} sm={6} md={3}>
           <FormControl fullWidth>
             <InputLabel>Alignment</InputLabel>
             <Select
@@ -88,7 +88,7 @@ const MenuSettings = ({
           </FormControl>
         </Grid>
 
-        <Grid item xs={6} md={1.5}>
+        <Grid item xs={6} sm={3} md={2}>
           <TextField
             fullWidth
             label="Order"
@@ -98,7 +98,7 @@ const MenuSettings = ({
             onChange={(e) => setSelectedMenu({ ...selectedMenu, sortOrder: Number(e.target.value) })}
           />
         </Grid>
-        <Grid item xs={6} md={1.5}>
+        <Grid item xs={6} sm={3} md={2}>
           <Stack direction="row" alignItems="center">
             <Switch
               checked={selectedMenu.isActive !== false}
@@ -108,7 +108,7 @@ const MenuSettings = ({
             <Typography>Active</Typography>
           </Stack>
         </Grid>
-        <Grid item xs={12} md={2}>
+        <Grid item xs={12} sm={6} md={2}>
           <Stack direction="row" spacing={1}>
             <Button variant="contained" disabled={!canManage} onClick={saveSelectedMenu}>
               Save

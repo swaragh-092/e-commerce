@@ -2,9 +2,9 @@ import EntitySeoFields from '../../components/admin/EntitySeoFields';
 import { useFeature } from '../../hooks/useSettings';
 import { useEffect, useState, useRef } from 'react';
 import {
-  Alert, Box, Button, Card, CardMedia, Chip, CircularProgress, Dialog, DialogActions,
+  Alert, Box, Button, Card, Chip, CircularProgress, Dialog, DialogActions,
   DialogContent, DialogTitle, FormControlLabel, IconButton, Stack, Switch, TextField,
-  Typography,
+  Skeleton, Typography,
 } from '@mui/material';
 import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate';
 import AddIcon from '@mui/icons-material/Add';
@@ -23,6 +23,26 @@ import { galleryService } from '../../services/galleryService';
 const emptyForm = { metaTitle: '', metaDescription: '', metaKeywords: '', ogImage: '', title: '', slug: '', description: '', isActive: true };
 const slugify = (value) => String(value || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const messageFor = (error) => getApiErrorMessage(error, 'Something went wrong. Please try again.');
+
+const GalleryThumbnail = ({ src, alt, width = '100%', height }) => {
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => setLoaded(false), [src]);
+
+  return (
+    <Box sx={{ position: 'relative', width, height, overflow: 'hidden', borderRadius: 1, bgcolor: 'action.hover' }}>
+      {!loaded && <Skeleton variant="rectangular" animation="wave" sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />}
+      <Box
+        component="img"
+        src={src}
+        alt={alt}
+        onLoad={() => setLoaded(true)}
+        onError={() => setLoaded(true)}
+        sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: loaded ? 1 : 0, transition: 'opacity 120ms ease-in' }}
+      />
+    </Box>
+  );
+};
 
 const GalleryPage = () => {
   const { hasPermission } = useAuth();
@@ -240,7 +260,7 @@ const GalleryPage = () => {
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Public URL: /demo-orbis-seeds-v1-html/gallery-detail.html?album={selected.slug}</Typography>
             <Box sx={{ mb: 3 }}>
               <Typography fontWeight={700} sx={{ mb: 1 }}>Gallery cover photo</Typography>
-              {cover?.url && <Box component="img" src={getMediaUrl(cover.url)} alt="Gallery cover preview" sx={{ width: 180, height: 120, objectFit: 'cover', borderRadius: 1, mb: 1 }} />}
+              {cover?.url && <Box sx={{ width: 180, mb: 1 }}><GalleryThumbnail src={getMediaUrl(cover.url)} alt="Gallery cover preview" height={120} /></Box>}
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                 {selected.coverMediaId ? 'Using a selected cover photo.' : 'The first image in this gallery is used automatically when no cover photo is selected.'}
               </Typography>
@@ -257,7 +277,7 @@ const GalleryPage = () => {
             {!items.length ? <Alert severity="info">This gallery has no images yet. Add some from the Media Library.</Alert> : (
               <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 2 }}>
                 {items.map((item, index) => <Card variant="outlined" key={item.id}>
-                  <CardMedia component="img" image={getMediaUrl(item.media?.url)} alt={item.media?.alt || item.media?.originalName || 'Gallery image'} sx={{ height: 155, objectFit: 'cover' }} />
+                  <GalleryThumbnail src={getMediaUrl(item.media?.url)} alt={item.media?.alt || item.media?.originalName || 'Gallery image'} height={155} />
                   <Box sx={{ p: 1 }}><Typography variant="body2" noWrap title={item.media?.originalName || item.media?.caption}>{item.media?.caption || item.media?.originalName || `Image ${index + 1}`}</Typography>
                     <Stack direction="row" justifyContent="space-between">
                       <Typography variant="caption" color="text.secondary">#{index + 1}</Typography>

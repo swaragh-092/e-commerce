@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Button,
   Dialog,
@@ -16,6 +16,19 @@ import {
 import { locationHelp } from './constants';
 
 const MenuDialog = ({ open, onClose, menuForm, setMenuForm, onSave }) => {
+  const [attemptedSave, setAttemptedSave] = useState(false);
+  const nameMissing = !String(menuForm.name || '').trim();
+
+  useEffect(() => {
+    if (!open) setAttemptedSave(false);
+  }, [open]);
+
+  const handleSave = () => {
+    setAttemptedSave(true);
+    if (nameMissing) return;
+    onSave();
+  };
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>New Menu</DialogTitle>
@@ -24,6 +37,9 @@ const MenuDialog = ({ open, onClose, menuForm, setMenuForm, onSave }) => {
           <TextField
             fullWidth
             label="Name"
+            required
+            error={attemptedSave && nameMissing}
+            helperText={attemptedSave && nameMissing ? 'Name is required.' : ' '}
             value={menuForm.name || ''}
             onChange={(e) => setMenuForm({ ...menuForm, name: e.target.value })}
           />
@@ -68,7 +84,7 @@ const MenuDialog = ({ open, onClose, menuForm, setMenuForm, onSave }) => {
       </DialogContent>
       <DialogActions>
         <Button color="error" onClick={onClose}>Cancel</Button>
-        <Button variant="contained" onClick={onSave}>
+        <Button variant="contained" onClick={handleSave}>
           Create
         </Button>
       </DialogActions>

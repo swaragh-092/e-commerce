@@ -157,8 +157,9 @@ const MenuSelector = ({ menus, selectedMenuId, setSelectedMenuId, onRefresh }) =
                               <ListItemText
                                 primary={menu.name}
                                 secondary={menu.slug}
-                                primaryTypographyProps={{ variant: 'body2', fontWeight: 600, noWrap: true }}
+                                primaryTypographyProps={{ variant: 'body2', fontWeight: 600, sx: { overflowWrap: 'anywhere' } }}
                                 secondaryTypographyProps={{ variant: 'caption', noWrap: true }}
+                                title={menu.name}
                               />
                               {menu.isActive ? (
                                 <Tooltip title="Currently visible on storefront">
