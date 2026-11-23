@@ -1,6 +1,6 @@
 import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Box, CircularProgress } from '@mui/material';
+import { Alert, AlertTitle, Box, CircularProgress } from '@mui/material';
 import { useFeatureVisible, useFeaturesResolved, useMode, useSettings } from '../hooks/useSettings';
 import { Outlet } from 'react-router-dom';
 
@@ -25,10 +25,21 @@ const LoadingFallback = () => (
  * bounced while server state is still loading.
  */
 const FeatureRoute = ({ feature, surface = 'storefront', redirectTo = '/products' }) => {
+  const { search } = useLocation();
   const featuresResolved = useFeaturesResolved();
   const enabled = useFeatureVisible(feature, surface);
   if (!featuresResolved) return <LoadingFallback />;
-  return enabled ? <Outlet /> : <Navigate to={redirectTo} replace />;
+  if (enabled) return <Outlet />;
+  if (surface === 'storefront' && window.parent !== window && new URLSearchParams(search).get('previewMode') === '1') {
+    const label = feature === 'cart' ? 'Cart' : feature.charAt(0).toUpperCase() + feature.slice(1);
+    return <Box sx={{ p: { xs: 2, sm: 4 } }}>
+      <Alert severity="info" variant="outlined" sx={{ maxWidth: 480, mx: 'auto' }}>
+        <AlertTitle>{label} preview unavailable</AlertTitle>
+        {label} is disabled on this storefront. You can still edit its design settings.
+      </Alert>
+    </Box>;
+  }
+  return <Navigate to={redirectTo} replace />;
 };
 
 /**
