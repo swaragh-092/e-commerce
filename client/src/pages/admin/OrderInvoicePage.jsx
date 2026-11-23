@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Box, Typography, Button, Divider, CircularProgress, Alert } from '@mui/material';
+import { Box, Typography, Button, Divider, CircularProgress, Alert, MenuItem, TextField } from '@mui/material';
 import PrintIcon from '@mui/icons-material/Print';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { getOrderById } from '../../services/adminService';
@@ -20,6 +20,8 @@ const OrderInvoicePage = () => {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [format, setFormat] = useState('standard');
+  const compact = format === 'compact';
 
   useEffect(() => {
     getOrderById(id)
@@ -75,7 +77,7 @@ const OrderInvoicePage = () => {
       sx={{ 
         maxWidth: '800px', 
         mx: 'auto', 
-        p: { xs: 2, md: 5 },
+        p: { xs: 2, md: compact ? 3 : 5 },
         bgcolor: '#ffffff',
         color: '#000000',
         minHeight: '100vh',
@@ -87,6 +89,9 @@ const OrderInvoicePage = () => {
           '@media print': { display: 'none' },
           display: 'flex',
           justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 2,
           mb: 4,
           pb: 2,
           borderBottom: '1px solid #eee'
@@ -95,6 +100,11 @@ const OrderInvoicePage = () => {
         <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(`/admin/orders/${id}`)}>
           Back to Order
         </Button>
+        <TextField select size="small" label="Invoice format" value={format}
+          onChange={(event) => setFormat(event.target.value)} sx={{ minWidth: 155 }}>
+          <MenuItem value="standard">Standard</MenuItem>
+          <MenuItem value="compact">Compact</MenuItem>
+        </TextField>
         <Button variant="contained" startIcon={<PrintIcon />} onClick={handlePrint} color="primary">
           Print Invoice
         </Button>
@@ -103,10 +113,10 @@ const OrderInvoicePage = () => {
       {/* Invoice Content */}
       <Box id="printable-invoice">
         {/* Header */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 6 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: compact ? 2 : 6 }}>
           <Box>
             {showLogo && storeLogo ? (
-              <Box component="img" src={getMediaUrl(storeLogo)} alt={companyName} sx={{ maxHeight: 60, mb: 2, maxWidth: 200, objectFit: 'contain' }} />
+              <Box component="img" src={getMediaUrl(storeLogo)} alt={companyName} sx={{ maxHeight: compact ? 40 : 60, mb: compact ? 1 : 2, maxWidth: 200, objectFit: 'contain' }} />
             ) : (
               <Typography variant="h4" fontWeight={800} sx={{ mb: 1 }}>{companyName}</Typography>
             )}
@@ -119,7 +129,7 @@ const OrderInvoicePage = () => {
             {taxId && <Typography variant="body2" sx={{ color: '#555', mt: 0.5 }}>Tax/VAT: {taxId}</Typography>}
           </Box>
           <Box sx={{ textAlign: 'right' }}>
-            <Typography variant="h3" fontWeight={300} sx={{ color: '#888', mb: 2 }}>INVOICE</Typography>
+            <Typography variant={compact ? "h5" : "h3"} fontWeight={300} sx={{ color: '#888', mb: 2 }}>INVOICE</Typography>
             <Box sx={{ display: 'grid', gridTemplateColumns: 'min-content 1fr', gap: '8px 16px', textAlign: 'left' }}>
               <Typography variant="body2" fontWeight={600} sx={{ whiteSpace: 'nowrap' }}>Invoice #:</Typography>
               <Typography variant="body2">{invoicePrefix}{order.id}</Typography>
@@ -134,7 +144,7 @@ const OrderInvoicePage = () => {
         </Box>
 
         {/* Bill To & Ship To */}
-        <Box sx={{ display: 'flex', gap: 4, mb: 6 }}>
+        <Box sx={{ display: 'flex', gap: compact ? 2 : 4, mb: compact ? 2 : 6 }}>
           <Box sx={{ flex: 1 }}>
             <Typography variant="overline" sx={{ color: '#888', borderBottom: '1px solid #ddd', display: 'block', mb: 1 }}>
               Billed To
@@ -165,7 +175,7 @@ const OrderInvoicePage = () => {
         {/* Items Table */}
         <Box sx={{ mb: 4 }}>
           {/* Table Header */}
-          <Box sx={{ display: 'flex', backgroundColor: '#f5f5f5', p: 1.5, borderBottom: '2px solid #ddd', '@media print': { '-webkit-print-color-adjust': 'exact' } }}>
+          <Box sx={{ display: 'flex', backgroundColor: '#f5f5f5', p: compact ? 0.75 : 1.5, borderBottom: '2px solid #ddd', '@media print': { '-webkit-print-color-adjust': 'exact' } }}>
             <Typography variant="body2" fontWeight={700} sx={{ flex: 3 }}>Item</Typography>
             <Typography variant="body2" fontWeight={700} sx={{ flex: 1, textAlign: 'center' }}>Qty</Typography>
             <Typography variant="body2" fontWeight={700} sx={{ flex: 1, textAlign: 'right' }}>Unit Price</Typography>
@@ -176,7 +186,7 @@ const OrderInvoicePage = () => {
           {orderItems.map((item) => {
             const itemUnit = item.variantInfo?.unit || item.product?.unit || '';
             return (
-              <Box key={item.id} sx={{ display: 'flex', p: 1.5, borderBottom: '1px solid #eee' }}>
+              <Box key={item.id} sx={{ display: 'flex', p: compact ? 0.75 : 1.5, borderBottom: '1px solid #eee' }}>
                 <Box sx={{ flex: 3, pr: 2 }}>
                   <Typography variant="body2" fontWeight={600}>{item.snapshotName}</Typography>
                   {(item.snapshotSku || item.variant?.sku) && (
