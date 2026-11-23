@@ -1,3 +1,5 @@
+import { Link as RouterLink } from 'react-router-dom';
+import { getProducts } from '../../services/productService';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box, Typography, Button, Paper, CircularProgress, IconButton,
@@ -18,12 +20,13 @@ import {
   ArrowUpward as ArrowUpwardIcon,
   ArrowDownward as ArrowDownwardIcon,
   Search as SearchIcon,
+  DragIndicator as DragIndicatorIcon,
   AddCircleOutline as AddCircleOutlineIcon,
   Settings as SettingsIcon,
 } from '@mui/icons-material';
 
 import {
-  getCategoryTree, createCategory, updateCategory, deleteCategory, reorderCategory,
+  getCategoryTree, createCategory, updateCategory, deleteCategory, reorderCategory, moveCategory,
 } from '../../services/categoryService';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
@@ -71,12 +74,17 @@ const nodeMatchesSearch = (node, query) => {
 };
 
 // --- CategoryTreeItem Component (Left Panel Node) ---
-const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, onSelect, onReorder, onContextMenu, canManageCategories, searchQuery, reorderingId }) => {
+const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, onSelect, onReorder, onContextMenu, canManageCategories, searchQuery, reorderingId, draggedCategory, setDraggedCategory, onDropCategory }) => {
     const isExpanded = expandedIds.includes(node.id);
     const isSelected = selectedId === node.id;
     const hasChildren = node.children && node.children.length > 0;
     const hasMatches = searchQuery ? nodeMatchesSearch(node, searchQuery) : true;
     const [hovered, setHovered] = useState(false);
+    const canDrag = canManageCategories && !searchQuery && !reorderingId;
+    const canDrop = canDrag && draggedCategory && draggedCategory.id !== node.id
+        && (draggedCategory.parentId ?? null) === (node.parentId ?? null);
+    const [dropEdge, setDropEdge] = useState(null);
+
 
     // If searching, show only nodes that match or have matching descendants
     if (searchQuery && !hasMatches) return null;
@@ -95,12 +103,31 @@ const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, on
         <React.Fragment>
             <ListItemButton
                 onClick={handleRowClick}
+                onDragOver={(event) => {
+                    if (!canDrop) return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = 'move';
+                    const bounds = event.currentTarget.getBoundingClientRect();
+                    setDropEdge(event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after');
+                }}
+                onDragLeave={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget)) setDropEdge(null);
+                }}
+                onDrop={(event) => {
+                    setDropEdge(null);
+                    if (!canDrop) return;
+                    event.preventDefault();
+                    const bounds = event.currentTarget.getBoundingClientRect();
+                    onDropCategory(draggedCategory, node, event.clientY >= bounds.top + bounds.height / 2);
+                    setDraggedCategory(null);
+                }}
                 onContextMenu={(e) => onContextMenu && onContextMenu(e, node)}
                 onMouseEnter={() => setHovered(true)}
                 onMouseLeave={() => setHovered(false)}
                 sx={{
                     display: 'flex',
                     flexWrap: 'wrap',
+                    boxShadow: canDrop && dropEdge ? (theme) => `inset 0 ${dropEdge === 'before' ? 2 : -2}px 0 ${theme.palette.primary.main}` : undefined,
                     pl: 2 + level * 2,
                     py: 1,
                     pr: 2,
@@ -138,15 +165,31 @@ const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, on
                 {hasChildren && (
                     <Chip label={node.children.length} size="small" sx={{ height: 16, fontSize: '0.65rem', mr: 1 }} />
                 )}
-                {/* Up/Down reorder arrows on hover */}
-                {canManageCategories && hovered && !searchQuery && (
-                    <Box sx={{ display: 'flex', flexBasis: '100%', justifyContent: 'flex-end', ml: 0.5, mt: -0.5 }}>
+                {canDrag && (
+                    <Tooltip title="Drag to reorder within this level">
+                        <Box component="span" draggable
+                            onClick={(event) => event.stopPropagation()}
+                            onDragStart={(event) => {
+                                event.dataTransfer.effectAllowed = 'move';
+                                event.dataTransfer.setData('text/plain', node.name);
+                                setDraggedCategory(node);
+                            }}
+                            onDragEnd={() => setDraggedCategory(null)}
+                            sx={{ display: 'inline-flex', cursor: 'grab', color: 'text.secondary' }}
+                        >
+                            <DragIndicatorIcon fontSize="small" />
+                        </Box>
+                    </Tooltip>
+                )}
+                {/* Up/Down reorder controls */}
+                {canManageCategories && !searchQuery && (
+                    <Box sx={{ display: 'flex', flexBasis: '100%', justifyContent: 'flex-end', ml: 0.5, mt: -0.5, height: hovered ? 'auto' : 0, overflow: hovered ? 'visible' : 'hidden', opacity: hovered ? 1 : 0, '&:focus-within': { opacity: 1, height: 'auto', overflow: 'visible' }, '@media (hover: none)': { opacity: 1, height: 'auto', overflow: 'visible' } }}>
                         <Tooltip title="Move Up">
                             <IconButton
                                 size="small"
                                 onClick={(e) => { e.stopPropagation(); onReorder(node.id, 'up'); }}
                                 sx={{ p: 0.3 }}
-                                disabled={reorderingId === node.id}
+                                disabled={Boolean(reorderingId)}
                             >
                                 {reorderingId === node.id ? <CircularProgress size={16} /> : <ArrowUpwardIcon sx={{ fontSize: 16 }} />}
                             </IconButton>
@@ -156,7 +199,7 @@ const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, on
                                 size="small"
                                 onClick={(e) => { e.stopPropagation(); onReorder(node.id, 'down'); }}
                                 sx={{ p: 0.3 }}
-                                disabled={reorderingId === node.id}
+                                disabled={Boolean(reorderingId)}
                             >
                                 {reorderingId === node.id ? <CircularProgress size={16} /> : <ArrowDownwardIcon sx={{ fontSize: 16 }} />}
                             </IconButton>
@@ -180,6 +223,9 @@ const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, on
                             canManageCategories={canManageCategories}
                             searchQuery={searchQuery}
                             reorderingId={reorderingId}
+                            draggedCategory={draggedCategory}
+                            setDraggedCategory={setDraggedCategory}
+                            onDropCategory={onDropCategory}
                         />
                     ))}
                 </List>
@@ -189,6 +235,34 @@ const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, on
 };
 
 // --- CategoryDetailsPanel Component (Right Panel) ---
+const CategoryProductsLink = ({ categoryId, showCount = false }) => {
+    const { hasPermission } = useAuth();
+    const canReadProducts = hasPermission(PERMISSIONS.PRODUCTS_READ);
+    const [result, setResult] = useState(null);
+
+    useEffect(() => {
+        if (!showCount || !canReadProducts) return;
+        let active = true;
+        getProducts({ categoryId, page: 1, limit: 1 })
+            .then(response => {
+                if (active) setResult({ categoryId, count: response?.meta?.total });
+            })
+            .catch(() => {
+                if (active) setResult(null);
+            });
+        return () => { active = false; };
+    }, [categoryId, canReadProducts, showCount]);
+
+    if (!canReadProducts) return null;
+    const count = result?.categoryId === categoryId ? result.count : undefined;
+    return (
+        <Button component={RouterLink} to={`/admin/products?category=${encodeURIComponent(categoryId)}`}
+            size="small" variant="outlined">
+            {count == null ? 'View products' : `View products (${count})`}
+        </Button>
+    );
+};
+
 const CategoryDetailsPanel = ({ categoryId, categories, onEdit, onDelete, onAddChild, onNavigateNode, onManageAttributes, canManageCategories, canManageAttributes }) => {
     const selectedPath = useMemo(() => getBreadcrumbPath(categories, categoryId) || [], [categories, categoryId]);
     const selectedCatNode = useMemo(() => {
@@ -261,6 +335,7 @@ const CategoryDetailsPanel = ({ categoryId, categories, onEdit, onDelete, onAddC
                 </Box>
                 <Stack direction="row" spacing={1} sx={{ flexShrink: 0, flexWrap: { xs: 'wrap', lg: 'nowrap' }, '& .MuiButton-root': { whiteSpace: 'nowrap' } }}>
                     <Button variant="outlined" startIcon={<SettingsIcon />} onClick={() => onManageAttributes(selectedCatNode)} disabled={!canManageAttributes}>Attributes</Button>
+                    <CategoryProductsLink key={selectedCatNode.id} categoryId={selectedCatNode.id} showCount />
                     <Button variant="outlined" startIcon={<EditIcon />} onClick={() => onEdit(selectedCatNode)} disabled={!canManageCategories}>Edit</Button>
                     <Button variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={() => onDelete(selectedCatNode.id)} disabled={!canManageCategories}>Delete</Button>
                 </Stack>
@@ -315,7 +390,8 @@ const CategoryDetailsPanel = ({ categoryId, categories, onEdit, onDelete, onAddC
                                             <Chip label={child.children?.length || 0} size="small" variant="outlined" />
                                         </TableCell>
                                         <TableCell align="right">
-                                            <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                            <Stack direction="row" spacing={1} justifyContent="flex-end" alignItems="center" useFlexGap flexWrap="wrap">
+                                                <CategoryProductsLink categoryId={child.id} />
                                                 <Tooltip title="View Subcategory">
                                                     <IconButton size="small" onClick={() => onNavigateNode(child.id)}>
                                                         <ChevronRightIcon fontSize="small" />
@@ -391,7 +467,8 @@ const CategoryFlatView = ({ flatCategories, onEdit, onDelete, onAddChild, canMan
                                     <Typography variant="body2" color="text.secondary">{pathStr}</Typography>
                                 </TableCell>
                                 <TableCell align="right">
-                                    <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                                    <Stack direction="row" spacing={0.5} justifyContent="flex-end" alignItems="center" useFlexGap flexWrap="wrap">
+                                        <CategoryProductsLink categoryId={cat.id} />
                                         <Tooltip title="Add Subcategory">
                                             <IconButton size="small" onClick={() => onAddChild(cat)} disabled={!canManageCategories}>
                                                 <AddIcon fontSize="small" />
@@ -431,6 +508,7 @@ const CategoriesPage = () => {
     const [contextMenuAnchorEl, setContextMenuAnchorEl] = useState(null);
     const [contextMenuCat, setContextMenuCat] = useState(null);
     const [reorderingId, setReorderingId] = useState(null);
+    const [draggedCategory, setDraggedCategory] = useState(null);
 
     // Dialog state
     const [openDialog, setOpenDialog] = useState(false);
@@ -518,6 +596,26 @@ const CategoriesPage = () => {
         event.preventDefault();
         setContextMenuCat(cat);
         setContextMenuAnchorEl(event.currentTarget);
+    };
+
+    const handleDropCategory = async (source, target, after) => {
+        if (!canManageCategories || reorderingId || (source.parentId ?? null) !== (target.parentId ?? null)) return;
+        const siblings = flattenTree(categories).filter(node => (node.parentId ?? null) === (source.parentId ?? null));
+        const current = siblings.findIndex(node => node.id === source.id);
+        const targetIndex = siblings.filter(node => node.id !== source.id).findIndex(node => node.id === target.id);
+        if (current < 0 || targetIndex < 0) return;
+        const position = targetIndex + (after ? 1 : 0);
+        if (position === current) return;
+        setReorderingId(source.id);
+        try {
+            await moveCategory(source.id, { parentId: source.parentId ?? null, position });
+            await fetchCategories({ showLoading: false });
+            notify('Category reordered.', 'success');
+        } catch (error) {
+            notify(getApiErrorMessage(error), 'error');
+        } finally {
+            setReorderingId(null);
+        }
     };
 
     // Reorder handler
@@ -785,6 +883,9 @@ const CategoriesPage = () => {
                                                 canManageCategories={canManageCategories}
                                                 searchQuery={searchQuery.toLowerCase()}
                                                 reorderingId={reorderingId}
+                                                draggedCategory={draggedCategory}
+                                                setDraggedCategory={setDraggedCategory}
+                                                onDropCategory={handleDropCategory}
                                             />
                                         ))}
                                     </List>

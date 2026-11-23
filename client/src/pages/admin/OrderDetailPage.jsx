@@ -1,3 +1,4 @@
+import { getProductById } from '../../services/productService';
 import { getFulfillmentProgress, getOrderDataWarnings, isOrderShippingRequired } from '../../utils/orderFulfillment';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import StaffAssignment from '../../components/admin/StaffAssignment';
@@ -74,6 +75,65 @@ import {
 import { useOrderStatusTransitions } from '../../hooks/useOrderStatusTransitions';
 
 // ─── Order History helpers ──────────────────────────────────────────────────
+
+function ReplacementReview({ order, items, formatPrice, onClose }) {
+  const [rows, setRows] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    const requests = new Map();
+    Promise.all(items.map(async (item) => {
+      try {
+        if (!requests.has(item.productId)) requests.set(item.productId, getProductById(item.productId));
+        const { data: product } = await requests.get(item.productId);
+        const variant = item.variantId ? product.variants?.find(entry => entry.id === item.variantId) : null;
+        const selection = item.variantId ? variant : product;
+        const price = Number(selection?.effectivePrice ?? selection?.price);
+        const stock = variant ? variant.stockQty : product.quantity;
+        const reserved = variant ? variant.reservedQty : product.reservedQty;
+        const available = stock == null || product.type === 'combo' ? null : Math.max(0, Number(stock) - Number(reserved ?? 0));
+        const offered = product.status === 'published' && product.isEnabled !== false
+          && (item.variantId ? Boolean(variant && variant.isActive !== false) : product.type !== 'variable');
+        return { item, price: price > 0 ? price : null, available, offered };
+      } catch {
+        return { item, unavailable: true };
+      }
+    })).then(result => { if (active) setRows(result); });
+    return () => { active = false; };
+  }, [items]);
+
+  const address = order.shippingAddressSnapshot;
+  return (
+    <Dialog open onClose={onClose} fullWidth maxWidth="sm">
+      <DialogTitle>Review replacement for {order.orderNumber}</DialogTitle>
+      <DialogContent dividers>
+        <Stack spacing={2}>
+          <Typography variant="body2">Customer: {address?.email || order.User?.email || 'No email available'}</Typography>
+          <Alert severity="info">Prices and stock are for review. Checkout must recalculate taxes and delivery and confirm availability.</Alert>
+          {!rows ? <CircularProgress size={24} aria-label="Checking replacement items" /> : (
+            <>
+              {rows.length === 0 && <Typography>No items to replace.</Typography>}
+              {rows.map(({ item, unavailable, offered, price, available }) => (
+                <Box key={item.id}>
+                  <Typography fontWeight={600}>{item.snapshotName} × {item.quantity}</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {unavailable ? 'Could not load current product details' : [
+                      offered ? null : 'Unavailable for purchase',
+                      price == null ? 'Price unavailable' : `${formatPrice(price)} each`,
+                      available == null ? 'Stock requires confirmation' : `${available} available`,
+                      available != null && available < item.quantity ? 'Insufficient stock' : null,
+                    ].filter(Boolean).join(' · ')}
+                  </Typography>
+                </Box>
+              ))}
+            </>
+          )}
+        </Stack>
+      </DialogContent>
+      <DialogActions><Button onClick={onClose}>Close</Button></DialogActions>
+    </Dialog>
+  );
+}
 
 const EVENT_META = {
   order_edited:    { icon: EditIcon,                color: '#14b8a6', label: 'Order Edited' },
@@ -1207,6 +1267,7 @@ const OrderDetailPage = () => {
   );
   const address = order?.shippingAddressSnapshot;
   const payment = order?.Payment || null;
+  const [replacementReviewOpen, setReplacementReviewOpen] = useState(false);
 
   const { allowedNextStatuses, isFulfillable } = useOrderStatusTransitions(order?.status);
 
@@ -1534,6 +1595,17 @@ const OrderDetailPage = () => {
             Placed on {formatDateTime(order.createdAt)} • Last updated {formatDateTime(order.updatedAt)}
           </Typography>
           <StaffAssignment kind="orders" recordId={order.id} />
+          {order.status === 'cancelled' && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              {payment?.status === 'payment_expired'
+                ? 'This order is cancelled and its payment expired. A replacement requires a new order.'
+                : 'This order is cancelled. A replacement requires a new order.'}
+            </Typography>
+          )}
+          {replacementReviewOpen && order.status === 'cancelled' && (
+            <ReplacementReview key={order.id} order={order} items={orderItems} formatPrice={formatPrice}
+              onClose={() => setReplacementReviewOpen(false)} />
+          )}
         </Box>
 
         <Stack direction="row" spacing={1}>
@@ -1567,6 +1639,9 @@ const OrderDetailPage = () => {
                 Edit Order
               </Button></span>
             </Tooltip>
+          )}
+          {canUpdateOrderStatus && order.status === 'cancelled' && hasPermission(PERMISSIONS.PRODUCTS_READ) && (
+            <Button variant="outlined" onClick={() => setReplacementReviewOpen(true)}>Review replacement</Button>
           )}
           {canConfirmCod && (
             <Button variant="contained" color="success" onClick={openCodCollectionDialog} disabled={updating}>

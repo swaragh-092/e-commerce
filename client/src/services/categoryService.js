@@ -51,3 +51,8 @@ export const reorderCategoryProducts = async (id, productIds) => {
     const response = await api.post(`/categories/${id}/products/reorder`, { productIds });
     return response.data;
 };
+
+export const moveCategory = async (id, payload) => {
+    const response = await api.post(`/categories/${id}/move`, payload);
+    return response.data;
+};
