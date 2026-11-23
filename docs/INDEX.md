@@ -1,6 +1,6 @@
 # Documentation Index
 
-> Last updated: 2026-11-05
+> Last updated: 2026-11-23
 
 ## Reading Order
 
@@ -48,6 +48,7 @@
 | Doc | What It Covers |
 |-----|---------------|
 | [FEATURES.md](FEATURES.md) | Complete feature catalog — admin + customer-facing, feature flags, permissions matrix |
+| [GIFT-CARDS.md](GIFT-CARDS.md) | Digital gift card setup, sales controls, issuance, delivery, refunds, reconciliation, and launch checks |
 | [Product types and inventory](PRODUCT-TYPES.md) | Simple, Variable, and Combo product workflows and stock entry |
 | [Inventory stock and availability](inventory/stock-and-availability.md) | Alerts, reservations, disabled items, historical variants, and type changes |
 | [STORE-TEMPLATES.md](STORE-TEMPLATES.md) | Store Templates system, theme marketplace, template composer, section registry, preview system, import/export, activation history |
@@ -57,6 +58,7 @@
 | [COUPONS.md](COUPONS.md) | Coupon/discount engine — types, usage limits, stacking rules, targeting, auto-deactivation |
 | [SHIPPING-SYSTEM.md](SHIPPING-SYSTEM.md) | Shipping rate engine, zones, carriers, volumetric weight, COD, fulfillment, webhook tracking |
 | [SEO.md](SEO.md) | SEO meta tag management, URL overrides, canonical URLs, social OG tags, Google snippet preview |
+| [Orbi Seeds storefront SEO](orbi-storefront-seo.md) | Orbi storefront routing, SEO overrides, crawler output, sitemap, and deployment setup |
 | [MEDIA.md](MEDIA.md) | Media upload, storage, library UI, picker/uploader components |
 | [Menu child pagination](api/menu-child-pagination.md) | Menu Builder setup, public API pagination, and deployment migration |
 
