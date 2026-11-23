@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [1.9.1.0] - 2026-11-23
+
+### Fixed
+
+- Correct admin staff invitations, validation, and staff-role choices; prevent duplicate inventory alerts.
+- Fix admin navigation, scroll restoration, direct route loading, Store Designer section counts, and catalog-mode copy.
+- Improve admin settings, themes, email templates, audit log, API builder, catalog forms, product editing, shipping, coupons, gift cards, and order layouts and status summaries.
+- Keep tag, brand, and attribute details visible while dialogs close; clear brand name errors as users correct the field and improve attribute deletion confirmation.
+- Keep category names readable beside reorder controls and prevent detail actions from colliding with long names.
+
 ## [1.9.0.1] - 2026-11-20
 
 ### Fixed
