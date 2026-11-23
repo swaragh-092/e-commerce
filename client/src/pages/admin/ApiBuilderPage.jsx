@@ -130,6 +130,13 @@ const RESOURCE_RELATIONS = {
   ],
 };
 const OPERATORS = ['equals', 'contains', 'in', 'gte', 'lte', 'between'];
+const slugifyApiName = (value) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .trim()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '') || 'custom-api';
 
 const newBlock = (resource = 'products', relation = null) => ({
   id: `block-${Date.now()}`,
@@ -244,7 +251,8 @@ const ApiBuilderPage = () => {
   const [previewQueryText, setPreviewQueryText] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const { notify } = useNotification();
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
+  const { notify, confirm } = useNotification();
   const { hasPermission } = useAuth();
   const canManage = hasPermission(PERMISSIONS.API_BUILDER_MANAGE);
 
@@ -284,7 +292,20 @@ const ApiBuilderPage = () => {
     });
   }, []);
 
-  const setRoot = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const setRoot = (key, value) => {
+    if (key === 'name') {
+      setForm((current) => ({
+        ...current,
+        name: value,
+        ...(!slugManuallyEdited ? { slug: slugifyApiName(value) } : {}),
+      }));
+      return;
+    }
+    if (key === 'slug') {
+      setSlugManuallyEdited(Boolean(String(value).trim()));
+    }
+    setForm((current) => ({ ...current, [key]: value }));
+  };
   const setConfig = (patch) => setForm((current) => ({ ...current, config: { ...current.config, ...patch } }));
   const setBlocks = (blocks) => setConfig({ blocks });
   const updateBlock = (index, patch) => {
@@ -367,6 +388,7 @@ const ApiBuilderPage = () => {
   };
 
   const handleSelectDefinition = (definition) => {
+    setSlugManuallyEdited(false);
     if (!definition) {
       setSelectedId(null);
       setForm({ ...emptyForm, config: { ...emptyForm.config, blocks: [newBlock('products')] } });
@@ -388,6 +410,7 @@ const ApiBuilderPage = () => {
   const handleRemoveBlock = (index) => setBlocks((form.config.blocks || []).filter((_, itemIndex) => itemIndex !== index));
 
   const handleSave = async () => {
+    if (!form.name.trim()) return;
     if (!canManage) {
       notify('You do not have permission to manage API Builder.', 'error');
       return;
@@ -442,11 +465,21 @@ const ApiBuilderPage = () => {
 
   const handleDelete = async () => {
     if (!selectedId || !canManage) return;
-    await deleteApiDefinition(selectedId);
-    notify('API definition deleted.', 'success');
-    setSelectedId(null);
-    setForm({ ...emptyForm, config: { ...emptyForm.config, blocks: [newBlock('products')] } });
-    await loadDefinitions();
+    const name = selectedDefinition?.name || form.name || 'this API';
+    if (!await confirm('Delete API definition?', `Delete “${name}”? This action cannot be undone.`, 'danger')) return;
+    setSaving(true);
+    try {
+      await deleteApiDefinition(selectedId);
+      notify('API definition deleted.', 'success');
+      setSelectedId(null);
+      setSlugManuallyEdited(false);
+      setForm({ ...emptyForm, config: { ...emptyForm.config, blocks: [newBlock('products')] } });
+      await loadDefinitions();
+    } catch (error) {
+      notify(getApiErrorMessage(error, 'Failed to delete API definition.'), 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const renderFieldPicker = (node, onPatch) => (
@@ -565,7 +598,7 @@ const ApiBuilderPage = () => {
       <Button
         size="small"
         startIcon={<AddIcon />}
-        sx={{ mt: 1.25 }}
+        sx={{ mt: 1.25, mb: 0.75, alignSelf: 'flex-start' }}
         onClick={() => {
           const field = (FILTER_FIELDS[node.resource] || [])[0] || '';
           onPatch({ filters: [...(node.filters || []), { field, operator: 'equals', source: 'query', param: field, defaultValue: '' }] });
@@ -821,7 +854,7 @@ const ApiBuilderPage = () => {
           <Button variant="outlined" startIcon={<PlayArrowIcon />} onClick={handlePreview} disabled={loading}>
             Preview
           </Button>
-          <Button variant="contained" startIcon={<SaveIcon />} onClick={handleSave} disabled={saving || !canManage}>
+          <Button variant="contained" startIcon={<SaveIcon />} onClick={handleSave} disabled={saving || !canManage || !form.name.trim()}>
             Save
           </Button>
         </Stack>
@@ -873,7 +906,16 @@ const ApiBuilderPage = () => {
           <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2, mb: 2 }}>
             <Grid container spacing={2}>
               <Grid item xs={12} md={5}>
-                <TextField fullWidth size="small" label="API Name" value={form.name} onChange={(event) => setRoot('name', event.target.value)} />
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="API Name"
+                  required
+                  error={!form.name.trim()}
+                  helperText={!form.name.trim() ? 'API Name is required.' : ' '}
+                  value={form.name}
+                  onChange={(event) => setRoot('name', event.target.value)}
+                />
               </Grid>
               <Grid item xs={12} md={4}>
                 <TextField fullWidth size="small" label="Slug" value={form.slug} onChange={(event) => setRoot('slug', event.target.value)} />
@@ -1014,7 +1056,7 @@ const ApiBuilderPage = () => {
                 helperText="Matches the public URL query string used by dynamic filters."
               />
               {selectedDefinition && canManage && (
-                <Button color="error" variant="outlined" startIcon={<DeleteOutlineIcon />} onClick={handleDelete}>
+                <Button color="error" variant="outlined" startIcon={<DeleteOutlineIcon />} onClick={handleDelete} disabled={saving}>
                   Delete API
                 </Button>
               )}

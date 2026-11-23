@@ -221,12 +221,16 @@ const MediaPage = () => {
   const [iconSearch, setIconSearch] = useState('');
   const [customIcons, setCustomIcons] = useState([]);
   const [customIconsLoading, setCustomIconsLoading] = useState(false);
+  const [customIconsLoaded, setCustomIconsLoaded] = useState(false);
   const [uploadIconDialogOpen, setUploadIconDialogOpen] = useState(false);
   const [iconSectionTab, setIconSectionTab] = useState('all');
   const observerRef = useRef(null);
 
   const fetchCustomIcons = useCallback(async () => {
-    if (!mediaService.listIcons && !mediaService.list) return;
+    if (!mediaService.listIcons && !mediaService.list) {
+      setCustomIconsLoaded(true);
+      return;
+    }
     try {
       setCustomIconsLoading(true);
       const res = mediaService.listIcons
@@ -237,6 +241,7 @@ const MediaPage = () => {
       console.error(err);
     } finally {
       setCustomIconsLoading(false);
+      setCustomIconsLoaded(true);
     }
   }, []);
 
@@ -461,6 +466,8 @@ const MediaPage = () => {
   }, [iconSearch]);
 
   const totalMatchingIcons = filteredIcons.length + filteredCustomIcons.length;
+  const iconCountsPending = activeLibrary === 'icons' && (customIconsLoading || !customIconsLoaded);
+  const mediaResultsUpdating = loading || searchInput.trim() !== search;
 
   const copyIconId = async (id) => {
     try {
@@ -698,6 +705,13 @@ const MediaPage = () => {
         </Alert>
       )}
 
+      {activeLibrary === 'files' && mediaResultsUpdating && files.length > 0 && (
+        <Box role="status" aria-live="polite" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5, color: 'text.secondary' }}>
+          <CircularProgress size={16} />
+          <Typography variant="body2">Updating media results…</Typography>
+        </Box>
+      )}
+
       {loading && files.length === 0 ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress />
@@ -790,20 +804,20 @@ const MediaPage = () => {
                 exclusive
                 onChange={(_, val) => val && setIconSectionTab(val)}
               >
-                <ToggleButton value="all">All ({totalMatchingIcons})</ToggleButton>
-                <ToggleButton value="custom">Custom ({filteredCustomIcons.length})</ToggleButton>
+                <ToggleButton value="all">All ({iconCountsPending ? '…' : totalMatchingIcons})</ToggleButton>
+                <ToggleButton value="custom">Custom ({iconCountsPending ? '…' : filteredCustomIcons.length})</ToggleButton>
                 <ToggleButton value="builtin">Built-in ({filteredIcons.length})</ToggleButton>
               </ToggleButtonGroup>
             </Box>
-            <Typography variant="body2" color="text.secondary">
-              {totalMatchingIcons} icon{totalMatchingIcons !== 1 ? 's' : ''}
+            <Typography variant="body2" color="text.secondary" role={iconCountsPending ? 'status' : undefined}>
+              {iconCountsPending ? 'Loading icons…' : `${totalMatchingIcons} icon${totalMatchingIcons !== 1 ? 's' : ''}`}
             </Typography>
           </Box>
           <Alert severity="info" sx={{ mb: 3 }}>
             These icons are available when editing a category. You can also upload your own custom icons here (PNG or WebP with transparent background).
           </Alert>
 
-          {customIconsLoading && (
+          {iconCountsPending && (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
               <CircularProgress size={32} />
             </Box>
@@ -890,7 +904,7 @@ const MediaPage = () => {
                 </Box>
               )}
             </Box>
-          ) : (
+          ) : iconCountsPending ? null : (
             <Alert severity="info">No icons match “{iconSearch}”.</Alert>
           )}
         </Box>

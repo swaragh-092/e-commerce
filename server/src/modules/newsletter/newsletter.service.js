@@ -180,6 +180,13 @@ const unsubscribe = async (email) => {
 const list = async (query = {}) => {
   const where = {};
   if (query.status) where.status = query.status;
+  const search = typeof query.search === 'string' ? query.search.trim().slice(0, 255) : '';
+  if (search) {
+    where[Sequelize.Op.or] = [
+      { email: { [Sequelize.Op.iLike]: `%${search}%` } },
+      { source: { [Sequelize.Op.iLike]: `%${search}%` } },
+    ];
+  }
   const requestedLimit = Number.parseInt(query.limit, 10);
   const limit = Number.isFinite(requestedLimit) && requestedLimit > 0
     ? Math.min(requestedLimit, MAX_LIST_LIMIT)

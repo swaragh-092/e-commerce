@@ -33,6 +33,7 @@ router.get('/campaigns', authenticate, authorizePermissions(PERMISSIONS.NEWSLETT
 router.post('/campaigns', authenticate, authorizePermissions(PERMISSIONS.NEWSLETTER_MANAGE), featureGate('newsletter'), handleCampaign((req) => campaigns.create(req.body, req.user.id)));
 router.post('/campaigns/test', authenticate, authorizePermissions(PERMISSIONS.NEWSLETTER_MANAGE), featureGate('newsletter'), handleCampaign((req) => campaigns.test(req.body, req.user)));
 router.put('/campaigns/:id', authenticate, authorizePermissions(PERMISSIONS.NEWSLETTER_MANAGE), featureGate('newsletter'), validate(idParamSchema, 'params'), handleCampaign((req) => campaigns.edit(req.params.id, req.body)));
+router.delete('/campaigns/:id', authenticate, authorizePermissions(PERMISSIONS.NEWSLETTER_MANAGE), featureGate('newsletter'), validate(idParamSchema, 'params'), handleCampaign((req) => campaigns.removeDraft(req.params.id)));
 router.post('/campaigns/:id/schedule', authenticate, authorizePermissions(PERMISSIONS.NEWSLETTER_MANAGE), featureGate('newsletter'), validate(idParamSchema, 'params'), handleCampaign((req) => campaigns.schedule(req.params.id, req.body.scheduledAt)));
 router.post('/campaigns/:id/cancel', authenticate, authorizePermissions(PERMISSIONS.NEWSLETTER_MANAGE), validate(idParamSchema, 'params'), handleCampaign((req) => campaigns.cancel(req.params.id)));
 

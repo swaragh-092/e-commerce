@@ -93,6 +93,11 @@ export default function NewsletterCampaigns() {
                 {['draft', 'scheduled'].includes(campaign.status) && <Button size="small" disabled={busy} onClick={async () => {
                   if (await confirm('Cancel campaign', `Cancel “${campaign.subject}”?`, 'warning')) await action(() => api.post(`/newsletter/campaigns/${campaign.id}/cancel`), 'Campaign cancelled.');
                 }}>Cancel</Button>}
+                {['draft', 'cancelled'].includes(campaign.status) && <Button size="small" color="error" disabled={busy} onClick={async () => {
+                  if (await confirm('Delete draft campaign?', `Permanently delete “${campaign.subject}”? Only unsent drafts can be removed.`, 'danger')) {
+                    await action(() => api.delete(`/newsletter/campaigns/${campaign.id}`), 'Draft campaign deleted.');
+                  }
+                }}>Delete</Button>}
               </Stack>}</TableCell>
             </TableRow>)}
           </TableBody>

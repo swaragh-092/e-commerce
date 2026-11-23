@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Box, Button, Chip, Container, IconButton, Paper, Stack,
+  Box, Button, Chip, Container, FormControl, IconButton, InputAdornment, InputLabel, MenuItem, Paper, Select, Stack, TextField,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Typography, CircularProgress, TablePagination,
 } from '@mui/material';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import SearchIcon from '@mui/icons-material/Search';
 import api from '../../services/api';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
@@ -39,6 +40,9 @@ const NewsletterSubscribersPage = () => {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('all');
   const [exporting, setExporting] = useState(false);
   const { notify } = useNotification();
 
@@ -46,7 +50,10 @@ const NewsletterSubscribersPage = () => {
     if (!canReadSubscribers) { setSubscribers([]); setTotal(0); setLoading(false); return; }
     setLoading(true);
     try {
-      const res = await api.get('/newsletter', { params: { limit: rowsPerPage, offset: page * rowsPerPage } });
+      const params = { limit: rowsPerPage, offset: page * rowsPerPage };
+      if (search) params.search = search;
+      if (status !== 'all') params.status = status;
+      const res = await api.get('/newsletter', { params });
       if (!subscriberAccess.current) return;
       const list = res.data?.data?.subscribers || [];
       setSubscribers(list.map(normalizeSubscriber));
@@ -56,9 +63,14 @@ const NewsletterSubscribersPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, notify, canReadSubscribers]);
+  }, [page, rowsPerPage, notify, canReadSubscribers, search, status]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchInput.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   const handleExport = async () => {
     if (!subscriberAccess.current || exporting) return;
@@ -70,7 +82,10 @@ const NewsletterSubscribersPage = () => {
       let total = Number.POSITIVE_INFINITY;
       let all = [];
       while (offset < total && all.length < CSV_EXPORT_MAX_ROWS) {
-        const res = await api.get('/newsletter', { params: { limit: CSV_PAGE_SIZE, offset } });
+        const params = { limit: CSV_PAGE_SIZE, offset };
+        if (search) params.search = search;
+        if (status !== 'all') params.status = status;
+        const res = await api.get('/newsletter', { params });
         const batch = res.data?.data?.subscribers || [];
         total = res.data?.data?.total || 0;
         all = all.concat(batch.map(normalizeSubscriber));
@@ -118,6 +133,32 @@ const NewsletterSubscribersPage = () => {
       </Stack>
 
       {canReadCampaigns && <NewsletterCampaigns />}
+
+      {canReadSubscribers && <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2 }}>
+        <TextField
+          fullWidth
+          size="small"
+          label="Search subscribers"
+          placeholder="Email or source"
+          value={searchInput}
+          onChange={(event) => { setSearchInput(event.target.value); setPage(0); }}
+          InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
+        />
+        <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 190 } }}>
+          <InputLabel id="subscriber-status-filter-label">Status</InputLabel>
+          <Select
+            labelId="subscriber-status-filter-label"
+            label="Status"
+            value={status}
+            onChange={(event) => { setStatus(event.target.value); setPage(0); }}
+          >
+            <MenuItem value="all">All statuses</MenuItem>
+            <MenuItem value="active">Active</MenuItem>
+            <MenuItem value="pending">Pending</MenuItem>
+            <MenuItem value="unsubscribed">Unsubscribed</MenuItem>
+          </Select>
+        </FormControl>
+      </Stack>}
 
       {canReadSubscribers && <TableContainer component={Paper} variant="outlined">
         <Table size="small">

@@ -60,6 +60,26 @@ const cancel = async (id) => sequelize.transaction(async (transaction) => {
   return campaign;
 });
 
+const removeDraft = async (id) => sequelize.transaction(async (transaction) => {
+  const campaign = await NewsletterCampaign.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+  if (!campaign) throw new AppError('NOT_FOUND', 404, 'Campaign not found');
+  if (!['draft', 'cancelled'].includes(campaign.status)) {
+    throw new AppError('CONFLICT', 409, 'Only unsent draft campaigns can be deleted');
+  }
+  if (Number(campaign.recipientCount) > 0) {
+    throw new AppError('CONFLICT', 409, 'Campaigns with recipients cannot be deleted');
+  }
+  const queuedMessages = await NotificationQueue.count({
+    where: { dedupeKey: { [Op.like]: `newsletter:${id}:%` } },
+    transaction,
+  });
+  if (queuedMessages > 0) {
+    throw new AppError('CONFLICT', 409, 'Campaigns with queued messages cannot be deleted');
+  }
+  await campaign.destroy({ transaction });
+  return { deleted: true };
+});
+
 const list = async () => {
   const campaigns = await NewsletterCampaign.findAll({ order: [['createdAt', 'DESC']], limit: 30 });
   if (!campaigns.length) return [];
@@ -165,4 +185,4 @@ const test = async (input, user) => {
   return { sent: true };
 };
 
-module.exports = { create, edit, schedule, cancel, list, queueDue, test, unsubscribeUrl, confirmUrl, oneClickUnsubscribeUrl };
+module.exports = { create, edit, schedule, cancel, removeDraft, list, queueDue, test, unsubscribeUrl, confirmUrl, oneClickUnsubscribeUrl };

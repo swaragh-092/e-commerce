@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Box } from '@mui/material';
 import {
-  Agriculture, BakeryDining, Category, Coffee, Egg, EnergySavingsLeaf,
+  Agriculture, BakeryDining, Category, Coffee, Egg, EnergySavingsLeaf, FilterVintage,
   Fastfood, Forest, Grass, Home, Inventory2, KebabDining, LocalCafe, LocalDining,
-  LocalFlorist, LocalGroceryStore, LocalShipping, Nature, NaturePeople, Park, Pets,
+  LocalFlorist, LocalGroceryStore, LocalShipping, Nature, NaturePeople, Park, Pets, Recycling,
   Restaurant, SetMeal, ShoppingBasket, ShoppingCart, Spa, Star, Store, Storefront,
   Yard,
 } from '@mui/icons-material';
@@ -11,7 +11,7 @@ import { getMediaUrl } from '../../utils/media';
 
 export const CATEGORY_ICONS = [
   { id: 'eco', label: 'Eco', keywords: 'leaf green nature', Component: EnergySavingsLeaf },
-  { id: 'energy-savings-leaf', label: 'Leaf', keywords: 'plant leaf nature', Component: EnergySavingsLeaf },
+  { id: 'energy-savings-leaf', label: 'Leaf', keywords: 'plant leaf nature', Component: FilterVintage },
   { id: 'local-florist', label: 'Flower', keywords: 'flower flowers garden', Component: LocalFlorist },
   { id: 'spa', label: 'Herb', keywords: 'herb plant garden', Component: Spa },
   { id: 'yard', label: 'Garden', keywords: 'garden plant yard', Component: Yard },
@@ -21,7 +21,7 @@ export const CATEGORY_ICONS = [
   { id: 'nature', label: 'Nature', keywords: 'nature outdoors', Component: Nature },
   { id: 'nature-people', label: 'Nature', keywords: 'nature outdoors people', Component: NaturePeople },
   { id: 'agriculture', label: 'Agriculture', keywords: 'farm farming crops', Component: Agriculture },
-  { id: 'compost', label: 'Compost', keywords: 'compost soil organic', Component: Grass },
+  { id: 'compost', label: 'Compost', keywords: 'compost soil organic', Component: Recycling },
   { id: 'category', label: 'Category', keywords: 'category folder', Component: Category },
   { id: 'shopping-basket', label: 'Basket', keywords: 'basket shopping market', Component: ShoppingBasket },
   { id: 'local-grocery-store', label: 'Groceries', keywords: 'grocery groceries market', Component: LocalGroceryStore },
