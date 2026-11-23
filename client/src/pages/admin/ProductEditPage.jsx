@@ -576,6 +576,7 @@ const ProductEditPage = () => {
     try {
       const payload = {
         ...formData,
+        sku: formData.sku.trim() || null,
         price: formData.price === '' ? null : Number(formData.price),
         costPrice: formData.costPrice === "" ? null : Number(formData.costPrice),
         salePrice:
