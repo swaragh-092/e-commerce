@@ -142,7 +142,9 @@ export default function TagsPage() {
                     <TableCell sx={{ overflowWrap: 'anywhere' }}>{tag.slug}</TableCell>
                     <TableCell align="right">{canReadProducts ? <Button component={Link} to={`/admin/products?tags=${encodeURIComponent(tag.slug)}`} size="small" aria-label={`View products tagged ${tag.name}`}>{tag.productCount}</Button> : tag.productCount}</TableCell>
                     <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
-                      <Tooltip title="View storefront page"><IconButton component="a" href={tagUrl(tag.slug)} target="_blank" rel="noopener noreferrer" aria-label={`View storefront page for ${tag.name}`}><OpenInNewIcon fontSize="small" /></IconButton></Tooltip>
+                      <Tooltip title={Number(tag.productCount) > 0 ? 'View storefront page' : 'Add products to this tag before opening its storefront page'}>
+                        <span><IconButton component="a" href={Number(tag.productCount) > 0 ? tagUrl(tag.slug) : undefined} target="_blank" rel="noopener noreferrer" disabled={Number(tag.productCount) === 0} aria-label={`View storefront page for ${tag.name}`}><OpenInNewIcon fontSize="small" /></IconButton></span>
+                      </Tooltip>
                       <Tooltip title="Copy storefront link"><IconButton aria-label={`Copy storefront link for ${tag.name}`} onClick={() => copyLink(tag.slug)}><ContentCopyIcon fontSize="small" /></IconButton></Tooltip>
                       {canRename && <Tooltip title="Edit tag"><IconButton aria-label={`Edit ${tag.name}`} onClick={() => openEditor(tag)}><EditIcon fontSize="small" /></IconButton></Tooltip>}
                       {canDelete && <Tooltip title="Delete tag"><IconButton aria-label={`Delete ${tag.name}`} onClick={() => { setDialogError(''); setRemove(tag); setRemoveOpen(true); }}><DeleteIcon fontSize="small" /></IconButton></Tooltip>}
@@ -178,7 +180,7 @@ export default function TagsPage() {
               <Typography variant="caption" color="text.secondary">Renaming this tag keeps its existing URL.</Typography>
               <Stack direction="row" gap={1} flexWrap="wrap" mt={1}>
                 <Button size="small" startIcon={<ContentCopyIcon />} onClick={() => copyLink(edit.slug)}>Copy link</Button>
-                <Button size="small" startIcon={<OpenInNewIcon />} component="a" href={tagUrl(edit.slug)} target="_blank" rel="noopener noreferrer">View page</Button>
+                <Button size="small" startIcon={<OpenInNewIcon />} component="a" href={Number(edit.productCount) > 0 ? tagUrl(edit.slug) : undefined} target="_blank" rel="noopener noreferrer" disabled={Number(edit.productCount) === 0}>View page</Button>
               </Stack>
               <Typography variant="body2" mt={1}>Used by {Number(edit.productCount) || 0} {Number(edit.productCount) === 1 ? 'product' : 'products'}.</Typography>
               {canReadProducts && <Button size="small" component={Link} target="_blank" rel="noopener noreferrer" to={`/admin/products?tags=${encodeURIComponent(edit.slug)}`}>View products</Button>}

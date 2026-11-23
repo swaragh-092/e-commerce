@@ -56,6 +56,7 @@ const CACHE_TTL = 30000; // 30 seconds
  */
 const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Select Media' }) => {
   const titleId = useId();
+  const tabsAction = useRef(null);
   const activeRef = useRef(open);
   const [tab, setTab] = useState(0); // 0: Upload, 1: Library
   const [media, setMedia] = useState([]);
@@ -72,6 +73,12 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
   const requestIdRef = useRef(0);
   const abortControllerRef = useRef(null);
   const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const frame = requestAnimationFrame(() => tabsAction.current?.updateIndicator());
+    return () => cancelAnimationFrame(frame);
+  }, [open, tab]);
 
   const cacheKey = `${sortBy}:${sortDir}`;
   const previousSortKeyRef = useRef(cacheKey);
@@ -268,6 +275,7 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
       onKeyDown={(event) => event.stopPropagation()}
       maxWidth="md"
       fullWidth
+      TransitionProps={{ onEntered: () => tabsAction.current?.updateIndicator() }}
       PaperProps={{
         sx: {
           borderRadius: '12px',
@@ -290,14 +298,16 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
       </DialogTitle>
 
       <Box sx={{ px: 2, borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs value={tab} onChange={(_, v) => setTab(v)}>
+        <Tabs action={tabsAction} value={tab} onChange={(_, v) => setTab(v)}>
           <Tab
+            value={0}
             icon={<CloudUploadIcon sx={{ mr: 1 }} />}
             iconPosition="start"
             label="Upload Files"
             sx={{ fontWeight: 600 }}
           />
           <Tab
+            value={1}
             icon={<PhotoLibraryIcon sx={{ mr: 1 }} />}
             iconPosition="start"
             label="Media Library"

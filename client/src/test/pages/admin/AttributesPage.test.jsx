@@ -170,6 +170,18 @@ describe('attribute category and value unit flow', () => {
     await waitFor(() => expect(attributeService.addAttributeValue).toHaveBeenLastCalledWith('height', expect.objectContaining({ value: '1 - 1.5', unitLabel: 'm' })));
   });
 
+  it('closes optional value details cleanly after saving a value', async () => {
+    mount();
+    await openValues();
+    fireEvent.click(screen.getByRole('button', { name: 'Optional details' }));
+    fireEvent.change(screen.getByPlaceholderText('New value…'), { target: { value: '30' } });
+    chooseUnit('Centimetre (cm)');
+    fireEvent.change(screen.getByLabelText('Display label'), { target: { value: '30 cm tall' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add value', exact: true }));
+    await waitFor(() => expect(attributeService.addAttributeValue).toHaveBeenCalledWith('height', expect.objectContaining({ value: '30', displayLabel: '30 cm tall', unitLabel: 'cm' })));
+    expect(screen.getByRole('button', { name: 'Optional details' })).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('uses the same category restriction when editing a value', async () => {
     mount();
     await openValues();

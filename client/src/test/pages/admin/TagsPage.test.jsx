@@ -27,6 +27,14 @@ describe('tag management', () => {
     expect(await screen.findByRole('link', { name: 'View products tagged Summer' })).toHaveAttribute('href', '/admin/products?tags=summer');
     expect(screen.getByText('summer', { exact: true })).toBeInTheDocument();
   });
+  it('does not offer a broken storefront link for an unused tag', async () => {
+    getTags.mockResolvedValue({ data: [{ ...tag, productCount: 0 }], meta: { total: 1 } });
+    mount();
+    const viewLink = await screen.findByRole('button', { name: 'View storefront page for Summer' });
+    expect(viewLink).toHaveAttribute('aria-disabled', 'true');
+    expect(viewLink).toHaveAttribute('tabindex', '-1');
+    expect(viewLink).not.toHaveAttribute('href');
+  });
   it('creates a tag and refreshes the dictionary', async () => {
     mount();
     fireEvent.click(screen.getByRole('button', { name: 'Add tag' }));

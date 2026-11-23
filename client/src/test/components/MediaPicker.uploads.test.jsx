@@ -13,6 +13,15 @@ beforeEach(() => {
   mediaService.list.mockResolvedValue({ data: [], meta: { page: 1, totalPages: 1 } });
 });
 afterEach(() => vi.unstubAllGlobals());
+it('moves the active tab indicator to Media Library when selected', async () => {
+  render(<MediaPicker open onClose={vi.fn()} onSelect={vi.fn()} />);
+  const uploadTab = screen.getByRole('tab', { name: 'Upload Files' });
+  const libraryTab = screen.getByRole('tab', { name: 'Media Library' });
+  fireEvent.click(libraryTab);
+  expect(libraryTab).toHaveAttribute('aria-selected', 'true');
+  expect(uploadTab).toHaveAttribute('aria-selected', 'false');
+});
+
 it('finishes the whole upload batch before changing tabs and preserves both selections', async () => {
   const first = { id: 'first', url: '/first.png' };
   const second = { id: 'second', url: '/second.png' };

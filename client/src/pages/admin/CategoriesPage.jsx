@@ -466,9 +466,9 @@ const CategoriesPage = () => {
     const canManageAttributes = hasPermission(PERMISSIONS.ATTRIBUTES_MANAGE);
     const canManageCategoryAttributes = canManageCategories && canManageAttributes;
 
-    const fetchCategories = async () => {
+    const fetchCategories = async ({ showLoading = true } = {}) => {
         try {
-            setLoading(true);
+            if (showLoading) setLoading(true);
             const res = await getCategoryTree();
             const data = res?.data || [];
             setCategories(data);
@@ -485,7 +485,7 @@ const CategoriesPage = () => {
         } catch {
             notify('Failed to load categories.', 'error');
         } finally {
-            setLoading(false);
+            if (showLoading) setLoading(false);
         }
     };
 
@@ -530,7 +530,7 @@ const CategoriesPage = () => {
         try {
             await reorderCategory(id, direction);
             notify(`Category ${direction === 'up' ? 'moved up' : 'moved down'}`, 'success');
-            fetchCategories();
+            await fetchCategories({ showLoading: false });
         } catch (err) {
             notify(getApiErrorMessage(err), 'error');
         } finally {

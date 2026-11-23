@@ -232,7 +232,7 @@ const AttributesPage = () => {
       <Paper variant="outlined" sx={{ p: 2, mb: 3, borderRadius: 2 }}>
         <Grid container spacing={1.5} alignItems="center">
           {/* Search Field */}
-          <Grid item xs={12} sm={12} md={6}>
+          <Grid item xs={12} sm={12} md={12}>
             <TextField
               id="attributes-search-input"
               size="small"
@@ -318,7 +318,7 @@ const AttributesPage = () => {
           </Grid>
 
           {/* Sort By Filter */}
-          <Grid item xs={6} sm={3} md={2.5}>
+          <Grid item xs={12} sm={6} md={3}>
             <FormControl fullWidth size="small">
               <InputLabel id="sort-filter-label">Sort By</InputLabel>
               <Select

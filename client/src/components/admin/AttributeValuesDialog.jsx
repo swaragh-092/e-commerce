@@ -165,7 +165,7 @@ const AttributeValuesDialog = ({ initialAttribute, canManage, onChange, onClose 
           endIcon={<ExpandMoreIcon sx={{ transform: showDetails ? 'rotate(180deg)' : undefined }} />} sx={{ mt: 1 }}>
           Optional details
         </Button>
-        <Collapse in={showDetails} unmountOnExit>
+        <Collapse in={showDetails} timeout={showDetails ? 'auto' : 0} unmountOnExit>
           <Grid container spacing={2} id="attribute-value-details" sx={{ pt: 2 }}>
             <Grid item xs={12} sm={7}><TextField label="Display label" fullWidth size="small" value={draft.displayLabel} disabled={blocked} inputProps={{ maxLength: 100 }} onChange={(event) => update('displayLabel', event.target.value)} helperText="Optional customer-facing label" /></Grid>
             <Grid item xs={12} sm={5}><TextField label="Swatch color" placeholder="#000 or red" fullWidth size="small" value={draft.swatchColor} disabled={blocked} inputProps={{ maxLength: 32 }} onChange={(event) => update('swatchColor', event.target.value)} helperText="For color swatches" /></Grid>
