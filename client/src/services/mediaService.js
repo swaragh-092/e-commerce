@@ -5,7 +5,11 @@ export const mediaService = {
   replaceImage: async (id, file) => {
     const form = new FormData();
     form.append('file', file);
-    return (await api.put(`/media/${id}/image`, form)).data;
+    return (await api.put(`/media/${id}/image`, form, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })).data;
   },
   revertImage: async (id) => (await api.post(`/media/${id}/revert`)).data,
   listCropPresets: async (signal) => (await api.get('/media/crop-presets', { signal })).data,
