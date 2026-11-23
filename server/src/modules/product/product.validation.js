@@ -28,7 +28,7 @@ const productListQuerySchema = Joi.object({
 }).unknown();
 
 const productVariantCreateSchema = Joi.object({
-  sku: Joi.string().max(100).allow('', null),
+  sku: Joi.string().trim().max(100).empty('').allow(null),
   price: Joi.number().precision(2).min(0).required(),
   stockQty: Joi.number().integer().min(0).default(0),
   isActive: Joi.boolean().default(true),
@@ -60,7 +60,7 @@ const createProductSchema = Joi.object({
   metaDescription: Joi.string().max(500).allow('', null),
   metaKeywords: Joi.string().max(500).allow('', null),
   ogImage: Joi.string().max(2048).allow('', null),
-  sku: Joi.string().max(100).allow('', null),
+  sku: Joi.string().trim().max(100).empty('').allow(null),
   unit: Joi.string().max(50).allow('', null),
   price: Joi.number().precision(2).positive().required(),
   costPrice: Joi.number().precision(2).min(0).max(99999999.99).allow(null),
@@ -132,7 +132,7 @@ const updateProductSchema = Joi.object({
   metaDescription: Joi.string().max(500).allow('', null),
   metaKeywords: Joi.string().max(500).allow('', null),
   ogImage: Joi.string().max(2048).allow('', null),
-  sku: Joi.string().max(100).allow('', null),
+  sku: Joi.string().trim().max(100).empty('').allow(null),
   unit: Joi.string().max(50).allow('', null),
   price: Joi.number().precision(2).positive(),
   costPrice: Joi.number().precision(2).min(0).max(99999999.99).allow(null),
@@ -173,7 +173,7 @@ const updateProductSchema = Joi.object({
   tags: productTagsSchema,
   variants: Joi.array().items(
     Joi.object({
-      sku: Joi.string().max(100).allow('', null),
+      sku: Joi.string().trim().max(100).empty('').allow(null),
       price: Joi.number().precision(2).min(0).required(),
       stockQty: Joi.number().integer().min(0).default(0),
       isActive: Joi.boolean().default(true),

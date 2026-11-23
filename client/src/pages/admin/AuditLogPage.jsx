@@ -313,7 +313,13 @@ const AuditLogPage = () => {
 
       {/* Activity table */}
       <Box
+        component="section"
+        aria-label="Audit log results. Scroll horizontally to view all columns."
+        tabIndex={0}
         sx={{
+          width: '100%',
+          minWidth: 0,
+          overflowX: 'auto',
           bgcolor: 'background.paper',
           borderRadius: 2,
           border: '1px solid',
@@ -335,8 +341,9 @@ const AuditLogPage = () => {
           '& .MuiDataGrid-row:hover': { bgcolor: alpha(theme.palette.primary.main, 0.035) },
         }}
       >
-        <DataGrid
-          getRowHeight={() => 'auto'}
+        <Box sx={{ minWidth: 1160 }}>
+          <DataGrid
+            getRowHeight={() => 'auto'}
           getEstimatedRowHeight={() => 72}
           rows={rows}
           columns={columns}
@@ -348,8 +355,9 @@ const AuditLogPage = () => {
           autoHeight
           disableRowSelectionOnClick
           pageSizeOptions={[10, 20, 50]}
-          localeText={{ noRowsLabel: 'No activity found. Try adjusting or clearing your filters.' }}
-        />
+            localeText={{ noRowsLabel: 'No activity found. Try adjusting or clearing your filters.' }}
+          />
+        </Box>
       </Box>
 
       <Drawer anchor="right" open={Boolean(diff)} onClose={() => setDiff(null)} PaperProps={{ sx: { width: { xs: '100%', sm: 480 }, p: 0 } }}>
