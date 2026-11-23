@@ -126,7 +126,7 @@ const AddSectionDialog = ({ open, anchorEl, onClose, onAdd, existingIds = [], se
 
   if (anchorEl) return <Popover open={open} anchorEl={anchorEl} onClose={handleClose}
     anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-    slotProps={{ paper: { role: 'dialog', 'aria-label': 'Add section', sx: { width: 560 } } }}>
+    slotProps={{ paper: { role: 'dialog', 'aria-label': 'Add section', sx: { width: 'min(560px, calc(100vw - 32px))' } } }}>
     {content}
   </Popover>;
 

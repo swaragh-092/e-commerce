@@ -288,7 +288,7 @@ export default function ComposedHeroEditor({ productInformation, orderedDetails,
       </>}
       {target?.anchorEl ? <Popover open={parentId !== undefined} anchorEl={target.anchorEl} onClose={closePicker}
         anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-        slotProps={{ paper: { role: 'dialog', 'aria-label': 'Add block', sx: { width: 560 } } }}>
+        slotProps={{ paper: { role: 'dialog', 'aria-label': 'Add block', sx: { width: 'min(560px, calc(100vw - 32px))' } } }}>
         {pickerContent}
       </Popover> : <Dialog open={parentId !== undefined} onClose={closePicker} aria-label="Add block" fullWidth maxWidth="sm">
         <DialogTitle>Add block</DialogTitle>
