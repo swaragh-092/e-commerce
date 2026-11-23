@@ -3,6 +3,7 @@ import StaffAssignment from '../../components/admin/StaffAssignment';
 import {
   Box,
   Typography,
+  useMediaQuery,
   Chip,
   IconButton,
   Button,
@@ -23,7 +24,7 @@ import {
   Tooltip,
   InputAdornment,
 } from '@mui/material';
-import { DataGrid } from '@mui/x-data-grid';
+import ResponsiveDataGrid from '../../components/admin/ResponsiveDataGrid';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -51,6 +52,9 @@ const useDebounceValue = (value, delay) => {
 };
 
 const EnquiriesPage = () => {
+  const compact = useMediaQuery('(max-width: 1200px)');
+  const narrow = useMediaQuery('(max-width: 760px)');
+  const phone = useMediaQuery('(max-width: 600px)');
   const { notify } = useNotification();
   const [rows, setRows] = useState([]);
   const [rowCount, setRowCount] = useState(0);
@@ -184,7 +188,7 @@ const EnquiriesPage = () => {
     {
       field: 'name',
       headerName: 'Customer',
-      minWidth: 220,
+      minWidth: 160,
       flex: 1.2,
       renderCell: ({ row }) => (
         <Box py={0.5}>
@@ -212,8 +216,8 @@ const EnquiriesPage = () => {
     },
     {
       field: 'actions',
-      headerName: 'Actions',
-      width: 120,
+      headerName: phone ? '' : 'Actions',
+      width: phone ? 56 : 100,
       sortable: false,
       filterable: false,
       renderCell: ({ row }) => (
@@ -230,7 +234,7 @@ const EnquiriesPage = () => {
   ];
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ p: { xs: 1, sm: 3 }, minWidth: 0 }}>
       <PageSEO title="Enquiries | Admin" type="noindex" />
 
       <Typography variant="h5" component="h1" fontWeight={700} mb={3}>
@@ -245,7 +249,7 @@ const EnquiriesPage = () => {
               placeholder="Search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              sx={{ minWidth: 280 }}
+              sx={{ minWidth: { xs: 0, sm: 240 } }}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -295,9 +299,11 @@ const EnquiriesPage = () => {
           borderColor: 'divider',
         }}
       >
-        <DataGrid
+        <ResponsiveDataGrid
           rows={rows}
           columns={columns}
+          requiredColumns={['name', 'actions']}
+          columnVisibilityModel={{ createdAt: !narrow, subject: !compact, status: !phone }}
           rowHeight={76}
           rowCount={rowCount}
           loading={loading}

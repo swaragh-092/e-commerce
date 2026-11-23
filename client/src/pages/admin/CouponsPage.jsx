@@ -23,8 +23,9 @@ import {
   TextField,
   Tooltip,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
-import { DataGrid } from '@mui/x-data-grid';
+import ResponsiveDataGrid from '../../components/admin/ResponsiveDataGrid';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -90,6 +91,9 @@ const localToISO = (value) => {
 };
 
 const CouponsPage = () => {
+  const compact = useMediaQuery('(max-width: 1440px)');
+  const narrow = useMediaQuery('(max-width: 1050px)');
+  const phone = useMediaQuery('(max-width: 760px)');
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -517,7 +521,7 @@ const CouponsPage = () => {
       field: 'name',
       headerName: 'Campaign',
       flex: 1.2,
-      minWidth: 180,
+      minWidth: phone ? 135 : 180,
       renderCell: ({ row }) => (
         <Box sx={{ py: 1 }}>
           <Typography
@@ -634,7 +638,7 @@ const CouponsPage = () => {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2, mb: 3 }}>
         <Box>
           <Typography variant="h5" component="h1" fontWeight={700}>Coupons & Promotions</Typography>
           <Typography variant="body2" color="text.secondary">Build targeted offers with schedule, visibility, exclusions, and eligibility rules.</Typography>
@@ -643,10 +647,12 @@ const CouponsPage = () => {
       </Box>
 
       <Box sx={{ bgcolor: 'background.paper', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
-        <DataGrid
+        <ResponsiveDataGrid
           autoHeight
           rows={rows}
           columns={columns}
+          requiredColumns={['name', 'actions']}
+          columnVisibilityModel={{ scope: !compact, campaignStatus: !narrow, visibility: !compact, applicationMode: !compact, usage: !narrow, offer: !phone, status: !phone }}
           rowCount={total}
           loading={loading}
           paginationMode="server"
