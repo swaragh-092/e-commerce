@@ -157,7 +157,6 @@ const AttributesPage = () => {
   const handleDialogClose = () => {
     if (savingAttribute) return;
     setDialogOpen(false);
-    setEditing(null);
   };
 
   const handleSave = async () => {
@@ -174,7 +173,6 @@ const AttributesPage = () => {
         else notify('Attribute created. Open its values from the list to continue.', 'warning');
       }
       setDialogOpen(false);
-      setEditing(null);
       fetchAttributes();
     } catch (err) {
       notify(getApiErrorMessage(err), 'error');
@@ -183,16 +181,16 @@ const AttributesPage = () => {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (attribute) => {
     if (!canManageAttributes) return;
     const confirmed = await confirm(
       'Delete Attribute Template',
-      'Sure with deleting with Attribute?',
+      `Are you sure you want to delete “${attribute.name}”? This can’t be undone.`,
       'error'
     );
     if (!confirmed) return;
     try {
-      await attributeService.deleteAttribute(id);
+      await attributeService.deleteAttribute(attribute.id);
       fetchAttributes();
     } catch (err) {
       notify(getApiErrorMessage(err), 'error');
@@ -234,7 +232,7 @@ const AttributesPage = () => {
       <Paper variant="outlined" sx={{ p: 2, mb: 3, borderRadius: 2 }}>
         <Grid container spacing={1.5} alignItems="center">
           {/* Search Field */}
-          <Grid item xs={12} sm={6} md={3.5}>
+          <Grid item xs={12} sm={12} md={6}>
             <TextField
               id="attributes-search-input"
               size="small"
@@ -260,7 +258,7 @@ const AttributesPage = () => {
           </Grid>
 
           {/* Display Style Filter */}
-          <Grid item xs={6} sm={3} md={2}>
+          <Grid item xs={12} sm={6} md={3}>
             <FormControl fullWidth size="small">
               <InputLabel id="display-style-filter-label">Display Style</InputLabel>
               <Select
@@ -281,7 +279,7 @@ const AttributesPage = () => {
           </Grid>
 
           {/* Value Type Filter */}
-          <Grid item xs={6} sm={3} md={2}>
+          <Grid item xs={12} sm={6} md={3}>
             <FormControl fullWidth size="small">
               <InputLabel id="value-type-filter-label">Value Type</InputLabel>
               <Select
@@ -302,7 +300,7 @@ const AttributesPage = () => {
           </Grid>
 
           {/* Values Filter */}
-          <Grid item xs={6} sm={3} md={2}>
+          <Grid item xs={12} sm={6} md={3}>
             <FormControl fullWidth size="small">
               <InputLabel id="has-values-filter-label">Values</InputLabel>
               <Select
@@ -505,7 +503,7 @@ const AttributesPage = () => {
                         </IconButton>
                       </Tooltip>
                       <Tooltip title="Delete">
-                        <IconButton size="small" color="error" onClick={() => handleDelete(attribute.id)} disabled={!canManageAttributes}>
+                        <IconButton size="small" color="error" onClick={() => handleDelete(attribute)} disabled={!canManageAttributes}>
                           <DeleteIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>

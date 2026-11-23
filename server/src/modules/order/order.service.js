@@ -511,7 +511,7 @@ const HEAVY_ORDER_INCLUDE = [
             {
                 model: Product,
                 as: 'product',
-                attributes: ['id', 'name', 'slug'],
+                attributes: ['id', 'name', 'slug', 'requiresShipping'],
                 required: false,
                 include: [{ model: ProductImage, as: 'images', attributes: ['id', 'url', 'alt', 'sortOrder', 'isPrimary'], required: false }],
             },

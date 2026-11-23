@@ -112,6 +112,7 @@ const AuditLogPage = () => {
     {
       field: 'user',
       headerName: 'Actor',
+      minWidth: 280,
       flex: 1.5,
       renderCell: ({ row }) => (
         <Stack direction="row" spacing={1.5} alignItems="center">
@@ -127,11 +128,11 @@ const AuditLogPage = () => {
           >
             {row.User?.firstName?.[0] || <PersonIcon fontSize="small" />}
           </Avatar>
-          <Box sx={{ overflow: 'hidden' }}>
-            <Typography variant="body2" fontWeight={600} noWrap>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="body2" fontWeight={600} sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
               {row.User ? `${row.User.firstName} ${row.User.lastName}` : 'System'}
             </Typography>
-            <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
               {row.User?.email || 'automated-task'}
             </Typography>
           </Box>
@@ -175,7 +176,7 @@ const AuditLogPage = () => {
     {
       field: 'changes',
       headerName: 'Details',
-      width: 125,
+      width: 150,
       sortable: false,
       align: 'center',
       headerAlign: 'center',
@@ -269,8 +270,8 @@ const AuditLogPage = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={3}>
-            <Stack direction="row" spacing={1}>
+          <Grid item xs={12} md={6}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
               <TextField
                 fullWidth
                 size="small"
@@ -279,7 +280,7 @@ const AuditLogPage = () => {
                 InputLabelProps={{ shrink: true }}
                 value={filters.from}
                 onChange={(e) => setFilter('from', e.target.value)}
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                sx={{ minWidth: 180, flex: '1 1 180px', '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
               />
               <TextField
                 fullWidth
@@ -289,7 +290,7 @@ const AuditLogPage = () => {
                 InputLabelProps={{ shrink: true }}
                 value={filters.to}
                 onChange={(e) => setFilter('to', e.target.value)}
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                sx={{ minWidth: 180, flex: '1 1 180px', '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
               />
             </Stack>
           </Grid>
@@ -322,6 +323,7 @@ const AuditLogPage = () => {
           },
           '& .MuiDataGrid-cell': {
             borderColor: alpha(theme.palette.divider, 0.5),
+            py: 1.5,
           },
           '& .MuiDataGrid-columnHeaders': {
             bgcolor: alpha(theme.palette.background.default, 0.5),
@@ -334,6 +336,8 @@ const AuditLogPage = () => {
         }}
       >
         <DataGrid
+          getRowHeight={() => 'auto'}
+          getEstimatedRowHeight={() => 72}
           rows={rows}
           columns={columns}
           rowCount={total}
@@ -343,7 +347,6 @@ const AuditLogPage = () => {
           onPaginationModelChange={setPaginationModel}
           autoHeight
           disableRowSelectionOnClick
-          rowHeight={72}
           pageSizeOptions={[10, 20, 50]}
           localeText={{ noRowsLabel: 'No activity found. Try adjusting or clearing your filters.' }}
         />

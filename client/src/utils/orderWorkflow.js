@@ -1,3 +1,4 @@
+import { isOrderShippingRequired } from './orderFulfillment';
 import orderWorkflow from '../../../shared/order-workflow.json';
 import { PAYMENT_SETTLED_STATUSES } from './constants';
 
@@ -110,6 +111,7 @@ export const getRefundStatusColor = (status) => colorMap[status] || 'default';
 
 export const getOrderProgressSteps = (order = {}, progress = {}) => {
   const orderStatus = order?.status;
+  const requiresShipping = isOrderShippingRequired(order);
   const shippingStatus = order?.orderShippingStatus || order?.shipmentStatus || 'not_shipped';
   const paymentStatus = order?.Payment?.status || order?.paymentStatus;
   const statusHistory = order?.statusHistory || [];
@@ -130,7 +132,7 @@ export const getOrderProgressSteps = (order = {}, progress = {}) => {
   const outForDelivery = ['partially_out_for_delivery', 'out_for_delivery', 'partially_delivered', 'delivered'].includes(shippingStatus);
   const delivered = shippingStatus === 'delivered';
   const partiallyDelivered = shippingStatus === 'partially_delivered';
-  const processing = ['processing', 'ready_for_shipment', 'closed'].includes(orderStatus) || shipped || delivered;
+  const processing = ['processing', 'ready_for_shipment', 'closed'].includes(orderStatus) || (requiresShipping && (shipped || delivered));
 
   const steps = [
     {
@@ -177,11 +179,11 @@ export const getOrderProgressSteps = (order = {}, progress = {}) => {
       status: paymentSettled ? 'completed' : delivered ? 'active' : 'pending',
       occurredAt: paymentStatus === 'paid_cod' ? order?.Payment?.updatedAt : undefined,
     }] : []),
-  ];
+  ].filter((step) => requiresShipping || !['shipped', 'out_for_delivery', 'delivered'].includes(step.key));
 
   if (isCancelled || isClosed) {
     return [
-      ...steps.filter((step) => step.status === 'completed' || step.key === 'placed'),
+      ...steps.filter((step) => isCancelled ? step.key === 'placed' : step.status === 'completed' || step.key === 'placed'),
       {
         key: orderStatus,
         label: isCancelled ? 'Cancelled' : 'Closed',

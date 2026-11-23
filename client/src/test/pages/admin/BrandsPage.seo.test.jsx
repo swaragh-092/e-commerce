@@ -22,6 +22,16 @@ beforeEach(() => {
   state.service.updateBrand.mockResolvedValue({});
 });
 describe('Brand SEO editor', () => {
+  it('clears the required-name error as soon as a name is entered', async () => {
+    render(<BrandsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add Brand' }));
+    const name = screen.getByRole('textbox', { name: /Brand Name/ });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Brand' }));
+    expect(await screen.findByText('Name is required')).toBeInTheDocument();
+    fireEvent.change(name, { target: { value: 'New Brand' } });
+    expect(screen.queryByText('Name is required')).not.toBeInTheDocument();
+  });
+
   it('creates a brand with customized SEO', async () => {
     render(<BrandsPage />);
     fireEvent.click(screen.getByRole('button', { name: 'Add Brand' }));

@@ -99,6 +99,8 @@ const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, on
                 onMouseEnter={() => setHovered(true)}
                 onMouseLeave={() => setHovered(false)}
                 sx={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
                     pl: 2 + level * 2,
                     py: 1,
                     pr: 2,
@@ -123,13 +125,14 @@ const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, on
                 <ListItemIcon sx={{ minWidth: 32 }}>
                     {node.icon ? <CategoryIcon value={node.icon} size={20} color={isSelected ? 'primary.main' : 'text.secondary'} /> : (isSelected || isExpanded ? <FolderOpenIcon color={isSelected ? "primary" : "action"} fontSize="small" /> : <FolderIcon color="action" fontSize="small" />)}
                 </ListItemIcon>
-                <ListItemText 
+                    <ListItemText
+                    sx={{ minWidth: 0, flex: '1 1 auto' }}
                     primary={node.name} 
                     primaryTypographyProps={{ 
                         variant: 'body2', 
                         fontWeight: isSelected ? 600 : 400,
                         color: isSelected ? 'text.primary' : 'text.secondary',
-                        noWrap: true
+                        sx: { overflowWrap: 'anywhere' }
                     }} 
                 />
                 {hasChildren && (
@@ -137,7 +140,7 @@ const CategoryTreeItem = ({ node, level, expandedIds, toggleNode, selectedId, on
                 )}
                 {/* Up/Down reorder arrows on hover */}
                 {canManageCategories && hovered && !searchQuery && (
-                    <Box sx={{ display: 'flex', ml: 0.5 }}>
+                    <Box sx={{ display: 'flex', flexBasis: '100%', justifyContent: 'flex-end', ml: 0.5, mt: -0.5 }}>
                         <Tooltip title="Move Up">
                             <IconButton
                                 size="small"
@@ -233,7 +236,7 @@ const CategoryDetailsPanel = ({ categoryId, categories, onEdit, onDelete, onAddC
             </Breadcrumbs>
 
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 4, flexWrap: 'wrap', gap: 2 }}>
-                <Box sx={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+                <Box sx={{ display: 'flex', gap: 3, alignItems: 'center', flex: '1 1 260px', minWidth: 0 }}>
                     <Box sx={{ width: 80, height: 80, borderRadius: 2, overflow: 'hidden', flexShrink: 0, border: '1px solid', borderColor: 'divider' }}>
                         <img
                             src={selectedCatNode.image ? getMediaUrl(selectedCatNode.image) : PLACEHOLDER_CATEGORY}
@@ -247,8 +250,8 @@ const CategoryDetailsPanel = ({ categoryId, categories, onEdit, onDelete, onAddC
                             <CategoryIcon value={selectedCatNode.icon} size={26} color="primary.main" />
                         </Box>
                     )}
-                    <Box>
-                        <Typography variant="h4" fontWeight={700} gutterBottom>{selectedCatNode.name}</Typography>
+                    <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="h4" fontWeight={700} gutterBottom sx={{ overflowWrap: 'anywhere' }}>{selectedCatNode.name}</Typography>
                         {selectedCatNode.description && (
                             <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 600 }}>
                                 {selectedCatNode.description}
@@ -256,7 +259,7 @@ const CategoryDetailsPanel = ({ categoryId, categories, onEdit, onDelete, onAddC
                         )}
                     </Box>
                 </Box>
-                <Stack direction="row" spacing={1}>
+                <Stack direction="row" spacing={1} sx={{ flexShrink: 0, flexWrap: { xs: 'wrap', lg: 'nowrap' }, '& .MuiButton-root': { whiteSpace: 'nowrap' } }}>
                     <Button variant="outlined" startIcon={<SettingsIcon />} onClick={() => onManageAttributes(selectedCatNode)} disabled={!canManageAttributes}>Attributes</Button>
                     <Button variant="outlined" startIcon={<EditIcon />} onClick={() => onEdit(selectedCatNode)} disabled={!canManageCategories}>Edit</Button>
                     <Button variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={() => onDelete(selectedCatNode.id)} disabled={!canManageCategories}>Delete</Button>

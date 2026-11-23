@@ -182,6 +182,7 @@ const StoreDesignSummary = ({ scope = 'global', page, form = {}, homepageSection
         sx={{ mb: 2 }}
       >
         {config.title}. {config.description}
+        {scope === 'homepage' && ' This count reflects published sections. Store Designer may include unpublished draft changes.'}
       </Alert>
 
       <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" aria-label="Current store design summary">
@@ -205,7 +206,7 @@ const StoreDesignSummary = ({ scope = 'global', page, form = {}, homepageSection
         {scope === 'announcement' && <SummaryChip label="Announcement" value={summary.structure.announcement} />}
         {scope === 'header' && <SummaryChip label="Header" value={summary.structure.header} />}
         {scope === 'footer' && <SummaryChip label="Footer" value={summary.structure.footer} />}
-        {scope === 'homepage' && <SummaryChip label="Sections" value={summary.homepage.sections} />}
+        {scope === 'homepage' && <SummaryChip label="Published sections" value={summary.homepage.sections} />}
       </Stack>
 
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>

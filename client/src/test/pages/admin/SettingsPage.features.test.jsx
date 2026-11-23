@@ -46,6 +46,16 @@ beforeEach(() => {
 });
 
 describe('Settings follow platform features and permissions', () => {
+  it('identifies the homepage count as published rather than draft sections', async () => {
+    state.features = { ...state.features, themes: true };
+    getAllSettings.mockResolvedValueOnce({ general: { storeName: 'Test Shop' }, homepage: { sections: Array.from({ length: 6 }, (_, id) => ({ id })) } });
+    render(view());
+    await screen.findByDisplayValue('Test Shop');
+    openTab('Homepage');
+    expect(screen.getByText('Published sections: 6')).toBeInTheDocument();
+    expect(screen.getByText(/Store Designer may include unpublished draft changes/)).toBeInTheDocument();
+  });
+
   it('opens the independent security editor and excludes its policy from Save All', async () => {
     getAllSettings.mockResolvedValueOnce({ general: { storeName: 'Test Shop' }, auth: { mfaPolicy: {
       requireAdministrators: false, staffMode: 'optional', requiredRoleIds: [],

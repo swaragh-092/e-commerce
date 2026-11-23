@@ -114,6 +114,7 @@ const SectionRow = ({ section, index, total, isSelected, onSelect, onMove, onTog
     onClick={() => onSelect(section)}
     sx={{
       display: 'flex',
+      flexWrap: 'wrap',
       position: 'relative',
       minHeight: 44,
       alignItems: 'center',
@@ -137,7 +138,7 @@ const SectionRow = ({ section, index, total, isSelected, onSelect, onMove, onTog
     {expandControl}
     {dragHandleProps && <Box {...dragHandleProps} aria-label={`Reorder ${getSectionLabel(section)}`} sx={{ display: 'flex', color: 'text.secondary', cursor: 'grab' }}><DragIndicatorIcon sx={{ fontSize: 18 }} /></Box>}
     <Box component="button" type="button" onClick={(event) => { event.stopPropagation(); onSelect(section); }} aria-label={`Edit ${getSectionLabel(section)}`} sx={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', p: 0, color: 'inherit', cursor: 'pointer' }}>
-      <Typography variant="body2" fontWeight={isSelected ? 800 : 600} noWrap sx={{ fontSize: '0.85rem' }}>
+      <Typography variant="body2" fontWeight={isSelected ? 800 : 600} sx={{ fontSize: '0.85rem', overflowWrap: 'anywhere' }}>
         {section.title || getSectionLabel(section)}
       </Typography>
       {section.title || section.subtitle || section.placement === 'footer' ? (
@@ -146,7 +147,7 @@ const SectionRow = ({ section, index, total, isSelected, onSelect, onMove, onTog
         </Typography>
       ) : null}
     </Box>
-    <Stack className="section-actions" direction="row" alignItems="center" sx={{ opacity: isSelected ? 1 : 0, transition: 'opacity .15s', position: 'absolute', right: 4, bgcolor: 'background.paper', borderRadius: 1, '@media (hover: none)': { opacity: 1, position: 'static' } }}>
+    <Stack className="section-actions" direction="row" alignItems="center" sx={{ opacity: isSelected ? 1 : 0, transition: 'opacity .15s', width: '100%', justifyContent: 'flex-end', flexShrink: 0, borderRadius: 1, '@media (hover: none)': { opacity: 1 } }}>
     <Tooltip title={section.enabled === false ? 'Enable section' : 'Hide section'}>
       <Switch
         size="small"
@@ -392,7 +393,7 @@ const DesignerTreePanel = ({
       const target = rows[destination.index].originalIndex;
       onReorderSection?.(from, target + (destination.index > source.index ? 1 : 0), source.droppableId);
     }}>
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden' }}>
 
       {/* Panel Header */}
       <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
@@ -405,7 +406,7 @@ const DesignerTreePanel = ({
       </Box>
 
       {/* Scrollable body */}
-      <Box sx={{ flex: 1, overflowY: 'auto', py: 1 }}>
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', py: 1 }}>
         {loadError && (
           <Box sx={{ p: 1.5, mx: 1, mb: 1 }}>
             <Alert
@@ -689,7 +690,7 @@ const DesignerTreePanel = ({
       </Box>
 
       {/* Bottom: Theme Settings CTA */}
-      <Box sx={{ borderTop: '1px solid', borderColor: 'divider', p: 1 }}>
+      <Box sx={{ flexShrink: 0, borderTop: '1px solid', borderColor: 'divider', p: 1 }}>
         <Button
           fullWidth
           size="small"

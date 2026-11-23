@@ -255,6 +255,15 @@ describe('AdminService.createStaffUser recreation & edge cases', () => {
     }
   });
 
+  it('rejects customer roles in staff creation before looking up accounts', async () => {
+    vi.spyOn(db.Role, 'findByPk').mockResolvedValue({ ...mockRole, slug: 'customer', baseRole: 'customer' });
+    const lookup = vi.spyOn(User, 'findOne').mockResolvedValue(null);
+    await expect(AdminService.createStaffUser({
+      firstName: 'QA', lastName: 'Staff', email: 'qa@example.test', password: 'Password123!', roleId: 'customer',
+    }, superAdminCaller)).rejects.toMatchObject({ code: 'VALIDATION_ERROR', statusCode: 400 });
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
   it('rejects with 409 if user with email is currently an active customer', async () => {
     vi.spyOn(User, 'findOne').mockResolvedValue({
       id: 'active-customer-id',

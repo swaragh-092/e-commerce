@@ -302,6 +302,10 @@ const ProductEditPage = () => {
   const [brands, setBrands] = useState([]);
   const [saleLabels, setSaleLabels] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [productLoading, setProductLoading] = useState(!isNew);
+  const [productLoadError, setProductLoadError] = useState(false);
+  const [loadedProductId, setLoadedProductId] = useState(null);
+  const [loadVersion, setLoadVersion] = useState(0);
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
   const [ogPickerOpen, setOgPickerOpen] = useState(false);
   const [dbProduct, setDbProduct] = useState(null);
@@ -312,13 +316,18 @@ const ProductEditPage = () => {
   const initialFormRef = useRef(null);
 
   useEffect(() => {
+    let active = true;
     const load = async () => {
+      setProductLoading(!isNew);
+      setProductLoadError(false);
       try {
         const catRes = await getCategoryTree();
+        if (!active) return;
         setCategories(catRes?.data || []);
 
         if (brandsEnabled) {
           const brandRes = await brandService.getBrands({ limit: 100, isActive: 'true' });
+          if (!active) return;
           setBrands(brandRes?.data?.data || []);
         } else {
           setBrands([]);
@@ -326,6 +335,7 @@ const ProductEditPage = () => {
 
         try {
           const labelsRes = await getSaleLabels();
+          if (!active) return;
           const fetchedLabels = labelsRes.data?.data || [];
           setSaleLabels(fetchedLabels.filter(l => l.isActive));
         } catch (e) {
@@ -334,6 +344,8 @@ const ProductEditPage = () => {
 
         if (!isNew) {
           const prodRes = await getProductById(id);
+          if (!active) return;
+          if (!prodRes?.data) throw new Error('Product not found');
           if (prodRes?.data) {
             const p = prodRes.data;
 
@@ -389,15 +401,21 @@ const ProductEditPage = () => {
               ogImage: p.ogImage || '',
             };
             setFormData(loadedFormData);
+            setLoadedProductId(id);
             initialFormRef.current = JSON.stringify(loadedFormData);
           }
         }
       } catch (err) {
+        if (!active) return;
+        setProductLoadError(true);
         notify('Failed to load product data.', 'error');
+      } finally {
+        if (active) setProductLoading(false);
       }
     };
     load();
-  }, [id, isNew, brandsEnabled]);
+    return () => { active = false; };
+  }, [id, isNew, brandsEnabled, loadVersion]);
 
   useEffect(() => {
     if (isNew && !initialFormRef.current) {
@@ -705,6 +723,21 @@ const ProductEditPage = () => {
   const previewPriceLabel = previewPrice < Number(formData.price) ? 'Active sale price' : 'MRP';
   const productTypeLabel = formData.type === 'variable' ? 'Variable' : formData.type === 'combo' ? 'Combo' : 'Simple';
 
+  if (!isNew && productLoadError) {
+    return <Box sx={{ p: 3 }}>
+      <Alert severity="error" action={<Button color="inherit" onClick={() => setLoadVersion((value) => value + 1)}>Retry</Button>}>
+        Failed to load product data. Retry before editing this product.
+      </Alert>
+      <Button sx={{ mt: 2 }} onClick={() => navigate(returnTo)}>Back to products</Button>
+    </Box>;
+  }
+  if (!isNew && (productLoading || loadedProductId !== id)) {
+    return <Box role="status" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, py: 8 }}>
+      <CircularProgress size={24} />
+      <Typography>Loading product…</Typography>
+    </Box>;
+  }
+
   return (
     <Box sx={{ p: { xs: 1.5, sm: 3 }, mx: 'auto' }}>
       <form onSubmit={handleSave} noValidate>
@@ -819,7 +852,7 @@ const ProductEditPage = () => {
           </Box>
         </Paper>
         <Grid container spacing={4}>
-          <Grid item xs={12} md={8}>
+          <Grid item xs={12}>
             {productAssistantEnabled && (
               <ProductAssistantPanel
                 initialInput={formData.name}
@@ -1209,7 +1242,7 @@ const ProductEditPage = () => {
 
           </Grid>
 
-          <Grid item xs={12} md={4}>
+          <Grid item xs={12} sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'repeat(2, minmax(0, 1fr))' }, gap: 3, alignItems: 'start', '& > .MuiPaper-root': { mb: 0 } }}>
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h6" gutterBottom>
                 Storefront

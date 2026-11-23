@@ -872,7 +872,7 @@ const ShippingPage = () => {
                 <Typography variant="subtitle1" fontWeight={600}>Rate Zones</Typography>
                 <Typography variant="body2" color="text.secondary">Assign these pincode groups to Shipping Rules for regional rates or providers. They do not replace Storewide Delivery Coverage.</Typography>
               </Box>
-              <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => handleOpenZoneDialog()}>
+              <Button variant="contained" size="small" startIcon={<AddIcon />} sx={{ whiteSpace: 'nowrap', flexShrink: 0, alignSelf: 'flex-start' }} onClick={() => handleOpenZoneDialog()}>
                 Add Zone
               </Button>
             </Box>
@@ -944,7 +944,7 @@ const ShippingPage = () => {
                         <TableCell sx={{ fontWeight: 600 }}>{r.name}</TableCell>
                         <TableCell>{zone ? zone.name : 'All Zones'}</TableCell>
                         <TableCell>{provider ? provider.name : 'Auto/Default'}</TableCell>
-                        <TableCell>{r.rateType}</TableCell>
+                        <TableCell>{{ flat: 'Flat rate', free: 'Free', free_above_threshold: 'Free above threshold', percent_of_order: 'Percentage of order', per_kg_slab: 'Weight slabs', volumetric: 'Volumetric weight' }[r.rateType] || r.rateType?.replaceAll('_', ' ')}</TableCell>
                         <TableCell>
                           {r.rateType === 'free' && <Chip size="small" label="Free" color="success" />}
                           {r.rateType === 'flat' && `${symbol}${r.rateConfig?.amount ?? r.rateConfig?.baseCharge ?? 0}`}

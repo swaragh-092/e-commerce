@@ -1,6 +1,6 @@
 import React from 'react';
 import { getTags } from '../../../services/tagService';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProductEditPage from '../../../pages/admin/ProductEditPage';
@@ -62,6 +62,40 @@ describe('product type and inventory editor', () => {
     getProductById.mockResolvedValue({ data: { ...product, type: 'variable' } });
     mount(); await loaded();
     expect(screen.getByTestId('variant-editor')).toHaveAttribute('data-pricing-enabled', String(pricing && showPrices));
+  });
+
+  it('keeps failed loads out of the editor and lets the user retry', async () => {
+    getProductById.mockRejectedValueOnce(new Error('Network unavailable'));
+    mount();
+    await screen.findByText('Failed to load product data. Retry before editing this product.');
+    expect(screen.queryByRole('textbox', { name: /Product Name/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry', exact: true }));
+    await loaded();
+    expect(getProductById).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores a stale product response after the editor unmounts', async () => {
+    let finish;
+    getProductById.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const view = mount();
+    await waitFor(() => expect(getProductById).toHaveBeenCalled());
+    view.unmount();
+    await act(async () => finish({ data: { ...product, name: 'Stale product' } }));
+    expect(screen.queryByRole('textbox', { name: /Product Name/ })).not.toBeInTheDocument();
+    expect(updateProduct).not.toHaveBeenCalled();
+  });
+
+  it('shows loading instead of an empty editor until the existing product arrives', async () => {
+    let finish;
+    getProductById.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    mount();
+    expect(screen.getByRole('status')).toHaveTextContent('Loading product');
+    expect(screen.queryByText('Untitled Product')).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: /Product Name/ })).not.toBeInTheDocument();
+    await waitFor(() => expect(getProductById).toHaveBeenCalled());
+    await act(async () => finish({ data: product }));
+    await loaded();
+    expect(screen.queryByText('Loading product…')).not.toBeInTheDocument();
   });
 
   it('uses standalone stock for a Simple product with old variant rows and an old alert link', async () => {

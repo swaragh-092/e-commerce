@@ -119,6 +119,12 @@ describe('ProductsManagePage storefront state controls', () => {
     vi.useRealTimers();
   });
 
+  it('uses singular copy for a single matching product', async () => {
+    renderProductsPage();
+    expect(await screen.findByText('1 product total')).toBeInTheDocument();
+    expect(screen.queryByText('1 products total')).not.toBeInTheDocument();
+  });
+
   it('opens the product editor when the MRP is clicked', async () => {
     renderProductsPage();
 

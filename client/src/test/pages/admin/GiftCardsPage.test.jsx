@@ -50,3 +50,14 @@ it('blocks new staff issuance when Platform Features pauses it', async () => {
     expect(screen.getByRole('button', { name: 'Create gift card' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Save policy' })).toBeDisabled();
 });
+
+it('shows an explicit empty state after loading gift-card records', async () => {
+  render(<GiftCardsPage />);
+  expect(screen.getByText('Loading gift cards…')).toBeInTheDocument();
+  expect(await screen.findByText(/No gift cards found/)).toBeInTheDocument();
+});
+it('shows a loading failure instead of claiming there are no gift cards', async () => {
+  mocks.get.mockRejectedValue(new Error('Unavailable'));
+  render(<GiftCardsPage />);
+  expect(await screen.findByText('Gift cards could not be loaded.')).toBeInTheDocument();
+});

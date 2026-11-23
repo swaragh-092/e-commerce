@@ -377,7 +377,9 @@ const EmailTemplatesPage = ({ excludeTemplates = [], embedded = false, onDirtyCh
                   setActiveChannel(value);
                   setEditorTab(value === 'email' ? 0 : 1);
                 }}
-                variant="fullWidth"
+                variant="scrollable"
+                scrollButtons="auto"
+                allowScrollButtonsMobile
                 sx={{ minHeight: 36 }}
               >
                 {CHANNELS.map(channel => (
@@ -432,7 +434,7 @@ const EmailTemplatesPage = ({ excludeTemplates = [], embedded = false, onDirtyCh
                       <ListItemText
                         primary={
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                            <Typography variant="body2" fontWeight={600} noWrap>{m.label}</Typography>
+                            <Typography variant="body2" fontWeight={600} sx={{ overflowWrap: 'anywhere' }}>{m.label}</Typography>
                             {dirty && <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: 'warning.main', flexShrink: 0 }} />}
                           </Box>
                         }

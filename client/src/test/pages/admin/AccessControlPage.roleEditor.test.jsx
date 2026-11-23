@@ -143,6 +143,48 @@ describe('custom role editor', () => {
     await screen.findByRole('combobox', { name: 'Assigned role for staff@example.test' });
     return view;
   };
+  it('validates staff fields, excludes customer roles and explains invitation behavior', async () => {
+    auth.grants.add('users.assign_roles');
+    service.getAccessUsers.mockResolvedValue({ data: { data: [], meta: { total: 0 } } });
+    service.getAccessRoles.mockResolvedValue({ data: { data: [
+      { id: 'viewer', name: 'Viewer', slug: 'viewer', baseRole: 'admin', permissions: [] },
+      { id: 'customer', name: 'Customer', slug: 'customer', baseRole: 'customer', permissions: [] },
+    ] } });
+    render(<AccessControlPage />);
+    await screen.findByRole('heading', { name: 'Viewer' });
+    fireEvent.click(screen.getByRole('tab', { name: 'Staff accounts', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create User', exact: true }));
+    const dialog = within(screen.getByRole('dialog'));
+    const submit = dialog.getByRole('button', { name: 'Create Account', exact: true });
+    expect(submit).toBeDisabled();
+    const firstName = dialog.getByRole('textbox', { name: /First Name/ });
+    expect(firstName).toBeRequired();
+    fireEvent.blur(firstName);
+    expect(firstName).toHaveAttribute('aria-invalid', 'true');
+    expect(dialog.getByText('First name is required.')).toBeInTheDocument();
+    expect(dialog.getByText(/An invitation email will let/)).toBeInTheDocument();
+    expect(dialog.queryByText(/Share the credentials/)).not.toBeInTheDocument();
+    fireEvent.change(firstName, { target: { value: 'QA' } });
+    fireEvent.change(dialog.getByRole('textbox', { name: /Last Name/ }), { target: { value: 'Staff' } });
+    fireEvent.change(dialog.getByRole('textbox', { name: /Email Address/ }), { target: { value: 'invalid' } });
+    fireEvent.blur(dialog.getByRole('textbox', { name: /Email Address/ }));
+    expect(dialog.getByText('Enter a valid email address.')).toBeInTheDocument();
+    fireEvent.change(dialog.getByRole('textbox', { name: /Email Address/ }), { target: { value: 'qa@example.test' } });
+    fireEvent.mouseDown(dialog.getByRole('combobox', { name: 'Assign Role' }));
+    expect(screen.queryByRole('option', { name: 'Customer', exact: true })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('option', { name: 'Viewer', exact: true }));
+    expect(submit).toBeEnabled();
+    fireEvent.click(dialog.getByRole('checkbox', { name: /Email an invitation/ }));
+    expect(submit).toBeDisabled();
+    expect(dialog.getByText(/Share the credentials/)).toBeInTheDocument();
+    fireEvent.change(dialog.getByLabelText(/Password/, { selector: 'input' }), { target: { value: 'long-password' } });
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+    await waitFor(() => expect(service.createAccessUser).toHaveBeenCalledWith({
+      firstName: 'QA', lastName: 'Staff', email: 'qa@example.test', password: 'long-password', roleId: 'viewer', sendInvitation: false,
+    }));
+  });
+
   const chooseEditor = () => {
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Assigned role for staff@example.test' }));
     fireEvent.click(screen.getByRole('option', { name: 'Editor', exact: true }));

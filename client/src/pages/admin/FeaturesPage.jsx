@@ -341,7 +341,7 @@ const FeaturesPage = () => {
           </Paper>
         </Box>
 
-        <Paper variant="outlined" sx={{ position: 'sticky', bottom: 16, zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2, p: 2, borderRadius: 2, bgcolor: 'background.paper' }}>
+        <Paper variant="outlined" sx={{ position: 'sticky', bottom: 0, zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2, p: 2, borderRadius: 2, bgcolor: 'background.paper' }}>
           <Typography variant="body2" color="text.secondary">Changes apply to your store after you save.</Typography>
           <Button
             variant="contained"

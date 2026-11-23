@@ -15,6 +15,8 @@ import BoltIcon from '@mui/icons-material/Bolt';
 import { Link } from 'react-router-dom';
 import { getOptimizedMediaUrl } from '../../../utils/media';
 import { resolveHeroGradient } from '../../../utils/styleMaps';
+import { useSettings } from '../../../hooks/useSettings';
+import { getHeroTitle } from '../../../utils/heroCopy';
 import StorefrontButton from '../StorefrontButton';
 import { CanvasEditableText, CanvasEditableImage } from './SectionFallback';
 
@@ -377,11 +379,13 @@ const ProductSpotlightHero = ({ section, slide, preview, active, visibleSlides, 
 
 const HeroSection = ({ section = {}, slides = [], mode = 'live', onSelectComponent, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
   const [active, setActive] = useState(0);
+  const { mode: storeMode } = useSettings();
   const preview = mode === 'preview';
   const hasCustomSlides = Array.isArray(section?.slides);
-  const visibleSlides = hasCustomSlides
+  const visibleSlides = (hasCustomSlides
     ? section.slides
-    : (Array.isArray(slides) && slides.length ? slides : defaultSlides);
+    : (Array.isArray(slides) && slides.length ? slides : defaultSlides))
+    .map((slide) => ({ ...slide, title: getHeroTitle(slide.title, storeMode) }));
 
   const canRotate = !preview && visibleSlides.length > 1;
   const interval = num(section?.interval, 6500);

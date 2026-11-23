@@ -416,15 +416,16 @@ const ThemeGalleryPage = () => {
         </Box>
       </Box>
 
-      {(tab === 0 || tab === 1) && (
+      {(tab === 0 || (tab === 1 && libraryThemes.length > 0)) && (
         <Paper variant="outlined" sx={{ p: 2, mb: 3, borderRadius: 3 }}>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'stretch', md: 'center' }}>
             <TextField
               size="small"
-              placeholder="Search templates by industry, tag, or name..."
+              label="Search templates"
+              placeholder="Name, industry or tag"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              sx={{ width: { xs: '100%', md: 360 } }}
+              sx={{ width: { xs: '100%', md: 360 }, flexShrink: 0 }}
               InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
             />
             <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
@@ -506,7 +507,7 @@ const ThemeGalleryPage = () => {
       )}
 
       {/* Sorting & Favorites filter */}
-      {(tab === 0 || tab === 1) && (
+      {(tab === 0 || (tab === 1 && libraryThemes.length > 0)) && (
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }} flexWrap="wrap">
           <SortIcon fontSize="small" color="action" />
           <Typography variant="caption" color="text.secondary">Sort:</Typography>

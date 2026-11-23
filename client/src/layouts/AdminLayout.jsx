@@ -183,6 +183,10 @@ const AdminLayout = () => {
 
   const { logout, user, hasAnyPermission, hasPermission, hasRole } = useAuth();
   const location = useLocation();
+  React.useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [location.pathname]);
+
   const navigate = useNavigate();
   const { settings, features, visibility } = useSettings();
   const logoSrc = settings?.logo?.main;
@@ -744,7 +748,7 @@ const AdminLayout = () => {
                 onError={() => setFailedLogoSrc(logoSrc)}
               />
             ) : null}
-            <Typography variant="h6" noWrap sx={{ fontWeight: 700, display: { xs: showLogo ? 'none' : 'block', md: 'block' } }}>
+            <Typography component={RouterLink} to="/admin" variant="h6" noWrap sx={{ color: 'inherit', textDecoration: 'none', fontWeight: 700, display: { xs: showLogo ? 'none' : 'block', md: 'block' } }}>
               Admin Dashboard
             </Typography>
           </Box>

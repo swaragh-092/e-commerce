@@ -29,7 +29,7 @@ const createId = (prefix) => `${prefix}-${Math.random().toString(36).slice(2, 11
 
 const useHomepageSettings = ({ form, set, brandPrimary }) => {
   const getHomepageSections = () => {
-    if (Array.isArray(form['homepage.sections']) && form['homepage.sections'].length) {
+    if (Array.isArray(form['homepage.sections'])) {
       return form['homepage.sections'];
     }
 
