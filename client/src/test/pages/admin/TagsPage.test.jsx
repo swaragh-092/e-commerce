@@ -27,6 +27,14 @@ describe('tag management', () => {
     expect(await screen.findByRole('link', { name: 'View products tagged Summer' })).toHaveAttribute('href', '/admin/products?tags=summer');
     expect(screen.getByText('summer', { exact: true })).toBeInTheDocument();
   });
+  it('does not offer a broken storefront link for an unused tag', async () => {
+    getTags.mockResolvedValue({ data: [{ ...tag, productCount: 0 }], meta: { total: 1 } });
+    mount();
+    const viewLink = await screen.findByRole('button', { name: 'View storefront page for Summer' });
+    expect(viewLink).toHaveAttribute('aria-disabled', 'true');
+    expect(viewLink).toHaveAttribute('tabindex', '-1');
+    expect(viewLink).not.toHaveAttribute('href');
+  });
   it('creates a tag and refreshes the dictionary', async () => {
     mount();
     fireEvent.click(screen.getByRole('button', { name: 'Add tag' }));
@@ -50,12 +58,19 @@ describe('tag management', () => {
     let dialog = within(screen.getByRole('dialog'));
     expect(dialog.getByText(/products will remain/)).toBeInTheDocument();
     fireEvent.click(dialog.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByText('Delete “Summer”?', { selector: 'h2', hidden: true })).toBeInTheDocument();
     expect(deleteTag).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'Delete Summer' }));
     dialog = within(screen.getByRole('dialog'));
     fireEvent.click(dialog.getByRole('button', { name: 'Delete tag' }));
     await waitFor(() => expect(deleteTag).toHaveBeenCalledWith('tag-1'));
+  });
+  it('keeps the edit title intact during its close transition', async () => {
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Summer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
+    expect(screen.getByText('Edit tag', { selector: 'h2', hidden: true })).toBeInTheDocument();
   });
   it('keeps the form open on duplicate names', async () => {
     createTag.mockRejectedValue({ response: { data: { error: { message: 'A tag with this name already exists.' } } } });
@@ -139,7 +154,7 @@ describe('tag management', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Select image' }));
     fireEvent.click(screen.getByRole('button', { name: 'Choose test image' }));
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Choose test image' })).not.toBeInTheDocument());
-    expect(screen.getByRole('img', { name: 'Selected tag image' })).toHaveAttribute('src', '/uploads/tag.jpg');
+    expect(screen.getByRole('img', { name: 'Selected tag image' })).toHaveAttribute('src', expect.stringContaining('/uploads/tag.jpg'));
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(renameTag).toHaveBeenCalledWith('tag-1', 'Summer', '', 'image-1'));
     view.unmount();

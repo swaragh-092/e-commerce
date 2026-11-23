@@ -13,6 +13,7 @@ import {
   DialogContentText,
   DialogTitle,
   FormControl,
+  FormHelperText,
   IconButton,
   InputAdornment,
   InputLabel,
@@ -223,6 +224,22 @@ const AccessControlPage = () => {
   }, [hasPermission, isSuperAdmin]);
 
   const assignableRoleOptions = roleOptions.filter(isRoleDelegable);
+  const staffRoleOptions = assignableRoleOptions.filter((role) => role.isActive !== false && role.baseRole !== 'customer' && role.slug !== 'customer');
+  const [userTouched, setUserTouched] = useState({});
+  const userErrors = {
+    firstName: createUserForm.firstName.trim() ? '' : 'First name is required.',
+    lastName: createUserForm.lastName.trim() ? '' : 'Last name is required.',
+    email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(createUserForm.email.trim()) ? '' : 'Enter a valid email address.',
+    password: createUserForm.sendInvitation || createUserForm.password.length >= 8 ? '' : 'Password must be at least 8 characters.',
+    roleId: staffRoleOptions.some((role) => role.id === createUserForm.roleId) ? '' : 'Select a staff role.',
+  };
+  const canCreateUser = !Object.values(userErrors).some(Boolean);
+  const userFieldFeedback = (field) => ({
+    required: true,
+    onBlur: () => setUserTouched((current) => ({ ...current, [field]: true })),
+    error: Boolean(userTouched[field] && userErrors[field]),
+    helperText: userTouched[field] && userErrors[field] ? userErrors[field] : undefined,
+  });
 
   const canGrantPermission = useCallback((permission) => {
     if (isSuperAdmin) return true;
@@ -537,6 +554,7 @@ const AccessControlPage = () => {
 
   const openCreateUserDialog = () => {
     setCreateUserForm(emptyUserForm);
+    setUserTouched({});
     setShowPassword(false);
     setCreateUserDialogOpen(true);
   };
@@ -544,6 +562,7 @@ const AccessControlPage = () => {
   const closeCreateUserDialog = () => {
     setCreateUserDialogOpen(false);
     setCreateUserForm(emptyUserForm);
+    setUserTouched({});
     setShowPassword(false);
   };
 
@@ -583,24 +602,8 @@ const AccessControlPage = () => {
   }, [canAssignRoles]);
 
   const handleCreateUser = async () => {
+    if (!canCreateUser) return;
     const { firstName, lastName, email, password, roleId, sendInvitation } = createUserForm;
-    if (!firstName.trim() || !lastName.trim()) {
-      notify('First and last name are required.', 'error');
-      return;
-    }
-    if (!email.trim()) {
-      notify('Email is required.', 'error');
-      return;
-    }
-    if (!sendInvitation && password.length < 8) {
-      notify('Password must be at least 8 characters.', 'error');
-      return;
-    }
-    if (!roleId) {
-      notify('Please select a role.', 'error');
-      return;
-    }
-
     setSavingUser(true);
     try {
       await createAccessUser({ firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim(), ...(sendInvitation ? {} : { password }), roleId, sendInvitation });
@@ -1018,6 +1021,7 @@ const AccessControlPage = () => {
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
               <TextField
                 label="First Name"
+                {...userFieldFeedback('firstName')}
                 value={createUserForm.firstName}
                 onChange={setUserField('firstName')}
                 fullWidth
@@ -1026,6 +1030,7 @@ const AccessControlPage = () => {
               />
               <TextField
                 label="Last Name"
+                {...userFieldFeedback('lastName')}
                 value={createUserForm.lastName}
                 onChange={setUserField('lastName')}
                 fullWidth
@@ -1034,6 +1039,7 @@ const AccessControlPage = () => {
             </Stack>
             <TextField
               label="Email Address"
+              {...userFieldFeedback('email')}
               type="email"
               value={createUserForm.email}
               onChange={setUserField('email')}
@@ -1048,7 +1054,8 @@ const AccessControlPage = () => {
               onChange={setUserField('password')}
               fullWidth
               size="small"
-              helperText="Minimum 8 characters"
+              {...userFieldFeedback('password')}
+              helperText={(userTouched.password && userErrors.password) || 'Minimum 8 characters'}
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
@@ -1063,22 +1070,26 @@ const AccessControlPage = () => {
                 ),
               }}
             />}
-            <FormControl size="small" fullWidth>
-              <InputLabel>Assign Role</InputLabel>
+            <FormControl size="small" fullWidth required error={Boolean(userTouched.roleId && userErrors.roleId)}>
+              <InputLabel id="create-staff-role-label">Assign Role</InputLabel>
               <Select
                 label="Assign Role"
+                labelId="create-staff-role-label"
+                onBlur={() => setUserTouched((current) => ({ ...current, roleId: true }))}
                 inputProps={{ 'aria-label': 'Assign Role' }}
                 value={createUserForm.roleId}
                 onChange={setUserField('roleId')}
               >
-                {assignableRoleOptions.map((role) => (
+                {staffRoleOptions.map((role) => (
                   <MenuItem key={role.id} value={role.id}>{role.name}</MenuItem>
                 ))}
               </Select>
+              {userTouched.roleId && userErrors.roleId && <FormHelperText>{userErrors.roleId}</FormHelperText>}
             </FormControl>
             <Alert severity="info" sx={{ mt: 0.5 }}>
-              The account will be created as <strong>active</strong> with email pre-verified. Share
-              the credentials with the staff member directly.
+              {createUserForm.sendInvitation
+                ? 'An invitation email will let the staff member verify their email and set their own password.'
+                : <>The account will be created as <strong>active</strong> with email pre-verified. Share the credentials with the staff member directly.</>}
             </Alert>
           </Stack>
         </DialogContent>
@@ -1090,7 +1101,7 @@ const AccessControlPage = () => {
             onClick={handleCreateUser}
             variant="contained"
             startIcon={<PersonAddIcon />}
-            disabled={savingUser}
+            disabled={savingUser || !canCreateUser}
           >
             {savingUser ? 'Creating…' : 'Create Account'}
           </Button>

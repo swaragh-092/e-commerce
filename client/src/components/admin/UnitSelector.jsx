@@ -28,7 +28,7 @@ const UnitSelector = ({
 
   return (
     <Box sx={{ width: fullWidth ? '100%' : undefined, mt: margin === 'normal' ? 2 : margin === 'dense' ? 1 : 0, mb: margin === 'none' ? 0 : 1 }}>
-      <Box sx={{ display: 'grid', gridTemplateColumns: fixedCategory !== undefined ? 'minmax(0, 1fr)' : { xs: '1fr', sm: 'minmax(0, 1fr) minmax(0, 1fr)' }, gap: 1.5 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: fixedCategory !== undefined ? 'minmax(0, 1fr)' : 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 1.5 }}>
         {fixedCategory === undefined && <FormControl fullWidth size={size} disabled={disabled || loading}>
           <InputLabel id={categoryId}>{categoryLabel}</InputLabel>
           <Select

@@ -1,3 +1,4 @@
+import { getHeroTitle } from '../../utils/heroCopy';
 import { getPageSections, getPageSectionTypes, PAGE_TEMPLATE_ASSIGNMENT_KEYS } from '../../utils/designerSections';
 import { useState, useEffect, useCallback, useContext, useMemo, useRef } from 'react';
 import {
@@ -231,7 +232,7 @@ const SectionComposerPage = () => {
   const { notify } = useNotification();
   const { hasPermission } = useAuth();
   const canManageAdvancedSettings = hasPermission(PERMISSIONS.SETTINGS_ADVANCED);
-  const { settings, refreshSettings } = useContext(SettingsContext) || {};
+  const { settings, refreshSettings, mode: storeMode } = useContext(SettingsContext) || {};
   const liveSettingsRef = useRef(settings);
   liveSettingsRef.current = settings;
 
@@ -239,7 +240,7 @@ const SectionComposerPage = () => {
     if (!sec) return [];
     if (sec.type === 'hero-carousel') {
       const slides = settings?.homepage?.heroSlides?.length ? settings.homepage.heroSlides : null;
-      return Array.isArray(slides) && slides.length ? slides : [
+      return Array.isArray(slides) && slides.length ? slides.map((slide) => ({ ...slide, title: getHeroTitle(slide.title, storeMode) })) : [
         {
           eyebrow: 'Fresh drops, sharper prices',
           title: 'Shop the Latest',
@@ -272,7 +273,7 @@ const SectionComposerPage = () => {
       return settings?.homepage?.categoryTiles?.length ? settings.homepage.categoryTiles : [];
     }
     return [];
-  }, [settings]);
+  }, [settings, storeMode]);
 
   // FSM helper transitions
   const selectSection = (section) => {

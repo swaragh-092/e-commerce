@@ -51,6 +51,12 @@ describe('unit settings management', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it('uses singular grammar for a single unit search result', async () => {
+    mount();
+    await search('Centimetre');
+    expect(await screen.findByText('1 unit')).toBeInTheDocument();
+  });
+
   it('shows duplicate errors beside the symbol and keeps the editor available', async () => {
     mount();
     await openAdd('KG');

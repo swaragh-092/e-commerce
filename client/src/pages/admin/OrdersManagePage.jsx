@@ -270,7 +270,7 @@ const OrdersManagePage = () => {
 
   const columns = useMemo(
     () => [
-      { field: 'orderNumber', headerName: 'Order #', minWidth: 170, flex: 0.8 },
+      { field: 'orderNumber', headerName: 'Order #', minWidth: 230, flex: 0.8 },
       {
         field: 'customer',
         headerName: 'Customer',
@@ -328,7 +328,7 @@ const OrdersManagePage = () => {
       {
         field: 'status',
         headerName: 'Status',
-        width: 170,
+        width: 225,
         renderCell: ({ row }) => {
           const statusOptions = getAllowedOrderStatuses(row.status).filter((statusOption) => statusOption !== 'refunded');
           const canChange = canUpdateStatus && statusOptions.length > 1;
@@ -341,7 +341,7 @@ const OrdersManagePage = () => {
               onChange={(event) => handleQuickStatusUpdate(row, event.target.value)}
               disabled={actionLoadingId === `${row.id}:status`}
               sx={{
-                minWidth: 150,
+                minWidth: 200,
                 height: 32,
                 fontSize: '0.78rem',
                 fontWeight: 700,
@@ -563,7 +563,10 @@ const OrdersManagePage = () => {
           border: '1px solid',
           borderColor: 'divider',
           overflowX: 'auto',
-          '& .MuiDataGrid-root': { minWidth: 700 },
+          '& .MuiDataGrid-root': { minWidth: 1500 },
+          scrollbarWidth: 'auto',
+          '&::-webkit-scrollbar': { height: 12 },
+          '&::-webkit-scrollbar-thumb': { bgcolor: 'text.disabled', borderRadius: 6 },
         }}
       >
         <DataGrid
@@ -578,6 +581,7 @@ const OrdersManagePage = () => {
           disableRowSelectionOnClick
           autoHeight
           slots={{ noRowsOverlay: EmptyOrdersOverlay }}
+          slotProps={{ loadingOverlay: { variant: orders.length ? 'linear-progress' : 'circular-progress', noRowsVariant: 'circular-progress' } }}
           onRowClick={(params) => navigate(`/admin/orders/${params.id}`)}
           sx={{
             border: 0,
@@ -602,7 +606,7 @@ const OrdersManagePage = () => {
               bgcolor: 'action.hover',
             },
             '& .MuiDataGrid-overlayWrapper': {
-              minHeight: 260,
+              minHeight: orders.length ? 0 : 260,
             },
           }}
         />

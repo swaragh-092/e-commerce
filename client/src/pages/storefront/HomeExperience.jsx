@@ -34,7 +34,7 @@ const DEFAULT_HOMEPAGE = {
   heroSlides: [
     {
       eyebrow: 'Mega Style Weekend',
-      title: 'Upgrade your everyday cart',
+      title: 'Discover your next favorite',
       subtitle: 'Curated fashion, lifestyle, and essentials with discovery-first shopping.',
       buttonText: 'Shop Now',
       buttonLink: '/products',

@@ -54,13 +54,12 @@ beforeEach(() => {
 });
 
 describe('attribute category and value unit flow', () => {
-  it('explains soft deletion and refreshes the list without deleting existing product data', async () => {
+  it('names the attribute in the delete confirmation and refreshes the list after deletion', async () => {
     mount();
     const row = within(await screen.findByRole('row', { name: 'View values for Height' }));
     fireEvent.click(row.getByRole('button', { name: 'Delete', exact: true }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Delete Attribute Template' }));
-    expect(dialog.getByText(/Deletion is blocked while it is attached to any product that has not been deleted/)).toBeInTheDocument();
-    expect(dialog.getByText(/You can reuse the name after deletion/)).toBeInTheDocument();
+    expect(dialog.getByText(/delete “Height”\?/i)).toBeInTheDocument();
     attributeService.getAttributes.mockResolvedValue({ data: { data: { rows: [], count: 0 } } });
     fireEvent.click(dialog.getByRole('button', { name: 'Confirm', exact: true }));
     await waitFor(() => expect(attributeService.deleteAttribute).toHaveBeenCalledWith('height'));
@@ -109,6 +108,7 @@ describe('attribute category and value unit flow', () => {
     expect(await screen.findByRole('dialog', { name: 'Edit Attribute' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Values for Height' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
+    expect(screen.getByText('Edit Attribute', { selector: 'h2', hidden: true })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     fireEvent.click(row.getByRole('button', { name: 'Delete', exact: true }));
     expect(await screen.findByRole('dialog', { name: 'Delete Attribute Template' })).toBeInTheDocument();
@@ -168,6 +168,18 @@ describe('attribute category and value unit flow', () => {
     chooseUnit('Metre (m)');
     fireEvent.click(screen.getByRole('button', { name: 'Add value', exact: true }));
     await waitFor(() => expect(attributeService.addAttributeValue).toHaveBeenLastCalledWith('height', expect.objectContaining({ value: '1 - 1.5', unitLabel: 'm' })));
+  });
+
+  it('closes optional value details cleanly after saving a value', async () => {
+    mount();
+    await openValues();
+    fireEvent.click(screen.getByRole('button', { name: 'Optional details' }));
+    fireEvent.change(screen.getByPlaceholderText('New value…'), { target: { value: '30' } });
+    chooseUnit('Centimetre (cm)');
+    fireEvent.change(screen.getByLabelText('Display label'), { target: { value: '30 cm tall' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add value', exact: true }));
+    await waitFor(() => expect(attributeService.addAttributeValue).toHaveBeenCalledWith('height', expect.objectContaining({ value: '30', displayLabel: '30 cm tall', unitLabel: 'cm' })));
+    expect(screen.getByRole('button', { name: 'Optional details' })).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('uses the same category restriction when editing a value', async () => {

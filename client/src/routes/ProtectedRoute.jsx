@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 
 export const ProtectedRoute = ({ role, permission, permissions = [], requireAllPermissions = false }) => {
   const { isAuthenticated, loading, hasPermission, hasRole } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -12,8 +13,6 @@ export const ProtectedRoute = ({ role, permission, permissions = [], requireAllP
       </Box>
     );
   }
-
-  const location = useLocation();
 
   if (!isAuthenticated) {
     if (location.pathname.startsWith('/admin')) {

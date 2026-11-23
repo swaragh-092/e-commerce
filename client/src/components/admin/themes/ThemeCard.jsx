@@ -69,7 +69,7 @@ const ThemeCard = ({ theme, onPreview, onApply, onDetail, isActive }) => {
       }}
     >
       {isActive && (
-        <Chip label="Currently Active" size="small" color="success" sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1, fontWeight: 700 }} />
+        <Chip label="Currently Active" size="small" color="success" sx={{ alignSelf: 'flex-end', m: 1, fontWeight: 700 }} />
       )}
       <Box
         sx={{
@@ -84,11 +84,11 @@ const ThemeCard = ({ theme, onPreview, onApply, onDetail, isActive }) => {
           borderColor: 'divider',
         }}
       >
-        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
-          <Stack direction="row" spacing={0.5} alignItems="center">
+        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexWrap: 'wrap', gap: 0.5 }}>
             <Chip size="small" label={categoryLabel} color="primary" variant="outlined" sx={{ bgcolor: 'background.paper' }} />
           </Stack>
-          <Stack direction="row" spacing={0.5} alignItems="center">
+          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexWrap: 'wrap', gap: 0.5 }}>
             {/* Colour swatches */}
             {colors.slice(0, 4).map((color, idx) => (
               <Box key={`${color}-${idx}`} sx={{ width: 16, height: 16, borderRadius: '50%', bgcolor: color, border: '1px solid rgba(0,0,0,0.14)' }} />

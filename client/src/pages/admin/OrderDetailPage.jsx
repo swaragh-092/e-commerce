@@ -1,3 +1,4 @@
+import { getFulfillmentProgress, getOrderDataWarnings, isOrderShippingRequired } from '../../utils/orderFulfillment';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import StaffAssignment from '../../components/admin/StaffAssignment';
 import {
@@ -279,7 +280,7 @@ const OrderHistorySection = ({ history = [], onAddNote, addingNote, inDialog = f
 const DetailCard = ({ title, children, sx = {} }) => (
   <Paper
     elevation={0}
-    sx={{ p: 3, borderRadius: 3, border: '1px solid', borderColor: 'divider', ...sx }}
+    sx={{ p: 3, minWidth: 0, overflowWrap: 'anywhere', borderRadius: 3, border: '1px solid', borderColor: 'divider', ...sx }}
   >
     <Typography variant="h6" fontWeight={700} mb={2}>
       {title}
@@ -345,25 +346,6 @@ const ProgressEntry = ({ label, status, occurredAt, last }) => {
   );
 };
 
-
-const getFulfillmentProgress = (items = [], fulfillments = []) => {
-  const total = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-  const deliveredByItem = fulfillments
-    .filter((fulfillment) => fulfillment.status === 'delivered')
-    .flatMap((fulfillment) => fulfillment.items || [])
-    .reduce((map, item) => {
-      const orderItemId = item.orderItemId || item.orderItem?.id;
-      if (!orderItemId) return map;
-      map[orderItemId] = (map[orderItemId] || 0) + Number(item.quantity || 0);
-      return map;
-    }, {});
-  const shipped = items.reduce((sum, item) => sum + Number(deliveredByItem[item.id] || 0), 0);
-  return {
-    total,
-    shipped,
-    remaining: Math.max(total - shipped, 0),
-  };
-};
 
 const getDeliveredItemsAmount = (items = [], fulfillments = []) => {
   const deliveredByItem = fulfillments
@@ -1540,9 +1522,10 @@ const OrderDetailPage = () => {
             <Typography variant="h5" component="h1" fontWeight={700}>
               {order.orderNumber}
             </Typography>
-            <Chip label={getOrderStatusLabel(order.status)} color={getOrderStatusColor(order.status)} />
+            <Chip label={`Order: ${getOrderStatusLabel(order.status)}`} color={getOrderStatusColor(order.status)} />
             <Chip
-              label={getShipmentStatusLabel(orderShippingStatus)}
+              label={`Delivery: ${isOrderShippingRequired(order) ? getShipmentStatusLabel(orderShippingStatus) : 'Not required'}`}
+              title={isOrderShippingRequired(order) ? undefined : 'This order contains no items requiring shipping.'}
               color={getShipmentStatusColor(orderShippingStatus)}
               variant="outlined"
             />
@@ -1578,10 +1561,12 @@ const OrderDetailPage = () => {
           >
             Print Invoice
           </Button>
-          {canEditOrder && (
-            <Button variant="outlined" startIcon={<EditIcon />} onClick={openEditDialog}>
-              Edit Order
-            </Button>
+          {canUpdateOrderStatus && (
+            <Tooltip title={canEditOrder ? 'Edit shipping address, contact details and notes' : 'Cancelled or closed orders cannot be edited. Review the order history; a new purchase requires a new order.'}>
+              <span><Button variant="outlined" startIcon={<EditIcon />} disabled={!canEditOrder} onClick={openEditDialog}>
+                Edit Order
+              </Button></span>
+            </Tooltip>
           )}
           {canConfirmCod && (
             <Button variant="contained" color="success" onClick={openCodCollectionDialog} disabled={updating}>
@@ -1624,10 +1609,14 @@ const OrderDetailPage = () => {
         </Alert>
       )}
 
+      {getOrderDataWarnings(order, fulfillmentProgress).map((warning) => (
+        <Alert key={warning} severity="warning" sx={{ mb: 2 }}>{warning}</Alert>
+      ))}
+
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} mb={3}>
         <MetricCard label="Order total" value={formatPrice(order.total || 0)} accent="primary.main" />
         <MetricCard label="Items" value={orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0)} />
-        <MetricCard label="Delivered" value={`${fulfillmentProgress.shipped}/${fulfillmentProgress.total}`} />
+        <MetricCard label={isOrderShippingRequired(order) ? 'Recorded delivered items' : 'Delivery'} value={isOrderShippingRequired(order) ? `${fulfillmentProgress.shipped}/${fulfillmentProgress.total}` : 'Not required'} />
         <MetricCard label="Customer" value={customerName} />
         <MetricCard
           label="Payment"
@@ -1637,7 +1626,7 @@ const OrderDetailPage = () => {
       </Stack>
 
       <Grid container spacing={3}>
-        <Grid item xs={12} md={8} >
+        <Grid item xs={12} md={8} sx={{ minWidth: 0 }}>
           <DetailCard title="Items">
             {orderItems.map((item) => (
               <Box
@@ -1756,11 +1745,11 @@ const OrderDetailPage = () => {
             </Box>
           </DetailCard>
 
-          <Box sx={{ mt: 3, display: 'flex', gap: 2, alignItems: 'stretch' }}>
+          <Box sx={{ mt: 3, display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'repeat(2, minmax(0, 1fr))' }, gap: 2, alignItems: 'stretch' }}>
             <DetailCard title="Payment Details" sx={{ flex: 1 }}>
               <Stack spacing={1.25}>
                 <Box>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" color="text.secondary" display="block">
                     Status
                   </Typography>
                   <Chip
@@ -1771,19 +1760,19 @@ const OrderDetailPage = () => {
                   />
                 </Box>
                 <Box>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" color="text.secondary" display="block">
                     Provider
                   </Typography>
                   <Typography variant="body2">{payment?.provider || '—'}</Typography>
                 </Box>
                 <Box>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" color="text.secondary" display="block">
                     Transaction
                   </Typography>
                   <Typography variant="body2">{payment?.transactionId || 'Pending / unavailable'}</Typography>
                 </Box>
                 <Box>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" color="text.secondary" display="block">
                     Order amount
                   </Typography>
                   <Typography variant="body2">
@@ -1793,13 +1782,13 @@ const OrderDetailPage = () => {
                 {order?.paymentMethod === 'cod' && (
                   <>
                     <Box>
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography variant="caption" color="text.secondary" display="block">
                         Collected so far
                       </Typography>
                       <Typography variant="body2">{formatPrice(codCollectedAmount)}</Typography>
                     </Box>
                     <Box>
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography variant="caption" color="text.secondary" display="block">
                         Pending balance
                       </Typography>
                       <Typography variant="body2">{formatPrice(codDueAmount)}</Typography>
@@ -1809,7 +1798,7 @@ const OrderDetailPage = () => {
                 {refundedAmount > 0 && (
                   <>
                     <Box>
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography variant="caption" color="text.secondary" display="block">
                         Item refunds
                       </Typography>
                       <Typography variant="body2">{formatPrice(refundedAmount)}</Typography>
@@ -2054,12 +2043,12 @@ const OrderDetailPage = () => {
           )}
         </Grid>
 
-        <Grid item xs={12} md={4}>
+        <Grid item xs={12} md={4} sx={{ minWidth: 0 }}>
           <Stack spacing={2}>
             <DetailCard title="Order Overview">
               <Stack spacing={1.25}>
                 <Box>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" color="text.secondary" display="block">
                     Customer
                   </Typography>
                   <Typography
@@ -2081,7 +2070,7 @@ const OrderDetailPage = () => {
                   </Typography>
                 </Box>
                 <Box>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" color="text.secondary" display="block">
                     Email
                   </Typography>
                   <Typography variant="body2">{order.User?.email || order.shippingAddressSnapshot?.email || 'No email available'}</Typography>
@@ -2105,14 +2094,14 @@ const OrderDetailPage = () => {
                   )}
                 </Box>
                 <Box>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" color="text.secondary" display="block">
                     Order ID
                   </Typography>
                   <Typography variant="body2">{order.id}</Typography>
                 </Box>
                 {order.notes && (
                   <Box>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" color="text.secondary" display="block">
                       Order notes
                     </Typography>
                     <Typography variant="body2">{order.notes}</Typography>

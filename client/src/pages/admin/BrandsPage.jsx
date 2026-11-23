@@ -153,7 +153,6 @@ const BrandsPage = () => {
 
   const handleCloseDialog = () => {
     setOpen(false);
-    setEditingBrand(null);
   };
 
   const validate = () => {
@@ -218,7 +217,7 @@ const BrandsPage = () => {
     try {
       await brandService.deleteBrand(deleteConfirm.id);
       notify('Brand deleted successfully.', 'success');
-      setDeleteConfirm({ open: false, id: null, name: '' });
+      setDeleteConfirm((prev) => ({ ...prev, open: false }));
       fetchBrands();
       refreshBrands();
     } catch (err) {
@@ -244,7 +243,7 @@ const BrandsPage = () => {
         <Avatar
           src={getMediaUrl(params.value)}
           variant="rounded"
-          sx={{ width: 40, height: 40, bgcolor: 'action.hover' }}
+          sx={{ width: 40, height: 40, bgcolor: 'action.hover', '& img': { objectFit: 'contain' } }}
         >
           {params.row.name?.[0]}
         </Avatar>
@@ -461,6 +460,7 @@ const BrandsPage = () => {
               value={formData.name}
               onChange={(e) => {
                 const newName = e.target.value;
+                if (newName.trim()) setErrors((prev) => ({ ...prev, name: undefined }));
                 setFormData((prev) => {
                   const newData = { ...prev, name: newName };
                   // Auto-update slug if it's a new brand and slug hasn't been manually edited
@@ -622,14 +622,14 @@ const BrandsPage = () => {
       </Dialog>
 
       {/* Delete confirmation */}
-      <Dialog open={deleteConfirm.open} onClose={() => setDeleteConfirm({ open: false, id: null, name: '' })}>
+      <Dialog open={deleteConfirm.open} onClose={() => setDeleteConfirm((prev) => ({ ...prev, open: false }))}>
         <DialogTitle>Delete Brand?</DialogTitle>
         <DialogContent>
           Are you sure you want to delete <strong>{deleteConfirm.name}</strong>? 
           Products assigned to this brand will have their brand association removed.
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button color="error" onClick={() => setDeleteConfirm({ open: false, id: null, name: '' })}>Cancel</Button>
+          <Button color="error" onClick={() => setDeleteConfirm((prev) => ({ ...prev, open: false }))}>Cancel</Button>
           <Button variant="contained" color="error" onClick={handleDelete}>
             Delete
           </Button>

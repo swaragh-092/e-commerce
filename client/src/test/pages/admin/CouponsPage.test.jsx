@@ -65,6 +65,14 @@ describe('CouponsPage duplicate flow', () => {
     }));
   });
 
+  it('distinguishes the saved lifecycle from the effective expiry status', async () => {
+    getCoupons.mockResolvedValue({ data: { data: [{ ...baseCoupon, campaignStatus: 'paused', isActive: false, status: 'expired' }], meta: { total: 1 } } });
+    render(<CouponsPage />);
+    const row = await screen.findByRole('row');
+    expect(within(row).getByText('paused')).toBeInTheDocument();
+    expect(within(row).getByText('expired')).toBeInTheDocument();
+  });
+
   it('checks every server page before choosing a duplicate coupon code', async () => {
     getCoupons.mockImplementation(({ page, limit }) => Promise.resolve({
       data: {

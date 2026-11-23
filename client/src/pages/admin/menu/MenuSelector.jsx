@@ -78,7 +78,8 @@ const MenuSelector = ({ menus, selectedMenuId, setSelectedMenuId, onRefresh }) =
         <TextField
           fullWidth
           size="small"
-          placeholder="Search menus or locations..."
+          label="Search menus"
+          placeholder="Name or location"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           InputProps={{

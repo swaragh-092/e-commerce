@@ -1061,6 +1061,10 @@ const createStaffUser = async ({ firstName, lastName, email, password, roleId, s
       throw new AppError('NOT_FOUND', 404, 'Role not found or inactive');
     }
 
+    if (role.baseRole === ROLES.CUSTOMER || role.slug === ROLES.CUSTOMER) {
+      throw new AppError('VALIDATION_ERROR', 400, 'Select a staff role to create a staff account');
+    }
+
     assertDelegableRole(role, actingUser);
 
     // Only super admins may create super_admin-level accounts

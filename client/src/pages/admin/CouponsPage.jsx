@@ -559,8 +559,14 @@ const CouponsPage = () => {
       ),
     },
     {
+      field: 'campaignStatus',
+      headerName: 'Lifecycle',
+      minWidth: 130,
+      renderCell: ({ row }) => <Chip size="small" variant="outlined" label={(row.campaignStatus || (row.isActive === false ? 'paused' : 'active')).replaceAll('_', ' ')} />,
+    },
+    {
       field: 'status',
-      headerName: 'Status',
+      headerName: 'Effective status',
       minWidth: 130,
       renderCell: ({ value, row }) => (
         <Chip
@@ -636,8 +642,9 @@ const CouponsPage = () => {
         {canManageCoupons && <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>New Promotion</Button>}
       </Box>
 
-      <Box sx={{ height: 620, bgcolor: 'background.paper', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+      <Box sx={{ bgcolor: 'background.paper', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
         <DataGrid
+          autoHeight
           rows={rows}
           columns={columns}
           rowCount={total}
@@ -657,6 +664,7 @@ const CouponsPage = () => {
             <Stack spacing={2.5}>
               <Box>
                 <Typography variant="subtitle1" fontWeight={700} mb={1}>General</Typography>
+                {editing && <Alert severity="info" sx={{ mb: 2 }}>Effective status: {String(editing.status || 'unknown').replaceAll('_', ' ')}. Lifecycle is the saved setting; dates and usage limits also determine whether this promotion can apply.</Alert>}
                 <Stack spacing={2}>
                   <TextField size="small" label="Internal name *" value={form.name} error={!!formErrors.name} helperText={formErrors.name} onChange={(e) => set('name', e.target.value)} />
                   <TextField size="small" label="Customer-facing code *" value={form.code} error={!!formErrors.code} helperText={formErrors.code} onChange={(e) => set('code', e.target.value.toUpperCase())} />

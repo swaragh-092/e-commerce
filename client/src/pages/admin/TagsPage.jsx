@@ -39,14 +39,17 @@ export default function TagsPage() {
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
   const [edit, setEdit] = useState(null);
+  const [editOpen, setEditOpen] = useState(false);
   const [remove, setRemove] = useState(null);
+  const [removeOpen, setRemoveOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dialogError, setDialogError] = useState('');
   const dirty = Boolean(edit && (edit.name !== edit.initialName || edit.description !== edit.initialDescription || (edit.imageId || null) !== edit.initialImageId));
-  const closeEditor = () => { if (!saving) { if (dirty) setDiscard(true); else setEdit(null); } };
+  const closeEditor = () => { if (!saving) { if (dirty) setDiscard(true); else setEditOpen(false); } };
   const openEditor = (tag = {}) => {
     setDialogError('');
     setEdit({ ...tag, name: tag.name || '', description: tag.description || '', imageId: tag.imageId || tag.image?.id || null, initialImageId: tag.imageId || tag.image?.id || null, initialName: tag.name || '', initialDescription: tag.description || '' });
+    setEditOpen(true);
   };
   const copyLink = async (slug) => {
     const url = tagUrl(slug);
@@ -57,11 +60,11 @@ export default function TagsPage() {
     } catch { setManualCopy(url); }
   };
   useEffect(() => {
-    if (!dirty) return;
+    if (!editOpen || !dirty) return;
     const warn = (event) => { event.preventDefault(); event.returnValue = ''; };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
-  }, [dirty]);
+  }, [dirty, editOpen]);
   const refresh = useCallback(() => setRevision((n) => n + 1), []);
 
   useEffect(() => {
@@ -91,14 +94,14 @@ export default function TagsPage() {
     try {
       if (edit.id) await renameTag(edit.id, name, edit.description.trim(), edit.imageId); else await createTag(name, edit.description.trim(), edit.imageId);
       notify(edit.id ? 'Tag updated across all products.' : 'Tag created.', 'success');
-      setEdit(null); refresh();
+      setEditOpen(false); refresh();
     } catch (err) { setDialogError(getApiErrorMessage(err, 'Could not save tag.')); }
     finally { setSaving(false); }
   };
   const confirmDelete = async () => {
     setSaving(true); setDialogError('');
     try {
-      await deleteTag(remove.id); setRemove(null); refresh();
+      await deleteTag(remove.id); setRemoveOpen(false); refresh();
       notify('Tag deleted and removed from linked products. Products remain in your catalog.', 'success');
     } catch (err) { setDialogError(getApiErrorMessage(err, 'Could not delete tag.')); }
     finally { setSaving(false); }
@@ -139,10 +142,12 @@ export default function TagsPage() {
                     <TableCell sx={{ overflowWrap: 'anywhere' }}>{tag.slug}</TableCell>
                     <TableCell align="right">{canReadProducts ? <Button component={Link} to={`/admin/products?tags=${encodeURIComponent(tag.slug)}`} size="small" aria-label={`View products tagged ${tag.name}`}>{tag.productCount}</Button> : tag.productCount}</TableCell>
                     <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
-                      <Tooltip title="View storefront page"><IconButton component="a" href={tagUrl(tag.slug)} target="_blank" rel="noopener noreferrer" aria-label={`View storefront page for ${tag.name}`}><OpenInNewIcon fontSize="small" /></IconButton></Tooltip>
+                      <Tooltip title={Number(tag.productCount) > 0 ? 'View storefront page' : 'Add products to this tag before opening its storefront page'}>
+                        <span><IconButton component="a" href={Number(tag.productCount) > 0 ? tagUrl(tag.slug) : undefined} target="_blank" rel="noopener noreferrer" disabled={Number(tag.productCount) === 0} aria-label={`View storefront page for ${tag.name}`}><OpenInNewIcon fontSize="small" /></IconButton></span>
+                      </Tooltip>
                       <Tooltip title="Copy storefront link"><IconButton aria-label={`Copy storefront link for ${tag.name}`} onClick={() => copyLink(tag.slug)}><ContentCopyIcon fontSize="small" /></IconButton></Tooltip>
                       {canRename && <Tooltip title="Edit tag"><IconButton aria-label={`Edit ${tag.name}`} onClick={() => openEditor(tag)}><EditIcon fontSize="small" /></IconButton></Tooltip>}
-                      {canDelete && <Tooltip title="Delete tag"><IconButton aria-label={`Delete ${tag.name}`} onClick={() => { setDialogError(''); setRemove(tag); }}><DeleteIcon fontSize="small" /></IconButton></Tooltip>}
+                      {canDelete && <Tooltip title="Delete tag"><IconButton aria-label={`Delete ${tag.name}`} onClick={() => { setDialogError(''); setRemove(tag); setRemoveOpen(true); }}><DeleteIcon fontSize="small" /></IconButton></Tooltip>}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -152,7 +157,7 @@ export default function TagsPage() {
           <TablePagination component="div" count={total} page={page} rowsPerPage={20} rowsPerPageOptions={[20]} onPageChange={(_, next) => setPage(next)} />
         </Paper>
       )}
-      <Dialog open={Boolean(edit)} onClose={closeEditor} fullWidth maxWidth="sm" aria-labelledby="tag-editor-title">
+      <Dialog open={editOpen} onClose={closeEditor} fullWidth maxWidth="sm" aria-labelledby="tag-editor-title">
         <Box component="form" onSubmit={save}>
           <DialogTitle id="tag-editor-title" sx={{ pr: 7 }}>{edit?.id ? 'Edit tag' : 'Add tag'}<IconButton aria-label="Close tag editor" disabled={saving} onClick={closeEditor} sx={{ position: 'absolute', right: 12, top: 12 }}><CloseIcon /></IconButton></DialogTitle>
           <DialogContent>
@@ -175,7 +180,7 @@ export default function TagsPage() {
               <Typography variant="caption" color="text.secondary">Renaming this tag keeps its existing URL.</Typography>
               <Stack direction="row" gap={1} flexWrap="wrap" mt={1}>
                 <Button size="small" startIcon={<ContentCopyIcon />} onClick={() => copyLink(edit.slug)}>Copy link</Button>
-                <Button size="small" startIcon={<OpenInNewIcon />} component="a" href={tagUrl(edit.slug)} target="_blank" rel="noopener noreferrer">View page</Button>
+                <Button size="small" startIcon={<OpenInNewIcon />} component="a" href={Number(edit.productCount) > 0 ? tagUrl(edit.slug) : undefined} target="_blank" rel="noopener noreferrer" disabled={Number(edit.productCount) === 0}>View page</Button>
               </Stack>
               <Typography variant="body2" mt={1}>Used by {Number(edit.productCount) || 0} {Number(edit.productCount) === 1 ? 'product' : 'products'}.</Typography>
               {canReadProducts && <Button size="small" component={Link} target="_blank" rel="noopener noreferrer" to={`/admin/products?tags=${encodeURIComponent(edit.slug)}`}>View products</Button>}
@@ -185,13 +190,13 @@ export default function TagsPage() {
           <DialogActions sx={{ px: 3, pb: 2, pt: 1 }}><Button disabled={saving} onClick={closeEditor}>Cancel</Button><Button type="submit" variant="contained" disabled={saving}>{saving ? 'Saving…' : edit?.id ? 'Save changes' : 'Save tag'}</Button></DialogActions>
         </Box>
       </Dialog>
-      <Dialog open={Boolean(remove)} onClose={() => { if (!saving) setRemove(null); }} fullWidth maxWidth="xs">
+      <Dialog open={removeOpen} onClose={() => { if (!saving) setRemoveOpen(false); }} fullWidth maxWidth="xs">
         <DialogTitle>Delete “{remove?.name}”?</DialogTitle>
         <DialogContent>
           {dialogError && <Alert severity="error" sx={{ mb: 2 }}>{dialogError}</Alert>}
           <DialogContentText>This permanently deletes the tag and removes it from {remove?.productCount || 0} {Number(remove?.productCount) === 1 ? 'product' : 'products'}. The products will remain in your catalog. Its storefront page will no longer be available.</DialogContentText>
         </DialogContent>
-        <DialogActions><Button disabled={saving} onClick={() => setRemove(null)}>Cancel</Button><Button color="error" variant="contained" disabled={saving} onClick={confirmDelete}>{saving ? 'Deleting…' : 'Delete tag'}</Button></DialogActions>
+        <DialogActions><Button disabled={saving} onClick={() => setRemoveOpen(false)}>Cancel</Button><Button color="error" variant="contained" disabled={saving} onClick={confirmDelete}>{saving ? 'Deleting…' : 'Delete tag'}</Button></DialogActions>
       </Dialog>
       {pickerOpen && <MediaPicker open onClose={() => setPickerOpen(false)} title="Select tag image" multiple={false} onSelect={(images) => {
         if (images?.[0]) setEdit((current) => current ? ({ ...current, imageId: images[0].id, image: images[0] }) : current);
@@ -200,7 +205,7 @@ export default function TagsPage() {
       <Dialog open={discard} onClose={() => setDiscard(false)} aria-labelledby="discard-tag-title" maxWidth="xs" fullWidth>
         <DialogTitle id="discard-tag-title">Discard unsaved changes?</DialogTitle>
         <DialogContent><DialogContentText>Your edits have not been saved.</DialogContentText></DialogContent>
-        <DialogActions><Button onClick={() => setDiscard(false)}>Keep editing</Button><Button color="error" onClick={() => { setDiscard(false); setEdit(null); }}>Discard changes</Button></DialogActions>
+        <DialogActions><Button onClick={() => setDiscard(false)}>Keep editing</Button><Button color="error" onClick={() => { setDiscard(false); setEditOpen(false); }}>Discard changes</Button></DialogActions>
       </Dialog>
       <Dialog open={Boolean(manualCopy)} onClose={() => setManualCopy('')} aria-labelledby="copy-tag-title" fullWidth maxWidth="sm">
         <DialogTitle id="copy-tag-title">Copy storefront link</DialogTitle>

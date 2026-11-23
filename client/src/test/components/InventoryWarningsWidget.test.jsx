@@ -5,6 +5,15 @@ import { describe, expect, it } from 'vitest';
 import InventoryWarningsWidget from '../../components/admin/dashboard/InventoryWarningsWidget';
 
 describe('inventory warning identity', () => {
+  it('shows an out-of-stock item only once even when its quantity is positive', () => {
+    render(<MemoryRouter><InventoryWarningsWidget spacing={2} lowStock={[
+      { id: 'product', name: 'YELLOW QUEEN', variantId: 'variant', sku: 'YQ112', availableQty: 2, status: 'out_of_stock' },
+    ]} /></MemoryRouter>);
+    expect(screen.getAllByText('Variant · SKU: YQ112')).toHaveLength(1);
+    expect(screen.getByText('Out')).toBeInTheDocument();
+    expect(screen.queryByText('2 available')).not.toBeInTheDocument();
+  });
+
   it('distinguishes two low-stock variants of the same product', () => {
     render(<MemoryRouter><InventoryWarningsWidget spacing={2} lowStock={[
       { id: 'product', name: 'IGA', inventoryKey: 'variant:a', variantId: 'a', sku: 'IGA-250G', availableQty: 3 },

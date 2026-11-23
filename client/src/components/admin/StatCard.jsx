@@ -42,7 +42,7 @@ const StatCard = memo(({ title, value, icon, loading = false, trend, color = 'pr
     </Box>
 
     <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-      <Typography variant="body2" color="text.secondary" noWrap>
+      <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
         {title}
       </Typography>
       {loading ? (

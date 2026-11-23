@@ -26,7 +26,10 @@ export default function GiftCardsPage() {
     const [filter, setFilter] = useState('');
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
+    const [loading, setLoading] = useState(true);
     const refresh = useCallback(async (search = '') => {
+        setLoading(true);
+        try {
         const [settings, cards, health] = await Promise.all([
             api.get('/gift-cards/admin/policy').then(unwrap),
             api.get('/gift-cards/admin/cards', { params: { search } }).then(unwrap),
@@ -35,6 +38,7 @@ export default function GiftCardsPage() {
         setPolicy(settings);
         setRows(cards);
         setHealth(health);
+        } finally { setLoading(false); }
     }, []);
 
     useEffect(() => { refresh().catch((error) => setError(errorText(error))); }, [refresh]);
@@ -139,8 +143,8 @@ export default function GiftCardsPage() {
                 direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                 <TextField size="small" label="Search by purchase reference or code suffix" value={filter}
                     onChange={(event) => setFilter(event.target.value)} fullWidth />
-                <Button type="submit" disabled={busy}>Search</Button>
-                <Button onClick={download} disabled={busy}>Export reconciliation</Button>
+                <Button type="submit" variant="contained" disabled={busy || loading} sx={{ flexShrink: 0 }}>Search</Button>
+                <Button variant="outlined" onClick={download} disabled={busy || loading} sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}>Export reconciliation</Button>
             </Stack>
             <Paper variant="outlined" sx={{ overflowX: 'auto' }}>
                 <Table size="small">
@@ -148,6 +152,9 @@ export default function GiftCardsPage() {
                         {['Reference', 'Card', 'Face value', 'Balance', 'Held', 'Delivery', 'Refund', 'Actions'].map((label) => <TableCell key={label}>{label}</TableCell>)}
                     </TableRow></TableHead>
                     <TableBody>
+                        {rows.length === 0 && <TableRow><TableCell colSpan={8} align="center" sx={{ py: 5 }}>
+                            {loading ? 'Loading gift cards…' : error ? 'Gift cards could not be loaded.' : 'No gift cards found. Try another search or wait for the first purchase.'}
+                        </TableCell></TableRow>}
                         {rows.map((row) => (
                                 <TableRow key={row.id}>
                                     <TableCell>

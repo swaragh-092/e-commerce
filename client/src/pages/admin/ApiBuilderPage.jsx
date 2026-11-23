@@ -468,7 +468,7 @@ const ApiBuilderPage = () => {
       <Stack spacing={1.25}>
         {(node.filters || []).map((filter, filterIndex) => (
           <Grid container spacing={1} key={`${node.id}-filter-${filterIndex}`}>
-            <Grid item xs={12} md={3}>
+            <Grid item xs={12} sm={6}>
               <FormControl fullWidth size="small">
                 <InputLabel>Field</InputLabel>
                 <Select
@@ -484,7 +484,7 @@ const ApiBuilderPage = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} md={2}>
+            <Grid item xs={12} sm={6}>
               <FormControl fullWidth size="small">
                 <InputLabel>Operator</InputLabel>
                 <Select
@@ -500,7 +500,7 @@ const ApiBuilderPage = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} md={2}>
+            <Grid item xs={12} sm={6}>
               <FormControl fullWidth size="small">
                 <InputLabel>Source</InputLabel>
                 <Select
@@ -521,7 +521,7 @@ const ApiBuilderPage = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} md={2.5}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 size="small"
@@ -537,7 +537,7 @@ const ApiBuilderPage = () => {
                 helperText={(filter.source || (filter.param ? 'query' : 'static')) === 'query' ? `Use ?${filter.param || filter.field || 'param'}=...` : undefined}
               />
             </Grid>
-            <Grid item xs={10} md={1.5}>
+            <Grid item xs={10} sm={5}>
               <TextField
                 fullWidth
                 size="small"
@@ -550,7 +550,7 @@ const ApiBuilderPage = () => {
                 }}
               />
             </Grid>
-            <Grid item xs={2} md={1}>
+            <Grid item xs={2} sm={1}>
               <IconButton
                 color="error"
                 onClick={() => onPatch({ filters: (node.filters || []).filter((_, itemIndex) => itemIndex !== filterIndex) })}

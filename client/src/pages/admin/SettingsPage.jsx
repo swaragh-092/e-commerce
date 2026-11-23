@@ -288,6 +288,7 @@ const SettingsPage = () => {
       fullWidth
       size="small"
       label={label}
+      InputLabelProps={{ shrink: true }}
       type={type}
       value={form[key] ?? ''}
       onChange={(e) => set(key, e.target.value)}

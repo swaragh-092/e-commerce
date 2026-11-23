@@ -74,6 +74,18 @@ describe('ThemeGalleryPage permission gating', () => {
     themeService.getActivations.mockResolvedValue([ACTIVE_ACTIVATION]);
   });
 
+  it('hides filters for an empty saved library and keeps built-in filters available', async () => {
+    render(<MemoryRouter><ThemeGalleryPage /></MemoryRouter>);
+    const saved = await screen.findByRole('tab', { name: 'My Templates (0)' });
+    fireEvent.click(saved);
+    expect(screen.queryByLabelText('Search templates')).not.toBeInTheDocument();
+    expect(screen.queryByText('Sort:')).not.toBeInTheDocument();
+    expect(screen.queryByText('All Themes')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Built-in Templates (1)' }));
+    expect(screen.getByLabelText('Search templates')).toBeInTheDocument();
+    expect(screen.getByText('Sort:')).toBeInTheDocument();
+  });
+
   it('shows the draft-tab write controls to a settings manager', async () => {
     render(<MemoryRouter><ThemeGalleryPage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByRole('tab', { name: /Theme Drafts/ })).toBeInTheDocument());

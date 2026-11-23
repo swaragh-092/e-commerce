@@ -6,7 +6,7 @@ import { getPanelSx } from './dashboardUtils';
 
 const InventoryWarningsWidget = ({ lowStock, loading, spacing, stats }) => {
   const criticalItems = lowStock.filter((item) => item.availableQty <= 0 || item.status === 'out_of_stock');
-  const warningItems = lowStock.filter((item) => item.availableQty > 0).slice(0, 4);
+  const warningItems = lowStock.filter((item) => item.availableQty > 0 && item.status !== 'out_of_stock').slice(0, 4);
   const outOfStockCount = Number(stats?.inventory?.outOfStockCount ?? stats?.outOfStockCount ?? criticalItems.length);
   const totalAtRisk = Number(stats?.inventory?.totalAtRisk ?? stats?.lowStockCount ?? lowStock.length);
 

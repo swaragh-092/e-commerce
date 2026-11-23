@@ -263,7 +263,7 @@ const UnitSettingsDialog = ({ onClose }) => {
             </Box>
             <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
               <Box sx={{ p: { xs: 2, sm: 2.5 }, pb: 1.5 }}>
-                <Stack direction="row" alignItems="baseline" spacing={1} sx={{ mb: 1.5 }}><Typography variant="subtitle1" fontWeight={700}>{activeCategory || 'All units'}</Typography><Typography variant="body2" color="text.secondary">{filtered.length} units</Typography></Stack>
+                <Stack direction="row" alignItems="baseline" spacing={1} sx={{ mb: 1.5 }}><Typography variant="subtitle1" fontWeight={700}>{activeCategory || 'All units'}</Typography><Typography variant="body2" color="text.secondary">{filtered.length} {filtered.length === 1 ? 'unit' : 'units'}</Typography></Stack>
                 <Box sx={{ display: { xs: 'block', md: 'none' }, mb: 1.5 }}>{categorySelect}<Button size="small" onClick={() => setManagingCategories(true)} disabled={loading || Boolean(loadError)}>Manage categories</Button></Box>
                 <Stack direction="row" spacing={1.5}>
                   <TextField label="Search units" size="small" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0); }} sx={{ flex: 1, minWidth: 0 }} InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }} />

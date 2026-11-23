@@ -1105,7 +1105,7 @@ const ProductsManagePage = () => {
       >
         <Box>
           <Typography variant="h5" component="h1" fontWeight={700}>Manage Products</Typography>
-          <Typography variant="body2" color="text.secondary">{total} products total</Typography>
+          <Typography variant="body2" color="text.secondary">{total} {total === 1 ? 'product' : 'products'} total</Typography>
         </Box>
         <Stack
           direction="row"
@@ -1172,7 +1172,7 @@ const ProductsManagePage = () => {
             ) : null,
           }}
         />
-        <FormControl size="small" sx={{ minWidth: 140 }}>
+        <FormControl size="small" sx={{ minWidth: 210, flexShrink: 0 }}>
           <InputLabel id="storefront-state-filter-label">Storefront state</InputLabel>
           <Select
             value={status}

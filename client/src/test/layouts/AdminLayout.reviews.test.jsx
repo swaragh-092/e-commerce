@@ -1,6 +1,6 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminLayout from '../../layouts/AdminLayout';
@@ -23,15 +23,18 @@ vi.mock('../../context/UnitCatalogContext', () => ({
 }));
 
 const theme = createTheme();
+const CurrentPath = () => <output aria-label="Current path">{useLocation().pathname}</output>;
 const view = (initialPath = '/admin/features') => (
   <ThemeProvider theme={theme}>
     <MemoryRouter initialEntries={[initialPath]}>
       <AdminLayout />
+      <CurrentPath />
     </MemoryRouter>
   </ThemeProvider>
 );
 
 beforeEach(() => {
+  window.scrollTo = vi.fn();
   localStorage.clear();
   localStorage.setItem('admin_sidebar_favorites', JSON.stringify(['/admin/reviews', '/admin/pages', '/admin/customers']));
   localStorage.setItem('admin_sidebar_group_order', JSON.stringify(['Sales', 'Content']));
@@ -67,5 +70,17 @@ describe('Optional sidebar feature visibility', () => {
     state.features = { ...state.features, [feature]: true };
     rerender(view());
     expect(screen.getByRole('link', { name: label })).toBeInTheDocument();
+  });
+});
+
+describe('admin header navigation', () => {
+  it('links back to the dashboard and resets scroll when the route changes', () => {
+    render(view());
+    const link = screen.getByRole('link', { name: 'Admin Dashboard' });
+    expect(link).toHaveAttribute('href', '/admin');
+    window.scrollTo.mockClear();
+    fireEvent.click(link);
+    expect(screen.getByLabelText('Current path')).toHaveTextContent('/admin');
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' });
   });
 });
