@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Box, Button, Dialog, DialogTitle, DialogContent, IconButton, Popover, Stack, TextField, Typography,
 } from '@mui/material';
@@ -47,6 +47,7 @@ const generateId = (type, existingIds) => {
 const AddSectionDialog = ({ open, anchorEl, onClose, onAdd, existingIds = [], sectionPresets = {}, allowedTypes, insertLabel = 'this template' }) => {
   const [query, setQuery] = useState('');
   const [previewKey, setPreviewKey] = useState(null);
+  const firstResultRef = useRef(null);
   const gallery = new Map(getSectionPresetGallery(sectionPresets).map((preset) => [preset.type, preset]));
   const options = [...productChoices, ...sectionOptions.flatMap((option) => {
     const preset = gallery.get(option.type) || option;
@@ -93,7 +94,12 @@ const AddSectionDialog = ({ open, anchorEl, onClose, onAdd, existingIds = [], se
 
   const handleClose = () => { reset(); onClose(); };
   const content = <Stack spacing={1} sx={{ p: 1 }}>
-    <TextField autoFocus size="small" label="Search sections" value={query} onChange={(event) => { setQuery(event.target.value); setPreviewKey(null); }} />
+    <TextField autoFocus size="small" label="Search sections" value={query} onChange={(event) => { setQuery(event.target.value); setPreviewKey(null); }}
+      onKeyDown={(event) => {
+        if (event.key !== 'ArrowDown' || event.nativeEvent.isComposing || !firstResultRef.current) return;
+        event.preventDefault();
+        firstResultRef.current.focus();
+      }} />
     <Typography variant="caption" color="text.secondary" sx={{ px: 0.5 }}>Insert in {insertLabel}</Typography>
     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'repeat(2, minmax(0, 1fr))' }, alignItems: 'start', gap: 1 }}>
     <Box sx={{ maxHeight: { xs: 'min(32vh, 240px)', sm: 'min(52vh, 420px)' }, overflowY: 'auto', overscrollBehavior: 'contain' }}>
@@ -101,7 +107,7 @@ const AddSectionDialog = ({ open, anchorEl, onClose, onAdd, existingIds = [], se
       {[...groups].map(([group, choices]) => <Box component="section" aria-label={group} key={group} sx={{ py: 0.5, borderTop: 1, borderColor: 'divider' }}>
         <Typography component="h3" variant="caption" fontWeight={700} sx={{ px: 1 }}>{group}</Typography>
         {choices.map((option) => <Stack direction="row" key={option.key || option.type}>
-        <Button fullWidth color="inherit" size="small"
+        <Button ref={option === visibleOptions[0] ? firstResultRef : undefined} fullWidth color="inherit" size="small"
           title={option.description} onClick={() => handleAdd(option)} startIcon={<DashboardCustomizeOutlinedIcon />}
           onFocus={() => setPreviewKey(option.key || option.type)} onPointerEnter={() => setPreviewKey(option.key || option.type)}
           sx={{ justifyContent: 'flex-start', textTransform: 'none', textAlign: 'left', bgcolor: option === previewOption ? 'action.hover' : undefined }}>

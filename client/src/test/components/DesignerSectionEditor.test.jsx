@@ -10,6 +10,18 @@ vi.mock('../../services/adminService', () => ({
 vi.mock('../../components/common/MediaPicker', () => ({ default: () => <div data-testid="media-picker" /> }));
 
 describe('DesignerSectionEditor BlockListEditor', () => {
+  it.each(['composed-hero', 'editorial-image-text', 'product-info'])('previews blocks without insertion in %s', (type) => {
+    const onChange = vi.fn();
+    render(<DesignerSectionEditor section={{ id: 'preview', type }} onChange={onChange}
+      onBlur={vi.fn()} onBlockFocus={vi.fn()} blockInsertion={{}} />);
+    const pane = screen.getByRole('complementary', { name: 'Block preview' });
+    fireEvent.pointerEnter(screen.getByRole('button', { name: 'Heading', exact: true }));
+    expect(pane).toHaveTextContent('Introduce your story');
+    fireEvent.focus(screen.getByRole('button', { name: 'Text', exact: true }));
+    expect(pane).toHaveTextContent('Share a few details');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('inserts a block directly after the selected sibling in the requested placement', () => {
     const first = { id: 'first', type: 'text', text: 'First' };
     const last = { id: 'last', type: 'text', text: 'Last' };

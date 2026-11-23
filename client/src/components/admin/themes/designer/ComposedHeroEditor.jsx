@@ -1,7 +1,9 @@
 import { DEFAULT_PRODUCT_BLOCK_PLACEMENT, PRODUCT_BLOCK_PLACEMENTS, getProductBlockPlacement } from '../../../../utils/productBlockPlacement';
 import useHeroCategories from '../../../../hooks/useHeroCategories';
 import { useEffect, useRef, useState } from 'react';
-import { Autocomplete, Box, Button, Dialog, DialogContent, DialogTitle, MenuItem, Popover, Stack, TextField, Typography } from '@mui/material';
+import { Autocomplete, Box, Button, Dialog, DialogContent, DialogTitle, IconButton, MenuItem, Popover, Stack, TextField, Typography } from '@mui/material';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import BlockPickerPreview from './BlockPickerPreview';
 import { HERO_BLOCK_LABELS, HERO_CARD_SOURCES } from '../../../storefront/sections/ComposedHero';
 
 import attributeService from '../../../../services/attributeService';
@@ -68,6 +70,8 @@ export default function ComposedHeroEditor({ productInformation, orderedDetails,
   const [target, setTarget] = useState(null);
   const [pickerDepth, setPickerDepth] = useState(0);
   const [query, setQuery] = useState('');
+  const [previewType, setPreviewType] = useState(null);
+  const firstResultRef = useRef(null);
   const activeRef = useRef(null);
   const collection = useHeroCategories(Boolean(activeId));
   const brand = useHeroCategories(Boolean(activeId), 'brand');
@@ -99,6 +103,7 @@ export default function ComposedHeroEditor({ productInformation, orderedDetails,
     setTarget(insertion);
     setPickerDepth(insertion.depth || 0);
     setQuery('');
+    setPreviewType(null);
     setParentId(insertion.parentId ?? null);
   }, [insertion]);
 
@@ -106,6 +111,7 @@ export default function ComposedHeroEditor({ productInformation, orderedDetails,
     setTarget(destination);
     setPickerDepth(depth);
     setQuery('');
+    setPreviewType(null);
     setParentId(parent);
   };
   const add = (type) => {
@@ -233,16 +239,31 @@ export default function ComposedHeroEditor({ productInformation, orderedDetails,
     if ((type === 'delivery' || type === 'group') && pickerDepth >= 3) return false;
     return pickerOptions[type]?.toLowerCase().includes(query.trim().toLowerCase());
   })]).filter(([, types]) => types.length);
+  const visibleTypes = groups.flatMap(([, types]) => types);
+  const activePreview = visibleTypes.includes(previewType) ? previewType : visibleTypes[0];
   const closePicker = () => setParentId(undefined);
   const pickerContent = <Stack spacing={1} sx={{ p: 1 }}>
-    <TextField autoFocus size="small" label="Search blocks" value={query} onChange={(event) => setQuery(event.target.value)} />
-    <Box sx={{ maxHeight: 'min(52vh, 420px)', overflowY: 'auto', overscrollBehaviorY: 'contain' }}>
+    <TextField autoFocus size="small" label="Search blocks" value={query} onChange={(event) => { setQuery(event.target.value); setPreviewType(null); }}
+      onKeyDown={(event) => {
+        if (event.key !== 'ArrowDown' || event.nativeEvent.isComposing || !firstResultRef.current) return;
+        event.preventDefault();
+        firstResultRef.current.focus();
+      }} />
+    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'repeat(2, minmax(0, 1fr))' }, alignItems: 'start', gap: 1 }}>
+    <Box sx={{ maxHeight: { xs: 'min(32vh, 240px)', sm: 'min(52vh, 420px)' }, overflowY: 'auto', overscrollBehaviorY: 'contain' }}>
       {groups.length === 0 && <Typography role="status" variant="body2" sx={{ p: 1 }}>No matching blocks</Typography>}
       {groups.map(([label, types]) => <Box component="section" key={label} aria-label={label} sx={{ py: 0.5, borderTop: 1, borderColor: 'divider' }}>
         <Typography component="h3" variant="caption" fontWeight={700} sx={{ px: 1 }}>{label}</Typography>
-        {types.map((type) => <Button key={type} fullWidth size="small" color="inherit" onClick={() => add(type)}
-          sx={{ justifyContent: 'flex-start', textTransform: 'none' }}>{pickerOptions[type]}</Button>)}
+        {types.map((type) => <Stack key={type} direction="row">
+          <Button ref={type === visibleTypes[0] ? firstResultRef : undefined} fullWidth size="small" color="inherit" onClick={() => add(type)}
+            onFocus={() => setPreviewType(type)} onPointerEnter={() => setPreviewType(type)}
+            sx={{ justifyContent: 'flex-start', textTransform: 'none', bgcolor: type === activePreview ? 'action.hover' : undefined }}>{pickerOptions[type]}</Button>
+          <IconButton size="small" aria-label={`Preview ${pickerOptions[type]}`} onClick={() => setPreviewType(type)}
+            sx={{ display: 'none', '@media (hover: none)': { display: 'inline-flex' }, flexShrink: 0 }}><VisibilityOutlinedIcon fontSize="small" /></IconButton>
+        </Stack>)}
       </Box>)}
+    </Box>
+    {activePreview && <BlockPickerPreview type={activePreview} label={pickerOptions[activePreview]} />}
     </Box>
   </Stack>;
 
@@ -267,9 +288,9 @@ export default function ComposedHeroEditor({ productInformation, orderedDetails,
       </>}
       {target?.anchorEl ? <Popover open={parentId !== undefined} anchorEl={target.anchorEl} onClose={closePicker}
         anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-        slotProps={{ paper: { role: 'dialog', 'aria-label': 'Add block', sx: { width: 304 } } }}>
+        slotProps={{ paper: { role: 'dialog', 'aria-label': 'Add block', sx: { width: 560 } } }}>
         {pickerContent}
-      </Popover> : <Dialog open={parentId !== undefined} onClose={closePicker} aria-label="Add block" fullWidth maxWidth="xs">
+      </Popover> : <Dialog open={parentId !== undefined} onClose={closePicker} aria-label="Add block" fullWidth maxWidth="sm">
         <DialogTitle>Add block</DialogTitle>
         <DialogContent sx={{ p: 1 }}>{pickerContent}</DialogContent>
       </Dialog>}
