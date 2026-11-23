@@ -88,7 +88,7 @@ const MenuSettings = ({
           </FormControl>
         </Grid>
 
-        <Grid item xs={6} sm={3} md={2}>
+        <Grid item xs={12} sm={6} md={3}>
           <TextField
             fullWidth
             label="Order"
@@ -98,7 +98,7 @@ const MenuSettings = ({
             onChange={(e) => setSelectedMenu({ ...selectedMenu, sortOrder: Number(e.target.value) })}
           />
         </Grid>
-        <Grid item xs={6} sm={3} md={2}>
+        <Grid item xs={12} sm={6} md={3}>
           <Stack direction="row" alignItems="center">
             <Switch
               checked={selectedMenu.isActive !== false}
@@ -108,9 +108,9 @@ const MenuSettings = ({
             <Typography>Active</Typography>
           </Stack>
         </Grid>
-        <Grid item xs={12} sm={6} md={2}>
-          <Stack direction="row" spacing={1}>
-            <Button variant="contained" disabled={!canManage} onClick={saveSelectedMenu}>
+        <Grid item xs={12}>
+          <Stack direction="row" spacing={1} justifyContent="flex-end" flexWrap="wrap">
+            <Button variant="contained" disabled={!canManage} onClick={saveSelectedMenu} sx={{ minWidth: 104 }}>
               Save
             </Button>
             <IconButton

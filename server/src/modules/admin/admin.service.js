@@ -179,7 +179,7 @@ const getStats = async (actingUser = null) => {
     : Promise.resolve(0);
   const inventoryPromise = canReadProducts
     ? getInventorySummary(threshold)
-    : Promise.resolve({ totalAtRisk: 0, lowStockCount: 0, outOfStockCount: 0, threshold, health: null });
+    : Promise.resolve({ totalAtRisk: 0, atRiskProductCount: 0, lowStockCount: 0, outOfStockCount: 0, threshold, health: null });
   const pendingReviewsPromise = canReadReviews ? Review.count({ where: { status: 'pending' } }) : Promise.resolve(0);
   const totalReviewsPromise = canReadReviews ? Review.count() : Promise.resolve(0);
 
@@ -209,7 +209,7 @@ const getStats = async (actingUser = null) => {
     customerCount,
     productCount,
     pendingOrders,
-    lowStockCount: inventorySummary.totalAtRisk,
+    lowStockCount: inventorySummary.atRiskProductCount,
     lowStockOnlyCount: inventorySummary.lowStockCount,
     outOfStockCount: inventorySummary.outOfStockCount,
     inventoryHealth: inventorySummary.health,

@@ -499,6 +499,21 @@ const SettingsPage = () => {
     if (name === 'Advanced' && !canManageAdvancedSettings) return false;
     return ['Notifications', 'Security'].includes(name) || panels[index]?.length > 0;
   });
+  const handleQuickFindChange = (value) => {
+    setSearchQuery(value);
+    const query = value.trim().toLowerCase();
+    if (!query) return;
+
+    const matchingTab = /smtp|outbound email|mail server|email sender/.test(query)
+      ? visibleTabs.find((name) => name === 'Notifications')
+      : visibleTabs.find((name) => {
+        const index = allTabs.indexOf(name);
+        return (panels[index] || []).some((item) =>
+          [item.title, item.description, ...(item.keywords || [])].join(' ').toLowerCase().includes(query)
+        );
+      });
+    if (matchingTab) setTab(matchingTab);
+  };
   const safeTabIndex = Math.max(visibleTabs.indexOf(tab), 0);
   const currentTab = visibleTabs[safeTabIndex];
   const originalIndex = allTabs.indexOf(currentTab);
@@ -535,7 +550,7 @@ const SettingsPage = () => {
               size="small"
               placeholder="Search settings…"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => handleQuickFindChange(e.target.value)}
             />
           </Paper>
 

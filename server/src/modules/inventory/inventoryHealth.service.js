@@ -91,6 +91,7 @@ const buildInventorySummary = (products, threshold = 10) => {
   return {
     rows: atRiskRows,
     totalAtRisk: atRiskRows.length,
+    atRiskProductCount: new Set(atRiskRows.map((row) => row.id)).size,
     lowStockCount,
     outOfStockCount,
     threshold: normalizedThreshold,

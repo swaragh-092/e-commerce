@@ -8,6 +8,7 @@ export const generateSlug = (text) => {
     .trim()
     .replace(/\s+/g, '-')
     .replace(/[^\w-]+/g, '')
+    .replace(/_/g, '-')
     .replace(/--+/g, '-')
     .replace(/^-+/, '')
     .replace(/-+$/, '');
