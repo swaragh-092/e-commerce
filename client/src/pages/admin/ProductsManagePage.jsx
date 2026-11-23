@@ -7,7 +7,7 @@ import {
   CircularProgress,
   useMediaQuery,
 } from '@mui/material';
-import { DataGrid } from '@mui/x-data-grid';
+import ResponsiveDataGrid from '../../components/admin/ResponsiveDataGrid';
 import {
   Add as AddIcon, AddCircle as AddCircleIcon, Edit as EditIcon, Delete as DeleteIcon,
   OpenInNew as OpenInNewIcon, Clear as ClearIcon,
@@ -1311,9 +1311,11 @@ const ProductsManagePage = () => {
         minWidth: 0,
         width: '100%',
       }}>
-        <DataGrid
+        <ResponsiveDataGrid
           rows={rows}
           columns={columns}
+          requiredColumns={['name', 'actions']}
+          unavailableColumns={[...(!pricingEnabled ? ['price', 'saleMeta'] : []), ...(!cartEnabled ? ['quantity'] : [])]}
           columnVisibilityModel={{
             images: !isCompactScreen,
             price: pricingEnabled && !isTabletScreen,

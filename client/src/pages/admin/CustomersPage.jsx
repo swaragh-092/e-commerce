@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
+  useMediaQuery,
   Chip,
   IconButton,
   Tooltip,
@@ -12,7 +13,7 @@ import {
   Select,
   Stack,
 } from '@mui/material';
-import { DataGrid } from '@mui/x-data-grid';
+import ResponsiveDataGrid from '../../components/admin/ResponsiveDataGrid';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import BlockIcon from '@mui/icons-material/Block';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -24,6 +25,9 @@ import { PERMISSIONS } from '../../utils/permissions';
 import { formatDateOnly } from '../../utils/dates';
 
 const CustomersPage = () => {
+  const compact = useMediaQuery('(max-width: 1200px)');
+  const narrow = useMediaQuery('(max-width: 850px)');
+  const phone = useMediaQuery('(max-width: 600px)');
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -73,7 +77,9 @@ const CustomersPage = () => {
   const columns = [
     {
       field: 'firstName',
-      headerName: 'First',
+      headerName: narrow ? 'Customer' : 'First',
+      minWidth: 110,
+      flex: narrow ? 1 : undefined,
       width: 120,
       renderCell: ({ row }) => (
         <Typography
@@ -83,7 +89,7 @@ const CustomersPage = () => {
           aria-label={`View customer ${[row.firstName, row.lastName].filter(Boolean).join(' ') || row.email}`}
           sx={{ p: 0, border: 0, background: 'none', color: 'primary.main', font: 'inherit', textAlign: 'left', cursor: 'pointer', '&:hover': { textDecoration: 'underline' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
         >
-          {row.firstName || row.email}
+          {(narrow ? [row.firstName, row.lastName].filter(Boolean).join(' ') : row.firstName) || row.email}
         </Typography>
       ),
     },
@@ -168,15 +174,18 @@ const CustomersPage = () => {
       <Box
         sx={{
           height: 580,
+          minWidth: 0,
           bgcolor: 'background.paper',
           borderRadius: 2,
           border: '1px solid',
           borderColor: 'divider',
         }}
       >
-        <DataGrid
+        <ResponsiveDataGrid
           rows={rows}
           columns={columns}
+          requiredColumns={['firstName', 'actions']}
+          columnVisibilityModel={{ lastName: !narrow, email: !phone, emailVerified: !compact, createdAt: !compact, status: !phone }}
           rowCount={total}
           loading={loading}
           paginationMode="server"

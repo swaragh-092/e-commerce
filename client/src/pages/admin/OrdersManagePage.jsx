@@ -19,8 +19,9 @@ import {
   TextField,
   Tooltip,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
-import { DataGrid } from '@mui/x-data-grid';
+import ResponsiveDataGrid from '../../components/admin/ResponsiveDataGrid';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -108,6 +109,10 @@ const ClickableSummaryCard = ({ label, value, tone = 'default', onClick, active 
 
 const OrdersManagePage = () => {
   const navigate = useNavigate();
+  const isCompactScreen = useMediaQuery('(max-width: 1440px)');
+  const isTabletScreen = useMediaQuery('(max-width: 1024px)');
+  const hideCustomerColumn = useMediaQuery((theme) => theme.breakpoints.down(760));
+  const isSmallScreen = useMediaQuery((theme) => theme.breakpoints.down('sm'));
   const [searchParams] = useSearchParams();
   const { formatPrice } = useCurrency();
   const { notify, confirm } = useNotification();
@@ -270,12 +275,17 @@ const OrdersManagePage = () => {
 
   const columns = useMemo(
     () => [
-      { field: 'orderNumber', headerName: 'Order #', minWidth: 230, flex: 0.8 },
+      {
+        field: 'orderNumber', headerName: 'Order #', minWidth: isSmallScreen ? 116 : 170, flex: 1,
+        renderCell: ({ value }) => (
+          <Typography variant="body2" sx={{ overflowWrap: 'anywhere', whiteSpace: 'normal' }}>{value}</Typography>
+        ),
+      },
       {
         field: 'customer',
         headerName: 'Customer',
         flex: 1.2,
-        minWidth: 220,
+        minWidth: 145,
         sortable: false,
         renderCell: ({ row }) => {
           const customerName = [row.User?.firstName, row.User?.lastName].filter(Boolean).join(' ')
@@ -298,7 +308,7 @@ const OrdersManagePage = () => {
       {
         field: 'total',
         headerName: 'Total',
-        width: 130,
+        width: 104,
         renderCell: ({ value }) => formatPrice(value || 0),
       },
       {
@@ -328,7 +338,8 @@ const OrdersManagePage = () => {
       {
         field: 'status',
         headerName: 'Status',
-        width: 225,
+        minWidth: isSmallScreen ? 110 : 183,
+        flex: 1,
         renderCell: ({ row }) => {
           const statusOptions = getAllowedOrderStatuses(row.status).filter((statusOption) => statusOption !== 'refunded');
           const canChange = canUpdateStatus && statusOptions.length > 1;
@@ -337,11 +348,14 @@ const OrdersManagePage = () => {
             <Select
               size="small"
               value={row.status}
+              title={getOrderStatusLabel(row.status)}
+              inputProps={{ 'aria-label': `Status for order ${row.orderNumber}` }}
               onClick={(event) => event.stopPropagation()}
               onChange={(event) => handleQuickStatusUpdate(row, event.target.value)}
               disabled={actionLoadingId === `${row.id}:status`}
               sx={{
-                minWidth: 200,
+                width: '100%',
+                minWidth: 0,
                 height: 32,
                 fontSize: '0.78rem',
                 fontWeight: 700,
@@ -363,7 +377,7 @@ const OrdersManagePage = () => {
       {
         field: 'createdAt',
         headerName: 'Placed',
-        width: 220,
+        width: 192,
         align: 'center',
         headerAlign: 'center',
         renderCell: ({ value }) => (
@@ -374,8 +388,8 @@ const OrdersManagePage = () => {
       },
       {
         field: 'actions',
-        headerName: 'Actions',
-        width: 200,
+        headerName: isTabletScreen ? '' : 'Actions',
+        width: isTabletScreen ? 54 : canUpdateStatus ? 158 : 74,
         sortable: false,
         renderCell: ({ row }) => {
           const paymentStatus = row.Payment?.status;
@@ -402,11 +416,11 @@ const OrdersManagePage = () => {
               sx={{ width: '100%' }}
             >
               <Tooltip title="Open order">
-                <IconButton size="small" onClick={() => navigate(`/admin/orders/${row.id}`)}>
+                <IconButton size="small" aria-label="Open order" onClick={() => navigate(`/admin/orders/${row.id}`)}>
                   <VisibilityIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
-              {canCollectCod && (
+              {canCollectCod && !isTabletScreen && (
                 <Button
                   size="small"
                   variant="outlined"
@@ -423,7 +437,7 @@ const OrdersManagePage = () => {
         },
       },
     ],
-    [actionLoadingId, canUpdateStatus, navigate]
+    [actionLoadingId, canUpdateStatus, formatPrice, isSmallScreen, isTabletScreen, navigate]
   );
 
   const EmptyOrdersOverlay = () => (
@@ -467,7 +481,7 @@ const OrdersManagePage = () => {
         Orders
       </Typography>
 
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} mb={3}>
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} useFlexGap flexWrap="wrap" mb={3}>
         <ClickableSummaryCard 
           label="Total Orders" 
           value={total} 
@@ -497,15 +511,15 @@ const OrdersManagePage = () => {
           alignItems={{ xs: 'stretch', lg: 'center' }}
           justifyContent="space-between"
         >
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} useFlexGap flexWrap="wrap">
             <TextField
               size="small"
               placeholder="Search order #, name, or email..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              sx={{ minWidth: 240 }}
+              sx={{ minWidth: { xs: 0, sm: 240 } }}
             />
-            <FormControl size="small" sx={{ minWidth: 160 }}>
+            <FormControl size="small" sx={{ minWidth: { xs: 0, sm: 160 } }}>
               <InputLabel>Status</InputLabel>
               <Select value={status} label="Status" onChange={(e) => setStatus(e.target.value)}>
                 <MenuItem value="">All</MenuItem>
@@ -516,7 +530,7 @@ const OrdersManagePage = () => {
                 ))}
               </Select>
             </FormControl>
-            <FormControl size="small" sx={{ minWidth: 190 }}>
+            <FormControl size="small" sx={{ minWidth: { xs: 0, sm: 190 } }}>
               <InputLabel>Delivery status</InputLabel>
               <Select value={shippingStatus} label="Delivery status" onChange={(e) => setShippingStatus(e.target.value)}>
                 <MenuItem value="">All delivery statuses</MenuItem>
@@ -562,16 +576,20 @@ const OrdersManagePage = () => {
           borderRadius: 2,
           border: '1px solid',
           borderColor: 'divider',
-          overflowX: 'auto',
-          '& .MuiDataGrid-root': { minWidth: 1500 },
-          scrollbarWidth: 'auto',
-          '&::-webkit-scrollbar': { height: 12 },
-          '&::-webkit-scrollbar-thumb': { bgcolor: 'text.disabled', borderRadius: 6 },
+          width: '100%',
+          minWidth: 0,
         }}
       >
-        <DataGrid
+        <ResponsiveDataGrid
           rows={orders}
           columns={columns}
+          requiredColumns={['orderNumber', 'actions']}
+          columnVisibilityModel={{
+            createdAt: !isCompactScreen,
+            payment: !isTabletScreen,
+            customer: !hideCustomerColumn,
+            total: !isSmallScreen,
+          }}
           rowCount={total}
           loading={loading}
           paginationMode="server"

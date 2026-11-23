@@ -1,3 +1,4 @@
+import { useMediaQuery } from '@mui/material';
 import React, { useState, useMemo } from 'react';
 import {
   Box,
@@ -19,7 +20,7 @@ import {
   ToggleButton,
   ToggleButtonGroup,
 } from '@mui/material';
-import { DataGrid } from '@mui/x-data-grid';
+import ResponsiveDataGrid from '../../../components/admin/ResponsiveDataGrid';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -181,6 +182,9 @@ const MenuItemGrid = ({
   };
 
 
+  const compact = useMediaQuery('(max-width: 1500px)');
+  const narrow = useMediaQuery('(max-width: 1024px)');
+
   const columns = [
     {
       field: 'displayLabel',
@@ -277,7 +281,7 @@ const MenuItemGrid = ({
   ];
 
   return (
-    <Paper sx={{ height: 700, width: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Paper sx={{ height: 700, width: '100%', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" p={2}>
         <Box>
           <Typography variant="h6">Items</Typography>
@@ -357,9 +361,11 @@ const MenuItemGrid = ({
       
       <Box sx={{ flexGrow: 1, overflowY: 'auto', p: viewMode === 'sort' ? 2 : 0 }}>
         {viewMode === 'grid' ? (
-          <DataGrid
+          <ResponsiveDataGrid
             rows={rows}
             columns={columns}
+            requiredColumns={['displayLabel', 'actions']}
+            columnVisibilityModel={{ url: !compact, targetType: !compact, placement: !narrow }}
             loading={loading}
             checkboxSelection
             isRowSelectable={(params) => !params.row.generatedFromCategory}
@@ -370,7 +376,7 @@ const MenuItemGrid = ({
             initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
             sx={{
               border: 0,
-              minWidth: 900,
+              minWidth: 0,
               '& .MuiDataGrid-columnHeaderTitle': { whiteSpace: 'normal', lineHeight: 1.15 },
             }}
           />
