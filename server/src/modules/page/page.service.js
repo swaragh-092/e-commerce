@@ -59,7 +59,7 @@ exports.getPageById = async (id) => {
 exports.createPage = async (data) => {
     const transaction = await Page.sequelize.transaction();
     try {
-        const slug = await generateSlug(data.title, Page, 'slug', { transaction });
+        const slug = await generateSlug(data.title, Page, 'slug', { transaction, paranoid: true });
         
         if (data.content) data.content = sanitizePageContent(data.content);
 
@@ -93,7 +93,7 @@ exports.updatePage = async (id, data) => {
     const transaction = await Page.sequelize.transaction();
     try {
         if (data.title && data.title !== page.title) {
-            data.slug = await generateSlug(data.title, Page, 'slug', { transaction });
+            data.slug = await generateSlug(data.title, Page, 'slug', { transaction, paranoid: true });
         }
 
         if (data.content) data.content = sanitizePageContent(data.content);

@@ -186,30 +186,30 @@ const MenuItemGrid = ({
       field: 'displayLabel',
       headerName: 'Label',
       flex: 1,
-      minWidth: 170,
+      minWidth: 130,
       renderCell: (params) => (
         <Typography sx={{ pl: params.row.depth * 2, fontWeight: params.row.depth === 0 ? 700 : 400 }}>
           {params.row.label}
         </Typography>
       ),
     },
-    { field: 'placement', headerName: 'Placement', width: 130, minWidth: 130 },
+    { field: 'placement', headerName: 'Placement', width: 110, minWidth: 110 },
     {
       field: 'targetType',
       headerName: 'Type',
-      width: 160,
-      minWidth: 160,
+      width: 125,
+      minWidth: 125,
       valueGetter: (value, row) => row?.generatedFromCategory
         ? 'Synced category'
         : (row?.syncChildren ? 'Category + synced children' : ({ none: 'Label only', custom_url: 'Custom URL', system_route: 'Store page', category_tree: 'Synced categories', collection: 'Category' }[value] || value)),
     },
-    { field: 'url', headerName: 'URL', flex: 1, minWidth: 220 },
-    { field: 'sortOrder', headerName: 'Order', width: 90, minWidth: 90 },
+    { field: 'url', headerName: 'URL', flex: 1, minWidth: 145 },
+    { field: 'sortOrder', headerName: 'Order', width: 70, minWidth: 70 },
     {
       field: 'isVisible',
       headerName: 'Visible',
-      width: 100,
-      minWidth: 100,
+      width: 80,
+      minWidth: 80,
       renderCell: (params) => (
         <Chip
           label={params.value ? 'Visible' : 'Hidden'}
@@ -221,8 +221,8 @@ const MenuItemGrid = ({
     {
       field: 'actions',
       headerName: 'Actions',
-      width: 190,
-      minWidth: 190,
+      width: 160,
+      minWidth: 160,
       sortable: false,
       renderCell: (params) => (
         <Box>
@@ -277,7 +277,7 @@ const MenuItemGrid = ({
   ];
 
   return (
-    <Paper sx={{ height: 700, width: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Paper sx={{ height: 700, width: '100%', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" p={2}>
         <Box>
           <Typography variant="h6">Items</Typography>
@@ -355,7 +355,7 @@ const MenuItemGrid = ({
       </Stack>
       <Divider />
       
-      <Box sx={{ flexGrow: 1, overflowY: 'auto', p: viewMode === 'sort' ? 2 : 0 }}>
+      <Box sx={{ flexGrow: 1, minWidth: 0, overflow: 'auto', p: viewMode === 'sort' ? 2 : 0 }}>
         {viewMode === 'grid' ? (
           <DataGrid
             rows={rows}
@@ -370,7 +370,8 @@ const MenuItemGrid = ({
             initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
             sx={{
               border: 0,
-              minWidth: 900,
+              width: '100%',
+              minWidth: 0,
               '& .MuiDataGrid-columnHeaderTitle': { whiteSpace: 'normal', lineHeight: 1.15 },
             }}
           />

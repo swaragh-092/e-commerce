@@ -128,9 +128,10 @@ const StoreLayout = () => {
   const navPosition  = nav.sticky !== false ? 'sticky' : 'static';
   const headerStyle = themeSettings.headerStyle || 'gradient';
   const hasDynamicHeaderItems = Array.isArray(headerMenu?.items) && headerMenu.items.length > 0;
-  const headerItems = filterFeatureLinks(hasDynamicHeaderItems
-    ? headerMenu.items
-    : topLinks.map((link, index) => ({
+  const menuHeaderItems = hasDynamicHeaderItems ? headerMenu.items : [];
+  const menuHeaderUrls = new Set(menuHeaderItems.map((item) => item.url).filter(Boolean));
+  const pageHeaderItems = topLinks
+    .map((link, index) => ({
         id: link.id,
         label: link.title,
         url: `/p/${link.slug}`,
@@ -138,7 +139,9 @@ const StoreLayout = () => {
         placement: 'center',
         sortOrder: index,
         children: [],
-      })), features || {});
+      }))
+    .filter((item) => !menuHeaderUrls.has(item.url));
+  const headerItems = filterFeatureLinks([...menuHeaderItems, ...pageHeaderItems], features || {});
 
   const groupedHeaderItems = {
     left: headerItems.filter((item) => item.placement === 'left'),

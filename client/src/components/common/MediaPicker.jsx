@@ -58,7 +58,7 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
   const titleId = useId();
   const tabsAction = useRef(null);
   const activeRef = useRef(open);
-  const [tab, setTab] = useState(0); // 0: Upload, 1: Library
+  const [tab, setTab] = useState(multiple ? 1 : 0); // Multi-select pickers open on the library.
   const [media, setMedia] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -144,6 +144,7 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
   useEffect(() => {
     if (open) {
       activeRef.current = true;
+      setTab(multiple ? 1 : 0);
       setSelected([]);
       setLoadError('');
 
@@ -157,11 +158,12 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
         fetchMedia(1);
       }
     } else {
+      setTab(multiple ? 1 : 0);
       activeRef.current = false;
       requestIdRef.current += 1;
       abortControllerRef.current?.abort();
     }
-  }, [cacheKey, fetchMedia, open]);
+  }, [cacheKey, fetchMedia, multiple, open]);
 
   // Refresh when sort changes
   useEffect(() => {
@@ -234,6 +236,7 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
 
   const handleClose = () => {
     activeRef.current = false;
+    setTab(multiple ? 1 : 0);
     requestIdRef.current += 1;
     abortControllerRef.current?.abort();
     onClose();
@@ -504,7 +507,7 @@ const MediaPicker = ({ open, onClose, onSelect, multiple = false, title = 'Selec
             disabled={selected.length === 0}
             sx={{ px: 4 }}
           >
-            {multiple ? `Select ${selected.length} items` : 'Select'}
+            {multiple ? `Select ${selected.length} item${selected.length === 1 ? '' : 's'}` : 'Select'}
           </Button>
         </Box>
       </DialogActions>

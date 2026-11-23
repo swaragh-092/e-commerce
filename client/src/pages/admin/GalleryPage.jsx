@@ -2,7 +2,7 @@ import EntitySeoFields from '../../components/admin/EntitySeoFields';
 import { useFeature } from '../../hooks/useSettings';
 import { useEffect, useState, useRef } from 'react';
 import {
-  Alert, Box, Button, Card, Chip, CircularProgress, Dialog, DialogActions,
+  Alert, Box, Button, Card, Chip, CircularProgress, Dialog, DialogActions, Link,
   DialogContent, DialogTitle, FormControlLabel, IconButton, Stack, Switch, TextField,
   Skeleton, Typography,
 } from '@mui/material';
@@ -257,7 +257,15 @@ const GalleryPage = () => {
                 {canDelete && <IconButton aria-label="Delete gallery" color="error" disabled={busy} onClick={deleteGallery}><DeleteOutlineIcon /></IconButton>}
               </Stack>
             </Stack>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Public URL: /demo-orbis-seeds-v1-html/gallery-detail.html?album={selected.slug}</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              <Link
+                href={`/demo-orbis-seeds-v1-html/gallery-detail.html?album=${encodeURIComponent(selected.slug)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Public URL: /demo-orbis-seeds-v1-html/gallery-detail.html?album={selected.slug}
+              </Link>
+            </Typography>
             <Box sx={{ mb: 3 }}>
               <Typography fontWeight={700} sx={{ mb: 1 }}>Gallery cover photo</Typography>
               {cover?.url && <Box sx={{ width: 180, mb: 1 }}><GalleryThumbnail src={getMediaUrl(cover.url)} alt="Gallery cover preview" height={120} /></Box>}

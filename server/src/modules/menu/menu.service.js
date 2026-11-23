@@ -384,7 +384,7 @@ exports.getPublicMenuChildren = async (menuId, itemId, { offset = 0, limit, hide
 exports.createMenu = async (data) => {
     const transaction = await Menu.sequelize.transaction();
     try {
-        const slug = data.slug || await generateSlug(data.name, Menu, 'slug', { transaction });
+        const slug = data.slug || await generateSlug(data.name, Menu, 'slug', { transaction, paranoid: true });
         const menu = await Menu.create({ ...data, slug }, { transaction });
         await transaction.commit();
         clearCache();
@@ -404,7 +404,7 @@ exports.updateMenu = async (id, data) => {
 
         const updates = { ...data };
         if ((updates.name && updates.name !== menu.name) && !updates.slug) {
-            updates.slug = await generateSlug(updates.name, Menu, 'slug', { transaction });
+            updates.slug = await generateSlug(updates.name, Menu, 'slug', { transaction, paranoid: true });
         }
 
         await menu.update(updates, { transaction });

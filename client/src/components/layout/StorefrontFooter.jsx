@@ -125,7 +125,9 @@ const StorefrontFooter = () => {
     ...(Array.isArray(f.links) ? f.links : []).map(toFooterLink),
     ...dynamicLinks.map(toFooterLink),
   ].filter(Boolean);
-  const baseLinks = menuLinks.length ? menuLinks : legacyLinks;
+  const menuUrls = new Set(menuLinks.map((link) => link.url));
+  const supplementalLinks = legacyLinks.filter((link) => !menuUrls.has(link.url));
+  const baseLinks = dedupeLinks([...menuLinks, ...supplementalLinks]);
   const giftLinks = giftCardsEnabled && features?.checkout && features?.payments && !baseLinks.some((link) => link.url === '/gift-cards')
     ? [{ label: 'Gift cards', url: '/gift-cards' }] : [];
   const allLinks = filterFeatureLinks(dedupeLinks([...baseLinks, ...giftLinks]), features || {});

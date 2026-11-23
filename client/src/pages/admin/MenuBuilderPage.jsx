@@ -136,6 +136,10 @@ const MenuBuilderPage = () => {
 
   const saveSelectedMenu = async () => {
     if (!selectedMenu) return;
+    const previousMenus = menus;
+    setMenus((current) => current.map((menu) => menu.id === selectedMenu.id
+      ? { ...menu, ...selectedMenu }
+      : menu));
     try {
       await MenuService.adminUpdateMenu(selectedMenu.id, {
         name: selectedMenu.name,
@@ -155,6 +159,7 @@ const MenuBuilderPage = () => {
       }
 
     } catch (error) {
+      setMenus(previousMenus);
       notify(getApiErrorMessage(error, 'Failed to update menu.'), 'error');
     }
   };
@@ -352,7 +357,7 @@ const MenuBuilderPage = () => {
       </Stack>
 
       <Grid container spacing={3}>
-        <Grid item xs={12} md={4}>
+        <Grid item xs={12} md={3}>
           <MenuSelector 
             menus={menus} 
             selectedMenuId={selectedMenuId} 
@@ -362,7 +367,7 @@ const MenuBuilderPage = () => {
         </Grid>
 
 
-        <Grid item xs={12} md={8}>
+        <Grid item xs={12} md={9}>
           <MenuSettings
             selectedMenu={selectedMenu}
             setSelectedMenu={setSelectedMenu}
