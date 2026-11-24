@@ -32,6 +32,8 @@ import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import { validateSchemaOverride } from '../../utils/seo/schemaOverride';
+import SchemaOverrideField from '../../components/admin/SchemaOverrideField';
 import MediaPicker from '../../components/common/MediaPicker';
 import { getMediaUrl, onImageError, PLACEHOLDER_CATEGORY } from '../../utils/media';
 import { useSettings, useFeature } from '../../hooks/useSettings';
@@ -523,6 +525,7 @@ const CategoriesPage = () => {
         metaTitle: '',
         metaDescription: '',
         metaKeywords: '',
+        schemaOverride: '',
         ogImage: '',
         bannerImage: '',
         customHeading: '',
@@ -652,6 +655,7 @@ const CategoriesPage = () => {
             metaTitle: '',
             metaDescription: '',
             metaKeywords: '',
+            schemaOverride: '',
             ogImage: '',
             bannerImage: '',
             customHeading: '',
@@ -675,6 +679,7 @@ const CategoriesPage = () => {
             metaTitle: cat.metaTitle || '',
             metaDescription: cat.metaDescription || '',
             metaKeywords: cat.metaKeywords || '',
+            schemaOverride: cat.schemaOverride || '',
             ogImage: cat.ogImage || '',
             bannerImage: cat.bannerImage || '',
             customHeading: cat.customHeading || '',
@@ -696,6 +701,8 @@ const CategoriesPage = () => {
 
         const errs = {};
         if (!formData.name.trim()) errs.name = 'Name is required.';
+        const schemaError = seoEnabled && validateSchemaOverride(formData.schemaOverride, 'category');
+        if (schemaError) errs.schemaOverride = schemaError;
         if (Object.keys(errs).length) {
             setFormErrors(errs);
             return;
@@ -710,6 +717,8 @@ const CategoriesPage = () => {
             if (!data.metaTitle) data.metaTitle = null;
             if (!data.metaDescription) data.metaDescription = null;
             if (!data.metaKeywords) data.metaKeywords = null;
+            if (seoEnabled) data.schemaOverride = formData.schemaOverride.trim() || null;
+            else delete data.schemaOverride;
             if (!data.bannerImage) data.bannerImage = null;
             if (!data.customHeading) data.customHeading = null;
 
@@ -1141,6 +1150,19 @@ const CategoriesPage = () => {
                                 </Box>
                                 
                                 <Stack spacing={2}>
+                                    <SchemaOverrideField
+                                        key={editingCat?.id || 'new'}
+                                        kind="category"
+                                        value={formData.schemaOverride}
+                                        onChange={(value) => {
+                                            setFormData((previous) => ({ ...previous, schemaOverride: value }));
+                                            setFormErrors((previous) => ({ ...previous, schemaOverride: undefined }));
+                                        }}
+                                        error={formErrors.schemaOverride}
+                                        path={editingCat?.slug ? `/category/${encodeURIComponent(editingCat.slug)}` : null}
+                                        name={formData.name}
+                                        description={formData.metaDescription || formData.description}
+                                    />
                                     <TextField
                                         label="Meta Title"
                                         fullWidth

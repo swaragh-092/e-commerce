@@ -40,6 +40,7 @@ import { trackRecentlyViewed } from '../../components/storefront/sections/Recent
 import SectionRenderer from '../../components/storefront/sections/SectionRenderer';
 import { getPageSections } from '../../utils/designerSections';
 import { buildBreadcrumbJsonLd, buildProductJsonLd } from '../../utils/seo/buildStructuredData';
+import { parseSchemaOverride } from '../../utils/seo/schemaOverride';
 import { getBadgeChipProps } from '../../utils/componentStyles';
 import StorefrontButton from '../../components/storefront/StorefrontButton';
 
@@ -354,7 +355,8 @@ const ProductDetailPage = () => {
     });
 
     const showBreadcrumbs = pp.showBreadcrumbs !== false;
-    const productStructuredData = [productJsonLd, showBreadcrumbs ? breadcrumbStructuredData : null].filter(Boolean);
+    const customSchema = parseSchemaOverride(product.schemaOverride, 'product');
+    const productStructuredData = [customSchema || productJsonLd, showBreadcrumbs ? breadcrumbStructuredData : null].filter(Boolean);
 
     const hasVariants = product.type === 'variable';
 

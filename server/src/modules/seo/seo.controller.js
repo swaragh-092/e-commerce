@@ -4,6 +4,8 @@ const seoService = require('./seo.service');
 const { success, error } = require('../../utils/response');
 const logger = require('../../utils/logger');
 const { normalizeSeoPath } = require('./seoPaths');
+const { parseSchemaOverride } = require('./schemaOverride');
+const { getResolvedFeature } = require('../../middleware/featureGate.middleware');
 
 class SeoController {
   async getSitemap(req, res, next) {
@@ -36,6 +38,13 @@ class SeoController {
         return error(res, 'Path query parameter is required', 400, 'BAD_REQUEST');
       }
       const metadata = await seoService.getMetadataByPath(urlPath);
+      if (req.query.includeGeneratedSchema === 'true' && ['product', 'category'].includes(metadata.pageKind)) {
+        const includePricing = metadata.pageKind === 'product' &&
+          await getResolvedFeature('pricing') && await getResolvedFeature('showPrice');
+        metadata.generatedSchema = parseSchemaOverride(
+          JSON.stringify(seoService.buildPageSchema(metadata)), metadata.pageKind, { includePricing },
+        );
+      }
       return success(res, metadata);
     } catch (err) {
       logger.error('Metadata fetch error:', err);

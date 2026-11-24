@@ -9,17 +9,19 @@ import { createProduct, getProductById, updateProduct } from '../../../services/
 import { getCategoryTree } from '../../../services/categoryService';
 import brandService from '../../../services/brandService';
 import { getSaleLabels } from '../../../services/adminService';
+import { getMetadata } from '../../../services/seoService';
 
 vi.mock('../../../services/tagService', () => ({ getTags: vi.fn().mockResolvedValue({ data: [] }) }));
 vi.mock('../../../services/productService', () => ({ createProduct: vi.fn(), updateProduct: vi.fn(), getProductById: vi.fn(), getProducts: vi.fn() }));
 vi.mock('../../../services/categoryService', () => ({ getCategoryTree: vi.fn() }));
 vi.mock('../../../services/brandService', () => ({ default: { getBrands: vi.fn() } }));
 vi.mock('../../../services/adminService', () => ({ getSaleLabels: vi.fn() }));
+vi.mock('../../../services/seoService', () => ({ getMetadata: vi.fn() }));
 vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () => true }) }));
 vi.mock('../../../hooks/useSKUGenerator', () => ({ default: () => ({ generateProductSKU: () => 'SKU', generateVariantSKU: () => 'VSKU' }) }));
 const disabledFeatures = vi.hoisted(() => new Set());
 const hiddenFeatures = vi.hoisted(() => new Set());
-vi.mock('../../../hooks/useSettings', () => ({ useSettings: () => ({ settings: { features: { seo: false } } }), useCurrency: () => ({ symbol: '$', currency: 'USD', formatPrice: (value) => `$${value}` }), useFeature: (name) => !['productAssistant', 'seo'].includes(name) && !disabledFeatures.has(name), useFeatureVisible: (name) => !disabledFeatures.has(name) && !hiddenFeatures.has(name), useFeaturesResolved: () => true }));
+vi.mock('../../../hooks/useSettings', () => ({ useSettings: () => ({ settings: { features: { seo: false } } }), useCurrency: () => ({ symbol: '$', currency: 'USD', formatPrice: (value) => `$${value}` }), useFeature: (name) => name !== 'productAssistant' && !disabledFeatures.has(name), useFeatureVisible: (name) => !disabledFeatures.has(name) && !hiddenFeatures.has(name), useFeaturesResolved: () => true }));
 vi.mock('../../../components/common/MediaPicker', () => ({ default: ({ open, onSelect, onClose }) => open ? <button type="button" onClick={() => {
   onSelect([{ id: 'media-1', url: '/uploads/product.jpg', originalName: 'Product photo' }]);
   onClose();
@@ -42,6 +44,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   getTags.mockResolvedValue({ data: [] });
   disabledFeatures.clear();
+  disabledFeatures.add('seo');
   hiddenFeatures.clear();
   getCategoryTree.mockResolvedValue({ data: [] });
   brandService.getBrands.mockResolvedValue({ data: { data: [] } });
@@ -52,6 +55,26 @@ beforeEach(() => {
 });
 
 describe('product type and inventory editor', () => {
+  it('lets an admin copy the generated schema, edit it, and restore automatic generation', async () => {
+    disabledFeatures.delete('seo');
+    getProductById.mockResolvedValue({ data: { ...product, status: 'published' } });
+    getMetadata.mockResolvedValue({ generatedSchema: { '@type': 'Product', name: product.name } });
+    mount();
+    const field = await screen.findByRole('textbox', { name: 'Custom JSON-LD schema' });
+    expect(field).toHaveValue('');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit generated schema' }));
+    await waitFor(() => expect(JSON.parse(field.value)).toEqual({ '@type': 'Product', name: product.name }));
+
+    fireEvent.change(field, { target: { value: '{"@type":"Product","name":"Custom seed"}' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
+    await waitFor(() => expect(updateProduct).toHaveBeenCalledWith('product', expect.objectContaining({
+      schemaOverride: '{"@type":"Product","name":"Custom seed"}',
+    })));
+    fireEvent.click(screen.getByRole('button', { name: 'Restore automatic schema' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
+    await waitFor(() => expect(updateProduct).toHaveBeenLastCalledWith('product', expect.objectContaining({ schemaOverride: null })));
+  });
+
   it.each([
     { pricing: false, showPrices: false },
     { pricing: true, showPrices: false },

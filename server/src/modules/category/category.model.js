@@ -48,6 +48,10 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(500),
             field: 'og_image'
         },
+        schemaOverride: {
+            type: DataTypes.TEXT,
+            field: 'schema_override',
+        },
         bannerImage: {
             type: DataTypes.TEXT,
             allowNull: true,

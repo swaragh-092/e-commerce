@@ -7,6 +7,7 @@ const AppError = require('../../utils/AppError');
 const SettingsService = require('../settings/settings.service');
 const { getSaleLabels } = require('../settings/saleLabel.service');
 const { serializeProductPricing } = require('../product/product.pricing');
+const { parseSchemaOverride } = require('../seo/schemaOverride');
 const { isBrandVisible, stripBrandFields, assertBrandFilterAllowed } = require('../../utils/brandVisibility');
 const { getPopulatedCategoryIds } = require('./category.visibility');
 
@@ -252,6 +253,10 @@ exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20,
     });
 
     const categoryData = category.toJSON ? category.toJSON() : { ...category };
+    if (categoryData.schemaOverride) {
+        const schema = parseSchemaOverride(categoryData.schemaOverride, 'category', { includePricing: false });
+        categoryData.schemaOverride = schema ? JSON.stringify(schema) : null;
+    }
     categoryData.breadcrumbs = breadcrumbs;
 
     const shouldHidePrice = features.pricing === false || features.showPrice === false;
