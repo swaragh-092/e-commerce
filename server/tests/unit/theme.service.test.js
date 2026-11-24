@@ -64,7 +64,7 @@ describe('Theme package schema validation', () => {
   });
 
   it('exports the requested saved draft with its colors, hero, sections and resets', async () => {
-    const { Setting } = require('../../src/modules');
+    const { Setting, ThemePackage } = require('../../src/modules');
     const ThemeService = require('../../src/modules/theme/theme.service');
     const drafts = require('../../src/modules/settings/designDraft.service');
     const readSettings = vi.spyOn(Setting, 'findAll').mockResolvedValue([
@@ -72,13 +72,23 @@ describe('Theme package schema validation', () => {
       { group: 'nav', key: 'bgColor', value: '#da0b20' },
       { group: 'homepage', key: 'heroSlides', value: [{ title: 'Published hero' }] },
     ]);
+    const row = { id: 'draft-row', type: 'product-row', enabled: true, query: { featured: true, sort: 'newest' }, dataSourceSlug: 'store-featured', dataSourceBlock: 'items' };
+    const blankQueryRow = { ...row, query: {} };
+    const nested = { id: 'nested', type: 'composed-hero', enabled: true, heroBlocks: [
+      { id: 'group', type: 'group', children: [{ id: 'copy', type: 'text', text: 'Nested copy' }] },
+    ] };
     const readDraft = vi.spyOn(drafts, 'getDraft').mockResolvedValue({ draft: { revision: 7, payload: [
       { group: 'theme', key: 'primaryColor', value: '#15803d' },
       { group: 'nav', key: 'bgColor', operation: 'delete' },
       { group: 'homepage', key: 'heroSlides', value: [{ title: 'Draft hero' }] },
-      { group: 'homepage', key: 'sections', value: [{ id: 'draft-hero', type: 'hero-carousel' }] },
+      { group: 'homepage', key: 'sections', value: [{ id: 'draft-hero', type: 'hero-carousel' }, row, nested] },
+      { group: 'productPage', key: 'productRows', value: [row, nested] },
+      { group: 'wishlistPage', key: 'productRows', value: [blankQueryRow, nested] },
+      { group: 'searchPage', key: 'productRows', value: [row] },
       { group: 'advanced', key: 'customCSS', value: 'body { display: none }' },
     ] } });
+    const findTemplate = vi.spyOn(ThemePackage, 'findOne').mockResolvedValue(null);
+    const createTemplate = vi.spyOn(ThemePackage, 'create').mockImplementation(async (record) => record);
 
     try {
       const exported = await ThemeService.exportCurrent({}, 7);
@@ -88,11 +98,24 @@ describe('Theme package schema validation', () => {
       expect(exported.layout.homepageSections[0].id).toBe('draft-hero');
       expect(exported).not.toHaveProperty('advanced');
       expect(packageSchema.validate(JSON.parse(JSON.stringify(exported))).error).toBeUndefined();
+      const imported = await ThemeService.importToLibrary(JSON.parse(JSON.stringify(exported)), 'manager');
+      const result = await ThemeService.preview(imported.packageData, ['homepageSections', 'pageTemplates']);
+      expect(result.mergedSettings.homepage.sections.slice(1)).toEqual([row, nested]);
+      expect(result.mergedSettings.productPage.productRows).toEqual([row, nested]);
+      expect(result.mergedSettings.wishlistPage.productRows).toEqual([blankQueryRow, nested]);
+      expect(result.mergedSettings.searchPage.productRows).toEqual([row]);
+      const invalid = JSON.parse(JSON.stringify(exported));
+      invalid.pageTemplates.wishlist.productRows[0].query = { unknownFilter: true };
+      expect(packageSchema.validate(invalid).error?.details[0].path).toEqual([
+        'pageTemplates', 'wishlist', 'productRows', 0, 'query', 'unknownFilter',
+      ]);
       expect((await ThemeService.exportCurrent()).demoContent.heroSlides).toEqual([{ title: 'Published hero' }]);
       await expect(ThemeService.exportCurrent({}, 6)).rejects.toThrow('saved design draft changed');
     } finally {
       readSettings.mockRestore();
       readDraft.mockRestore();
+      findTemplate.mockRestore();
+      createTemplate.mockRestore();
     }
   });
 
@@ -454,7 +477,7 @@ describe('Theme package schema validation', () => {
   });
 
   it('stages scoped template settings into the existing draft without updating live settings', async () => {
-    const { sequelize, DesignDraft } = require('../../src/modules');
+    const { sequelize, DesignDraft, ThemePackage } = require('../../src/modules');
     const SettingsService = require('../../src/modules/settings/settings.service');
     const AuditService = require('../../src/modules/audit/audit.service');
     const ThemeService = require('../../src/modules/theme/theme.service');
@@ -465,6 +488,7 @@ describe('Theme package schema validation', () => {
     };
     const update = vi.fn(async (value) => ({ toJSON: () => value }));
     const mocks = [
+      vi.spyOn(ThemePackage, 'findOne').mockResolvedValue({ id: 'library-package' }),
       vi.spyOn(sequelize, 'transaction').mockImplementation((callback) => callback(transaction)),
       vi.spyOn(DesignDraft, 'findOne').mockResolvedValue({ ...original, update }),
       vi.spyOn(AuditService, 'log').mockResolvedValue(undefined),
@@ -485,6 +509,7 @@ describe('Theme package schema validation', () => {
       const draft = await ThemeService.stageDraft(pkg, {
         scopes: ['design', 'homepageSections', 'pageTemplates'],
       }, { id: 'manager' });
+      expect(draft.templateSource).toEqual({ name: pkg.meta.name, kind: 'library' });
       expect(draft.payload).toEqual(expect.arrayContaining([
         { group: 'homepage', key: 'sections', value: [header], operation: 'upsert' },
         { group: 'productPage', key: 'sections', value: [productInfo], operation: 'upsert' },

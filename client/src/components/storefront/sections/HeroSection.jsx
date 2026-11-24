@@ -361,7 +361,7 @@ const ProductSpotlightHero = ({ section, slide, preview, active, visibleSlides, 
               onInlineBlockFocus={onInlineBlockFocus}
               seedPatch={{ slides: visibleSlides }}
             />
-            <Box sx={{ position: 'absolute', left: 18, bottom: 18, right: 18, p: 2, borderRadius: 3, bgcolor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(12px)', boxShadow: 4 }}>
+            <Box sx={{ position: 'absolute', left: 18, bottom: 18, right: 18, p: 2, borderRadius: 3, bgcolor: 'background.paper', color: 'text.primary', boxShadow: 4 }}>
               <Typography variant="caption" color="text.secondary" fontWeight={800}>
                 {slide.productLabel || 'Featured Product'}
               </Typography>

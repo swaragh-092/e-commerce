@@ -235,6 +235,7 @@ const SectionComposerPage = () => {
   const [pagePickerAnchor, setPagePickerAnchor] = useState(null);
   const [pageSearch, setPageSearch] = useState('');
   const [actionsAnchor, setActionsAnchor] = useState(null);
+  const [sidebarDragging, setSidebarDragging] = useState(false);
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -1276,6 +1277,8 @@ const SectionComposerPage = () => {
         onChange={updatePageTemplates}
       />}
       selectedSectionId={panelView.sectionId}
+      componentSelection={panelView}
+      onDragActiveChange={setSidebarDragging}
       onSectionClick={selectSection}
       onThemeSettingsClick={() => setPanelView({ mode: 'theme-settings', sectionId: null, componentKey: null })}
       onAddSection={openAddSection}
@@ -1315,9 +1318,18 @@ const SectionComposerPage = () => {
       <Paper elevation={0} variant="outlined" sx={{ px: 1.5, py: 1, borderTop: 'none', borderLeft: 'none', borderRight: 'none', borderRadius: 0, bgcolor: 'background.paper', zIndex: 10 }}>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, '& .MuiButton-root': { minHeight: { xs: 40, md: 36 }, borderRadius: '6px', textTransform: 'none', fontWeight: 600, whiteSpace: 'nowrap', boxShadow: 'none' }, '& .MuiIconButton-root': { width: 40, height: 40, borderRadius: '6px' } }}>
           <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0, flex: { xs: '1 0 100%', md: '1 1 180px' } }}>
-            <Typography variant="subtitle2" fontWeight={800} noWrap>
-              Store Designer
-            </Typography>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="subtitle2" fontWeight={800} noWrap title={draft?.templateSource?.name}>
+                {draft?.templateSource?.name || settings?.general?.storeName || 'Store design'}
+              </Typography>
+              {draft?.templateSource && (
+                <Typography variant="caption" color="text.secondary" noWrap display="block">
+                  {draft.templateSource.kind === 'library' ? 'Based on a library template' :
+                    draft.templateSource.kind === 'builtin' ? 'Based on a built-in template' : 'Based on a theme package'}
+                </Typography>
+              )}
+              {dirty && !draft && <Typography variant="caption" color="text.secondary" display="block">Draft</Typography>}
+            </Box>
             <Chip
               label={dirty ? 'Unsaved changes' : draft ? 'Draft saved' : 'Published design'}
               size="small"
@@ -1554,6 +1566,7 @@ const SectionComposerPage = () => {
           minWidth: 0,
           minHeight: 0,
           display: isMobile && mobileTab !== 'preview' ? 'none' : 'flex',
+          '& iframe': { pointerEvents: sidebarDragging ? 'none' : undefined },
           flexDirection: 'column',
           height: '100%',
           overflow: 'hidden',

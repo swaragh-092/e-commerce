@@ -6,6 +6,9 @@
  */
 const resolveMediaPath = (path) => {
   if (!path) return '';
+  if (/^https:\/\/plus\.unsplash\.com\/premium_photo-1683121817275-85d1dcf9e4c4(?:[?#]|$)/.test(path)) {
+    return '/assets/fresh-arrivals-hero.webp';
+  }
   
   // If the path is already an absolute URL (e.g. from a CDN), return it as-is
   if (

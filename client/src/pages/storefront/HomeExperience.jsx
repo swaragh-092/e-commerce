@@ -217,14 +217,14 @@ const HomeExperience = () => {
         && bool(section.enabled, true)
         && (ordersEnabled || section.source !== 'bestSellers')
         && (brandsEnabled || section.type !== 'brand-showcase')
-        && (galleryEnabled || section.type !== 'gallery')
+        && (designerPreview || galleryEnabled || section.type !== 'gallery')
         && (newsletterEnabled || section.type !== 'newsletter-signup')
     );
     return [
       ...sections.filter((section) => section.placement !== 'footer'),
       ...sections.filter((section) => section.placement === 'footer'),
     ];
-  }, [brandsEnabled, galleryEnabled, newsletterEnabled, ordersEnabled, config.sections]);
+  }, [brandsEnabled, designerPreview, galleryEnabled, newsletterEnabled, ordersEnabled, config.sections]);
   const visiblePromoBanners = useMemo(
     () => arr(config.promoBanners).filter(
       (promo) => brandsEnabled || !String(promo?.link || '').startsWith('/brands')

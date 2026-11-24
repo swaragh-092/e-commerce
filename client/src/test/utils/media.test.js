@@ -17,6 +17,11 @@ describe('media utils and placeholder defaults', () => {
   });
 
   describe('getMediaUrl', () => {
+    it('resolves the reported premium image to the bundled hero replacement', () => {
+      const asset = 'https://plus.unsplash.com/premium_photo-1683121817275-85d1dcf9e4c4';
+      expect(getMediaUrl(asset + '?q=80&w=1170')).toBe('/assets/fresh-arrivals-hero.webp');
+      expect(getMediaUrl(asset + '-other')).toBe(asset + '-other');
+    });
     it('returns empty string for falsy path', () => {
       expect(getMediaUrl(null)).toBe('');
       expect(getMediaUrl(undefined)).toBe('');

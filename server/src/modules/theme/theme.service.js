@@ -110,10 +110,8 @@ const buildSettingsRows = (pkg, scopes, replaceDemoContent, dataSourceRefs = [])
   if (scopes.includes('homepageSections') && pkg.layout?.homepageSections) {
     const sourceByKey = new Map(dataSourceRefs.map((ref) => [ref.key, ref]));
     const sections = pkg.layout.homepageSections.map((section) => {
-      const { dataSourceSlug, ...safeSection } = section;
-      if (!safeSection.dataSourceKey) return safeSection;
-      const ref = sourceByKey.get(safeSection.dataSourceKey);
-      return ref ? { ...safeSection, dataSourceSlug: ref.slug } : safeSection;
+      const ref = sourceByKey.get(section.dataSourceKey);
+      return ref ? { ...section, dataSourceSlug: ref.slug } : section;
     });
     rows.push({ key: 'sections', value: sections, group: 'homepage' });
   }
@@ -164,10 +162,10 @@ const withoutStoreDataSource = (section) => {
   return { ...portableSection, enabled };
 };
 
-const portableAlternateTemplates = (templates) => templates.map((template) => {
+const portableAlternateTemplates = (templates, mapSection = withoutStoreDataSource) => templates.map((template) => {
   const settings = { ...template.settings };
   for (const key of ['productRows', 'sections']) {
-    if (Array.isArray(settings[key])) settings[key] = settings[key].map(withoutStoreDataSource);
+    if (Array.isArray(settings[key])) settings[key] = settings[key].map(mapSection);
   }
   return { ...template, settings };
 });
@@ -178,11 +176,11 @@ const buildPageTemplateRows = (pkg, scopes) => {
 
   for (const [page, group] of Object.entries(PAGE_TEMPLATE_GROUPS)) {
     const productRows = pkg.pageTemplates[page]?.productRows;
-    if (productRows) pushDefinedSetting(rows, group, 'productRows', productRows.map(withoutStoreDataSource));
+    if (productRows) pushDefinedSetting(rows, group, 'productRows', productRows);
     const sections = pkg.pageTemplates[page]?.sections;
-    if (sections) pushDefinedSetting(rows, group, 'sections', sections.map(withoutStoreDataSource));
+    if (sections) pushDefinedSetting(rows, group, 'sections', sections);
     const alternates = pkg.pageTemplates[page]?.alternateTemplates;
-    if (alternates) pushDefinedSetting(rows, group, 'alternateTemplates', portableAlternateTemplates(alternates));
+    if (alternates) pushDefinedSetting(rows, group, 'alternateTemplates', alternates);
   }
 
   const product = pkg.pageTemplates.product;
@@ -742,6 +740,8 @@ const exportCurrent = async (options = {}, draftRevision) => {
     groups.push(...Object.values(PAGE_TEMPLATE_GROUPS).filter((group) => !groups.includes(group)));
   }
   const snapshot = await readCurrentSettings(groups);
+  const exportSection = draftRevision === undefined ? withoutStoreDataSource :
+    (section) => ({ ...section, enabled: section.enabled ?? true });
 
   if (draftRevision !== undefined) {
     const { draft } = await DesignDraftService.getDraft();
@@ -790,11 +790,11 @@ const exportCurrent = async (options = {}, draftRevision) => {
   if (includeSectionPresets) {
     pkg.sectionPresets = Object.fromEntries(Object.entries(snapshot.sectionPresets || {})
       .filter(([, preset]) => preset?.type)
-      .map(([key, preset]) => [key, withoutStoreDataSource(preset)]));
+      .map(([key, preset]) => [key, exportSection(preset)]));
   }
 
   if (includeHomepageSections) {
-    pkg.layout.homepageSections = (snapshot.homepage?.sections || []).map(withoutStoreDataSource);
+    pkg.layout.homepageSections = (snapshot.homepage?.sections || []).map(exportSection);
   }
 
   pkg.pageTemplates = {
@@ -866,12 +866,12 @@ const exportCurrent = async (options = {}, draftRevision) => {
   for (const [page, group] of Object.entries(PAGE_TEMPLATE_GROUPS)) {
     const productRows = snapshot[group]?.productRows;
     if (Array.isArray(productRows)) {
-      pkg.pageTemplates[page] = { ...pkg.pageTemplates[page], productRows: productRows.map(withoutStoreDataSource) };
+      pkg.pageTemplates[page] = { ...pkg.pageTemplates[page], productRows: productRows.map(exportSection) };
     }
     const sections = snapshot[group]?.sections;
-    if (Array.isArray(sections) && pkg.pageTemplates[page]) pkg.pageTemplates[page].sections = sections.map(withoutStoreDataSource);
+    if (Array.isArray(sections) && pkg.pageTemplates[page]) pkg.pageTemplates[page].sections = sections.map(exportSection);
     if (['product', 'category'].includes(page) && Array.isArray(snapshot[group]?.alternateTemplates)) {
-      pkg.pageTemplates[page].alternateTemplates = portableAlternateTemplates(snapshot[group].alternateTemplates);
+      pkg.pageTemplates[page].alternateTemplates = portableAlternateTemplates(snapshot[group].alternateTemplates, exportSection);
     }
   }
 
@@ -895,7 +895,12 @@ const stageDraft = async (packageData, { scopes, replaceDemoContent }, user) => 
   const rows = buildSettingsRows(pkg, scopes, replaceDemoContent);
   if (!rows.length) throw new AppError('VALIDATION_ERROR', 400, 'No design settings to stage for the selected scopes.');
 
-  return DesignDraftService.saveDraft({ settings: rows }, user, { merge: true });
+  const { slug, name, version } = pkg.meta;
+  const builtin = loadBuiltinFiles().find((theme) => theme.meta.slug === slug &&
+    theme.meta.name === name && theme.meta.version === version);
+  const saved = builtin ? null : await ThemePackage.findOne({ where: { slug, name, version }, attributes: ['id'] });
+  const templateSource = { name, kind: builtin ? 'builtin' : saved ? 'library' : 'package' };
+  return DesignDraftService.saveDraft({ settings: rows }, user, { merge: true, templateSource });
 };
 
 const apply = async (packageData, applyOptions, user) => {

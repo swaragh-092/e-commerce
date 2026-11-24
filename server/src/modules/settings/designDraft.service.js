@@ -33,6 +33,7 @@ const validateProductBlockPlacements = (sections) => {
 const serializeDraft = (draft) => {
   if (!draft) return null;
   const value = draft.toJSON();
+  if (value.baseSnapshot?.templateSource) value.templateSource = value.baseSnapshot.templateSource;
   delete value.baseSnapshot;
   return value;
 };
@@ -172,7 +173,7 @@ const getArchivedDrafts = async ({ limit = 30 } = {}) => {
   return { archives: archives.map(serializeArchive) };
 };
 
-const saveDraft = async ({ settings, expectedRevision }, user, { merge = false } = {}) => {
+const saveDraft = async ({ settings, expectedRevision }, user, { merge = false, templateSource } = {}) => {
   const writes = normalizePayload(settings);
 
   return sequelize.transaction(async (t) => {
@@ -182,9 +183,10 @@ const saveDraft = async ({ settings, expectedRevision }, user, { merge = false }
     const payload = merge && draft?.status === 'draft' ? normalizePayload([...draft.payload, ...writes]) : writes;
     assertDraftPermissions(payload, user);
 
-    const baseSnapshot = draft?.status === 'draft'
+    const baseline = draft?.status === 'draft'
       ? draft.baseSnapshot
       : await readLiveSnapshot(t, { lock: true });
+    const baseSnapshot = templateSource === undefined ? baseline : { ...baseline, templateSource };
 
     let saved;
     if (draft) {
@@ -323,9 +325,10 @@ const restorePublishedVersion = async ({ versionId, expectedRevision }, user) =>
   if (draft?.status === 'draft') assertRevision(draft, expectedRevision);
 
   if (draft?.status === 'draft') await archiveDraft(draft, user.id, t);
-  const baseSnapshot = draft?.status === 'draft'
+  const baseSnapshot = { ...(draft?.status === 'draft'
     ? draft.baseSnapshot
-    : await readLiveSnapshot(t, { lock: true });
+    : await readLiveSnapshot(t, { lock: true })) };
+  delete baseSnapshot.templateSource;
 
   const nextRevision = (Number(draft?.revision) || 0) + 1;
   const restored = draft

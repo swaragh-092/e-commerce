@@ -1,6 +1,7 @@
 'use strict';
 
 const Joi = require('joi');
+const { productListQuerySchema } = require('../product/product.validation');
 const { TEMPLATE_ASSIGNMENT_KEYS, buildAlternateTemplatesSchema } = require('../settings/alternateTemplates');
 
 const hexColor = Joi.string().pattern(/^#[0-9a-fA-F]{3,8}$/).max(9).messages({
@@ -262,12 +263,32 @@ const homepageSectionSchema = Joi.object({
   title: safeText,
   subtitle: safeText,
   source: Joi.string().valid(...PRODUCT_SOURCES),
+  query: Joi.when('type', {
+    is: 'product-row',
+    then: productListQuerySchema.keys({
+      category: Joi.string().max(140),
+      categoryId: Joi.string().uuid(),
+      brand: Joi.string().max(140),
+      sort: Joi.string().valid(
+        'newest', 'oldest', 'name_asc', 'name_desc', 'price_asc', 'price_desc',
+        'arrivals', 'best-selling', 'trending', 'most-viewed', 'recommended', 'discount_desc', 'ending_soon',
+      ),
+      sortBy: Joi.string().valid('price', 'quantity', 'name', 'createdAt'),
+      sortOrder: Joi.string().insensitive().valid('asc', 'desc'),
+      status: Joi.string().valid('published'),
+      minPrice: Joi.number().min(0),
+      maxPrice: Joi.number().min(0),
+      maxQty: Joi.number().integer().min(0),
+    }).unknown(false).prefs({ noDefaults: true }),
+    otherwise: Joi.forbidden(),
+  }),
   productIds: Joi.array().items(Joi.string().uuid()).unique().max(12),
   pagePosition: Joi.string().valid('above', 'below'),
   productScope: Joi.string().valid('category', 'store'),
   saleLabel: Joi.string().trim().max(100).allow('', null),
   dataSourceKey: Joi.string().max(80).allow('', null),
-  dataSourceSlug: Joi.string().max(140).allow('', null),
+  dataSourceBlock: Joi.string().max(80).allow('', null),
+  dataSourceSlug: Joi.string().max(140).pattern(/^[a-z0-9-]+$/).allow('', null),
   count: Joi.number().integer().min(1).max(50),
   layout: Joi.string().valid('grid', 'carousel'),
   viewAllLabel: safeText,
