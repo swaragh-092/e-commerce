@@ -72,6 +72,7 @@ import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { formatSeoTitle } from '../../utils/seo/formatSeoTitle';
 import { validateSchemaOverride } from '../../utils/seo/schemaOverride';
+import { getProductShareImage } from '../../utils/seo/productShareImage';
 import SchemaOverrideField from '../../components/admin/SchemaOverrideField';
 import { formatOpenEndedDateRange } from '../../utils/dates';
 import ProductTagsInput from '../../components/admin/ProductTagsInput';
@@ -472,6 +473,7 @@ const ProductEditPage = () => {
   };
 
   const priceNum = Number(formData.price);
+  const shareImage = getProductShareImage(formData);
   const salePriceNum = formData.salePrice !== '' && formData.salePrice !== null && formData.salePrice !== undefined
     ? Number(formData.salePrice)
     : null;
@@ -1732,17 +1734,18 @@ const ProductEditPage = () => {
                     />
                   </>
                 )}
-                {formData.ogImage && (
+                {shareImage && (
                   <Box sx={{ mt: 2, position: 'relative', width: 'fit-content' }}>
                     <img
-                      src={getMediaUrl(formData.ogImage)}
-                      alt="SEO Preview"
+                      src={getMediaUrl(shareImage)}
+                      alt="Social share image preview"
                       style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, border: '1px solid #ddd' }}
                     />
-                    {canSaveProduct && (
+                    {canSaveProduct && formData.ogImage && (
                       <IconButton
                         size="small"
                         color="error"
+                        aria-label="Use primary product image"
                         sx={{ position: 'absolute', top: -10, right: -10, bgcolor: 'background.paper', boxShadow: 1 }}
                         onClick={() => setField('ogImage', '')}
                       >
@@ -1750,6 +1753,9 @@ const ProductEditPage = () => {
                       </IconButton>
                     )}
                   </Box>
+                )}
+                {!formData.ogImage && (
+                  <FormHelperText>The primary product image is used automatically when available.</FormHelperText>
                 )}
                 {!canUploadMedia && !formData.ogImage && (
                   <Typography variant="caption" color="text.secondary">

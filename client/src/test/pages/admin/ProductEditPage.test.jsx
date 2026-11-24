@@ -55,6 +55,25 @@ beforeEach(() => {
 });
 
 describe('product type and inventory editor', () => {
+  it('previews a saved share override and falls back to the primary product image when cleared', async () => {
+    disabledFeatures.delete('seo');
+    getProductById.mockResolvedValue({ data: {
+      ...product,
+      ogImage: '/uploads/share.jpg',
+      images: [
+        { id: 'first', url: '/uploads/first.jpg', sortOrder: 0 },
+        { id: 'primary', url: '/uploads/primary.jpg', isPrimary: true, sortOrder: 1 },
+      ],
+    } });
+    mount();
+    const image = await screen.findByRole('img', { name: 'Social share image preview' });
+    expect(image.getAttribute('src')).toContain('/uploads/share.jpg');
+    fireEvent.click(screen.getByRole('button', { name: 'Use primary product image' }));
+    expect(image.getAttribute('src')).toContain('/uploads/primary.jpg');
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
+    await waitFor(() => expect(updateProduct).toHaveBeenCalledWith('product', expect.objectContaining({ ogImage: null })));
+  });
+
   it('lets an admin copy the generated schema, edit it, and restore automatic generation', async () => {
     disabledFeatures.delete('seo');
     getProductById.mockResolvedValue({ data: { ...product, status: 'published' } });
