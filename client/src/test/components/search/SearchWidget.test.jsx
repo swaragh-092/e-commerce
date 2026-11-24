@@ -5,14 +5,17 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SearchWidget from '../../../components/search/SearchWidget';
 import { searchProducts } from '../../../services/searchService';
+import { SettingsContext } from '../../../context/ThemeContext';
 
 vi.mock('../../../services/searchService', () => ({
   searchProducts: vi.fn(),
 }));
 
-const renderSearchWidget = (children) => render(
+const renderSearchWidget = (children, config = { features: { pricing: false } }) => render(
   <MemoryRouter>
-    <ThemeProvider theme={createTheme()}>{children}</ThemeProvider>
+    <SettingsContext.Provider value={config}>
+      <ThemeProvider theme={createTheme()}>{children}</ThemeProvider>
+    </SettingsContext.Provider>
   </MemoryRouter>
 );
 
@@ -44,6 +47,7 @@ describe('SearchWidget', () => {
     const suggestion = await screen.findByText('Demo');
 
     expect(screen.getByTestId('hidden-search')).toContainElement(suggestion);
+    expect(screen.queryByText(/10\.00|undefined/)).not.toBeInTheDocument();
   });
 
   it('submits the query when the search button is clicked', () => {
@@ -56,5 +60,22 @@ describe('SearchWidget', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
     expect(onSearch).toHaveBeenCalledWith('demo');
+  });
+
+  it('formats a zero price and omits missing prices when storefront pricing is enabled', async () => {
+    searchProducts.mockResolvedValue({
+      data: { products: { data: [
+        { id: 'zero', name: 'Demo Zero', slug: 'demo-zero', effectivePrice: 0, price: 10 },
+        { id: 'missing', name: 'Demo Missing', slug: 'demo-missing' },
+      ], totalItems: 2 } },
+    });
+    const { container } = renderSearchWidget(<SearchWidget />, {
+      features: { pricing: true, showPrice: true },
+      visibility: { storefront: { pricing: true } },
+    });
+    fireEvent.change(container.querySelector('input'), { target: { value: 'demo' } });
+    expect(await screen.findByText('$0.00')).toBeInTheDocument();
+    expect(screen.getByText('Demo Missing')).toBeInTheDocument();
+    expect(screen.queryByText(/undefined|\$10\.00/)).not.toBeInTheDocument();
   });
 });

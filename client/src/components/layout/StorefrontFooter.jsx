@@ -12,7 +12,7 @@ import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import EmailIcon from '@mui/icons-material/Email';
 import PhoneIcon from '@mui/icons-material/Phone';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
-import { useSettings } from '../../hooks/useSettings';
+import { useFeatureVisible, useSettings } from '../../hooks/useSettings';
 import { useTheme } from '@mui/material/styles';
 import PageService from '../../services/pageService';
 import api from '../../services/api';
@@ -32,6 +32,9 @@ const SOCIAL = [
 
 const StorefrontFooter = () => {
   const { settings, features } = useSettings();
+  const cartVisible = useFeatureVisible('cart');
+  const checkoutVisible = useFeatureVisible('checkout');
+  const ordersVisible = useFeatureVisible('orders');
   const pagesEnabled = features?.pages === true;
   const theme = useTheme();
   const [dynamicLinks, setDynamicLinks] = React.useState([]);
@@ -128,7 +131,9 @@ const StorefrontFooter = () => {
   const baseLinks = menuLinks.length ? menuLinks : legacyLinks;
   const giftLinks = giftCardsEnabled && features?.checkout && features?.payments && !baseLinks.some((link) => link.url === '/gift-cards')
     ? [{ label: 'Gift cards', url: '/gift-cards' }] : [];
-  const allLinks = filterFeatureLinks(dedupeLinks([...baseLinks, ...giftLinks]), features || {});
+  const allLinks = filterFeatureLinks(dedupeLinks([...baseLinks, ...giftLinks]), {
+    ...features, cart: cartVisible, checkout: checkoutVisible, orders: ordersVisible,
+  });
 
   const hasSocial  = f.showSocial  && SOCIAL.some(({ key }) => f[key]);
   const hasLinks   = f.showLinks !== false && allLinks.length > 0;

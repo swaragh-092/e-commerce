@@ -11,7 +11,7 @@ vi.mock('../../../context/NotificationContext', () => ({ useNotification: () => 
 vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () => true }) }));
 vi.mock('../../../services/settingsService', () => ({ getSettingsGroup: vi.fn(), getDesignDraft: vi.fn(), getDesignState: vi.fn(), getDesignVersions: vi.fn(), publishDesignDraft: vi.fn(), restoreDesignVersion: vi.fn(), saveDesignDraft: vi.fn(), discardDesignDraft: vi.fn() }));
 vi.mock('../../../components/admin/themes/StorefrontTemplatePreview', () => ({ default: ({ activePage, currentSettings, onSelectSection }) => <div>{(activePage === 'home' ? currentSettings.homepage.sections : currentSettings.productPage.sections)?.map((section) => <button key={section.id} onClick={() => onSelectSection(section)}>Preview {section.title}</button>)}</div> }));
-vi.mock('../../../components/admin/themes/designer/DesignerTreePanel', () => ({ default: ({ sections, onToggleSection, pageTemplateControls }) => <div>{pageTemplateControls}{sections.map((section, index) => <button key={section.id} onClick={() => onToggleSection(index)}>Hide {section.title}</button>)}</div> }));
+vi.mock('../../../components/admin/themes/designer/DesignerTreePanel', () => ({ default: ({ sections, onToggleSection, onFooterClick, pageTemplateControls }) => <div>{pageTemplateControls}<button onClick={onFooterClick}>Edit footer</button>{sections.map((section, index) => <button key={section.id} onClick={() => onToggleSection(index)}>Hide {section.title}</button>)}</div> }));
 vi.mock('../../../components/admin/themes/designer/DesignerSectionEditor', () => ({ default: ({ section, onChange, onBlur }) => (
   <div>
     <input aria-label="Section title" value={section.title} onChange={(event) => onChange('title', event.target.value)} onBlur={onBlur} />
@@ -281,6 +281,20 @@ describe('Store Designer section editing', () => {
     fireEvent.click(undo);
     expect(screen.getByText('Slide blocks: 0')).toBeInTheDocument();
     expect(undo).toBeDisabled();
+  });
+
+  it('undoes and redoes footer visibility changes', async () => {
+    mount();
+    await screen.findByRole('button', { name: 'Preview Homepage hero' });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit footer' }));
+    const quickLinks = await screen.findByRole('checkbox', { name: 'Show quick links column' });
+    expect(quickLinks).toBeChecked();
+    fireEvent.click(quickLinks);
+    expect(quickLinks).not.toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Undo section change' }));
+    expect(quickLinks).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Redo section change' }));
+    expect(quickLinks).not.toBeChecked();
   });
 
   it('blocks saving and shows retry when initial homepage sections load fails', async () => {

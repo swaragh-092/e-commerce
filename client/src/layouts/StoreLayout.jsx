@@ -48,6 +48,7 @@ const StoreLayout = () => {
   const cartEnabled     = useFeatureVisible('cart', 'storefront');
   const wishlistEnabled = useFeature('wishlist');
   const ordersEnabled   = useFeatureVisible('orders', 'storefront');
+  const checkoutVisible = useFeatureVisible('checkout', 'storefront');
   const shippingVisible = useFeatureVisible('shipping', 'storefront');
   const pagesEnabled = features?.pages === true;
   const [announcementDismissed, setAnnouncementDismissed] = useState(false);
@@ -128,6 +129,7 @@ const StoreLayout = () => {
   const navPosition  = nav.sticky !== false ? 'sticky' : 'static';
   const headerStyle = themeSettings.headerStyle || 'gradient';
   const hasDynamicHeaderItems = Array.isArray(headerMenu?.items) && headerMenu.items.length > 0;
+  const navigationFeatures = { ...features, cart: cartEnabled, checkout: checkoutVisible, orders: ordersEnabled };
   const headerItems = filterFeatureLinks(hasDynamicHeaderItems
     ? headerMenu.items
     : topLinks.map((link, index) => ({
@@ -138,7 +140,7 @@ const StoreLayout = () => {
         placement: 'center',
         sortOrder: index,
         children: [],
-      })), features || {});
+      })), navigationFeatures);
 
   const groupedHeaderItems = {
     left: headerItems.filter((item) => item.placement === 'left'),
@@ -154,7 +156,7 @@ const StoreLayout = () => {
   const headerAlignment = headerMenu?.alignment || 'left';
 
   const hasDedicatedMobileItems = Array.isArray(mobileMenu?.items) && mobileMenu.items.length > 0;
-  const mobileHeaderItems = filterFeatureLinks(hasDedicatedMobileItems ? mobileMenu.items : desktopHeaderItems, features || {});
+  const mobileHeaderItems = filterFeatureLinks(hasDedicatedMobileItems ? mobileMenu.items : desktopHeaderItems, navigationFeatures);
 
   const getLinkProps = (item) => {
     const url = item.url || '/';
@@ -352,11 +354,12 @@ const StoreLayout = () => {
         sx={{
           borderRadius: 0,
           background: (theme) => {
+            if (nav.bgColor) return nav.bgColor;
             if (headerStyle === 'solid') return theme.palette.primary.main;
             if (headerStyle === 'glass') return `${theme.palette.background.paper}e8`;
             return `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 58%, ${theme.palette.secondary.dark} 100%)`;
           },
-          color: headerStyle === 'glass' ? 'text.primary' : '#fff',
+          color: nav.fgColor || (headerStyle === 'glass' ? 'text.primary' : '#fff'),
           backdropFilter: headerStyle === 'glass' ? 'blur(14px)' : 'none',
           borderBottom: headerStyle === 'glass' ? '1px solid' : '1px solid rgba(255,255,255,0.16)',
           borderColor: headerStyle === 'glass' ? 'divider' : 'rgba(255,255,255,0.16)',

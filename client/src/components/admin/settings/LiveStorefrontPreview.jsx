@@ -79,6 +79,11 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', devi
       const selected = JSON.stringify(String(selectedBlockId || selectedSectionId));
       const attribute = selectedBlockId ? 'data-store-block' : 'data-store-section';
       style.textContent += `[${attribute}=${selected}]{outline:2px solid #4f46e5;outline-offset:-2px}`;
+      const target = [...doc.querySelectorAll(`[${attribute}]`)].find(
+        (element) => element.getAttribute(attribute) === String(selectedBlockId || selectedSectionId)
+          && (!selectedBlockId || element.closest('[data-store-section]')?.dataset.storeSection === String(selectedSectionId))
+      );
+      target?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
     }
     const insertionSelectors = [
       canInsertSection && '[data-store-add-section]',

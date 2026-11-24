@@ -226,6 +226,7 @@ exports.getCategoryWithProducts = async (slug, pageOrOptions = 1, limitArg = 20,
         where: productWhere,
         include: [
             ...(brand && brandVisible ? [{ model: Brand, as: 'brand', where: { slug: brand }, required: true }] : []),
+            { model: Category, as: 'categories', attributes: ['id', 'name', 'slug'], through: { attributes: [] } },
             {
                 model: ProductImage,
                 as: 'images',
