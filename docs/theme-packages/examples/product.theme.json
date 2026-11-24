@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 3,
+  "meta": { "slug": "product-page-example", "name": "Product Page Example", "version": "1.0.0" },
+  "design": { "theme": { "primaryColor": "#15803d" } },
+  "pageTemplates": {
+    "product": {
+      "layout": "media-left-details-right",
+      "showSKU": true,
+      "productRows": [
+        { "id": "related-picks", "type": "product-row", "enabled": true, "pagePosition": "below", "source": "featured", "count": 4 }
+      ]
+    }
+  }
+}

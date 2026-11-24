@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 3,
+  "meta": { "slug": "fresh-harvest-home", "name": "Fresh Harvest Home", "version": "1.0.0", "category": "grocery" },
+  "design": { "theme": { "primaryColor": "#15803d", "backgroundColor": "#f8fafc", "textColor": "#17251c" } },
+  "layout": {
+    "homepageSections": [
+      { "id": "home-hero", "type": "hero-carousel", "enabled": true },
+      {
+        "id": "featured-fruit",
+        "type": "product-row",
+        "enabled": true,
+        "title": "Featured fruit",
+        "source": "featured",
+        "count": 4,
+        "query": { "category": "fruit", "sort": "newest" }
+      }
+    ]
+  },
+  "demoContent": {
+    "heroSlides": [{ "title": "Fresh arrivals", "buttonText": "Browse products", "buttonLink": "/products" }]
+  }
+}

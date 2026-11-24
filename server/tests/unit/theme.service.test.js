@@ -11,6 +11,23 @@ const { packageSchema } = require('../../src/modules/theme/theme.validation');
 
 const BUILTIN_DIR = path.join(__dirname, '../../src/modules/theme/builtin');
 
+describe('Theme JSON authoring files', () => {
+  const { generateThemeJsonSchema, schemaPath } = require('../../src/scripts/generateThemeJsonSchema');
+  const authoringExamples = ['home', 'product', 'category', 'wishlist'];
+
+  it('keeps the published JSON Schema in sync with the package validator', () => {
+    const published = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
+    expect(published).toEqual(generateThemeJsonSchema());
+  });
+
+  it.each(authoringExamples)('accepts the %s example through the runtime import validator', (name) => {
+    const ThemeService = require('../../src/modules/theme/theme.service');
+    const file = path.join(path.dirname(schemaPath), 'examples', `${name}.theme.json`);
+    const example = JSON.parse(fs.readFileSync(file, 'utf8'));
+    expect(ThemeService.validatePackage(example)).toMatchObject({ schemaVersion: 3, meta: example.meta });
+  });
+});
+
 // ─── Schema Validation Tests ────────────────────────────────────────────────
 
 describe('Theme package schema validation', () => {
