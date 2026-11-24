@@ -701,9 +701,15 @@ const cancelAccountDeletion = async (userId) => {
 const getSessions = async (userId, currentAccessToken) => {
   const { RefreshToken } = require('../index');
   const jwt = require('jsonwebtoken');
+  const now = new Date();
 
   const sessions = await RefreshToken.findAll({
-    where: { userId, revokedAt: null },
+    where: {
+      userId,
+      revokedAt: null,
+      expiresAt: { [Op.gt]: now },
+      [Op.or]: [{ absoluteExpiresAt: null }, { absoluteExpiresAt: { [Op.gt]: now } }],
+    },
     attributes: ['id', 'createdByIp', 'deviceName', 'lastActiveAt', 'createdAt'],
     order: [['lastActiveAt', 'DESC']],
   });
