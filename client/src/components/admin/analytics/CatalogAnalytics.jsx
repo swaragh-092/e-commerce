@@ -59,6 +59,9 @@ export default function CatalogAnalytics() {
     </Box>
     {error && <Alert severity="error" action={<Button onClick={() => setRetry((n) => n + 1)}>Retry</Button>} sx={{ mb: 2 }}>{error}</Alert>}
     {data?.trackingAvailable === false && <Alert severity="info" sx={{ mb: 2 }}>Visit tracking is not available yet. Analytics will appear once tracking is configured.</Alert>}
+    {data?.unidentifiedVisits > 0 && <Alert severity="info" sx={{ mb: 2 }}>
+      {formatCount(data.unidentifiedVisits)} page views in this period were recorded without a session ID and are excluded from the Sessions count.
+    </Alert>}
     {widgets.every(({ id }) => !visible(id)) && <Alert severity="info">All cards are hidden. Use Customize to choose cards or restore the defaults.</Alert>}
     {!error && <Grid container spacing={3}>
       {[['visits', 'Page views'], ['sessions', 'Sessions'], ['productViews', 'Product views'], ['enquiries', 'Enquiries'], ['convertedEnquiries', 'Converted enquiries'], ['openEnquiries', 'Open enquiries']].map(([id, label]) => <AnalyticsWidget metric={id} item xs={12} sm={4} key={id}>

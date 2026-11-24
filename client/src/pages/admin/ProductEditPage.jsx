@@ -1497,6 +1497,9 @@ const ProductEditPage = () => {
                   label="This product requires shipping"
                   sx={{ mb: 2 }}
                 />
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Turn this on for physical products, including those with free shipping. Turn it off for products fulfilled without shipping.
+                </Typography>
 
                 {formData.requiresShipping && (
                   <>

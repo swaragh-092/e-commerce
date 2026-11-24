@@ -2,6 +2,14 @@
 
 const { success } = require('../../utils/response');
 const AnalyticsEventService = require('./analyticsEvent.service');
+const { recordPageVisit } = require('./pageVisit.service');
+
+const recordPageView = async (req, res, next) => {
+  try {
+    await recordPageVisit(req.validated, req);
+    return res.status(204).end();
+  } catch (error) { next(error); }
+};
 
 const recordCheckoutStart = async (req, res, next) => {
   try {
@@ -15,4 +23,4 @@ const recordCheckoutStart = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-module.exports = { recordCheckoutStart };
+module.exports = { recordCheckoutStart, recordPageView };

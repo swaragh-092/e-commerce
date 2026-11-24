@@ -164,6 +164,11 @@ const FeaturesPage = () => {
                   ? 'Catalog mode lets customers browse your products. Pricing, cart, checkout, orders, payments, and shipping are turned off.'
                   : 'E-commerce mode enables pricing, cart, checkout, orders, payments, and shipping. Choose where their interfaces appear below.'}
               </Typography>
+              {appMode === 'catalog' && selectedMode === 'ecommerce' && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  Add any missing weight and dimensions to physical products after switching, so customers can get delivery quotes.
+                </Typography>
+              )}
             </Box>
             {isSuperAdmin ? (
               <FormControl size="small" sx={{ minWidth: 200, alignSelf: { sm: 'center' } }}>

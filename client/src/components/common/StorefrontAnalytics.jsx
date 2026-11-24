@@ -91,6 +91,37 @@ export default function StorefrontAnalytics() {
   const isAdmin = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
 
   useEffect(() => {
+    if (isPreview || isAdmin) return;
+    const state = getTrackerState();
+    const navigation = `${location.key}:${location.pathname}`;
+    if (state.pageVisit === navigation) return;
+
+    try {
+      const params = new URLSearchParams(location.search);
+      const base = (import.meta.env.VITE_API_URL || '/api').replace(/\/+$/, '');
+      const referrer = state.pageVisit ? window.location.origin : document.referrer;
+      const event = {
+        path: location.pathname,
+        sessionId: getSessionId(),
+        referrer: referrer ? new URL(referrer).origin : '',
+        utmSource: (params.get('utm_source') || '').slice(0, 255),
+        utmMedium: (params.get('utm_medium') || '').slice(0, 255),
+        utmCampaign: (params.get('utm_campaign') || '').slice(0, 255),
+      };
+      state.pageVisit = navigation;
+      void fetch(`${base}/analytics/events/page-view`, {
+        method: 'POST',
+        credentials: 'omit',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(event),
+      }).catch(() => {});
+    } catch {
+      // Analytics should not interrupt storefront navigation.
+    }
+  }, [isPreview, isAdmin, location.key, location.pathname, location.search]);
+
+  useEffect(() => {
     if (isPreview || isAdmin) return undefined;
     getCampaignAttribution(location.search);
     try {

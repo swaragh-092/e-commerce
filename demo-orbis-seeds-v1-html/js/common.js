@@ -1,5 +1,37 @@
 document.getElementById("current-year").textContent = new Date().getFullYear();
 
+(function recordPageView() {
+    try {
+        var params = new URLSearchParams(window.location.search);
+        if (window.self !== window.top || params.get('previewMode') === '1') return;
+        var sessionId = localStorage.getItem('orbiAnalyticsSessionId');
+        if (!sessionId) {
+            sessionId = window.crypto.randomUUID();
+            localStorage.setItem('orbiAnalyticsSessionId', sessionId);
+        }
+        var path = window.location.pathname;
+        var event = {
+            path: path,
+            sessionId: sessionId,
+            referrer: document.referrer ? new URL(document.referrer).origin : '',
+            utmSource: (params.get('utm_source') || '').slice(0, 255),
+            utmMedium: (params.get('utm_medium') || '').slice(0, 255),
+            utmCampaign: (params.get('utm_campaign') || '').slice(0, 255)
+        };
+        var slug = params.get('slug');
+        if (path === '/products.html' && slug && /^[\w-]{1,255}$/.test(slug)) event.slug = slug;
+        fetch(API_URL.replace(/\/+$/, '') + '/analytics/events/page-view', {
+            method: 'POST',
+            credentials: 'omit',
+            keepalive: true,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(event)
+        }).catch(function () {});
+    } catch (error) {
+        // Analytics should not interrupt the storefront.
+    }
+})();
+
 function getAbsoluteFile() {
     var page = window.location.pathname.substring(window.location.pathname.lastIndexOf('/') + 1);
     page = page.replace(/\.shtml$/, '').replace(/\.html$/, '').trim();

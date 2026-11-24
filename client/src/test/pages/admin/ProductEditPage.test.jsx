@@ -135,6 +135,8 @@ describe('product type and inventory editor', () => {
     disabledFeatures.add('pricing');
     disabledFeatures.add('shipping');
     mount('new');
+    expect(screen.queryByLabelText(/Weight \(grams\)/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('This product requires shipping')).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole('textbox', { name: /Product Name/ }), { target: { value: 'Catalog sample' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
     await waitFor(() => expect(createProduct).toHaveBeenCalled());

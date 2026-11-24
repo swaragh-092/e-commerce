@@ -142,6 +142,11 @@ describe('Packaging & Shipping Scenario Verification', () => {
 
     // Scenario 7: Missing measurements → flagged before sale
     it('Scenario 7: Missing measurements → rejects publishing physical products without weight/dimensions', () => {
+        expect(() => validateShippingReadiness({
+            status: 'published',
+            requiresShipping: true,
+        }, null, false)).not.toThrow();
+
         // Missing weight
         expect(() => {
             validateShippingReadiness({
