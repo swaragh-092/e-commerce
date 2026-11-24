@@ -7,7 +7,25 @@ vi.mock('../../services/adminService', () => ({
   getSaleLabels: vi.fn().mockResolvedValue({ data: { data: [{ id: 'summer-sale', name: 'Summer Sale' }] } }),
 }));
 
+vi.mock('../../services/categoryService', () => ({
+  getCategories: vi.fn().mockResolvedValue([
+    { id: 'produce', slug: 'produce', name: 'Produce', children: [{ id: 'fruit', slug: 'fruit', name: 'Fruit' }] },
+    { id: 'books', slug: 'books', name: 'Books' },
+  ]),
+}));
+
 vi.mock('../../components/common/MediaPicker', () => ({ default: () => <div data-testid="media-picker" /> }));
+
+it('filters a Product Row by a searchable category and preserves other query settings', async () => {
+  const onChange = vi.fn();
+  render(<DesignerSectionEditor section={{ id: 'featured', type: 'product-row', source: 'featured',
+    query: { featured: true, sort: 'newest' } }} onChange={onChange} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Content source' }));
+  const input = screen.getByRole('combobox', { name: 'Filter by category' });
+  fireEvent.change(input, { target: { value: 'Fruit' } });
+  fireEvent.click(await screen.findByRole('option', { name: 'Produce / Fruit' }));
+  expect(onChange).toHaveBeenCalledWith('query', { featured: true, sort: 'newest', category: 'fruit' });
+});
 
 describe('DesignerSectionEditor BlockListEditor', () => {
   it.each(['composed-hero', 'editorial-image-text', 'product-info'])('previews blocks without insertion in %s', (type) => {

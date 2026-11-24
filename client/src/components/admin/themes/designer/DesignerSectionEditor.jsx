@@ -1,9 +1,11 @@
 import StaffPicksEditor from './StaffPicksEditor';
 import ComposedHeroEditor from './ComposedHeroEditor';
+import useHeroCategories from '../../../../hooks/useHeroCategories';
+import { usesProductRowSource } from '../../../../utils/productRowSources';
 import { isValidPromoLink } from '../../../../utils/urls';
 import { useState, useEffect } from 'react';
 import {
-  Box, Stack, Typography, IconButton, Button, Chip, Divider,
+  Autocomplete, Box, Stack, Typography, IconButton, Button, Chip, Divider,
   TextField, FormControl, InputLabel, Select, MenuItem, InputAdornment,
   ToggleButtonGroup, ToggleButton, Switch, FormControlLabel,
   Accordion, AccordionSummary, AccordionDetails,
@@ -30,6 +32,56 @@ import { getMediaUrl } from '../../../../utils/media';
 
 import productRow from '../../../../../../shared/product-row.json';
 
+const productSortOptions = {
+  newest: 'Newest first',
+  name_asc: 'Name A–Z',
+  price_asc: 'Price low to high',
+  price_desc: 'Price high to low',
+};
+
+const ProductRowCategoryFilter = ({ query = {}, onChange, onBlur }) => {
+  const { categories, status } = useHeroCategories(true);
+  const selected = categories.find(({ slug, id }) => query.categoryId ? id === query.categoryId : slug === query.category);
+  const savedCategory = query.categoryId || query.category;
+  const missing = savedCategory && !selected
+    ? { slug: savedCategory, label: status === 'ready' ? `Unavailable category (${savedCategory})` : savedCategory }
+    : null;
+
+  const updateCategory = (category) => {
+    const { category: _category, categoryId: _categoryId, ...filters } = query;
+    onChange('query', { ...filters, ...(category && { category: category.slug }) });
+    onBlur?.();
+  };
+
+  const updateSort = (sort) => {
+    const { sort: _sort, sortBy: _sortBy, sortOrder: _sortOrder, ...filters } = query;
+    onChange('query', { ...filters, ...(sort && { sort }) });
+    onBlur?.();
+  };
+
+  const showUnavailable = Boolean(missing && status === 'ready');
+  return (
+    <>
+      <Autocomplete
+        size="small"
+        options={missing ? [missing, ...categories] : categories}
+        value={selected || missing}
+        loading={status === 'loading'}
+        getOptionLabel={(category) => category.label}
+        getOptionDisabled={(category) => category === missing}
+        isOptionEqualToValue={(option, value) => option.slug === value.slug}
+        onChange={(_, category) => updateCategory(category)}
+        renderInput={(params) => <TextField {...params} label="Filter by category" error={showUnavailable || status === 'error'}
+          helperText={status === 'error' ? 'Could not load categories.' : showUnavailable ? 'Choose another category or clear the filter.' : 'Leave blank to include all categories in this source.'} />}
+      />
+      <TextField select size="small" fullWidth label="Product sort" value={query.sort || ''} onChange={(event) => updateSort(event.target.value)}>
+        <MenuItem value="">Source default</MenuItem>
+        {Object.entries(productSortOptions).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
+        {query.sort && !Object.hasOwn(productSortOptions, query.sort) && <MenuItem value={query.sort}>{query.sort}</MenuItem>}
+      </TextField>
+    </>
+  );
+};
 
 export const BLOCK_FIELD_PRESETS = {
   'hero-carousel': {
@@ -680,7 +732,7 @@ const DesignerSectionEditor = ({
             <TextField select size="small" label="Product scope" value={section.productScope || 'category'}
               onChange={(event) => onChange('productScope', event.target.value)}>
               <MenuItem value="category">This category</MenuItem>
-              <MenuItem value="store">Entire store</MenuItem>
+              <MenuItem value="store">Store catalog</MenuItem>
             </TextField>
           )}
           {allowSharedPlacement && section.type === 'composed-hero' && (
@@ -1382,6 +1434,10 @@ const DesignerSectionEditor = ({
                       onChange('productIds', ids);
                       onBlur();
                     }} />
+                  )}
+                  {isProductRow && section.source !== 'staffPicks' && usesProductRowSource(section)
+                    && (!categoryPage || section.productScope === 'store') && (
+                      <ProductRowCategoryFilter query={section.query || undefined} onChange={onChange} onBlur={onBlur} />
                   )}
                   <TextField
                     label="Count"

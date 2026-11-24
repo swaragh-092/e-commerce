@@ -2,7 +2,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { Box, Container } from '@mui/material';
 import { useFeatureVisible, useSettings } from '../../../hooks/useSettings';
 import { getPageProductRows, getPageSectionTypes, findAssignedPageTemplate, PAGE_SETTINGS_GROUPS } from '../../../utils/designerSections';
-import { fetchStaffPicks, getProductRowQuery } from '../../../utils/productRowSources';
+import { fetchStaffPicks, getProductRowQuery, withProductRowCategoryLink } from '../../../utils/productRowSources';
 import React, { useContext, useEffect, useState } from 'react';
 import { getProducts } from '../../../services/productService';
 import SectionRenderer from './SectionRenderer';
@@ -39,7 +39,8 @@ const DiscoveryRow = ({ row, category, designerPreview }) => {
   const scopedLink = defaultLink && category
     ? `${defaultLink}&category=${encodeURIComponent(category)}`
     : defaultLink;
-  const viewAllLink = row.viewAllLink || scopedLink;
+  const selectedCategory = !category && source !== 'staffPicks' ? row.query?.category : undefined;
+  const viewAllLink = withProductRowCategoryLink(row.viewAllLink || scopedLink, selectedCategory);
   const layout = row.variant || row.layout || productRow.defaults.layout;
   return <ProductRow title={row.title || 'Recommended products'} viewAllLink={viewAllLink} products={products} loading={loading} count={count} layout={layout} compact={layout === 'grid-compact'} />;
 };
