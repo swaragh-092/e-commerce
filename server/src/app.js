@@ -109,11 +109,6 @@ if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('dev'));
 }
 
-// Visit tracking for analytics (async, non-blocking)
-const { trackVisit } = require('./middleware/visitTracking.middleware');
-app.use(trackVisit);
-
-
 // Use the same resolution strategy as media.service.js so both always point
 // to the same directory regardless of the working directory at startup.
 const SERVER_ROOT = path.resolve(__dirname, '..');

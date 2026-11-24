@@ -22,6 +22,7 @@ const getCatalogOverview = async ({ period = '30d' } = {}) => {
     )
     SELECT
       COUNT(*)::int AS visits,
+      COUNT(*) FILTER (WHERE NULLIF(session_id, '') IS NULL)::int AS "unidentifiedVisits",
       COUNT(DISTINCT NULLIF(session_id, ''))::int AS sessions,
       COUNT(*) FILTER (WHERE product_id IS NOT NULL)::int AS "productViews",
       (SELECT COUNT(*)::int FROM enquiries e
