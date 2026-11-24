@@ -20,6 +20,7 @@ const DiscoveryRow = ({ row, category, designerPreview }) => {
     const limit = source === 'bestSellers' ? Math.max(4, count) : source === 'mostViewed' ? Math.max(5, count) : count;
     const request = source === 'staffPicks' ? fetchStaffPicks(row, getProducts) : getProducts({
       ...(PRODUCT_SOURCE_PARAMS[source] || PRODUCT_SOURCE_PARAMS.featured),
+      ...row.query,
       ...(category && { category }),
       ...(source === 'sale' && row.saleLabel && { saleLabel: row.saleLabel }),
       limit,

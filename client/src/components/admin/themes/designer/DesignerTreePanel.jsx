@@ -258,6 +258,8 @@ const DesignerTreePanel = ({
   activePage,
   pageSettings,
   selectedSectionId,
+  componentSelection,
+  onDragActiveChange,
   onSectionClick,
   onThemeSettingsClick,
   onAddSection,
@@ -280,6 +282,12 @@ const DesignerTreePanel = ({
 }) => {
   const [expandedSections, setExpandedSections] = useState({});
   const [headerExpanded, setHeaderExpanded] = useState(false);
+  const headerRef = useRef(null);
+  useEffect(() => {
+    if (componentSelection?.componentKey === 'headerLayout') {
+      headerRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [componentSelection]);
   const [pageSettingsOpen, setPageSettingsOpen] = useState(true);
   const [cartExpanded, setCartExpanded] = useState(false);
 
@@ -363,7 +371,8 @@ const DesignerTreePanel = ({
   };
 
   return (
-    <DragDropContext onDragEnd={({ source, destination }) => {
+    <DragDropContext onBeforeDragStart={() => onDragActiveChange?.(true)} onDragEnd={({ source, destination }) => {
+      onDragActiveChange?.(false);
       if (!destination) return;
       if (source.droppableId !== destination.droppableId) {
         const positions = ['above', 'below'];
@@ -473,7 +482,9 @@ const DesignerTreePanel = ({
         )}
 
         {/* Fixed Header node */}
-        <Box sx={{ px: 1, mb: 0.5 }}>
+        <Box ref={headerRef} sx={{ px: 1, mb: 0.5, ...(componentSelection?.componentKey === 'headerLayout' && {
+          outline: '2px solid', outlineColor: 'primary.main', outlineOffset: '-2px',
+        }) }}>
           <Typography component="h3" variant="caption" color="text.secondary">Header</Typography>
           <FixedNode
             icon={<NavigationIcon sx={{ fontSize: 16 }} />}
@@ -530,7 +541,9 @@ const DesignerTreePanel = ({
               </Button>
             </Box>
           ) : (
-            <Droppable droppableId="template">{(provided) => <Box ref={provided.innerRef} {...provided.droppableProps}>
+            <Droppable droppableId="template">{(provided, snapshot) => <Box ref={provided.innerRef} {...provided.droppableProps}
+              data-drop-active={snapshot?.isDraggingOver || undefined}
+              sx={{ outline: snapshot?.isDraggingOver ? '2px dashed' : undefined, outlineColor: 'primary.main', outlineOffset: '-2px' }}>
             {templateSectionRows.map(({ section, originalIndex }, index) => (
               <Draggable key={section.id} draggableId={String(section.id)} index={index}>{(drag) => <Box ref={drag.innerRef} {...drag.draggableProps}>
                 <InsertSectionControl label={`Add section before ${section.title || getSectionLabel(section)}`}

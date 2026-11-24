@@ -2,15 +2,39 @@ import React from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import DesignerTreePanel from '../../components/admin/themes/designer/DesignerTreePanel';
-const dnd = vi.hoisted(() => ({ end: null }));
+const dnd = vi.hoisted(() => ({ start: null, end: null }));
 vi.mock('@hello-pangea/dnd', () => ({
-  DragDropContext: ({ onDragEnd, children }) => { dnd.end = onDragEnd; return children; },
+  DragDropContext: ({ onBeforeDragStart, onDragEnd, children }) => {
+    dnd.start = onBeforeDragStart;
+    dnd.end = onDragEnd;
+    return children;
+  },
   Droppable: ({ children }) => children({ innerRef: () => {}, droppableProps: {}, placeholder: null }),
   Draggable: ({ children }) => children({ innerRef: () => {}, draggableProps: {}, dragHandleProps: { role: 'button', tabIndex: 0 } }),
 }));
 const sections = [{ id: 'one', type: 'hero-carousel' }, { id: 'footer', type: 'trust-badges', placement: 'footer' }, { id: 'two', type: 'product-row' }];
 const setup = (activePage = 'home') => { const reorder = vi.fn(); const select = vi.fn(); render(<DesignerTreePanel sections={activePage === 'home' ? sections : []} activePage={activePage} pageSettings={{}} onSectionClick={select} onReorderSection={reorder} />); return { reorder, select }; };
 describe('store designer section navigation', () => {
+  it('releases the preview iframe guard after a canceled drag', () => {
+    const onDragActiveChange = vi.fn();
+    render(<DesignerTreePanel activePage="home" sections={sections} pageSettings={{}} onDragActiveChange={onDragActiveChange} />);
+    act(() => dnd.start());
+    act(() => dnd.end({ destination: null }));
+    expect(onDragActiveChange.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it('scrolls the Header node into view when selected in preview', () => {
+    const { rerender } = render(<DesignerTreePanel activePage="home" sections={sections} pageSettings={{}} />);
+    const header = screen.getByRole('heading', { name: 'Header' }).parentElement;
+    header.scrollIntoView = vi.fn();
+    const selectHeader = () => rerender(<DesignerTreePanel activePage="home" sections={sections} pageSettings={{}}
+      componentSelection={{ componentKey: 'headerLayout' }} />);
+    selectHeader();
+    selectHeader();
+    expect(header.scrollIntoView).toHaveBeenCalledTimes(2);
+    expect(header.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'nearest' });
+  });
+
   it('translates visible section indices to original insertion indices', () => {
     const { reorder } = setup();
     act(() => dnd.end({ source: { droppableId: 'template', index: 0 }, destination: { droppableId: 'template', index: 1 } }));

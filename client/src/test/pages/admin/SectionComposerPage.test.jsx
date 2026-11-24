@@ -48,6 +48,15 @@ beforeEach(() => {
   service.saveDesignDraft.mockImplementation(async (payload) => ({ revision: 1, payload }));
 });
 describe('Store Designer section editing', () => {
+  it('identifies the editable draft and its saved library template source', async () => {
+    service.getDesignDraft.mockResolvedValueOnce({ draft: {
+      revision: 2, payload: [], templateSource: { name: 'Fresh Harvest', kind: 'library' },
+    } });
+    mount();
+    expect(await screen.findByText('Fresh Harvest')).toBeInTheDocument();
+    expect(screen.getByText('Draft saved')).toBeInTheDocument();
+    expect(screen.getByText('Based on a library template')).toBeInTheDocument();
+  });
   it.each([
     ['Product', 'productPage', 'productSlugs', '/products'],
     ['Category', 'categoryPage', 'categorySlugs', '/category'],

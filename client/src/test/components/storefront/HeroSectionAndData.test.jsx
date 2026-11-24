@@ -1,6 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
 import HeroSection from '../../../components/storefront/sections/HeroSection';
 import { buildSectionRendererData } from '../../../components/storefront/sections/sectionData';
 
@@ -9,6 +10,16 @@ vi.mock('../../../hooks/useSettings', () => ({
 }));
 
 describe('HeroSection live and preview synchronization', () => {
+  it('uses an opaque theme surface for the product spotlight overlay', () => {
+    const theme = createTheme({ palette: { mode: 'dark', background: { paper: '#0f172a' } } });
+    render(<ThemeProvider theme={theme}>
+      <HeroSection section={{ id: 'spotlight', variant: 'product-spotlight' }}
+        slides={[{ title: 'New arrival', productName: 'Spotlight headphones' }]} mode="preview" />
+    </ThemeProvider>);
+    const overlay = screen.getByText('Featured Product').parentElement;
+    expect(getComputedStyle(overlay).backgroundColor).toBe('rgb(15, 23, 42)');
+    expect(overlay).toContainElement(screen.getByText('Spotlight headphones'));
+  });
   it('makes individual slide headings authoritative over section name', () => {
     const customSection = {
       id: 'hero-1',
