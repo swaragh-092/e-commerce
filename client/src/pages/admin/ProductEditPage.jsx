@@ -1670,6 +1670,7 @@ const ProductEditPage = () => {
               path={dbProduct?.status === 'published' && dbProduct.isEnabled !== false && dbProduct.slug ? `/products/${encodeURIComponent(dbProduct.slug)}` : null}
               name={formData.name}
               description={formData.metaDescription || formData.shortDescription}
+              variants={formData.type === 'variable' ? dbProduct?.variants : undefined}
             />
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 5fr) minmax(0, 3fr) minmax(0, 4fr)' }, gap: 3, alignItems: 'start' }}>
               <Box>
