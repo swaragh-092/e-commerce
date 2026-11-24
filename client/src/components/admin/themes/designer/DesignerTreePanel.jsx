@@ -109,6 +109,27 @@ const ExpandItemsButton = ({ label, expanded, onToggle }) => (
   </IconButton>
 );
 
+const SidebarDragHandle = ({ handleProps, label }) => handleProps && (
+  <Box
+    {...handleProps}
+    aria-label={`Reorder ${label}`}
+    onPointerDown={(event) => {
+      if (!event.isPrimary || event.pointerType === 'touch' || event.button !== 0 ||
+        event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      // Keep the pending gesture in this document if its first move crosses the preview iframe.
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    }}
+    sx={{
+      display: 'grid', placeItems: 'center', width: 32, height: 32, flexShrink: 0,
+      color: 'text.secondary', cursor: 'grab', touchAction: 'none', userSelect: 'none',
+      borderRadius: 1, '&:hover, &:focus-visible': { bgcolor: 'action.hover', color: 'text.primary' },
+      '&:active': { cursor: 'grabbing' },
+    }}
+  >
+    <DragIndicatorIcon sx={{ fontSize: 18, pointerEvents: 'none' }} />
+  </Box>
+);
+
 const SectionRow = ({ section, index, total, isSelected, onSelect, onMove, onToggle, onDelete, dragHandleProps, expandControl }) => {
   const rowRef = useRef(null);
   useEffect(() => {
@@ -142,7 +163,7 @@ const SectionRow = ({ section, index, total, isSelected, onSelect, onMove, onTog
     }}
   >
     {expandControl}
-    {dragHandleProps && <Box {...dragHandleProps} aria-label={`Reorder ${getSectionLabel(section)}`} sx={{ display: 'flex', color: 'text.secondary', cursor: 'grab', touchAction: 'none' }}><DragIndicatorIcon sx={{ fontSize: 18 }} /></Box>}
+    <SidebarDragHandle handleProps={dragHandleProps} label={section.title || getSectionLabel(section)} />
     <Box component="button" type="button" onClick={(event) => { event.stopPropagation(); onSelect(section); }} aria-label={`Edit ${getSectionLabel(section)}`} sx={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', p: 0, color: 'inherit', cursor: 'pointer' }}>
       <Typography variant="body2" fontWeight={isSelected ? 800 : 600} sx={{ fontSize: '0.85rem', overflowWrap: 'anywhere' }}>
         {section.title || getSectionLabel(section)}
@@ -596,7 +617,7 @@ const DesignerTreePanel = ({
                           return <Draggable key={key} draggableId={`product-detail:${key}`} index={index}>{(drag) => (
                             <Box ref={drag.innerRef} {...drag.draggableProps}>
                               <Stack direction="row" alignItems="center">
-                                <Box {...drag.dragHandleProps} sx={{ display: 'flex', cursor: 'grab' }} aria-label={`Reorder ${label}`}><DragIndicatorIcon fontSize="small" /></Box>
+                                <SidebarDragHandle handleProps={drag.dragHandleProps} label={label} />
                                 <Button size="small" sx={{ justifyContent: 'flex-start', textTransform: 'none', flex: 1, minWidth: 0 }}
                                   onClick={() => onSelectProductBlock(mainSection, block?.id || key, block ? 'heroBlocks' : 'detailsBlockOrder')}>
                                   <Typography variant="inherit" noWrap>{label}</Typography>
