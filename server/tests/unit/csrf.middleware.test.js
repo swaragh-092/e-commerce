@@ -33,4 +33,30 @@ describe('browser CSRF protection', () => {
         expect(check({ path: '/payments/payu/return', headers: { Origin: 'https://payu.example' } })).toBeUndefined();
         expect(check({ path: '/payments/webhook' })).toBeUndefined();
     });
+    it('accepts public form submissions while protecting account and admin writes', () => {
+        const headers = { Origin: 'https://shop.example' };
+        const cookies = { auth_access_token: 'session' };
+        for (const path of ['/enquiries', '/Enquiries/', '/contact', '/newsletter/subscribe']) {
+            expect(check({ path, cookies, headers })).toBeUndefined();
+        }
+        for (const path of ['/enquiries/admin', '/newsletter/campaigns', '/newsletter/me']) {
+            expect(check({ path, cookies, headers })).toMatchObject({ code: 'CSRF_TOKEN_INVALID' });
+        }
+        expect(check({ method: 'PUT', path: '/enquiries', cookies, headers })).toMatchObject({ code: 'CSRF_TOKEN_INVALID' });
+    });
+    it('allows email clients to submit one-click unsubscribe', () => {
+        const headers = { Origin: 'https://mail.example' };
+        expect(check({ path: '/newsletter/unsubscribe/one-click', headers })).toBeUndefined();
+        expect(check({ path: '/newsletter/unsubscribe', headers })).toMatchObject({ code: 'CSRF_TOKEN_INVALID' });
+    });
+    it('allows static storefront wishlist writes with an explicit guest session', () => {
+        const headers = { Origin: 'https://shop.example', 'X-Session-Id': '7ea64a5a-ecac-4872-901a-db28b3d35ac8' };
+        expect(check({ path: '/wishlist/items', headers })).toBeUndefined();
+        expect(check({ method: 'DELETE', path: '/wishlist/items', headers })).toBeUndefined();
+        expect(check({ method: 'DELETE', path: '/wishlist/items/product-id', headers })).toBeUndefined();
+        expect(check({ path: '/wishlist/items', headers, cookies: { auth_access_token: 'session' } })).toMatchObject({ code: 'CSRF_TOKEN_INVALID' });
+        expect(check({ path: '/wishlist/items', headers: { ...headers, Authorization: 'Bearer session' } })).toMatchObject({ code: 'CSRF_TOKEN_INVALID' });
+        expect(check({ path: '/wishlist/items', headers: { ...headers, 'X-Session-Id': 'invalid' } })).toMatchObject({ code: 'CSRF_TOKEN_INVALID' });
+        expect(check({ path: '/wishlist/merge', headers })).toMatchObject({ code: 'CSRF_TOKEN_INVALID' });
+    });
 });
