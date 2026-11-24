@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 3,
+  "meta": { "slug": "wishlist-example", "name": "Wishlist Example", "version": "1.0.0" },
+  "design": { "theme": { "primaryColor": "#15803d" } },
+  "pageTemplates": {
+    "wishlist": {
+      "productRows": [
+        {
+          "id": "wishlist-featured",
+          "type": "product-row",
+          "enabled": true,
+          "pagePosition": "below",
+          "source": "featured",
+          "count": 4,
+          "query": { "featured": true, "sort": "newest" }
+        }
+      ]
+    }
+  }
+}

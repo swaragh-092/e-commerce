@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 3,
+  "meta": { "slug": "category-page-example", "name": "Category Page Example", "version": "1.0.0" },
+  "design": { "theme": { "primaryColor": "#15803d" } },
+  "pageTemplates": {
+    "category": {
+      "heroTitle": "Shop the collection",
+      "showSubcategories": true,
+      "productRows": [
+        { "id": "category-featured", "type": "product-row", "enabled": true, "pagePosition": "above", "productScope": "category", "source": "featured", "count": 4 }
+      ]
+    }
+  }
+}
