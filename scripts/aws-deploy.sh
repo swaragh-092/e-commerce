@@ -229,7 +229,7 @@ server {
 
     # Detect social media crawlers and search engine indexing bots
     set \$is_crawler 0;
-    if (\$http_user_agent ~* "facebookexternalhit|facebot|whatsapp|twitterbot|linkedinbot|telegrambot|slackbot|discordbot|pinterest|googlebot|bingbot|applebot|yandex|duckduckbot") {
+    if (\$http_user_agent ~* "facebookexternalhit|facebookcatalog|meta-externalagent|meta-externalfetcher|facebot|whatsapp|twitterbot|linkedinbot|telegrambot|slackbot|discordbot|pinterest|googlebot|bingbot|applebot|yandex|duckduckbot") {
         set \$is_crawler 1;
     }
     if (\$args ~ "_escaped_fragment_") {
@@ -239,13 +239,23 @@ server {
         set \$is_crawler 0;
     }
 
+    if (\$request_uri ~ "^/admin(?:[/?]|\$)") {
+        set \$is_crawler 0;
+    }
+
     location / {
+        error_page 418 = @storefront_seo;
         if (\$is_crawler = 1) {
-            rewrite ^(.*)$ /api/seo/prerender?path=\$1 break;
-            proxy_pass http://localhost:5000;
+            return 418;
         }
         root ${CLIENT_BUILD_DIR};
         try_files \$uri \$uri/ /index.html;
+    }
+
+    location @storefront_seo {
+        rewrite ^(.*)$ /api/seo/prerender?path=\$1? break;
+        proxy_pass http://localhost:5000;
+        proxy_set_header Host \$host;
     }
 
     location /api/ {

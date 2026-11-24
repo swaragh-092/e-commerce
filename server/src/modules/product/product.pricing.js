@@ -1,6 +1,7 @@
 'use strict';
 
 const AppError = require('../../utils/AppError');
+const { parseSchemaOverride } = require('../seo/schemaOverride');
 
 // ─── Sale Label Resolution ────────────────────────────────────────────────────
 
@@ -284,6 +285,10 @@ const serializeProductPricing = (product, { adminView = false, features = {} } =
 
   // Enforce server-side price-stripping if pricing is disabled (Mode-locked) or showPrice is disabled (Admin)
   if (!adminView && (features.pricing === false || features.showPrice === false)) {
+      if (plain.schemaOverride) {
+          const schema = parseSchemaOverride(plain.schemaOverride, 'product', { includePricing: false });
+          plain.schemaOverride = schema ? JSON.stringify(schema) : null;
+      }
       delete plain.price;
       delete plain.salePrice;
       delete plain.costPrice;

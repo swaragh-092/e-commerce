@@ -11,6 +11,7 @@ const publicPostPaths = new Set([
     '/enquiries',
     '/contact',
     '/newsletter/subscribe',
+    '/analytics/events/page-view',
     // Mail providers authorize one-click unsubscribe with the link token.
     '/newsletter/unsubscribe/one-click',
 ]);

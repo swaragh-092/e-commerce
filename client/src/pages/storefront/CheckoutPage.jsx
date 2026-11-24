@@ -1042,10 +1042,10 @@ const CheckoutPage = () => {
                                 <CheckCircleIcon color="success" sx={{ fontSize: 24 }} />
                                 <Box>
                                     <Typography variant="subtitle2" fontWeight={600}>
-                                        Digital Delivery
+                                        No shipping required
                                     </Typography>
                                     <Typography variant="body2" color="text.secondary">
-                                        Your order contains only digital products. No shipping address is required; access will be delivered to your account and email.
+                                        The items in your order do not require a shipping address.
                                     </Typography>
                                 </Box>
                             </Box>
@@ -1546,7 +1546,7 @@ const CheckoutPage = () => {
                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                                         <Typography variant="body2" color="text.secondary">Delivery Charges</Typography>
                                         {!hasPhysicalItems ? (
-                                            <Typography variant="body2" color="success.main" fontWeight={600}>FREE (Digital)</Typography>
+                                            <Typography variant="body2" color="text.secondary">Not applicable</Typography>
                                         ) : shippingLoading ? (
                                             <CircularProgress size={16} />
                                         ) : shippingError || shippingQuote?.serviceable === false ? (
@@ -1623,7 +1623,9 @@ const CheckoutPage = () => {
                                     {/* Total */}
                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
                                         <Typography variant="subtitle1" fontWeight={700}>Total Amount</Typography>
-                                        {shippingLoading ? (
+                                        {!hasPhysicalItems ? (
+                                            <Typography variant="subtitle1" fontWeight={700}>{formatPrice(total)}</Typography>
+                                        ) : shippingLoading ? (
                                             <Typography variant="body2" color="text.secondary">Calculating...</Typography>
                                         ) : !selectedAddressId ? (
                                             <Typography variant="body2" color="text.secondary">Select address</Typography>

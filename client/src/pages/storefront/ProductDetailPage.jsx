@@ -40,6 +40,8 @@ import { trackRecentlyViewed } from '../../components/storefront/sections/Recent
 import SectionRenderer from '../../components/storefront/sections/SectionRenderer';
 import { getPageSections } from '../../utils/designerSections';
 import { buildBreadcrumbJsonLd, buildProductJsonLd } from '../../utils/seo/buildStructuredData';
+import { parseSchemaOverride } from '../../utils/seo/schemaOverride';
+import { getProductShareImage } from '../../utils/seo/productShareImage';
 import { getBadgeChipProps } from '../../utils/componentStyles';
 import StorefrontButton from '../../components/storefront/StorefrontButton';
 
@@ -354,7 +356,8 @@ const ProductDetailPage = () => {
     });
 
     const showBreadcrumbs = pp.showBreadcrumbs !== false;
-    const productStructuredData = [productJsonLd, showBreadcrumbs ? breadcrumbStructuredData : null].filter(Boolean);
+    const customSchema = parseSchemaOverride(product.schemaOverride, 'product');
+    const productStructuredData = [customSchema || productJsonLd, showBreadcrumbs ? breadcrumbStructuredData : null].filter(Boolean);
 
     const hasVariants = product.type === 'variable';
 
@@ -483,7 +486,7 @@ const ProductDetailPage = () => {
             <PageSEO
                 title={product.metaTitle || product.name}
                 description={product.metaDescription || product.shortDescription}
-                image={product.ogImage || product.images?.[0]?.url}
+                image={getProductShareImage(product)}
                 type="product"
                 url={resolvedPageUrl}
                 structuredData={productStructuredData}
@@ -601,7 +604,7 @@ const ProductDetailPage = () => {
                                 title={product.name}
                                 text={product.shortDescription}
                                 url={window.location.href}
-                                 image={product.ogImage || product.images?.[0]?.url}
+                                 image={getProductShareImage(product)}
                              />
                          </Box>
                      </Box>,

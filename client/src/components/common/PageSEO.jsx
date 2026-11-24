@@ -28,7 +28,7 @@ const PageSEO = ({ title, description, keywords, image, url, type = 'website', s
       ...(articlePublishedTime ? { datePublished: articlePublishedTime } : {}),
       mainEntityOfPage: canonicalUrl,
     });
-  } else if (type === 'collection' && title && canonicalUrl) {
+  } else if (type === 'collection' && title && canonicalUrl && !schemas.some((schema) => schema['@type'] === 'CollectionPage')) {
     schemas.push({
       '@context': 'https://schema.org',
       '@type': 'CollectionPage',

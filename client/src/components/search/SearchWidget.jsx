@@ -29,6 +29,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useDebounce } from '../../hooks/useDebounce';
+import { useCurrency, useFeature, useFeatureVisible } from '../../hooks/useSettings';
 import { searchProducts } from '../../services/searchService';
 import normalizeSearchQuery, { getSearchQueryLength } from '../../utils/searchQuery';
 import { getMediaUrl, PLACEHOLDER_PRODUCT, PLACEHOLDER_CATEGORY, PLACEHOLDER_BRAND } from '../../utils/media';
@@ -568,6 +569,9 @@ const ResultsList = ({
   handleSeeAll 
 }) => {
   const theme = useTheme();
+  const pricingVisible = useFeatureVisible('pricing');
+  const showPrice = useFeature('showPrice');
+  const { formatPrice } = useCurrency();
   let itemCounter = 0;
 
   // If no query and has recent searches, show them
@@ -660,7 +664,9 @@ const ResultsList = ({
                   </ListItemAvatar>
                   <ListItemText
                     primary={product.name}
-                    secondary={`₹${product.effectivePrice ?? product.price}`}
+                    secondary={pricingVisible && showPrice && (product.effectivePrice ?? product.price) != null
+                      ? formatPrice(product.effectivePrice ?? product.price)
+                      : null}
                     primaryTypographyProps={{ variant: 'body2', fontWeight: 800, noWrap: true, color: 'text.primary' }}
                     secondaryTypographyProps={{ variant: 'caption', fontWeight: 800, color: 'primary.main' }}
                   />

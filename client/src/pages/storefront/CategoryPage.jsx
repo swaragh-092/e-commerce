@@ -17,6 +17,7 @@ import { useSettings, useFeature, useFeatureVisible } from '../../hooks/useSetti
 import { getCategoryWithProducts } from '../../services/categoryService';
 import { getMediaUrl, onImageError, PLACEHOLDER_CATEGORY } from '../../utils/media';
 import { buildBreadcrumbJsonLd } from '../../utils/seo/buildStructuredData';
+import { parseSchemaOverride } from '../../utils/seo/schemaOverride';
 
 // ─── Subcategory chip rail (maps service response to CategorySection format) ─
 
@@ -288,6 +289,7 @@ const CategoryPage = () => {
     const subcategoryTiles = normalizeSubs(subcategories);
 
     const hasActiveFilters = Boolean(filters.brand || filters.minPrice || filters.maxPrice);
+    const customSchema = parseSchemaOverride(category?.schemaOverride, 'category');
 
     return (
         <Container maxWidth={isCompact ? 'lg' : 'xl'} sx={{ py: 4 }}>
@@ -297,7 +299,7 @@ const CategoryPage = () => {
                 image={category?.ogImage || category?.bannerImage || category?.image}
                 url={categoryUrl}
                 type="collection"
-                structuredData={breadcrumbStructuredData}
+                structuredData={[customSchema, breadcrumbStructuredData]}
             />
 
             {/* ── Category header ─────────────────────────────────── */}

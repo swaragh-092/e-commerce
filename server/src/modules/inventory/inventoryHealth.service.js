@@ -54,7 +54,7 @@ const buildInventorySummary = (products, threshold = 10) => {
           inventoryKey: `variant:${variant.id}`,
           variantId: variant.id,
           name: product.name,
-          sku: variant.sku || product.sku || '',
+          sku: variant.sku || '',
           quantity,
           reservedQty,
           availableQty,
@@ -78,13 +78,19 @@ const buildInventorySummary = (products, threshold = 10) => {
     });
   }
 
+  const seenInventoryKeys = new Set();
   const atRiskRows = rows
     .filter((row) => row.status !== 'healthy')
     .sort((a, b) => (
       (a.status === 'out_of_stock' ? 0 : 1) - (b.status === 'out_of_stock' ? 0 : 1)
       || a.availableQty - b.availableQty
       || String(a.name || '').localeCompare(String(b.name || ''))
-    ));
+    ))
+    .filter((row) => {
+      if (seenInventoryKeys.has(row.inventoryKey)) return false;
+      seenInventoryKeys.add(row.inventoryKey);
+      return true;
+    });
   const outOfStockCount = atRiskRows.filter((row) => row.status === 'out_of_stock').length;
   const lowStockCount = atRiskRows.length - outOfStockCount;
 

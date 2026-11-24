@@ -25,6 +25,7 @@ const pixelCommands = () => window.fbq?.queue || [];
 
 beforeEach(() => {
   vi.useFakeTimers();
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
   state.settings = { seo: { googleAnalyticsId: 'G-ABC1234567', facebookPixelId: '123456789012345' } };
   delete window.__storefrontAnalytics;
   delete window.gtag;
@@ -33,6 +34,7 @@ beforeEach(() => {
   delete window._fbq;
 });
 afterEach(() => {
+  vi.unstubAllGlobals();
   vi.useRealTimers();
   document.querySelectorAll('script[data-store-tracker]').forEach((script) => script.remove());
   document.querySelectorAll('script[data-test-existing]').forEach((script) => script.remove());
@@ -41,6 +43,24 @@ afterEach(() => {
 });
 
 describe('Storefront analytics integration', () => {
+  it('records catalog page views with a shared session even without external trackers', () => {
+    state.settings = {};
+    mount('/?utm_source=newsletter&token=private');
+    fireEvent.click(screen.getByText('Product'));
+    fireEvent.click(screen.getByText('Admin'));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const [home, product] = fetch.mock.calls.map(([url, request]) => {
+      expect(url).toMatch(/\/api\/analytics\/events\/page-view$/);
+      expect(request).toMatchObject({ method: 'POST', credentials: 'omit' });
+      return JSON.parse(request.body);
+    });
+    expect(home).toMatchObject({ path: '/', utmSource: 'newsletter' });
+    expect(home).not.toHaveProperty('token');
+    expect(product).toMatchObject({ path: '/products/seed', sessionId: home.sessionId });
+    expect(home.sessionId).toBeTruthy();
+  });
+
   it('loads the saved trackers once and sends one pageview through repeated effects', () => {
     const view = mount();
     flush();

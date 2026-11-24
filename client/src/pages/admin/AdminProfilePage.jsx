@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { userService } from '../../services/userService';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import TwoFactorSetup from '../../components/storefront/TwoFactorSetup';
+import ActiveSessions from '../../components/storefront/ActiveSessions';
 
 const readable = (value = '') => value.replace(/[_.-]/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
 const profileFor = user => ({ firstName: user?.firstName || '', lastName: user?.lastName || '', phone: user?.profile?.phone || '' });
@@ -160,6 +161,7 @@ const AdminProfilePage = () => {
         </Paper>
       </Box>
       <Box id="authenticator" sx={{ scrollMarginTop: 96 }}><TwoFactorSetup user={user} onUpdate={refreshUser} /></Box>
+      {permissions.includes('account.self') && <ActiveSessions key={user?.id} />}
       <Accordion disableGutters elevation={0} sx={{ mt: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
         <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="profile-permissions" id="profile-permissions-heading"><Typography fontWeight={600}>View permissions ({new Set(permissions).size})</Typography></AccordionSummary>
         <AccordionDetails id="profile-permissions">

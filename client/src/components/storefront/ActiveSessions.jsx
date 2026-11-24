@@ -60,7 +60,7 @@ const ActiveSessions = () => {
     <Paper sx={{ p: 3, mt: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h6">Active Sessions</Typography>
-        {sessions.length > 1 && (
+        {sessions.length > 1 && sessions.some((session) => session.isCurrent) && (
           <Button size="small" color="error" variant="outlined" onClick={handleRevokeAll}>
             Sign out all others
           </Button>

@@ -71,6 +71,9 @@ import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { formatSeoTitle } from '../../utils/seo/formatSeoTitle';
+import { validateSchemaOverride } from '../../utils/seo/schemaOverride';
+import { getProductShareImage } from '../../utils/seo/productShareImage';
+import SchemaOverrideField from '../../components/admin/SchemaOverrideField';
 import { formatOpenEndedDateRange } from '../../utils/dates';
 import ProductTagsInput from '../../components/admin/ProductTagsInput';
 import ProductCustomTabs from '../../components/admin/ProductCustomTabs';
@@ -295,6 +298,7 @@ const ProductEditPage = () => {
     metaTitle: '',
     metaDescription: '',
     metaKeywords: '',
+    schemaOverride: '',
     ogImage: '',
   });
   const [errors, setErrors] = useState({});
@@ -398,6 +402,7 @@ const ProductEditPage = () => {
               metaTitle: p.metaTitle || '',
               metaDescription: p.metaDescription || '',
               metaKeywords: p.metaKeywords || '',
+              schemaOverride: p.schemaOverride || '',
               ogImage: p.ogImage || '',
             };
             setFormData(loadedFormData);
@@ -468,6 +473,7 @@ const ProductEditPage = () => {
   };
 
   const priceNum = Number(formData.price);
+  const shareImage = getProductShareImage(formData);
   const salePriceNum = formData.salePrice !== '' && formData.salePrice !== null && formData.salePrice !== undefined
     ? Number(formData.salePrice)
     : null;
@@ -547,6 +553,8 @@ const ProductEditPage = () => {
 
     const effectiveQuantity = formData.type === 'variable' ? variantStockTotal : formData.quantity;
     const errs = validate({ ...formData, quantity: effectiveQuantity, _features: { pricing: pricingCapability, shipping: shippingCapability } });
+    const schemaError = seoEnabled && validateSchemaOverride(formData.schemaOverride, 'product');
+    if (schemaError) errs.schemaOverride = schemaError;
 
     // Block type change if invariants are violated
     if (!isNew && dbProduct && formData.type !== dbProduct.type) {
@@ -600,6 +608,7 @@ const ProductEditPage = () => {
         metaTitle: formData.metaTitle || null,
         metaDescription: formData.metaDescription || null,
         metaKeywords: formData.metaKeywords || null,
+        schemaOverride: formData.schemaOverride.trim() || null,
         ogImage: formData.ogImage || null,
       };
 
@@ -613,7 +622,7 @@ const ProductEditPage = () => {
       }
       if (!brandsEnabled) delete payload.brandId;
       if (!tagsEnabled || !canManageTags) delete payload.tags;
-      if (!seoEnabled) for (const key of ['metaTitle', 'metaDescription', 'metaKeywords', 'ogImage']) delete payload[key];
+      if (!seoEnabled) for (const key of ['metaTitle', 'metaDescription', 'metaKeywords', 'ogImage', 'schemaOverride']) delete payload[key];
 
       // Variant and bundle stock is managed by their own editors.
       delete payload.quantity;
@@ -1497,6 +1506,9 @@ const ProductEditPage = () => {
                   label="This product requires shipping"
                   sx={{ mb: 2 }}
                 />
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Turn this on for physical products, including those with free shipping. Turn it off for products fulfilled without shipping.
+                </Typography>
 
                 {formData.requiresShipping && (
                   <>
@@ -1651,6 +1663,17 @@ const ProductEditPage = () => {
               If left blank, the system will auto-generate metadata.
             </Alert>
 
+            <SchemaOverrideField
+              key={id}
+              kind="product"
+              value={formData.schemaOverride}
+              onChange={(value) => setField('schemaOverride', value)}
+              error={errors.schemaOverride}
+              path={dbProduct?.status === 'published' && dbProduct.isEnabled !== false && dbProduct.slug ? `/products/${encodeURIComponent(dbProduct.slug)}` : null}
+              name={formData.name}
+              description={formData.metaDescription || formData.shortDescription}
+              variants={formData.type === 'variable' ? dbProduct?.variants : undefined}
+            />
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 5fr) minmax(0, 3fr) minmax(0, 4fr)' }, gap: 3, alignItems: 'start' }}>
               <Box>
                 <TextField
@@ -1711,17 +1734,18 @@ const ProductEditPage = () => {
                     />
                   </>
                 )}
-                {formData.ogImage && (
+                {shareImage && (
                   <Box sx={{ mt: 2, position: 'relative', width: 'fit-content' }}>
                     <img
-                      src={getMediaUrl(formData.ogImage)}
-                      alt="SEO Preview"
+                      src={getMediaUrl(shareImage)}
+                      alt="Social share image preview"
                       style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, border: '1px solid #ddd' }}
                     />
-                    {canSaveProduct && (
+                    {canSaveProduct && formData.ogImage && (
                       <IconButton
                         size="small"
                         color="error"
+                        aria-label="Use primary product image"
                         sx={{ position: 'absolute', top: -10, right: -10, bgcolor: 'background.paper', boxShadow: 1 }}
                         onClick={() => setField('ogImage', '')}
                       >
@@ -1729,6 +1753,9 @@ const ProductEditPage = () => {
                       </IconButton>
                     )}
                   </Box>
+                )}
+                {!formData.ogImage && (
+                  <FormHelperText>The primary product image is used automatically when available.</FormHelperText>
                 )}
                 {!canUploadMedia && !formData.ogImage && (
                   <Typography variant="caption" color="text.secondary">

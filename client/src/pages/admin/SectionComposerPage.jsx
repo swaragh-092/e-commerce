@@ -208,6 +208,7 @@ const SectionComposerPage = () => {
   // History state for Undo/Redo
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const designEditRevision = useRef(0);
 
   // Viewport mode state for live preview
   const [viewportMode, setViewportMode] = useState('desktop');
@@ -455,7 +456,7 @@ const SectionComposerPage = () => {
       }
       setSections(initialSections);
       sectionsRef.current = initialSections;
-      setHistory([initialSections]);
+      setHistory([{ sections: initialSections }]);
       setHistoryIndex(0);
       setLoadError(null);
     } catch (error) {
@@ -541,6 +542,7 @@ const SectionComposerPage = () => {
     }
     setSaving(true);
     const sectionsToSave = sectionsRef.current;
+    const savedEditRevision = designEditRevision.current;
     try {
       // Map unified pageSettings back to their API groups
       const pageEntries = Object.entries(pageSettings || {}).flatMap(([pg, vals]) =>
@@ -559,7 +561,9 @@ const SectionComposerPage = () => {
       ]);
       const savedDraft = await saveDesignDraft(payload, draft?.revision);
       setDraft(savedDraft);
-      setDraftDeletes((savedDraft?.payload || []).filter((entry) => entry.operation === 'delete').map(({ group, key }) => ({ group, key })));
+      if (designEditRevision.current === savedEditRevision && sectionsRef.current === sectionsToSave) {
+        setDraftDeletes((savedDraft?.payload || []).filter((entry) => entry.operation === 'delete').map(({ group, key }) => ({ group, key })));
+      }
       try {
         const latestDraftState = await getDesignDraft();
         setDraftConflicts(latestDraftState?.conflicts || []);
@@ -567,9 +571,9 @@ const SectionComposerPage = () => {
         setLoadError('Draft saved, but conflict status could not be refreshed. Retry loading before publishing.');
       }
       notify('Design draft saved. Publish it when the storefront is ready.', 'success');
-      if (sectionsRef.current === sectionsToSave) {
+      if (sectionsRef.current === sectionsToSave && designEditRevision.current === savedEditRevision) {
         setDirty(false);
-        setHistory([sectionsRef.current]);
+        setHistory([{ sections: sectionsRef.current }]);
         setHistoryIndex(0);
       } else {
         setDirty(true);
@@ -620,7 +624,7 @@ const SectionComposerPage = () => {
       setDraftDeletes(draftResult.resetTargets || []);
       draftHydratedRef.current = true;
       const nextSections = draftResult.groups?.homepage?.sections || [];
-      setHistory([nextSections]);
+      setHistory([{ sections: nextSections }]);
       setHistoryIndex(0);
       setDirty(false);
       setPendingVersion(null);
@@ -679,43 +683,50 @@ const SectionComposerPage = () => {
     }
   };
 
+  const recordHistory = (entry) => {
+    const nextHistory = history.slice(0, historyIndex + 1);
+    setHistory([...nextHistory, entry]);
+    setHistoryIndex(nextHistory.length);
+  };
+
   const update = (next, skipHistory = false) => {
     sectionsRef.current = next;
     setSections(next);
     clearDraftDelete('homepage');
     setDirty(true);
-    if (!skipHistory) {
-      const nextHistory = history.slice(0, historyIndex + 1);
-      setHistory([...nextHistory, next]);
-      setHistoryIndex(nextHistory.length);
-    }
+    if (!skipHistory) recordHistory({ sections: next });
+  };
+
+  const restoreHistorySections = (index) => {
+    const { sections: next } = history[index];
+    setHistoryIndex(index);
+    sectionsRef.current = next;
+    setSections(next);
+    setDirty(true);
+    if (panelView.sectionId && activePage === 'home' && !next.some((section) => section.id === panelView.sectionId)) backToTree();
   };
 
   const handleUndo = () => {
     if (historyIndex > 0) {
-      const prevIndex = historyIndex - 1;
-      setHistoryIndex(prevIndex);
-      sectionsRef.current = history[prevIndex];
-      setSections(history[prevIndex]);
-      setDirty(true);
-      if (panelView.sectionId) {
-        const active = history[prevIndex].find((s) => s.id === panelView.sectionId);
-        if (!active) backToTree();
+      const change = history[historyIndex].change;
+      if (change) {
+        designEditRevision.current += 1;
+        change.setValue(change.before);
+        setDraftDeletes(change.beforeDeletes);
       }
+      restoreHistorySections(historyIndex - 1);
     }
   };
 
   const handleRedo = () => {
     if (historyIndex < history.length - 1) {
-      const nextIndex = historyIndex + 1;
-      setHistoryIndex(nextIndex);
-      sectionsRef.current = history[nextIndex];
-      setSections(history[nextIndex]);
-      setDirty(true);
-      if (panelView.sectionId) {
-        const active = history[nextIndex].find((s) => s.id === panelView.sectionId);
-        if (!active) backToTree();
+      const change = history[historyIndex + 1].change;
+      if (change) {
+        designEditRevision.current += 1;
+        change.setValue(change.after);
+        setDraftDeletes(change.afterDeletes);
       }
+      restoreHistorySections(historyIndex + 1);
     }
   };
 
@@ -904,13 +915,11 @@ const SectionComposerPage = () => {
     // Commit the current state to the undo/redo history on input blur
     const currentSections = sectionsRef.current;
     const currentHead = history[historyIndex];
-    const currentHeadSections = Array.isArray(currentHead) ? currentHead : currentHead?.sections;
+    const currentHeadSections = currentHead?.sections;
     if (currentHead && JSON.stringify(currentHeadSections) === JSON.stringify(currentSections)) {
       return;
     }
-    const nextHistory = history.slice(0, historyIndex + 1);
-    setHistory([...nextHistory, currentSections]);
-    setHistoryIndex(nextHistory.length);
+    recordHistory({ sections: currentSections });
   };
 
   const updateSectionField = (section, key, value) => {
@@ -1024,37 +1033,39 @@ const SectionComposerPage = () => {
     update(sections.map((s) => (s.id === editSection.id ? nextSection : s)));
   };
 
-  const handleComponentStyleChange = (componentName, nextValue) => {
-    clearDraftDelete('componentStyles', componentName);
-    setComponentStyles((current) => ({
-      ...(current || {}),
-      [componentName]: nextValue,
-    }));
+  const changeDesignSetting = (group, key, setValue, before, after, reset = false) => {
+    designEditRevision.current += 1;
+    const beforeDeletes = draftDeletes;
+    const afterDeletes = beforeDeletes.filter((entry) => entry.group !== group || (key && entry.key && entry.key !== key));
+    if (reset) afterDeletes.push({ group, key: key || null });
+    setValue(after);
+    setDraftDeletes(afterDeletes);
+    recordHistory({ sections: sectionsRef.current, change: { setValue, before, after, beforeDeletes, afterDeletes } });
     setDirty(true);
+  };
+
+  const handleComponentStyleChange = (componentName, nextValue) => {
+    changeDesignSetting('componentStyles', componentName, setComponentStyles, componentStyles, {
+      ...componentStyles, [componentName]: nextValue,
+    });
   };
 
   const handleResetDesign = (componentKey) => {
     const target = getDesignResetTarget(componentKey);
     if (!target) return;
     const defaults = designDefaults[target.group] || {};
-    if (target.group === 'theme') setThemeSettings({ ...defaults });
-    else if (target.group === 'nav') setNavSettings({ ...defaults });
-    else if (target.group === 'footer') setFooterSettings({ ...defaults });
-    else if (target.group === 'announcement') setAnnouncementSettings({ ...defaults });
-    else if (target.group === 'advanced') setAdvancedSettings({ customCSS: defaults.customCSS || '' });
+    const { group, key } = target;
+    if (group === 'theme') changeDesignSetting(group, key, setThemeSettings, themeSettings, defaults, true);
+    else if (group === 'nav') changeDesignSetting(group, key, setNavSettings, navSettings, defaults, true);
+    else if (group === 'footer') changeDesignSetting(group, key, setFooterSettings, footerSettings, defaults, true);
+    else if (group === 'announcement') changeDesignSetting(group, key, setAnnouncementSettings, announcementSettings, defaults, true);
+    else if (group === 'advanced') changeDesignSetting(group, key, setAdvancedSettings, advancedSettings, { customCSS: defaults.customCSS || '' }, true);
     else if (target.key) {
-      setComponentStyles((current) => {
-        const next = { ...(current || {}) };
-        if (Object.prototype.hasOwnProperty.call(defaults, target.key)) next[target.key] = defaults[target.key];
-        else delete next[target.key];
-        return next;
-      });
+      const next = { ...componentStyles };
+      if (Object.prototype.hasOwnProperty.call(defaults, key)) next[key] = defaults[key];
+      else delete next[key];
+      changeDesignSetting(group, key, setComponentStyles, componentStyles, next, true);
     }
-    setDraftDeletes((current) => {
-      const next = current.filter((entry) => entry.group !== target.group || entry.key !== target.key);
-      return [...next, { group: target.group, key: target.key || null }];
-    });
-    setDirty(true);
     notify('Reset staged in the design draft. Publish to make it live.', 'success');
   };
 
@@ -1495,32 +1506,12 @@ const SectionComposerPage = () => {
               designSource={activeComponentSource}
               onReset={handleResetDesign}
               resetting={resettingDesign}
-              onThemeSettingsChange={(value) => {
-                clearDraftDelete('theme');
-                setThemeSettings(value);
-                setDirty(true);
-              }}
+              onThemeSettingsChange={(value) => changeDesignSetting('theme', null, setThemeSettings, themeSettings, value)}
               onComponentStyleChange={handleComponentStyleChange}
-              onNavChange={(value) => {
-                clearDraftDelete('nav');
-                setNavSettings(value);
-                setDirty(true);
-              }}
-              onAnnouncementChange={(value) => {
-                clearDraftDelete('announcement');
-                setAnnouncementSettings(value);
-                setDirty(true);
-              }}
-              onFooterChange={(value) => {
-                clearDraftDelete('footer');
-                setFooterSettings(value);
-                setDirty(true);
-              }}
-              onAdvancedChange={(value) => {
-                clearDraftDelete('advanced', 'customCSS');
-                setAdvancedSettings(value);
-                setDirty(true);
-              }}
+              onNavChange={(value) => changeDesignSetting('nav', null, setNavSettings, navSettings, value)}
+              onAnnouncementChange={(value) => changeDesignSetting('announcement', null, setAnnouncementSettings, announcementSettings, value)}
+              onFooterChange={(value) => changeDesignSetting('footer', null, setFooterSettings, footerSettings, value)}
+              onAdvancedChange={(value) => changeDesignSetting('advanced', 'customCSS', setAdvancedSettings, advancedSettings, value)}
               canManageAdvancedSettings={canManageAdvancedSettings}
             />
           ) : null}
@@ -1579,7 +1570,7 @@ const SectionComposerPage = () => {
                 variant="outlined"
                 sx={{ py: 0, alignItems: 'center', '& .MuiAlert-message': { py: 0.5, fontSize: '0.78rem' } }}
               >
-                Previewing <strong>{activePageLabel}</strong> on the live storefront. Configure page settings in the sidebar.
+                Previewing <strong>{activePageLabel}</strong> with draft settings. Configure page settings in the sidebar.
               </Alert>
             ) : devicePreview ? (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', py: 0.5 }}>
@@ -1596,7 +1587,7 @@ const SectionComposerPage = () => {
                 )}
                 sx={{ py: 0, alignItems: 'center', '& .MuiAlert-message': { py: 0.5, fontSize: '0.78rem' } }}
               >
-                Live Storefront is read-only. Switch to Editor Preview to select sections and components.
+                Draft preview is read-only. Open the editor to select sections and components.
               </Alert>
             ) : loadError ? (
               <Alert

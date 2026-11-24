@@ -473,7 +473,7 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
     <SettingsContext.Provider value={scopedContext}>
       <ThemeProvider theme={themeObj}>
 
-        <Box style={cssVariables} sx={{ containerType: 'inline-size', containerName: 'store-preview', bgcolor: 'background.default', minHeight: 400, overflow: 'hidden' }}>
+        <Box style={cssVariables} sx={{ containerType: 'inline-size', containerName: 'store-preview', bgcolor: 'background.default', color: 'text.primary', minHeight: 400, overflow: 'hidden' }}>
         {/* Announcement Bar */}
         {showAnnouncement && (
           <Box

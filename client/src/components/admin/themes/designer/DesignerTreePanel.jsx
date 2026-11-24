@@ -1,7 +1,7 @@
 import { BLOCK_FIELD_PRESETS } from './DesignerSectionEditor';
 import { getProductDetailsOrder, PRODUCT_DETAILS_LABELS, customDetailKey } from '../../../../utils/productDetailsOrder';
 import { HERO_BLOCK_LABELS } from '../../../storefront/sections/ComposedHero';
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import {
   Box, Stack, Typography, IconButton, Switch, Button, Chip, Divider,
@@ -109,8 +109,14 @@ const ExpandItemsButton = ({ label, expanded, onToggle }) => (
   </IconButton>
 );
 
-const SectionRow = ({ section, index, total, isSelected, onSelect, onMove, onToggle, onDelete, dragHandleProps, expandControl }) => (
+const SectionRow = ({ section, index, total, isSelected, onSelect, onMove, onToggle, onDelete, dragHandleProps, expandControl }) => {
+  const rowRef = useRef(null);
+  useEffect(() => {
+    if (isSelected) rowRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  }, [isSelected]);
+  return (
   <Box
+    ref={rowRef}
     onClick={() => onSelect(section)}
     sx={{
       display: 'flex',
@@ -136,7 +142,7 @@ const SectionRow = ({ section, index, total, isSelected, onSelect, onMove, onTog
     }}
   >
     {expandControl}
-    {dragHandleProps && <Box {...dragHandleProps} aria-label={`Reorder ${getSectionLabel(section)}`} sx={{ display: 'flex', color: 'text.secondary', cursor: 'grab' }}><DragIndicatorIcon sx={{ fontSize: 18 }} /></Box>}
+    {dragHandleProps && <Box {...dragHandleProps} aria-label={`Reorder ${getSectionLabel(section)}`} sx={{ display: 'flex', color: 'text.secondary', cursor: 'grab', touchAction: 'none' }}><DragIndicatorIcon sx={{ fontSize: 18 }} /></Box>}
     <Box component="button" type="button" onClick={(event) => { event.stopPropagation(); onSelect(section); }} aria-label={`Edit ${getSectionLabel(section)}`} sx={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', p: 0, color: 'inherit', cursor: 'pointer' }}>
       <Typography variant="body2" fontWeight={isSelected ? 800 : 600} sx={{ fontSize: '0.85rem', overflowWrap: 'anywhere' }}>
         {section.title || getSectionLabel(section)}
@@ -182,7 +188,8 @@ const SectionRow = ({ section, index, total, isSelected, onSelect, onMove, onTog
     </Tooltip>
     </Stack>
   </Box>
-);
+  );
+};
 
 
 const HeaderBlockRow = ({ icon, label, description, onClick }) => (
@@ -388,7 +395,8 @@ const DesignerTreePanel = ({
         onChangePageSections(next);
         return;
       }
-      const rows = source.droppableId === 'footer' ? footerSectionRows : templateSectionRows;
+      const rows = { header: headerSectionRows, template: templateSectionRows, footer: footerSectionRows }[source.droppableId];
+      if (!rows?.[source.index] || !rows[destination.index]) return;
       const from = rows[source.index].originalIndex;
       const target = rows[destination.index].originalIndex;
       onReorderSection?.(from, target + (destination.index > source.index ? 1 : 0), source.droppableId);
@@ -480,20 +488,24 @@ const DesignerTreePanel = ({
             <HeaderBlockRow icon={<MenuIcon sx={{ fontSize: 15 }} />} label="Menu" description="Primary links and categories" onClick={() => onHeaderPartClick?.('headerMenu')} />
             <HeaderBlockRow icon={<ShoppingBagIcon sx={{ fontSize: 15 }} />} label="Actions" description="Search, account, cart" onClick={() => onHeaderPartClick?.('headerActions')} />
           </Stack>}
-          <>
+          <Droppable droppableId="header">{(drop) => <Box ref={drop.innerRef} {...drop.droppableProps}>
             {headerSectionRows.map(({ section, originalIndex }, index) => (
-              <Box key={section.id}>
+              <Draggable key={section.id} draggableId={`header:${section.id}`} index={index}>{(drag) => (
+              <Box ref={drag.innerRef} {...drag.draggableProps}>
                 <InsertSectionControl label="Add section before" onClick={showSectionPicker(originalIndex, 'header')} />
                 <SectionRow section={section} index={index} total={headerSectionRows.length}
+                  dragHandleProps={drag.dragHandleProps}
                   expandControl={expandSectionControl(section)}
                   isSelected={selectedSectionId === section.id} onSelect={onSectionClick}
                   onMove={(_, direction) => onMoveSection(originalIndex, direction, 'header')}
                   onToggle={() => onToggleSection(originalIndex)} onDelete={() => onDeleteSection(originalIndex)} />
                 {renderExpandableBlocks(section)}
               </Box>
+              )}</Draggable>
             ))}
+            {drop.placeholder}
             <AddSectionButton onClick={showSectionPicker(sharedSections.length, 'header')}>Add section to header</AddSectionButton>
-          </>
+          </Box>}</Droppable>
         </Box>
 
         {isHomePage ? <>
