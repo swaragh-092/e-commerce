@@ -5,6 +5,9 @@ export const getNavigationFeature = (url, origin = globalThis.location?.origin |
     const parsed = new URL(url, origin);
     if (parsed.origin !== origin) return null;
     const path = parsed.pathname.toLowerCase();
+    if (/^\/cart(?:\/|$)/.test(path)) return 'cart';
+    if (/^\/checkout(?:\/|$)/.test(path)) return 'checkout';
+    if (/^\/(?:account\/)?orders(?:\/|$)/.test(path)) return 'orders';
     if (/^\/p(?:\/|$)/.test(path)) return 'pages';
     if (/^\/brands(?:\/|$)/.test(path)) return 'brands';
     if (/^\/blogs(?:\/|$)/.test(path) || /\/blog(?:-details)?\.html$/.test(path)) return 'blogs';

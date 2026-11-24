@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, Button, Card, Chip, Grid, Typography } from '@mui/material';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { Link } from 'react-router-dom';
-import { getOptimizedMediaUrl } from '../../../utils/media';
+import { getOptimizedMediaUrl, PLACEHOLDER_PRODUCT } from '../../../utils/media';
 import { CanvasEditableText, CanvasEditableImage } from './SectionFallback';
 
 const imageUrl = (image) => getOptimizedMediaUrl(image || '', { width: 1200, quality: 82 }) || '';
@@ -24,8 +24,9 @@ const EditorialSection = ({ section = {}, mode = 'live', onSelectComponent, onIn
     borderRadius: preview ? 3 : 4,
     overflow: 'hidden',
     bgcolor: 'action.hover',
-    backgroundImage: image ? 'url(' + image + ')' : 'linear-gradient(135deg, rgba(0,0,0,0.06), rgba(0,0,0,0.14))',
-    backgroundSize: 'cover',
+    backgroundImage: image ? `url(${JSON.stringify(image)}), url("${PLACEHOLDER_PRODUCT}")` : 'linear-gradient(135deg, rgba(0,0,0,0.06), rgba(0,0,0,0.14))',
+    backgroundSize: image ? 'cover, contain' : 'cover',
+    backgroundRepeat: 'no-repeat',
     backgroundPosition: section.imageFocus || 'center',
   };
 

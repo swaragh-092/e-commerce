@@ -96,6 +96,40 @@ const renderValue = (val) => {
   return <Typography variant="body2">{String(val)}</Typography>;
 };
 
+const SectionChanges = ({ original = [], current = [] }) => {
+  const indexSections = (sections) => new Map((sections || []).map((section, index) => [
+    section.id || `${section.type}:${index}`, { section, index },
+  ]));
+  const before = indexSections(original);
+  const after = indexSections(current);
+  return (
+    <Box component="details" sx={{ gridColumn: '1 / -1', minWidth: 0 }}>
+      <Box component="summary" sx={{ cursor: 'pointer' }}>View section changes</Box>
+      {[...new Set([...before.keys(), ...after.keys()])].map((id) => {
+        const previous = before.get(id);
+        const next = after.get(id);
+        const oldSection = previous?.section || {};
+        const newSection = next?.section || {};
+        const fields = next && previous ? [...new Set([...Object.keys(oldSection), ...Object.keys(newSection)])]
+          .filter((key) => JSON.stringify(oldSection[key]) !== JSON.stringify(newSection[key])) : [];
+        if (previous?.index === next?.index && !fields.length) return null;
+        const status = !previous ? 'Added' : !next ? 'Removed' : previous.index !== next.index
+          ? `Moved from ${previous.index + 1} to ${next.index + 1}` : 'Edited';
+        return (
+          <Box key={id} sx={{ mt: 1.5 }}>
+            <Typography variant="subtitle2">{newSection.title || oldSection.title || newSection.type || oldSection.type} · {status}</Typography>
+            {fields.map((key) => (
+              <Typography key={key} variant="body2" sx={{ overflowWrap: 'anywhere' }}>
+                <strong>{key}</strong> {JSON.stringify(oldSection[key]) ?? '—'} → {JSON.stringify(newSection[key]) ?? '—'}
+              </Typography>
+            ))}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+};
+
 const ThemeGalleryPage = () => {
   const [tab, setTab] = useState(0);
   const [builtinThemes, setBuiltinThemes] = useState([]);
@@ -276,6 +310,7 @@ const ThemeGalleryPage = () => {
       a.click();
       URL.revokeObjectURL(url);
       setExportOpen(false);
+      notify('Template exported', 'success');
     } catch (e) {
       notify('Export failed', 'error');
     }
@@ -354,7 +389,8 @@ const ThemeGalleryPage = () => {
     return templates.filter((template) => {
       const meta = getMeta(template);
       const templateCategory = meta.category || 'general';
-      const matchesCategory = category === 'all' || templateCategory === category;
+      const matchesCategory = category === 'all' || templateCategory === category ||
+        (meta.tags || []).some((tag) => tag.toLowerCase() === category);
       const matchesSearch = !q ||
         (meta.name || '').toLowerCase().includes(q) ||
         (meta.author || '').toLowerCase().includes(q) ||
@@ -728,6 +764,8 @@ const ThemeGalleryPage = () => {
                                       </Button>
                                     )}
                                   </Box>
+                                  {diff.group === 'homepage' && diff.key === 'sections'
+                                    && <SectionChanges original={diff.originalValue} current={diff.currentValue} />}
                                 </Box>
                               ))}
                             </Box>

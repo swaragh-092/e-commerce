@@ -410,6 +410,11 @@ const BlockListEditor = ({
                         value={block?.[field.key] || ''}
                         onChange={(event) => updateField(index, field.key, event.target.value)}
                         onBlur={onBlur}
+                        helperText={schema.key === 'slides' && field.key === 'title'
+                          ? !String(block?.title || '').trim()
+                            ? 'An empty heading uses the default hero heading.'
+                            : block.title.length > 120 ? `${block.title.length} characters. Aim for 120 or fewer to fit smaller screens.` : undefined
+                          : undefined}
                         size="small"
                         fullWidth
                         multiline={Boolean(field.multiline)}

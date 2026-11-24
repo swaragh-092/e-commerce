@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { filterFeatureLinks, getNavigationFeature } from '../../utils/featureNavigation';
 import { getFirstAccessibleAdminPath } from '../../utils/permissions';
 describe('Disabled content navigation', () => {
+  it('hides disabled local commerce routes and preserves links to other stores', () => {
+    const external = { url: 'https://other.example.test/cart' };
+    const checkout = { url: '/checkout' };
+    const links = [{ url: '/cart?source=footer' }, checkout, { url: '/account/orders/123' }, external];
+    expect(filterFeatureLinks(links, { cart: false, checkout: true, orders: false })).toEqual([checkout, external]);
+  });
   it('hides nested local links while keeping unrelated and external links', () => {
     const links = [
       { url: '/products' }, { url: '/blogs?tag=latest' },
