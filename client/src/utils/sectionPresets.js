@@ -1,4 +1,5 @@
 import { SECTION_TYPES, SECTION_DEFINITIONS, getDefaultVariant } from '../components/storefront/sections/sectionRegistry';
+import productRow from '../../../shared/product-row.json';
 
 const compact = (obj) => Object.fromEntries(
   Object.entries(obj).filter(([, value]) => value !== undefined && value !== null && value !== '')
@@ -47,16 +48,7 @@ const SECTION_PRESETS = Object.freeze({
     autoPlay: true,
     interval: 6500,
   },
-  [SECTION_TYPES.PRODUCT_ROW]: {
-    title: 'Featured Products',
-    subtitle: 'Hand-picked products your customers should see first.',
-    variant: 'carousel',
-    layout: 'carousel',
-    source: 'featured',
-    count: 8,
-    viewAllLabel: 'View all products',
-    viewAllLink: '/products',
-  },
+  [SECTION_TYPES.PRODUCT_ROW]: productRow.defaults,
   [SECTION_TYPES.CATEGORY_SHORTCUTS]: {
     title: 'Shop by Category',
     subtitle: 'Help shoppers jump into the right collection faster.',

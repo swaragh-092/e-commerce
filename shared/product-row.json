@@ -1,0 +1,60 @@
+{
+  "type": "product-row",
+  "defaults": {
+    "title": "Featured Products",
+    "subtitle": "Hand-picked products your customers should see first.",
+    "variant": "carousel",
+    "layout": "carousel",
+    "source": "featured",
+    "count": 8,
+    "viewAllLabel": "View all products",
+    "viewAllLink": "/products"
+  },
+  "sourcePresetDefaults": {
+    "subtitle": "",
+    "dataSourceSlug": "",
+    "query": {},
+    "saleLabel": ""
+  },
+  "limits": {
+    "minCount": 1,
+    "editorMaxCount": 24,
+    "packageMaxCount": 50,
+    "maxStaffPicks": 12
+  },
+  "layouts": {
+    "homepage": ["grid", "carousel"],
+    "page": ["grid", "grid-compact", "carousel"]
+  },
+  "variants": ["carousel", "grid", "grid-compact"],
+  "pageGroups": {
+    "product": "productPage",
+    "category": "categoryPage",
+    "collection": "catalog",
+    "brand": "brandsPage",
+    "cart": "cartPage",
+    "account": "accountPage",
+    "blog": "blogPage",
+    "checkout": "checkoutPage",
+    "wishlist": "wishlistPage",
+    "search": "searchPage",
+    "not-found": "notFoundPage",
+    "orders": "ordersPage"
+  },
+  "sources": {
+    "featured": { "label": "Featured", "params": { "featured": true }, "link": "/products?featured=true", "presetLabel": "Featured Products" },
+    "sale": { "label": "On Sale", "params": { "sale": true }, "link": "/products?onSale=true", "presetLabel": "On Sale" },
+    "bestSellers": { "label": "Best Sellers", "params": { "sort": "best-selling", "discoveryRow": true }, "link": "/products?sort=best-selling", "presetLabel": "Best Sellers" },
+    "staffPicks": { "label": "Staff Picks", "presetLabel": "Staff Picks", "ignoresDataSource": true },
+    "trending": { "label": "Trending This Week", "params": { "sort": "trending", "discoveryRow": true }, "link": "/products?sort=trending", "presetLabel": "Trending This Week", "ignoresDataSource": true },
+    "mostViewed": { "label": "Most Viewed", "params": { "sort": "most-viewed", "discoveryRow": true }, "link": "/products?sort=most-viewed", "presetLabel": "Most Viewed" },
+    "newest": { "label": "Newest", "params": { "sort": "arrivals", "discoveryRow": true }, "link": "/products?sort=newest", "presetLabel": "New Arrivals" },
+    "recommended": { "label": "Recommended", "params": { "sort": "recommended" } }
+  },
+  "query": {
+    "sorts": ["newest", "oldest", "name_asc", "name_desc", "price_asc", "price_desc", "arrivals", "best-selling", "trending", "most-viewed", "recommended", "discount_desc", "ending_soon"],
+    "sortFields": ["price", "quantity", "name", "createdAt"],
+    "sortOrders": ["asc", "desc"],
+    "status": "published"
+  }
+}

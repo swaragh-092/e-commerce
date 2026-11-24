@@ -1,4 +1,4 @@
-import { fetchStaffPicks, PRODUCT_SOURCE_PARAMS, usesProductRowSource } from '../../utils/productRowSources';
+import { fetchStaffPicks, getProductRowQuery, PRODUCT_SOURCE_PARAMS, usesProductRowSource } from '../../utils/productRowSources';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Box } from '@mui/material';
 import api from '../../services/api';
@@ -131,13 +131,9 @@ const resolveHomepage = (settings = {}) => {
   };
 };
 
-const getProductParams = (section) => ({
-  ...(PRODUCT_SOURCE_PARAMS[section.source] || {}),
-  ...(section.query || {}),
-  ...(section.source === 'sale' && section.saleLabel && { saleLabel: section.saleLabel }),
+const getProductParams = (section) => getProductRowQuery(section, {
   limit: ['bestSellers', 'mostViewed'].includes(section.source)
     ? Math.max(4, num(section.count, 8)) : num(section.count, 8),
-  status: 'published',
 });
 
 const circuitBreakerState = {};

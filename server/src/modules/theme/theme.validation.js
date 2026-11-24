@@ -1,6 +1,7 @@
 'use strict';
 
 const Joi = require('joi');
+const productRow = require('../../../../shared/product-row.json');
 const { productListQuerySchema } = require('../product/product.validation');
 const { TEMPLATE_ASSIGNMENT_KEYS, buildAlternateTemplatesSchema } = require('../settings/alternateTemplates');
 
@@ -31,7 +32,6 @@ const CARD_STYLES = ['elevated', 'outlined', 'flat'];
 const BG_STYLES = ['softGradient', 'solid'];
 const FONT_WEIGHTS = ['300', '400', '500', '600', '700', '800', '900'];
 const SECTION_TYPES = ['tag-showcase', 'gallery-grid', 'composed-hero', 'hero-carousel', 'value-props', 'category-shortcuts', 'promo-banners', 'product-row', 'brand-showcase', 'editorial-image-text', 'testimonials', 'logo-cloud', 'newsletter-signup', 'countdown-sale', 'featured-collection-grid', 'faq', 'trust-badges', 'recently-viewed', 'gallery'];
-const PRODUCT_SOURCES = ['featured', 'sale', 'bestSellers', 'mostViewed', 'trending', 'staffPicks', 'newest', 'recommended'];
 const DATA_SOURCE_TYPES = ['apiBuilder'];
 const API_BUILDER_RESOURCES = ['products', 'categories', 'brands', 'productImages', 'tags', 'media', 'pages'];
 const API_BUILDER_OPERATORS = ['equals', 'contains', 'in', 'gte', 'lte', 'between'];
@@ -262,35 +262,32 @@ const homepageSectionSchema = Joi.object({
   detailsBlockOrder: Joi.when('type', { is: 'product-info', then: productDetailsOrderSchema, otherwise: Joi.forbidden() }),
   title: safeText,
   subtitle: safeText,
-  source: Joi.string().valid(...PRODUCT_SOURCES),
+  source: Joi.string().valid(...Object.keys(productRow.sources)),
   query: Joi.when('type', {
-    is: 'product-row',
+    is: productRow.type,
     then: productListQuerySchema.keys({
       category: Joi.string().max(140),
       categoryId: Joi.string().uuid(),
       brand: Joi.string().max(140),
-      sort: Joi.string().valid(
-        'newest', 'oldest', 'name_asc', 'name_desc', 'price_asc', 'price_desc',
-        'arrivals', 'best-selling', 'trending', 'most-viewed', 'recommended', 'discount_desc', 'ending_soon',
-      ),
-      sortBy: Joi.string().valid('price', 'quantity', 'name', 'createdAt'),
-      sortOrder: Joi.string().insensitive().valid('asc', 'desc'),
-      status: Joi.string().valid('published'),
+      sort: Joi.string().valid(...productRow.query.sorts),
+      sortBy: Joi.string().valid(...productRow.query.sortFields),
+      sortOrder: Joi.string().insensitive().valid(...productRow.query.sortOrders),
+      status: Joi.string().valid(productRow.query.status),
       minPrice: Joi.number().min(0),
       maxPrice: Joi.number().min(0),
       maxQty: Joi.number().integer().min(0),
     }).unknown(false).prefs({ noDefaults: true }),
     otherwise: Joi.forbidden(),
   }),
-  productIds: Joi.array().items(Joi.string().uuid()).unique().max(12),
+  productIds: Joi.array().items(Joi.string().uuid()).unique().max(productRow.limits.maxStaffPicks),
   pagePosition: Joi.string().valid('above', 'below'),
   productScope: Joi.string().valid('category', 'store'),
   saleLabel: Joi.string().trim().max(100).allow('', null),
   dataSourceKey: Joi.string().max(80).allow('', null),
   dataSourceBlock: Joi.string().max(80).allow('', null),
   dataSourceSlug: Joi.string().max(140).pattern(/^[a-z0-9-]+$/).allow('', null),
-  count: Joi.number().integer().min(1).max(50),
-  layout: Joi.string().valid('grid', 'carousel'),
+  count: Joi.number().integer().min(productRow.limits.minCount).max(productRow.limits.packageMaxCount),
+  layout: Joi.string().valid(...productRow.layouts.homepage),
   viewAllLabel: safeText,
   viewAllLink: linkUrl,
   autoPlay: Joi.boolean(),
@@ -387,8 +384,8 @@ const metaSchema = Joi.object({
 
 const pageLayoutSectionsSchema = (...types) => Joi.array().items(
   homepageSectionSchema.keys({
-    type: Joi.string().valid('product-row', ...types).required(),
-    layout: Joi.string().valid('grid', 'grid-compact', 'carousel'),
+    type: Joi.string().valid(productRow.type, ...types).required(),
+    layout: Joi.string().valid(...productRow.layouts.page),
   }),
 ).max(6);
 

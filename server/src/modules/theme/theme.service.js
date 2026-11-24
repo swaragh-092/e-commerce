@@ -8,6 +8,7 @@ const DesignDraftService = require('../settings/designDraft.service');
 const AuditService = require('../audit/audit.service');
 const { packageSchema } = require('./theme.validation');
 const AppError = require('../../utils/AppError');
+const productRow = require('../../../../shared/product-row.json');
 
 const BUILTIN_DIR = path.join(__dirname, 'builtin');
 
@@ -141,21 +142,7 @@ const pushDefinedSetting = (rows, group, key, value) => {
   if (value !== undefined && value !== null) rows.push({ group, key, value });
 };
 
-const PAGE_TEMPLATE_GROUPS = {
-  product: 'productPage',
-  category: 'categoryPage',
-  collection: 'catalog',
-  brand: 'brandsPage',
-  cart: 'cartPage',
-  account: 'accountPage',
-  blog: 'blogPage',
-  'checkout': 'checkoutPage',
-  'wishlist': 'wishlistPage',
-  'search': 'searchPage',
-  'not-found': 'notFoundPage',
-  'orders': 'ordersPage',
-
-};
+const PAGE_TEMPLATE_GROUPS = productRow.pageGroups;
 
 const withoutStoreDataSource = (section) => {
   const { dataSourceSlug, dataSourceKey, enabled = true, ...portableSection } = section;

@@ -1,15 +1,29 @@
-export const PRODUCT_SOURCE_PARAMS = {
-  newest: { sort: 'arrivals', discoveryRow: true },
-  featured: { featured: true },
-  bestSellers: { sort: 'best-selling', discoveryRow: true },
-  trending: { sort: 'trending', discoveryRow: true },
-  mostViewed: { sort: 'most-viewed', discoveryRow: true },
-  sale: { sale: true },
-  recommended: { sort: 'recommended' },
-};
+import productRow from '../../../shared/product-row.json';
+
+export const PRODUCT_SOURCE_PARAMS = Object.fromEntries(Object.entries(productRow.sources)
+  .filter(([, source]) => source.params)
+  .map(([key, source]) => [key, source.params]));
+
+export const applyProductSourcePreset = (section, source) => ({
+  ...section,
+  ...productRow.sourcePresetDefaults,
+  query: { ...productRow.sourcePresetDefaults.query },
+  source,
+  title: productRow.sources[source].presetLabel,
+  viewAllLink: productRow.sources[source].link || '',
+});
+
+export const getProductRowQuery = (section, { source = section.source, limit, category } = {}) => ({
+  ...PRODUCT_SOURCE_PARAMS[source],
+  ...section.query,
+  ...(category && { category }),
+  ...(source === 'sale' && section.saleLabel && { saleLabel: section.saleLabel }),
+  limit,
+  status: productRow.query.status,
+});
 
 export const usesProductRowSource = (section) =>
-  !section.dataSourceSlug || ['staffPicks', 'trending'].includes(section.source)
+  !section.dataSourceSlug || productRow.sources[section.source]?.ignoresDataSource === true
   || (section.source === 'sale' && Boolean(section.saleLabel));
 
 export const fetchStaffPicks = async (section, getProducts) => {

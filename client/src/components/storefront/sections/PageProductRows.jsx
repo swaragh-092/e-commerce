@@ -2,30 +2,29 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { Box, Container } from '@mui/material';
 import { useFeatureVisible, useSettings } from '../../../hooks/useSettings';
 import { getPageProductRows, getPageSectionTypes, findAssignedPageTemplate, PAGE_SETTINGS_GROUPS } from '../../../utils/designerSections';
-import { fetchStaffPicks, PRODUCT_SOURCE_PARAMS } from '../../../utils/productRowSources';
+import { fetchStaffPicks, getProductRowQuery } from '../../../utils/productRowSources';
 import React, { useContext, useEffect, useState } from 'react';
 import { getProducts } from '../../../services/productService';
 import SectionRenderer from './SectionRenderer';
 import { SettingsContext } from '../../../context/ThemeContext';
 import ProductRow from '../../product/ProductRow';
+import productRow from '../../../../../shared/product-row.json';
 
 const DiscoveryRow = ({ row, category, designerPreview }) => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const count = row.source === 'staffPicks' ? row.productIds?.length || 0 : Math.min(24, Math.max(1, Number.parseInt(row.count, 10) || 8));
-  const source = row.source || 'featured';
+  const count = row.source === 'staffPicks' ? row.productIds?.length || 0 : Math.min(
+    productRow.limits.editorMaxCount,
+    Math.max(productRow.limits.minCount, Number.parseInt(row.count, 10) || productRow.defaults.count),
+  );
+  const source = row.source || productRow.defaults.source;
   useEffect(() => {
     let active = true;
     setLoading(true);
     const limit = source === 'bestSellers' ? Math.max(4, count) : source === 'mostViewed' ? Math.max(5, count) : count;
-    const request = source === 'staffPicks' ? fetchStaffPicks(row, getProducts) : getProducts({
-      ...(PRODUCT_SOURCE_PARAMS[source] || PRODUCT_SOURCE_PARAMS.featured),
-      ...row.query,
-      ...(category && { category }),
-      ...(source === 'sale' && row.saleLabel && { saleLabel: row.saleLabel }),
-      limit,
-      status: 'published',
-    });
+    const request = source === 'staffPicks' ? fetchStaffPicks(row, getProducts) : getProducts(
+      getProductRowQuery(row, { source: Object.hasOwn(productRow.sources, source) ? source : productRow.defaults.source, limit, category }),
+    );
     request
       .then(result => { if (active) setProducts((result?.data || []).slice(0, count)); })
       .catch(() => { if (active) setProducts([]); })
@@ -36,20 +35,12 @@ const DiscoveryRow = ({ row, category, designerPreview }) => {
   if (!loading && !products.length) {
     return designerPreview ? <SectionRenderer section={row} mode="preview" data={{ showProductEmptyState: true }} /> : null;
   }
-  const sourceLinks = {
-    bestSellers: '/products?sort=best-selling',
-    mostViewed: '/products?sort=most-viewed',
-    trending: '/products?sort=trending',
-    newest: '/products?sort=newest',
-    sale: '/products?onSale=true',
-    featured: '/products?featured=true',
-  };
-  const defaultLink = sourceLinks[source];
+  const defaultLink = productRow.sources[source]?.link;
   const scopedLink = defaultLink && category
     ? `${defaultLink}&category=${encodeURIComponent(category)}`
     : defaultLink;
   const viewAllLink = row.viewAllLink || scopedLink;
-  const layout = row.variant || row.layout || 'carousel';
+  const layout = row.variant || row.layout || productRow.defaults.layout;
   return <ProductRow title={row.title || 'Recommended products'} viewAllLink={viewAllLink} products={products} loading={loading} count={count} layout={layout} compact={layout === 'grid-compact'} />;
 };
 
