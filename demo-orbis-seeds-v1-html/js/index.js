@@ -37,10 +37,6 @@ function resolveItemImage(sub, uploadUrl) {
 }
 
 function renderHomeCategories(categories, uploadUrl) {
-    if (!categories || !categories.length) {
-        $('#orbis-home-section-categories').empty();
-        return false;
-    }
     var html = "";
     categories.forEach(function (cat) {
         if (!cat.children || !cat.children.length) return;
@@ -48,15 +44,8 @@ function renderHomeCategories(categories, uploadUrl) {
         html += '<div class="vegetables">';
         html += '    <a href="product.html?cat=' + encodeURIComponent(cat.slug || '') + '" class="category-label">' + OrbiCatalog.escape(cat.name) + '</a>';
 
-        var children = cat.children.slice().sort(function (a, b) {
-            var aHasImg = (a.icon || a.image || (a.media && a.media.url) || (a.images && a.images.length) || (a.gallery && a.gallery.length)) ? 1 : 0;
-            var bHasImg = (b.icon || b.image || (b.media && b.media.url) || (b.images && b.images.length) || (b.gallery && b.gallery.length)) ? 1 : 0;
-            if (aHasImg !== bHasImg) return bHasImg - aHasImg;
-            return (a.sortOrder || 0) - (b.sortOrder || 0);
-        });
-
-        children.slice(0, 4).forEach(function (sub) {
-            var subUrl = "products.html?category=" + encodeURIComponent(sub.slug || '');
+        cat.children.slice(0, 4).forEach(function (sub) {
+            var subUrl = (sub.children?.length ? 'product.html?cat=' : 'products.html?category=') + encodeURIComponent(sub.slug);
             var iconUrl = resolveItemImage(sub, uploadUrl);
             var fallback = getLocalFallbackImage(sub.slug || sub.name);
 
@@ -77,46 +66,24 @@ function renderHomeCategories(categories, uploadUrl) {
         html += '</div>';
     });
 
-    if (html) {
-        $('#orbis-home-section-categories').html(html);
-        return true;
-    }
-    return false;
+    return html;
 }
 
 function fetchAndRenderHomeSections() {
-    var apiUrl = typeof API_URL !== 'undefined' ? API_URL : "https://eshopadmin.swaragh.org.in/api/";
-    var uploadUrl = typeof APP_URL !== 'undefined' ? APP_URL : "https://eshopadmin.swaragh.org.in/";
-    var homeSectionUrl = apiUrl + "api-builder/public/orbis-home-section-1?hideEmpty=true";
-
-    fetch(homeSectionUrl)
-        .then(function (r) { return r.json(); })
+    var container = document.getElementById('orbis-home-section-categories');
+    var status = container.querySelector('[role="status"]');
+    fetch(API_URL + 'categories')
+        .then(OrbiCatalog.readResponse)
         .then(function (result) {
-            var categories = result && result.success && result.data
-                ? (result.data.categories || (result.data.data && result.data.data.categories))
-                : null;
-
-            if (categories && categories.length && renderHomeCategories(categories, uploadUrl)) {
-                return;
-            }
-            throw new Error("No categories in home section");
+            if (!Array.isArray(result.data)) throw new Error('Invalid category response');
+            var html = renderHomeCategories(result.data, APP_URL);
+            if (html) container.innerHTML = html;
+            else status.textContent = 'No seed categories available.';
         })
-        .catch(function () {
-            // Fallback to categories endpoint if api-builder is disabled or unavailable
-            fetch(apiUrl + "categories?hideEmpty=true")
-                .then(function (r) { return r.json(); })
-                .then(function (catResult) {
-                    var categories = catResult && catResult.success && Array.isArray(catResult.data)
-                        ? catResult.data
-                        : [];
-                    renderHomeCategories(categories, uploadUrl);
-                })
-                .catch(function (error) {
-                    console.error("Error fetching categories for home section:", error);
-                });
+        .catch(function (error) {
+            status.textContent = 'Unable to load seed categories.';
+            console.error('Error fetching categories for home section:', error);
         });
 }
 
-$(document).ready(function () {
-    fetchAndRenderHomeSections();
-});
+document.addEventListener('DOMContentLoaded', fetchAndRenderHomeSections);

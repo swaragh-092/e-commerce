@@ -32,7 +32,8 @@ function fetchCategories() {
     container.innerHTML = '<div class="loading">Loading categories...</div>';
     container.setAttribute('aria-busy', 'true');
 
-    fetch(API_URL + "categories?hideEmpty=true")
+    const categorySlug = new URLSearchParams(window.location.search).get('cat');
+    fetch(API_URL + (categorySlug ? 'categories' : 'categories?hideEmpty=true'))
         .then(function (response) {
             if (!response.ok) throw new Error('Unable to load categories');
             return response.json();

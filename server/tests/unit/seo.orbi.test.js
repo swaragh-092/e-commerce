@@ -201,6 +201,19 @@ describe('Orbi storefront SEO', () => {
     expect(db.BlogPost.findOne.mock.calls[0][0].where.status).toBe('published');
   });
 
+  it('serves categories linked from the homepage even before they have public products', async () => {
+    const leaf = { name: 'Okra', slug: 'okra', children: [] };
+    const group = { name: 'Vegetables', slug: 'vegetables', children: [leaf] };
+    categoryService.getCategoryTree.mockImplementation(async (options) => options?.hideEmpty ? [] : [group]);
+
+    for (const path of ['/product.html?cat=vegetables', '/products.html?category=okra']) {
+      const res = await get(path);
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['X-Robots-Tag']).toBe('noindex, nofollow');
+    }
+    expect((await get('/products.html?category=unknown')).statusCode).toBe(404);
+  });
+
   it('serves unavailable entities and utility URLs with the correct indexing status', async () => {
     db.SeoOverride.findAll.mockResolvedValue([{ path: '/products/draft', metaTitle: 'Draft product' }]);
     for (const path of ['/products.html?slug=draft', '/gallery-detail.html?album=absent', '/missing.html']) {

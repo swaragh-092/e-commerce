@@ -95,10 +95,32 @@ describe('Orbi product choices', () => {
     choose(w);
     expect(w.document.querySelector('.products-left img').src).toBe('https://api.example.com/red.jpg');
     expect(w.document.querySelector('.product-selected-price').textContent).toBe('');
-    w.document.querySelector('.add-enquiry-list').click();
-    choose(w, 'blue'); w.document.querySelector('.add-enquiry-list').click();
+    const addButton = w.document.querySelector('.add-enquiry-list');
+    const controls = w.document.querySelector('.product-enquiry-quantity');
+    const quantity = controls.querySelector('output');
+    const increase = controls.querySelector('[data-enquiry-step="1"]');
+    const decrease = controls.querySelector('[data-enquiry-step="-1"]');
+    addButton.click();
+    expect(addButton.hidden).toBe(true);
+    expect(controls.hidden).toBe(false);
+    expect(quantity.value).toBe('1');
+    addButton.click();
+    expect(quantity.value).toBe('1');
+    increase.click();
+    expect(quantity.value).toBe('2');
+    choose(w, 'blue');
+    expect(addButton.hidden).toBe(false);
+    expect(controls.hidden).toBe(true);
+    expect(addButton.getAttribute('aria-disabled')).toBe('false');
+    addButton.click();
     expect(w.OrbiCatalog.getCart().map(i => i.variantId)).toEqual(['v1', 'v2']);
-    expect(w.document.getElementById('header-enquiry-count').textContent).toBe('2');
+    expect(w.OrbiCatalog.getCart().map(i => i.quantity)).toEqual([2, 1]);
+    expect(decrease.getAttribute('aria-label')).toBe('Remove from enquiry list');
+    decrease.click();
+    expect(addButton.hidden).toBe(false);
+    expect(controls.hidden).toBe(true);
+    expect(w.OrbiCatalog.getCart().map(i => i.variantId)).toEqual(['v1']);
+    expect(w.document.getElementById('header-enquiry-count').textContent).toBe('1');
   });
   it('restores a saved option from the URL and displays only its server-resolved price', async () => {
     const priced = { ...product, variants: product.variants.map(v => ({ ...v, price: 100, unitPrice: 80 })) };
@@ -116,6 +138,23 @@ describe('Orbi product choices', () => {
     expect(w.document.querySelector('.product-description script')).toBeNull();
     w.document.querySelector('.add-enquiry-list').click();
     expect(w.OrbiCatalog.getCart()[0].variantId).toBeNull();
+  });
+  it('restores enquiry membership and re-enables adding after removal in another tab', async () => {
+    const cart = [{ id: product.id, variantId: 'v1', quantity: 3 }];
+    const w = await mount({ cart, query: '?category=flowers&slug=marigold&variant=v1' });
+    const button = w.document.querySelector('.add-enquiry-list');
+    expect(button.hidden).toBe(true);
+    expect(w.document.querySelector('.product-enquiry-quantity output').value).toBe('3');
+    button.click();
+    expect(w.OrbiCatalog.getCart()[0].quantity).toBe(3);
+
+    w.localStorage.removeItem('enquiryCart');
+    w.dispatchEvent(new w.StorageEvent('storage', { key: 'enquiryCart' }));
+    expect(button.hidden).toBe(false);
+    expect(button.getAttribute('aria-disabled')).toBe('false');
+    expect(w.document.getElementById('header-enquiry-count').textContent).toBe('0');
+    button.click();
+    expect(w.OrbiCatalog.getCart()).toMatchObject([{ variantId: 'v1', quantity: 1 }]);
   });
   it('keeps an unavailable saved variant unselected instead of replacing it silently', async () => {
     const w = await mount({ query: '?category=flowers&slug=marigold&variant=deleted' });
