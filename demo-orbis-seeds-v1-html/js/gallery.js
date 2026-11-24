@@ -142,14 +142,21 @@
         var cover = document.createElement('div');
         renderCover(cover, readImage(album.coverImage), safeText(album.coverImage?.alt, title));
         card.appendChild(cover);
+        var info = document.createElement('div');
+        info.className = 'gallery-album-info';
         var heading = document.createElement('h3');
         heading.textContent = title;
-        card.appendChild(heading);
+        info.appendChild(heading);
         if (album.description) {
             var description = document.createElement('p');
             description.textContent = album.description;
-            card.appendChild(description);
+            info.appendChild(description);
         }
+        var arrow = document.createElement('span');
+        arrow.className = 'gallery-album-arrow';
+        arrow.setAttribute('aria-hidden', 'true');
+        info.appendChild(arrow);
+        card.appendChild(info);
         content.appendChild(card);
 
         // Older API deployments omit coverImage; obtain just their first image.
