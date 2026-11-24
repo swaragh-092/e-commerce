@@ -2,10 +2,24 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminProfilePage from '../../../pages/admin/AdminProfilePage';
 const { updateProfile, changePassword, requestEmailChange, user } = vi.hoisted(() => ({ updateProfile: vi.fn(), changePassword: vi.fn(), requestEmailChange: vi.fn(), user: { id: 'staff', firstName: 'Staff', lastName: 'Member', email: 'staff@example.test', status: 'active', emailVerified: true, profile: { phone: '9876543210' } } }));
-vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ user, roles: ['super_admin'], permissions: ['products.read', 'products.update', 'orders.read'], updateProfile }) }));
-vi.mock('../../../services/userService', () => ({ userService: { changePassword, requestEmailChange } }));
+vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ user, roles: ['super_admin'], permissions: ['products.read', 'products.update', 'orders.read', 'account.self'], updateProfile }) }));
+vi.mock('../../../services/userService', () => ({ userService: {
+  changePassword,
+  requestEmailChange,
+  getSessions: vi.fn().mockResolvedValue([
+    { id: 'current', deviceName: 'Current browser', isCurrent: true },
+    { id: 'other', deviceName: 'Other browser', isCurrent: false },
+  ]),
+} }));
 beforeEach(() => { vi.clearAllMocks(); updateProfile.mockResolvedValue({ ...user, firstName: 'Updated' }); changePassword.mockResolvedValue({}); requestEmailChange.mockResolvedValue({ sent: true }); });
 describe('Admin profile', () => {
+  it('shows the current session and controls for other sessions', async () => {
+    render(<AdminProfilePage />);
+    await screen.findByRole('heading', { name: 'Active Sessions' });
+    expect(screen.getByText('Current')).toBeInTheDocument();
+    expect(screen.getByText('Other browser')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign out all others' })).toBeInTheDocument();
+  });
   it('saves only changed profile fields and shows inline feedback', async () => {
     render(<AdminProfilePage />);
     expect(screen.getByText('Super Admin')).toBeInTheDocument();
@@ -53,7 +67,7 @@ describe('Admin profile', () => {
   });
   it('keeps permissions collapsed and groups them by resource when expanded', () => {
     render(<AdminProfilePage />);
-    const toggle = screen.getByRole('button', { name: 'View permissions (3)' });
+    const toggle = screen.getByRole('button', { name: 'View permissions (4)' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
