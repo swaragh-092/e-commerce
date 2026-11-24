@@ -28,16 +28,7 @@ import { galleryService } from '../../../../services/galleryService';
 import MediaPicker from '../../../common/MediaPicker';
 import { getMediaUrl } from '../../../../utils/media';
 
-const PRODUCT_SOURCES = [
-  { value: 'featured', label: 'Featured' },
-  { value: 'sale', label: 'On Sale' },
-  { value: 'bestSellers', label: 'Best Sellers' },
-  { value: 'staffPicks', label: 'Staff Picks' },
-  { value: 'trending', label: 'Trending This Week' },
-  { value: 'mostViewed', label: 'Most Viewed' },
-  { value: 'newest', label: 'Newest' },
-  { value: 'recommended', label: 'Recommended' },
-];
+import productRow from '../../../../../../shared/product-row.json';
 
 
 export const BLOCK_FIELD_PRESETS = {
@@ -1363,7 +1354,7 @@ const DesignerSectionEditor = ({
                   {isProductRow && <FormControl size="small" fullWidth>
                     <InputLabel>Product Source</InputLabel>
                     <Select
-                      value={section.source || 'featured'}
+                      value={section.source || productRow.defaults.source}
                       label="Product Source"
                       onChange={(event) => {
                         const source = event.target.value;
@@ -1377,7 +1368,7 @@ const DesignerSectionEditor = ({
                         onBlur();
                       }}
                     >
-                      {PRODUCT_SOURCES.map((s) => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
+                      {Object.entries(productRow.sources).map(([value, source]) => <MenuItem key={value} value={value}>{source.label}</MenuItem>)}
                     </Select>
                   </FormControl>}
                   {isProductRow && section.source === 'sale' && (
@@ -1396,12 +1387,12 @@ const DesignerSectionEditor = ({
                     label="Count"
                     type="number"
                     disabled={section.source === 'staffPicks'}
-                    value={section.source === 'staffPicks' ? section.productIds?.length || 0 : section.count || 8}
-                    onChange={(e) => onChange('count', Math.min(isRecentlyViewed ? 12 : 24, Math.max(1, parseInt(e.target.value) || 8)))}
+                    value={section.source === 'staffPicks' ? section.productIds?.length || 0 : section.count || productRow.defaults.count}
+                    onChange={(e) => onChange('count', Math.min(isRecentlyViewed ? 12 : productRow.limits.editorMaxCount, Math.max(productRow.limits.minCount, parseInt(e.target.value) || productRow.defaults.count)))}
                     onBlur={onBlur}
                     size="small"
                     fullWidth
-                    inputProps={{ min: 1, max: isRecentlyViewed ? 12 : 24 }}
+                    inputProps={{ min: productRow.limits.minCount, max: isRecentlyViewed ? 12 : productRow.limits.editorMaxCount }}
                   />
                   {isProductRow && !(section.source === 'sale' && section.saleLabel) && <TextField
                     label="View All Link"

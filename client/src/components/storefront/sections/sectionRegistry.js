@@ -1,10 +1,12 @@
+import productRow from '../../../../../shared/product-row.json';
+
 export const SECTION_TYPES = Object.freeze({
   COMPOSED_HERO: 'composed-hero',
   HERO_CAROUSEL: 'hero-carousel',
   VALUE_PROPS: 'value-props',
   CATEGORY_SHORTCUTS: 'category-shortcuts',
   PROMO_BANNERS: 'promo-banners',
-  PRODUCT_ROW: 'product-row',
+  PRODUCT_ROW: productRow.type,
   BRAND_SHOWCASE: 'brand-showcase',
   TAG_SHOWCASE: 'tag-showcase',
   GALLERY_GRID: 'gallery-grid',
@@ -40,7 +42,7 @@ export const SECTION_TYPES = Object.freeze({
 // ─── Variants per section type ──────────────────────────────────────────────
 export const SECTION_VARIANTS = Object.freeze({
   [SECTION_TYPES.HERO_CAROUSEL]: ['overlay', 'split', 'split-editorial', 'centered', 'full-bleed'],
-  [SECTION_TYPES.PRODUCT_ROW]: ['carousel', 'grid', 'grid-compact'],
+  [SECTION_TYPES.PRODUCT_ROW]: productRow.variants,
   [SECTION_TYPES.CATEGORY_SHORTCUTS]: ['icon-grid', 'image-tiles', 'compact-chips'],
   [SECTION_TYPES.PROMO_BANNERS]: ['cards', 'banner-stack', 'asymmetric'],
   [SECTION_TYPES.FEATURED_COLLECTION_GRID]: ['image-tiles', 'icon-grid', 'compact-chips'],
@@ -67,7 +69,7 @@ export const SECTION_DEFINITIONS = Object.freeze({
   [SECTION_TYPES.VALUE_PROPS]: { label: 'Value props', family: 'trust', data: 'content', live: true, preview: true, defaultVariant: 'icon-row' },
   [SECTION_TYPES.CATEGORY_SHORTCUTS]: { label: 'Category shortcuts', family: 'merchandising', data: 'categories', live: true, preview: true, defaultVariant: 'image-tiles' },
   [SECTION_TYPES.PROMO_BANNERS]: { label: 'Promo banners', family: 'campaign', data: 'content', live: true, preview: true, defaultVariant: 'cards' },
-  [SECTION_TYPES.PRODUCT_ROW]: { label: 'Product row', family: 'merchandising', data: 'products', live: true, preview: true, defaultVariant: 'carousel' },
+  [SECTION_TYPES.PRODUCT_ROW]: { label: 'Product row', family: 'merchandising', data: 'products', live: true, preview: true, defaultVariant: productRow.defaults.variant },
   [SECTION_TYPES.BRAND_SHOWCASE]: { label: 'Brand showcase', family: 'merchandising', data: 'brands', live: true, preview: true, defaultVariant: null },
   [SECTION_TYPES.EDITORIAL_IMAGE_TEXT]: { label: 'Editorial image and text', family: 'story', data: 'content', live: true, preview: true, defaultVariant: 'image-right' },
   [SECTION_TYPES.TESTIMONIALS]: { label: 'Testimonials', family: 'trust', data: 'content', live: true, preview: true, defaultVariant: 'cards' },

@@ -1,4 +1,4 @@
-import { fetchStaffPicks, PRODUCT_SOURCE_PARAMS, usesProductRowSource } from '../../../utils/productRowSources';
+import { fetchStaffPicks, getProductRowQuery, usesProductRowSource } from '../../../utils/productRowSources';
 import { useContext, useEffect, useMemo, useState } from 'react';
 import {
   Box, Typography, Button, Grid, Stack, Badge, IconButton,
@@ -244,16 +244,8 @@ const fetchPreviewProducts = (section, category) => {
   if (!usesProductRowSource(section)) {
     return api.get('/api-builder/public/' + section.dataSourceSlug, { timeout: API_BUILDER_TIMEOUT_MS });
   }
-  return getProducts({ ...getProductParams(section), ...(category && { category }) });
+  return getProducts(getProductRowQuery(section, { limit: num(section.count, 8), category }));
 };
-
-const getProductParams = (section) => ({
-  ...(PRODUCT_SOURCE_PARAMS[section.source] || {}),
-  ...(section.query || {}),
-  ...(section.source === 'sale' && section.saleLabel && { saleLabel: section.saleLabel }),
-  limit: num(section.count, 8),
-  status: 'published',
-});
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 

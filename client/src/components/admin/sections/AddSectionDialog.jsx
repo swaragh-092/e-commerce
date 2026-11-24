@@ -7,25 +7,21 @@ import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import { SECTION_DEFINITIONS, SECTION_VARIANTS } from '../../storefront/sections/sectionRegistry';
 import { createDefaultSection, getSectionPresetGallery, SECTION_PRESET_GOALS } from '../../../utils/sectionPresets';
 import SectionLayoutPreview from './SectionLayoutPreview';
+import productRow from '../../../../../shared/product-row.json';
+import { applyProductSourcePreset } from '../../../utils/productRowSources';
 
-const productChoices = [
-  { key: 'products-most-viewed', label: 'Most Viewed', source: 'mostViewed', link: '/products?sort=most-viewed' },
-  { key: 'products-trending', label: 'Trending This Week', source: 'trending', link: '/products?sort=trending' },
-  { key: 'products-staff-picks', label: 'Staff Picks', source: 'staffPicks', link: '' },
-  { key: 'products-best-sellers', label: 'Best Sellers', source: 'bestSellers', link: '/products?sort=best-selling' },
-  { key: 'products-featured', label: 'Featured Products', source: 'featured', link: '/products?featured=true' },
-  { key: 'products-newest', label: 'New Arrivals', source: 'newest', link: '/products?sort=newest' },
-  { key: 'products-sale', label: 'On Sale', source: 'sale', link: '/products?onSale=true' },
-].map((choice) => ({
-  ...choice,
-  type: 'product-row',
+const productChoices = ['mostViewed', 'trending', 'staffPicks', 'bestSellers', 'featured', 'newest', 'sale'].map((source) => ({
+  key: `products-${source}`,
+  label: productRow.sources[source].presetLabel,
+  source,
+  type: productRow.type,
   family: 'merchandising',
   goal: 'merchandising',
-  variant: 'carousel',
-  description: choice.source === 'featured'
+  variant: productRow.defaults.variant,
+  description: source === 'featured'
     ? 'Show hand-picked featured products.'
-    : choice.source === 'staffPicks' ? 'Choose and order the products in this row.'
-      : `Show ${choice.label.toLowerCase()} products in a carousel or grid.`,
+    : source === 'staffPicks' ? 'Choose and order the products in this row.'
+      : `Show ${productRow.sources[source].presetLabel.toLowerCase()} products in a carousel or grid.`,
 }));
 
 const sectionOptions = Object.entries(SECTION_DEFINITIONS)
@@ -80,16 +76,7 @@ const AddSectionDialog = ({ open, anchorEl, onClose, onAdd, existingIds = [], se
     // A reusable preset must not override the ID allocated for this instance.
     section.id = generateId(option.type, existingIds);
     reset();
-    onAdd(option.source ? {
-      ...section,
-      source: option.source,
-      title: option.label,
-      subtitle: '',
-      viewAllLink: option.link,
-      dataSourceSlug: '',
-      query: {},
-      saleLabel: '',
-    } : section);
+    onAdd(option.source ? applyProductSourcePreset(section, option.source) : section);
   };
 
   const handleClose = () => { reset(); onClose(); };

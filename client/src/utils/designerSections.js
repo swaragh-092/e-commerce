@@ -1,22 +1,11 @@
-const CONTENT_PAGE_SECTIONS = ['product-row', 'editorial-image-text', 'faq', 'promo-banners', 'composed-hero'];
+import productRow from '../../../shared/product-row.json';
+
+const CONTENT_PAGE_SECTIONS = [productRow.type, 'editorial-image-text', 'faq', 'promo-banners', 'composed-hero'];
 
 export const getPageSectionTypes = (page) =>
-  page === 'checkout' ? ['product-row'] : CONTENT_PAGE_SECTIONS;
+  page === 'checkout' ? [productRow.type] : CONTENT_PAGE_SECTIONS;
 
-export const PAGE_SETTINGS_GROUPS = {
-  'product': 'productPage',
-  'category': 'categoryPage',
-  'collection': 'catalog',
-  'brand': 'brandsPage',
-  'blog': 'blogPage',
-  'account': 'accountPage',
-  'cart': 'cartPage',
-  'checkout': 'checkoutPage',
-  'wishlist': 'wishlistPage',
-  'search': 'searchPage',
-  'not-found': 'notFoundPage',
-  'orders': 'ordersPage',
-};
+export const PAGE_SETTINGS_GROUPS = productRow.pageGroups;
 
 // Shared by the designer section list and its storefront preview.
 export const getPageSections = (settingsObj, activePg, defaultLayoutSections) => {

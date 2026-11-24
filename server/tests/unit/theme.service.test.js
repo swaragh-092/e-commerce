@@ -1,6 +1,8 @@
 import { createRequire } from 'node:module';
 import { describe, expect, it, vi } from 'vitest';
 import { createDefaultSection, getSectionPresetGallery } from '../../../client/src/utils/sectionPresets';
+import { applyProductSourcePreset } from '../../../client/src/utils/productRowSources';
+import productRowContract from '../../../shared/product-row.json';
 
 const require = createRequire(import.meta.url);
 const path = require('path');
@@ -116,6 +118,46 @@ describe('Theme package schema validation', () => {
       readDraft.mockRestore();
       findTemplate.mockRestore();
       createTemplate.mockRestore();
+    }
+  });
+
+  it('round-trips a Designer Product Row through saved drafts on every supported page', async () => {
+    const { sequelize, Setting, ThemePackage, DesignDraft } = require('../../src/modules');
+    const AuditService = require('../../src/modules/audit/audit.service');
+    const ThemeService = require('../../src/modules/theme/theme.service');
+    const { saveDraft } = require('../../src/modules/settings/designDraft.service');
+    const base = applyProductSourcePreset(createDefaultSection(productRowContract.type, { id: 'featured' }), 'featured');
+    const row = { ...base, query: { ...base.query, featured: true, sort: 'newest' }, dataSourceSlug: 'fresh-products' };
+    let storedDraft;
+    const mocks = [
+      vi.spyOn(sequelize, 'transaction').mockImplementation((callback) => callback({})),
+      vi.spyOn(Setting, 'findAll').mockResolvedValue([]),
+      vi.spyOn(DesignDraft, 'findOne').mockImplementation(async () => storedDraft),
+      vi.spyOn(DesignDraft, 'create').mockImplementation(async (draft) => {
+        storedDraft = { ...draft, toJSON: () => ({ ...draft }) };
+        return storedDraft;
+      }),
+      vi.spyOn(AuditService, 'log').mockResolvedValue(undefined),
+      vi.spyOn(ThemePackage, 'findOne').mockResolvedValue(null),
+      vi.spyOn(ThemePackage, 'create').mockImplementation(async (record) => record),
+    ];
+
+    try {
+      const draft = await saveDraft({ settings: [
+        { group: 'homepage', key: 'sections', value: [row] },
+        ...Object.values(productRowContract.pageGroups).map((group) => ({ group, key: 'productRows', value: [row] })),
+      ] }, { id: 'manager' });
+      const exported = await ThemeService.exportCurrent({}, draft.revision);
+      const pkg = await ThemeService.importToLibrary(JSON.parse(JSON.stringify(exported)), 'manager');
+      const { mergedSettings } = await ThemeService.preview(pkg.packageData, ['homepageSections', 'pageTemplates']);
+
+      expect(mergedSettings.homepage.sections).toEqual([row]);
+      for (const [page, group] of Object.entries(productRowContract.pageGroups)) {
+        expect(pkg.packageData.pageTemplates[page].productRows).toEqual([row]);
+        expect(mergedSettings[group].productRows).toEqual([row]);
+      }
+    } finally {
+      mocks.forEach((mock) => mock.mockRestore());
     }
   });
 

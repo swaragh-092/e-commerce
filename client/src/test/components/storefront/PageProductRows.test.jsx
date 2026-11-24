@@ -113,6 +113,17 @@ describe('page product rows', () => {
     expect(getProducts.mock.calls.map(([params]) => params.category)).toEqual(['shoes', undefined]);
   });
 
+  it('preserves the saved query while applying page scope and published status', async () => {
+    render(<MemoryRouter><PageProductRows category="fruit" rows={[{
+      id: 'featured', type: 'product-row', source: 'featured', count: 4,
+      query: { category: 'vegetables', sort: 'newest', limit: 30 },
+    }]} /></MemoryRouter>);
+
+    await waitFor(() => expect(getProducts).toHaveBeenCalledWith({
+      featured: true, category: 'fruit', sort: 'newest', limit: 4, status: 'published',
+    }));
+  });
+
   it('requests the configured most-viewed products with the discovery ranking', async () => {
     render(<MemoryRouter><PageProductRows rows={[{
       id: 'trending',
