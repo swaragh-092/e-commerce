@@ -124,6 +124,20 @@ describe('page product rows', () => {
     }));
   });
 
+  it('uses separate category filters for two featured rows and their catalog links', async () => {
+    render(<MemoryRouter><PageProductRows rows={['fruit', 'vegetables'].map((category) => ({
+      id: category, type: 'product-row', source: 'featured', count: 4,
+      query: { category, sort: 'newest' },
+    }))} /></MemoryRouter>);
+    expect(screen.getAllByRole('link', { name: 'View All' }).map((link) => link.getAttribute('href'))).toEqual([
+      '/products?featured=true&category=fruit', '/products?featured=true&category=vegetables',
+    ]);
+    await waitFor(() => expect(getProducts.mock.calls.map(([params]) => params)).toEqual([
+      { featured: true, category: 'fruit', sort: 'newest', limit: 4, status: 'published' },
+      { featured: true, category: 'vegetables', sort: 'newest', limit: 4, status: 'published' },
+    ]));
+  });
+
   it('requests the configured most-viewed products with the discovery ranking', async () => {
     render(<MemoryRouter><PageProductRows rows={[{
       id: 'trending',

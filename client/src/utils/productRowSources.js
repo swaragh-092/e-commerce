@@ -26,6 +26,13 @@ export const usesProductRowSource = (section) =>
   !section.dataSourceSlug || productRow.sources[section.source]?.ignoresDataSource === true
   || (section.source === 'sale' && Boolean(section.saleLabel));
 
+export const withProductRowCategoryLink = (link, category) => {
+  if (!category || !/^\/products(?:[?#]|$)/.test(link || '')) return link;
+  const url = new URL(link, 'https://store.invalid');
+  url.searchParams.set('category', category);
+  return url.pathname + url.search + url.hash;
+};
+
 export const fetchStaffPicks = async (section, getProducts) => {
   const ids = section.productIds || [];
   if (!ids.length) return { data: [] };

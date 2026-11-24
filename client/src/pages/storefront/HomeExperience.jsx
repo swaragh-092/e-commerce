@@ -1,4 +1,4 @@
-import { fetchStaffPicks, getProductRowQuery, PRODUCT_SOURCE_PARAMS, usesProductRowSource } from '../../utils/productRowSources';
+import { fetchStaffPicks, getProductRowQuery, PRODUCT_SOURCE_PARAMS, usesProductRowSource, withProductRowCategoryLink } from '../../utils/productRowSources';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Box } from '@mui/material';
 import api from '../../services/api';
@@ -298,11 +298,15 @@ const HomeExperience = () => {
           (sparse || (!loading && !available) || (section.source === 'sale' && !pricingEnabled));
         const previewSection = designerPreview &&
           (showProductEmptyState || ['gallery', 'testimonials', 'recently-viewed'].includes(section.type));
-        const renderedSection = campaignLabel
+        const baseSection = campaignLabel
           ? { ...section, viewAllLink: `/products?saleLabel=${encodeURIComponent(campaignLabel)}` }
           : discoverySort && (!section.viewAllLink || section.viewAllLink === '/products?sort=newest')
           ? { ...section, viewAllLink: `/products?sort=${discoverySort}` }
           : section;
+        const category = section.type === 'product-row' && section.source !== 'staffPicks' && usesProductRowSource(section)
+          ? section.query?.category : undefined;
+        const viewAllLink = withProductRowCategoryLink(baseSection.viewAllLink, category);
+        const renderedSection = viewAllLink === baseSection.viewAllLink ? baseSection : { ...baseSection, viewAllLink };
         const display = {
           xs: section.hideOnMobile ? 'none' : 'block',
           md: section.hideOnDesktop ? 'none' : 'block',

@@ -127,7 +127,7 @@ describe('Theme package schema validation', () => {
     const ThemeService = require('../../src/modules/theme/theme.service');
     const { saveDraft } = require('../../src/modules/settings/designDraft.service');
     const base = applyProductSourcePreset(createDefaultSection(productRowContract.type, { id: 'featured' }), 'featured');
-    const row = { ...base, query: { ...base.query, featured: true, sort: 'newest' }, dataSourceSlug: 'fresh-products' };
+    const row = { ...base, query: { ...base.query, featured: true, category: 'fruit', sort: 'newest' }, dataSourceSlug: 'fresh-products' };
     let storedDraft;
     const mocks = [
       vi.spyOn(sequelize, 'transaction').mockImplementation((callback) => callback({})),
