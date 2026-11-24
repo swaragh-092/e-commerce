@@ -41,6 +41,7 @@ import SectionRenderer from '../../components/storefront/sections/SectionRendere
 import { getPageSections } from '../../utils/designerSections';
 import { buildBreadcrumbJsonLd, buildProductJsonLd } from '../../utils/seo/buildStructuredData';
 import { parseSchemaOverride } from '../../utils/seo/schemaOverride';
+import { getProductShareImage } from '../../utils/seo/productShareImage';
 import { getBadgeChipProps } from '../../utils/componentStyles';
 import StorefrontButton from '../../components/storefront/StorefrontButton';
 
@@ -485,7 +486,7 @@ const ProductDetailPage = () => {
             <PageSEO
                 title={product.metaTitle || product.name}
                 description={product.metaDescription || product.shortDescription}
-                image={product.ogImage || product.images?.[0]?.url}
+                image={getProductShareImage(product)}
                 type="product"
                 url={resolvedPageUrl}
                 structuredData={productStructuredData}
@@ -603,7 +604,7 @@ const ProductDetailPage = () => {
                                 title={product.name}
                                 text={product.shortDescription}
                                 url={window.location.href}
-                                 image={product.ogImage || product.images?.[0]?.url}
+                                 image={getProductShareImage(product)}
                              />
                          </Box>
                      </Box>,

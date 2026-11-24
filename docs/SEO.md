@@ -39,7 +39,7 @@ To solve this completely, the platform implements a **Dual Pre-rendering Archite
 In `client/nginx.conf` and `scripts/aws-deploy.sh`, Nginx checks the `User-Agent`:
 ```nginx
 set $is_crawler 0;
-if ($http_user_agent ~* "facebookexternalhit|facebot|whatsapp|twitterbot|linkedinbot|telegrambot|slackbot|discordbot|pinterest|googlebot|bingbot|applebot|yandex|duckduckbot") {
+if ($http_user_agent ~* "facebookexternalhit|facebookcatalog|meta-externalagent|meta-externalfetcher|facebot|whatsapp|twitterbot|linkedinbot|telegrambot|slackbot|discordbot|pinterest|googlebot|bingbot|applebot|yandex|duckduckbot") {
     set $is_crawler 1;
 }
 if ($args ~ "_escaped_fragment_") {
@@ -49,16 +49,28 @@ if ($uri ~* "\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|webp|json|map
     set $is_crawler 0;
 }
 
+if ($request_uri ~ "^/admin(?:[/?]|$)") {
+    set $is_crawler 0;
+}
+
 location / {
+    error_page 418 = @storefront_seo;
     if ($is_crawler = 1) {
-        rewrite ^(.*)$ /api/seo/prerender?path=$1 break;
-        proxy_pass http://server:5000;
+        return 418;
     }
     try_files $uri $uri/ /index.html;
+}
+
+location @storefront_seo {
+    rewrite ^(.*)$ /api/seo/prerender?path=$1? break;
+    proxy_pass http://server:5000;
+    proxy_set_header Host $host;
 }
 ```
 *   **Human visitors**: Served static assets and SPA `index.html` from disk at maximum speed.
 *   **Social & Search bots**: Seamlessly served live, pre-rendered HTML with full meta tags and images.
+
+On existing EC2 installs, apply the routing to the active storefront HTTPS server block and use the local API upstream. The frontend artifact deployment does not replace the host's Nginx config. After testing and reloading Nginx, confirm that a request with a WhatsApp or Facebook crawler user agent returns an absolute `og:image` on a normal product URL.
 
 ---
 

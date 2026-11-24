@@ -18,7 +18,7 @@ class Backend(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b'PRERENDER_BACKEND')
+        self.wfile.write(self.path.encode())
     def log_message(self, *_):
         pass
 
@@ -60,7 +60,10 @@ with tempfile.TemporaryDirectory(prefix='admin-nginx-') as temp:
             ('/admin/products/new', 'Mozilla/5.0', 'ADMIN_SPA'),
             ('/admin', 'Googlebot', 'ADMIN_SPA'),
             ('/admin/settings?_escaped_fragment_=1', 'Mozilla/5.0', 'ADMIN_SPA'),
-            ('/products', 'Googlebot', 'PRERENDER_BACKEND'),
+            ('/products', 'Googlebot', '/api/seo/prerender?path=/products'),
+            ('/product/19jp19?utm_source=share', 'WhatsApp/2.24', '/api/seo/prerender?path=/product/19jp19'),
+            ('/products/19jp19', 'meta-externalfetcher/1.1', '/api/seo/prerender?path=/products/19jp19'),
+            ('/product/19jp19', 'Mozilla/5.0', 'ADMIN_SPA'),
         ]:
             actual = fetch(path, agent)
             print(f'{agent} {path}: {actual}')

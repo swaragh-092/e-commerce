@@ -7,6 +7,9 @@ const { isGalleryPath, normalizeSeoPath } = require('../modules/seo/seoPaths');
 // Known social media crawlers and search engine indexing bots
 const CRAWLER_USER_AGENTS = [
   'facebookexternalhit',
+  'facebookcatalog',
+  'meta-externalagent',
+  'meta-externalfetcher',
   'facebot',
   'whatsapp',
   'twitterbot',
