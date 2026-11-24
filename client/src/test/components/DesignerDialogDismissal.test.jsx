@@ -5,7 +5,7 @@ import SaveAsTemplateDialog from '../../components/admin/themes/SaveAsTemplateDi
 import AddSectionDialog from '../../components/admin/sections/AddSectionDialog';
 import DesignerTreePanel from '../../components/admin/themes/designer/DesignerTreePanel';
 
-const { theme } = vi.hoisted(() => ({ theme: { exportTheme: vi.fn(), importTheme: vi.fn() } }));
+const { theme } = vi.hoisted(() => ({ theme: { exportTheme: vi.fn(), exportDraftTheme: vi.fn(), importTheme: vi.fn() } }));
 vi.mock('../../services/themeService', () => ({ default: theme }));
 vi.mock('../../hooks/useAuth', () => ({ useAuth: () => ({ user: { name: 'Admin' } }) }));
 
@@ -102,5 +102,20 @@ describe('Designer dialog dismissal during requests', () => {
     await act(async () => finishExport({ meta: {} }));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(theme.importTheme).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves a Designer template from the saved revision with hero content selected by default', async () => {
+    theme.exportDraftTheme.mockResolvedValueOnce({ meta: {}, demoContent: { heroSlides: [{ title: 'Draft hero' }] } });
+    theme.importTheme.mockResolvedValueOnce({});
+    const onClose = vi.fn();
+    render(<SaveAsTemplateDialog open draftRevision={7} onClose={onClose} />);
+    expect(screen.getByRole('checkbox', { name: /Include current hero slides/ })).toBeChecked();
+    fireEvent.change(screen.getByRole('textbox', { name: /Template Name/ }), { target: { value: 'Draft theme' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save to Library' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(theme.exportDraftTheme).toHaveBeenCalledWith(7, expect.objectContaining({ includeDemoContent: true }));
+    expect(theme.importTheme).toHaveBeenLastCalledWith(expect.objectContaining({
+      demoContent: { heroSlides: [{ title: 'Draft hero' }] },
+    }));
   });
 });

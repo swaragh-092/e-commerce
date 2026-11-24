@@ -1,9 +1,12 @@
 'use strict';
 
 const Joi = require('joi');
+const pageSlug = Joi.string().max(255).pattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+    .messages({ 'string.pattern.base': 'Slug must contain lowercase letters, numbers, and single hyphens.' });
 
 const createPageSchema = Joi.object({
     title: Joi.string().max(255).required(),
+    slug: pageSlug,
     content: Joi.string().required(),
     linkPosition: Joi.string().valid('top', 'bottom', 'none').default('none'),
     linkPlacement: Joi.string().max(50).allow(null, ''),
@@ -17,6 +20,7 @@ const createPageSchema = Joi.object({
 
 const updatePageSchema = Joi.object({
     title: Joi.string().max(255),
+    slug: pageSlug,
     content: Joi.string(),
     linkPosition: Joi.string().valid('top', 'bottom', 'none'),
     linkPlacement: Joi.string().max(50).allow(null, ''),

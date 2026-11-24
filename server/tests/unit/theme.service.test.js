@@ -63,6 +63,39 @@ describe('Theme package schema validation', () => {
     expect(error).toBeDefined();
   });
 
+  it('exports the requested saved draft with its colors, hero, sections and resets', async () => {
+    const { Setting } = require('../../src/modules');
+    const ThemeService = require('../../src/modules/theme/theme.service');
+    const drafts = require('../../src/modules/settings/designDraft.service');
+    const readSettings = vi.spyOn(Setting, 'findAll').mockResolvedValue([
+      { group: 'theme', key: 'primaryColor', value: '#92400e' },
+      { group: 'nav', key: 'bgColor', value: '#da0b20' },
+      { group: 'homepage', key: 'heroSlides', value: [{ title: 'Published hero' }] },
+    ]);
+    const readDraft = vi.spyOn(drafts, 'getDraft').mockResolvedValue({ draft: { revision: 7, payload: [
+      { group: 'theme', key: 'primaryColor', value: '#15803d' },
+      { group: 'nav', key: 'bgColor', operation: 'delete' },
+      { group: 'homepage', key: 'heroSlides', value: [{ title: 'Draft hero' }] },
+      { group: 'homepage', key: 'sections', value: [{ id: 'draft-hero', type: 'hero-carousel' }] },
+      { group: 'advanced', key: 'customCSS', value: 'body { display: none }' },
+    ] } });
+
+    try {
+      const exported = await ThemeService.exportCurrent({}, 7);
+      expect(exported.design.theme.primaryColor).toBe('#15803d');
+      expect(exported.layout.nav).not.toHaveProperty('bgColor');
+      expect(exported.demoContent.heroSlides).toEqual([{ title: 'Draft hero' }]);
+      expect(exported.layout.homepageSections[0].id).toBe('draft-hero');
+      expect(exported).not.toHaveProperty('advanced');
+      expect(packageSchema.validate(JSON.parse(JSON.stringify(exported))).error).toBeUndefined();
+      expect((await ThemeService.exportCurrent()).demoContent.heroSlides).toEqual([{ title: 'Published hero' }]);
+      await expect(ThemeService.exportCurrent({}, 6)).rejects.toThrow('saved design draft changed');
+    } finally {
+      readSettings.mockRestore();
+      readDraft.mockRestore();
+    }
+  });
+
   it('preserves Designer product and category controls through theme export, library import, and scoped preview', async () => {
     const { Setting, ThemePackage } = require('../../src/modules');
     const ThemeService = require('../../src/modules/theme/theme.service');

@@ -1,5 +1,6 @@
 import { getHeroTitle } from '../../utils/heroCopy';
 import { getPageSections, getPageSectionTypes, PAGE_TEMPLATE_ASSIGNMENT_KEYS } from '../../utils/designerSections';
+import { isValidPromoLink } from '../../utils/urls';
 import { useState, useEffect, useCallback, useContext, useMemo, useRef } from 'react';
 import {
   Box, Button, Card, Container, Divider, IconButton, Stack, Switch,
@@ -173,7 +174,12 @@ const SectionComposerPage = () => {
   const [reviewDraftOpen, setReviewDraftOpen] = useState(false);
   const [archivesOpen, setArchivesOpen] = useState(false);
   const [usingLive, setUsingLive] = useState(false);
-  const [draftDeletes, setDraftDeletes] = useState([]);
+  const [draftDeletes, setDraftDeletesState] = useState([]);
+  const draftDeletesRef = useRef(draftDeletes);
+  const setDraftDeletes = useCallback((next) => {
+    draftDeletesRef.current = typeof next === 'function' ? next(draftDeletesRef.current) : next;
+    setDraftDeletesState(draftDeletesRef.current);
+  }, []);
   const [publishConflict, setPublishConflict] = useState(null);
   const [publishOpen, setPublishOpen] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
@@ -202,12 +208,22 @@ const SectionComposerPage = () => {
   const [resettingDesign, setResettingDesign] = useState(false);
   
   // Unified page style settings state
-  const [pageSettings, setPageSettings] = useState({});
+  const [pageSettings, setPageSettingsState] = useState({});
+  const pageSettingsRef = useRef(pageSettings);
+  const setPageSettings = useCallback((next) => {
+    pageSettingsRef.current = next;
+    setPageSettingsState(next);
+  }, []);
   const [selectedTemplateIds, setSelectedTemplateIds] = useState({});
 
   // History state for Undo/Redo
-  const [history, setHistory] = useState([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [designHistory, setDesignHistoryState] = useState({ entries: [], index: -1 });
+  const { entries: history, index: historyIndex } = designHistory;
+  const historyRef = useRef(designHistory);
+  const setDesignHistory = useCallback((entries, index) => {
+    historyRef.current = { entries, index };
+    setDesignHistoryState(historyRef.current);
+  }, []);
   const designEditRevision = useRef(0);
 
   // Viewport mode state for live preview
@@ -429,7 +445,7 @@ const SectionComposerPage = () => {
       setSections(merged.homepage.sections);
     }
     return { groups: merged, resetTargets };
-  }, []);
+  }, [setPageSettings]);
 
   const fetchSections = useCallback(async () => {
     setLoading(true);
@@ -456,8 +472,7 @@ const SectionComposerPage = () => {
       }
       setSections(initialSections);
       sectionsRef.current = initialSections;
-      setHistory([{ sections: initialSections }]);
-      setHistoryIndex(0);
+      setDesignHistory([{ sections: initialSections }], 0);
       setLoadError(null);
     } catch (error) {
       const message = error?.response?.data?.error?.message || error?.message || 'Failed to load homepage sections';
@@ -466,7 +481,7 @@ const SectionComposerPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [applyDraftPayload, notify]);
+  }, [applyDraftPayload, notify, setDesignHistory, setDraftDeletes]);
 
   useEffect(() => {
     fetchSections();
@@ -540,8 +555,19 @@ const SectionComposerPage = () => {
       notify('Cannot save: store sections failed to load. Please retry loading first.', 'error');
       return;
     }
-    setSaving(true);
     const sectionsToSave = sectionsRef.current;
+    const invalidPromo = sectionsToSave.find((section) => {
+      if (section.type !== 'promo-banners') return false;
+      const items = Array.isArray(section.items) ? section.items : section.banners;
+      return !isValidPromoLink(section.ctaLink) ||
+        (Array.isArray(items) && items.some((item) => !isValidPromoLink(item?.link)));
+    });
+    if (invalidPromo) {
+      selectSection(invalidPromo);
+      notify('Use a store path starting with / or an HTTP or HTTPS URL for promo links.', 'error');
+      return;
+    }
+    setSaving(true);
     const savedEditRevision = designEditRevision.current;
     try {
       // Map unified pageSettings back to their API groups
@@ -573,8 +599,7 @@ const SectionComposerPage = () => {
       notify('Design draft saved. Publish it when the storefront is ready.', 'success');
       if (sectionsRef.current === sectionsToSave && designEditRevision.current === savedEditRevision) {
         setDirty(false);
-        setHistory([{ sections: sectionsRef.current }]);
-        setHistoryIndex(0);
+        setDesignHistory([{ sections: sectionsRef.current }], 0);
       } else {
         setDirty(true);
       }
@@ -624,8 +649,7 @@ const SectionComposerPage = () => {
       setDraftDeletes(draftResult.resetTargets || []);
       draftHydratedRef.current = true;
       const nextSections = draftResult.groups?.homepage?.sections || [];
-      setHistory([{ sections: nextSections }]);
-      setHistoryIndex(0);
+      setDesignHistory([{ sections: nextSections }], 0);
       setDirty(false);
       setPendingVersion(null);
       notify(`Version ${pendingVersion.revision} restored into the design draft. Review it, then publish when ready.`, 'success');
@@ -684,9 +708,9 @@ const SectionComposerPage = () => {
   };
 
   const recordHistory = (entry) => {
-    const nextHistory = history.slice(0, historyIndex + 1);
-    setHistory([...nextHistory, entry]);
-    setHistoryIndex(nextHistory.length);
+    const { entries, index } = historyRef.current;
+    const nextHistory = entries.slice(0, index + 1);
+    setDesignHistory([...nextHistory, entry], nextHistory.length);
   };
 
   const update = (next, skipHistory = false) => {
@@ -699,7 +723,7 @@ const SectionComposerPage = () => {
 
   const restoreHistorySections = (index) => {
     const { sections: next } = history[index];
-    setHistoryIndex(index);
+    setDesignHistory(history, index);
     sectionsRef.current = next;
     setSections(next);
     setDirty(true);
@@ -819,21 +843,21 @@ const SectionComposerPage = () => {
   };
 
   const handlePageSettingChange = (page, value) => {
-    clearDraftDelete(DESIGNER_PAGE_GROUP_MAP[page] || page);
-    setPageSettings((current) => {
-      const previous = current[page] || {};
-      const apply = (settings) => typeof value === 'function' ? value(settings) : value;
-      if (!PAGE_TEMPLATE_ASSIGNMENT_KEYS[page]) return { ...current, [page]: apply(previous) };
-
+    const pageSnapshot = pageSettingsRef.current;
+    const previous = pageSnapshot[page] || {};
+    const apply = (settings) => typeof value === 'function' ? value(settings) : value;
+    let next;
+    if (PAGE_TEMPLATE_ASSIGNMENT_KEYS[page]) {
       const { alternateTemplates: templates, ...defaults } = previous;
       const selectedId = selectedTemplateIds[page];
-      const next = Array.isArray(templates) && templates.some(({ id }) => id === selectedId)
+      next = Array.isArray(templates) && templates.some(({ id }) => id === selectedId)
         ? { ...previous, alternateTemplates: templates.map((template) => template.id === selectedId
           ? { ...template, settings: apply(template.settings) } : template) }
         : { ...apply(defaults), ...(Array.isArray(templates) && { alternateTemplates: templates }) };
-      return { ...current, [page]: next };
+    } else next = apply(previous);
+    changeDesignSetting(DESIGNER_PAGE_GROUP_MAP[page] || page, null, setPageSettings, pageSnapshot, {
+      ...pageSnapshot, [page]: next,
     });
-    setDirty(true);
   };
 
   const changePageSections = (productRows) => {
@@ -841,12 +865,11 @@ const SectionComposerPage = () => {
   };
 
   const updatePageTemplates = (templates) => {
-    clearDraftDelete(pageGroup);
-    setPageSettings((current) => ({
-      ...current,
-      [activePage]: { ...current[activePage], alternateTemplates: templates },
-    }));
-    setDirty(true);
+    const pageSnapshot = pageSettingsRef.current;
+    changeDesignSetting(pageGroup, null, setPageSettings, pageSnapshot, {
+      ...pageSnapshot,
+      [activePage]: { ...pageSnapshot[activePage], alternateTemplates: templates },
+    });
   };
 
   const removePageSection = () => {
@@ -1035,7 +1058,7 @@ const SectionComposerPage = () => {
 
   const changeDesignSetting = (group, key, setValue, before, after, reset = false) => {
     designEditRevision.current += 1;
-    const beforeDeletes = draftDeletes;
+    const beforeDeletes = draftDeletesRef.current;
     const afterDeletes = beforeDeletes.filter((entry) => entry.group !== group || (key && entry.key && entry.key !== key));
     if (reset) afterDeletes.push({ group, key: key || null });
     setValue(after);
@@ -1375,7 +1398,14 @@ const SectionComposerPage = () => {
               onClick={(event) => setActionsAnchor(event.currentTarget)}><MoreHorizIcon /></IconButton>
             <Menu id="designer-actions-menu" anchorEl={actionsAnchor} open={Boolean(actionsAnchor)} onClose={() => setActionsAnchor(null)}>
               <MenuItem disabled={activePage === 'checkout' || (activePage !== 'home' && pageSections.length >= 6)} onClick={() => { setActionsAnchor(null); openAddSection(activePage === 'home' ? sections.length : pageSections.length, 'template'); }}><AddIcon fontSize="small" sx={{ mr: 1.5 }} />Add section</MenuItem>
-              <MenuItem onClick={() => { setActionsAnchor(null); setSaveTemplateOpen(true); }}><SaveIcon fontSize="small" sx={{ mr: 1.5 }} />Save as template</MenuItem>
+              <MenuItem disabled={loadError || saving || publishing} onClick={() => {
+                setActionsAnchor(null);
+                if (dirty) {
+                  notify('Save your design draft before saving it as a template.', 'info');
+                  return;
+                }
+                setSaveTemplateOpen(true);
+              }}><SaveIcon fontSize="small" sx={{ mr: 1.5 }} />Save as template</MenuItem>
               <MenuItem onClick={() => { setActionsAnchor(null); openVersionHistory(); }} disabled={saving || publishing}><HistoryIcon fontSize="small" sx={{ mr: 1.5 }} />Version history</MenuItem>
               {draft && <MenuItem onClick={() => { setActionsAnchor(null); setDiscardOpen(true); }} disabled={saving || publishing || discarding}>Discard draft</MenuItem>}
               {isMobile && <MenuItem onClick={() => { setActionsAnchor(null); handleUndo(); }} disabled={historyIndex <= 0}><UndoIcon fontSize="small" sx={{ mr: 1.5 }} />Undo section change</MenuItem>}
@@ -1774,11 +1804,15 @@ const SectionComposerPage = () => {
         sectionPresets={sectionPresets}
       />
 
-      <SaveAsTemplateDialog
-        open={saveTemplateOpen}
-        onClose={() => setSaveTemplateOpen(false)}
-        onSaved={() => notify('Template saved to library', 'success')}
-      />
+      {saveTemplateOpen && (
+        <SaveAsTemplateDialog
+          open
+          draftRevision={draft?.revision}
+          publishedOnly={!draft}
+          onClose={() => setSaveTemplateOpen(false)}
+          onSaved={() => notify('Template saved to library', 'success')}
+        />
+      )}
 
       <DesignVersionHistoryDialog
         open={historyOpen}

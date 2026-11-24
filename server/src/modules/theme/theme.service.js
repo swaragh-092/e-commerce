@@ -735,10 +735,33 @@ const importToLibrary = async (packageData, userId) => {
   });
 };
 
-const exportCurrent = async (options = {}) => {
+const exportCurrent = async (options = {}, draftRevision) => {
   const { includeHomepageSections = true, includeDemoContent = true, includeComponentStyles = true, includeSectionPresets = true } = options;
   const groups = ['theme', 'componentStyles', 'sectionPresets', 'nav', 'footer', 'announcement', 'homepage', 'productPage', 'categoryPage', 'catalog', 'brandsPage', 'cartPage', 'accountPage', 'blogPage'];
+  if (draftRevision !== undefined) {
+    groups.push(...Object.values(PAGE_TEMPLATE_GROUPS).filter((group) => !groups.includes(group)));
+  }
   const snapshot = await readCurrentSettings(groups);
+
+  if (draftRevision !== undefined) {
+    const { draft } = await DesignDraftService.getDraft();
+    if (!draft || draft.revision !== draftRevision) {
+      throw new AppError('CONFLICT', 409, 'The saved design draft changed. Reload Store Designer before saving the template.');
+    }
+
+    const defaults = Object.fromEntries(groups.map((group) => [group, SettingsService.getGroupDefaults(group)]));
+    for (const group of groups) snapshot[group] = { ...defaults[group], ...snapshot[group] };
+    for (const entry of draft.payload.filter((entry) => entry.operation === 'delete')) {
+      if (!groups.includes(entry.group)) continue;
+      const fallback = defaults[entry.group];
+      if (entry.key === null) snapshot[entry.group] = { ...fallback };
+      else if (Object.hasOwn(fallback, entry.key)) snapshot[entry.group][entry.key] = fallback[entry.key];
+      else delete snapshot[entry.group][entry.key];
+    }
+    for (const entry of draft.payload.filter((entry) => entry.operation !== 'delete')) {
+      if (groups.includes(entry.group)) snapshot[entry.group][entry.key] = entry.value;
+    }
+  }
 
   const pkg = {
     schemaVersion: 3,
@@ -765,7 +788,9 @@ const exportCurrent = async (options = {}) => {
   }
 
   if (includeSectionPresets) {
-    pkg.sectionPresets = snapshot.sectionPresets || {};
+    pkg.sectionPresets = Object.fromEntries(Object.entries(snapshot.sectionPresets || {})
+      .filter(([, preset]) => preset?.type)
+      .map(([key, preset]) => [key, withoutStoreDataSource(preset)]));
   }
 
   if (includeHomepageSections) {

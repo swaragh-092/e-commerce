@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Box, Skeleton } from '@mui/material';
+import { Box, Skeleton, Typography } from '@mui/material';
 import { SECTION_TYPES, getSectionType, isKnownSectionType } from './sectionRegistry';
 import { SectionFrame, UnsupportedSection } from './SectionFallback';
 import ComposedHero from './ComposedHero';
@@ -144,6 +144,19 @@ const SectionRenderer = ({
       content = <PromoBannerSection section={section} banners={data.banners || data.promoBanners || []} mode={mode} onSelectComponent={onSelectComponent} {...editorProps} />;
       break;
     case SECTION_TYPES.PRODUCT_ROW:
+      if (preview && data.showProductEmptyState) {
+        content = (
+          <Box>
+            <Typography variant="h6">{section.title || 'Products'}</Typography>
+            <Typography color="text.secondary" role="status">
+              {section.source === 'sale' && data.pricingEnabled === false
+                ? 'Enable storefront pricing to display sale products.'
+                : 'No products match this section. Check the product source and catalog.'}
+            </Typography>
+          </Box>
+        );
+        break;
+      }
       content = (
         <ProductRowSection
           section={section}

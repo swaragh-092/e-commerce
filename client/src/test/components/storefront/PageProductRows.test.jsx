@@ -13,6 +13,14 @@ describe('page product rows', () => {
     getProducts.mockResolvedValue({ data: [] });
   });
 
+  it('shows a fallback for an empty product row in Designer', async () => {
+    render(<SettingsContext.Provider value={{ settings: {} }}>
+      <MemoryRouter><PageProductRows designerPreview rows={[{ id: 'empty', type: 'product-row', title: 'Seasonal picks' }]} /></MemoryRouter>
+    </SettingsContext.Provider>);
+    expect(await screen.findByText('No products match this section. Check the product source and catalog.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Seasonal picks' })).toBeInTheDocument();
+  });
+
   it.each([
     ['product', 'productPage', 'productSlugs', '/products', 'slug'],
     ['category', 'categoryPage', 'categorySlugs', '/category', 'categorySlug'],

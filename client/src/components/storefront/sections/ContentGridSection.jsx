@@ -54,6 +54,14 @@ const ContentGridSection = ({ section = {}, fallbackTitle = 'Content', kind = 'c
   const isFaq = section.type === 'faq' || kind === 'faq';
   const isTestimonial = section.type === 'testimonials';
   const variant = isTestimonial && ['quote-wall', 'carousel'].includes(section.variant) ? section.variant : 'cards';
+  if (preview && isTestimonial && !section.items?.length) {
+    return (
+      <Box>
+        <Typography variant="h6">{section.title || 'Testimonials'}</Typography>
+        <Typography color="text.secondary" role="status">Add a testimonial in the section settings to display it here.</Typography>
+      </Box>
+    );
+  }
   const items = Array.isArray(section.items) && section.items.length ? section.items : preview ? buildFallbackItems(fallbackTitle, section.count) : [];
 
   if (!items.length) return null;

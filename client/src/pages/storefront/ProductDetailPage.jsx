@@ -70,7 +70,8 @@ const ProductDetailPage = () => {
     const storeName = getStoreName(settings);
     const cartEnabled    = useFeatureVisible('cart', 'storefront');
     const pricingEnabled = useFeatureVisible('pricing', 'storefront');
-    const showPrice = useFeature('showPrice');
+    const showPricePreference = useFeature('showPrice');
+    const showPrice = pricingEnabled && showPricePreference;
     const wishlistEnabled = useFeature('wishlist');
     const enquiryEnabled = useFeature('enquiry');
     const pp = settings?.productPage || {};

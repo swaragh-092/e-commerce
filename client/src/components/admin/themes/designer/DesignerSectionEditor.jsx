@@ -1,5 +1,6 @@
 import StaffPicksEditor from './StaffPicksEditor';
 import ComposedHeroEditor from './ComposedHeroEditor';
+import { isValidPromoLink } from '../../../../utils/urls';
 import { useState, useEffect } from 'react';
 import {
   Box, Stack, Typography, IconButton, Button, Chip, Divider,
@@ -410,7 +411,10 @@ const BlockListEditor = ({
                         value={block?.[field.key] || ''}
                         onChange={(event) => updateField(index, field.key, event.target.value)}
                         onBlur={onBlur}
-                        helperText={schema.key === 'slides' && field.key === 'title'
+                        error={schema.title === 'Promo Blocks' && field.key === 'link' && !isValidPromoLink(block?.link)}
+                        helperText={schema.title === 'Promo Blocks' && field.key === 'link'
+                          ? 'Use a store path starting with / or an HTTP or HTTPS URL.'
+                          : schema.key === 'slides' && field.key === 'title'
                           ? !String(block?.title || '').trim()
                             ? 'An empty heading uses the default hero heading.'
                             : block.title.length > 120 ? `${block.title.length} characters. Aim for 120 or fewer to fit smaller screens.` : undefined
@@ -944,6 +948,8 @@ const DesignerSectionEditor = ({
                   size="small"
                   fullWidth
                   placeholder="/products?featured=true"
+                  error={section.type === 'promo-banners' && !isValidPromoLink(section.ctaLink)}
+                  helperText={section.type === 'promo-banners' ? 'Use a store path starting with / or an HTTP or HTTPS URL.' : undefined}
                 />
                 <TextField
                   label="CTA Text"

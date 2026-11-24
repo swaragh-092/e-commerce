@@ -5,7 +5,7 @@ import { CanvasEditableText } from './SectionFallback';
 
 const calcTimeLeft = (endDate) => {
   const diff = new Date(endDate).getTime() - Date.now();
-  if (diff <= 0) return null;
+  if (!Number.isFinite(diff) || diff <= 0) return null;
   return {
     days: Math.floor(diff / 86400000),
     hours: Math.floor((diff % 86400000) / 3600000),
@@ -25,6 +25,7 @@ const CountdownSection = ({ section = {}, mode = 'live', onSelectComponent, onIn
   const stacked = align === 'center';
 
   useEffect(() => {
+    setTimeLeft(endDate ? calcTimeLeft(endDate) : null);
     if (preview || !endDate) return;
     const timer = setInterval(() => {
       const tl = calcTimeLeft(endDate);
@@ -59,7 +60,7 @@ const CountdownSection = ({ section = {}, mode = 'live', onSelectComponent, onIn
           bgcolor: 'secondary.main',
           color: 'secondary.contrastText',
           display: 'flex',
-          flexDirection: stacked ? 'column' : 'row',
+          flexDirection: stacked ? 'column' : { xs: 'column', md: 'row' },
           alignItems: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'center',
           justifyContent: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'space-between',
           textAlign: align,
@@ -95,20 +96,22 @@ const CountdownSection = ({ section = {}, mode = 'live', onSelectComponent, onIn
           </CanvasEditableText>
         </Box>
         <Stack
-          direction="row"
+          direction={{ xs: 'column', md: 'row' }}
           spacing={1}
           alignItems="center"
           onClick={preview && onSelectComponent ? (event) => { event.stopPropagation(); onSelectComponent('designTokens'); } : undefined}
           sx={preview && onSelectComponent ? { cursor: 'pointer', outline: '1px dashed transparent', '&:hover': { outlineColor: '#1976d2' } } : undefined}
         >
+          <Box sx={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 0.5 }}>
           {displayItems.map((item) => (
             <Chip
               key={item.label}
               label={`${item.value}${item.label}`}
-              sx={{ bgcolor: 'background.paper', color: 'text.primary', fontWeight: 900, fontSize: '0.9rem', minWidth: 48 }}
+              sx={{ bgcolor: 'background.paper', color: 'text.primary', fontWeight: 900, fontSize: '0.9rem', minWidth: 42, flexShrink: 0 }}
             />
           ))}
-          <Button variant="contained" size="small" sx={{ pointerEvents: 'none' }}>
+          </Box>
+          <Button variant="contained" size="small" sx={{ pointerEvents: 'none', whiteSpace: 'nowrap' }}>
             {section.ctaText || 'Shop Sale'}
           </Button>
         </Stack>

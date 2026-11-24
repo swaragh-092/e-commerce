@@ -7,6 +7,7 @@ import {
 import SaveIcon from '@mui/icons-material/Save';
 import themeService from '../../../services/themeService';
 import { useAuth } from '../../../hooks/useAuth';
+import { getApiErrorMessage } from '../../../utils/apiErrors';
 
 const CATEGORIES = [
   'general', 'fashion', 'electronics', 'grocery', 'beauty',
@@ -18,7 +19,8 @@ const slugify = (text) => {
   return slug || 'template-' + Date.now();
 };
 
-const SaveAsTemplateDialog = ({ open, onClose, onSaved, publishedOnly = false }) => {
+const SaveAsTemplateDialog = ({ open, onClose, onSaved, publishedOnly = false, draftRevision }) => {
+  const fromDraft = draftRevision != null;
   const categoryLabelId = useId();
   const { user } = useAuth();
   const authorName = user?.name || user?.email || 'Unknown User';
@@ -26,7 +28,7 @@ const SaveAsTemplateDialog = ({ open, onClose, onSaved, publishedOnly = false })
   const [category, setCategory] = useState('general');
   const [description, setDescription] = useState('');
   const [includeHomepage, setIncludeHomepage] = useState(true);
-  const [includeDemoContent, setIncludeDemoContent] = useState(false);
+  const [includeDemoContent, setIncludeDemoContent] = useState(fromDraft);
   const [includeComponentStyles, setIncludeComponentStyles] = useState(true);
   const [includeSectionPresets, setIncludeSectionPresets] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -37,12 +39,15 @@ const SaveAsTemplateDialog = ({ open, onClose, onSaved, publishedOnly = false })
     setSaving(true);
     setError('');
     try {
-      const exported = await themeService.exportTheme({
+      const options = {
         includeHomepageSections: includeHomepage,
         includeDemoContent,
         includeComponentStyles,
         includeSectionPresets,
-      });
+      };
+      const exported = await (fromDraft
+        ? themeService.exportDraftTheme(draftRevision, options)
+        : themeService.exportTheme(options));
       // Override meta with user input
       exported.meta = {
         ...exported.meta,
@@ -57,9 +62,9 @@ const SaveAsTemplateDialog = ({ open, onClose, onSaved, publishedOnly = false })
       await themeService.importTheme(exported);
       onSaved?.();
       onClose();
-      setName(''); setDescription(''); setCategory('general'); setIncludeHomepage(true); setIncludeDemoContent(false); setIncludeComponentStyles(true); setIncludeSectionPresets(true);
+      setName(''); setDescription(''); setCategory('general'); setIncludeHomepage(true); setIncludeDemoContent(fromDraft); setIncludeComponentStyles(true); setIncludeSectionPresets(true);
     } catch (e) {
-      setError(e.response?.data?.message || 'Failed to save template');
+      setError(getApiErrorMessage(e, 'Failed to save template'));
     } finally {
       setSaving(false);
     }
@@ -67,7 +72,7 @@ const SaveAsTemplateDialog = ({ open, onClose, onSaved, publishedOnly = false })
 
   return (
     <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{publishedOnly ? 'Save Published Store as Template' : 'Save Current Store as Template'}</DialogTitle>
+      <DialogTitle>{fromDraft ? 'Save Design Draft as Template' : publishedOnly ? 'Save Published Store as Template' : 'Save Current Store as Template'}</DialogTitle>
       <DialogContent>
         <Stack spacing={2.5} sx={{ mt: 1 }}>
           {publishedOnly && <Alert severity="info">This template uses your published store. Draft changes are not included.</Alert>}

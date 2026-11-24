@@ -11,7 +11,19 @@ vi.mock('../../../context/NotificationContext', () => ({ useNotification: () => 
 vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () => true }) }));
 vi.mock('../../../services/settingsService', () => ({ getSettingsGroup: vi.fn(), getDesignDraft: vi.fn(), getDesignState: vi.fn(), getDesignVersions: vi.fn(), publishDesignDraft: vi.fn(), restoreDesignVersion: vi.fn(), saveDesignDraft: vi.fn(), discardDesignDraft: vi.fn() }));
 vi.mock('../../../components/admin/themes/StorefrontTemplatePreview', () => ({ default: ({ activePage, currentSettings, onSelectSection }) => <div>{(activePage === 'home' ? currentSettings.homepage.sections : currentSettings.productPage.sections)?.map((section) => <button key={section.id} onClick={() => onSelectSection(section)}>Preview {section.title}</button>)}</div> }));
-vi.mock('../../../components/admin/themes/designer/DesignerTreePanel', () => ({ default: ({ sections, onToggleSection, onFooterClick, pageTemplateControls }) => <div>{pageTemplateControls}<button onClick={onFooterClick}>Edit footer</button>{sections.map((section, index) => <button key={section.id} onClick={() => onToggleSection(index)}>Hide {section.title}</button>)}</div> }));
+vi.mock('../../../components/admin/themes/designer/DesignerTreePanel', () => ({
+  default: ({ activePage, sections, onToggleSection, onFooterClick, onPageSettingChange, pageTemplateControls }) => (
+    <div>
+      {pageTemplateControls}
+      <button onClick={onFooterClick}>Edit footer</button>
+      {activePage === 'product' && <button onClick={() => {
+        onPageSettingChange('product', (current) => ({ ...current, showSKU: false }));
+        onPageSettingChange('product', (current) => ({ ...current, showBreadcrumbs: false }));
+      }}>Hide product details</button>}
+      {sections.map((section, index) => <button key={section.id} onClick={() => onToggleSection(index)}>Hide {section.title}</button>)}
+    </div>
+  ),
+}));
 vi.mock('../../../components/admin/themes/designer/DesignerSectionEditor', () => ({ default: ({ section, onChange, onBlur }) => (
   <div>
     <input aria-label="Section title" value={section.title} onChange={(event) => onChange('title', event.target.value)} onBlur={onBlur} />
@@ -295,6 +307,31 @@ describe('Store Designer section editing', () => {
     expect(quickLinks).toBeChecked();
     fireEvent.click(screen.getByRole('button', { name: 'Redo section change' }));
     expect(quickLinks).not.toBeChecked();
+  });
+
+  it('undoes and redoes a product template setting change', async () => {
+    mount();
+    await screen.findByRole('button', { name: 'Preview Homepage hero' });
+    fireEvent.click(screen.getByRole('button', { name: /^Home/ }));
+    fireEvent.click(await screen.findByText('Product', { selector: '.MuiListItemText-primary' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Hide product details' }));
+
+    const undo = screen.getByRole('button', { name: 'Undo section change' });
+    const redo = screen.getByRole('button', { name: 'Redo section change' });
+    expect(undo).toBeEnabled();
+    fireEvent.click(undo);
+    fireEvent.click(undo);
+    expect(undo).toBeDisabled();
+    expect(redo).toBeEnabled();
+    fireEvent.click(redo);
+    fireEvent.click(redo);
+    fireEvent.click(screen.getByRole('button', { name: /Save draft/i }));
+    await waitFor(() => expect(service.saveDesignDraft).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        { group: 'productPage', key: 'showSKU', value: false },
+        { group: 'productPage', key: 'showBreadcrumbs', value: false },
+      ]), undefined,
+    ));
   });
 
   it('blocks saving and shows retry when initial homepage sections load fails', async () => {
