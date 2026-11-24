@@ -60,10 +60,12 @@ describe('product type and inventory editor', () => {
     getProductById.mockResolvedValue({ data: { ...product, status: 'published' } });
     getMetadata.mockResolvedValue({ generatedSchema: { '@type': 'Product', name: product.name } });
     mount();
-    const field = await screen.findByRole('textbox', { name: 'Custom JSON-LD schema' });
-    expect(field).toHaveValue('');
+    const automaticField = await screen.findByRole('textbox', { name: 'Automatic JSON-LD schema' });
+    expect(automaticField).toHaveAttribute('readonly');
+    await waitFor(() => expect(JSON.parse(automaticField.value)).toEqual({ '@type': 'Product', name: product.name }));
     fireEvent.click(screen.getByRole('button', { name: 'Edit generated schema' }));
-    await waitFor(() => expect(JSON.parse(field.value)).toEqual({ '@type': 'Product', name: product.name }));
+    const field = screen.getByRole('textbox', { name: 'Custom JSON-LD schema' });
+    expect(field).not.toHaveAttribute('readonly');
 
     fireEvent.change(field, { target: { value: '{"@type":"Product","name":"Custom seed"}' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
@@ -71,8 +73,18 @@ describe('product type and inventory editor', () => {
       schemaOverride: '{"@type":"Product","name":"Custom seed"}',
     })));
     fireEvent.click(screen.getByRole('button', { name: 'Restore automatic schema' }));
+    expect(screen.getByRole('textbox', { name: 'Automatic JSON-LD schema' })).toHaveAttribute('readonly');
     fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
     await waitFor(() => expect(updateProduct).toHaveBeenLastCalledWith('product', expect.objectContaining({ schemaOverride: null })));
+  });
+
+  it('shows an automatic schema preview for a draft without requesting its public metadata', async () => {
+    disabledFeatures.delete('seo');
+    mount();
+    const field = await screen.findByRole('textbox', { name: 'Automatic JSON-LD schema' });
+    expect(JSON.parse(field.value)).toMatchObject({ '@type': 'Product', name: product.name });
+    expect(field).toHaveAttribute('readonly');
+    expect(getMetadata).not.toHaveBeenCalled();
   });
 
   it.each([
