@@ -14,6 +14,7 @@ const themeService = {
   previewTheme: (packageData, scopes) => api.post('/themes/preview', { packageData, scopes }).then(r => r.data.data),
   importTheme: (packageData) => api.post('/themes/import', { packageData }).then(r => r.data.data),
   exportTheme: (options = {}) => api.post('/themes/export', options).then(r => r.data.data),
+  exportDraftTheme: (draftRevision, options) => api.post('/themes/export-draft', { ...options, draftRevision }).then(r => r.data.data),
   stageTheme: (packageData, scopes, replaceDemoContent) => api.post('/themes/stage', { packageData, scopes, replaceDemoContent }).then(r => r.data.data),
   applyTheme: (packageData, scopes, replaceDemoContent = false) => api.post('/themes/apply', { packageData, scopes, replaceDemoContent }).then(r => r.data.data),
   rollbackTheme: (activationId) => api.post(`/themes/activations/${activationId}/rollback`).then(r => r.data.data),

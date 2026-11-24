@@ -142,6 +142,7 @@ const PageEditPage = () => {
   const [activeTab, setActiveTab] = useState(0); // 0: Visual, 1: Code, 2: Preview
   const [saveError, setSaveError] = useState('');
   const [slug, setSlug] = useState('');
+  const [slugInput, setSlugInput] = useState('');
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -165,6 +166,7 @@ const PageEditPage = () => {
           const response = await PageService.adminGetPageById(id);
           const page = response.data;
           setSlug(page.slug);
+          setSlugInput(page.slug);
           setFormData({
             title: page.title,
             content: page.content,
@@ -227,11 +229,17 @@ const PageEditPage = () => {
       setSaveError('Page content cannot be empty.');
       return;
     }
+    const requestedSlug = slugInput.trim();
+    if (requestedSlug && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(requestedSlug)) {
+      setSaveError('Use lowercase letters, numbers, and single hyphens for the page slug.');
+      return;
+    }
 
     setSaving(true);
     try {
+      const payload = { ...formData, ...(requestedSlug && { slug: requestedSlug }) };
       if (isNew) {
-        const res = await PageService.adminCreatePage(formData);
+        const res = await PageService.adminCreatePage(payload);
         notify('Page created successfully.', 'success');
         // Navigate to edit view so slug and ID are available
         const newId = res.data?.id;
@@ -241,8 +249,9 @@ const PageEditPage = () => {
           navigate('/admin/pages');
         }
       } else {
-        const res = await PageService.adminUpdatePage(id, formData);
+        const res = await PageService.adminUpdatePage(id, payload);
         setSlug(res.data?.slug || slug);
+        setSlugInput(res.data?.slug || slug);
         notify('Page updated successfully.', 'success');
       }
     } catch (error) {
@@ -332,6 +341,17 @@ const PageEditPage = () => {
               sx={{ mb: 3 }}
               error={!formData.title.trim() && saving}
               helperText={!formData.title.trim() && saving ? 'Title is required' : ''}
+            />
+
+            <TextField
+              fullWidth
+              label="Page slug"
+              value={slugInput}
+              onChange={(event) => setSlugInput(event.target.value)}
+              error={Boolean(slugInput.trim() && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slugInput.trim()))}
+              helperText={isNew ? 'Leave blank to generate the slug from the title.' : 'Changing the slug changes the page URL.'}
+              inputProps={{ maxLength: 255 }}
+              sx={{ mb: 3 }}
             />
 
             {/* Editor Tabs */}

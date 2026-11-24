@@ -65,7 +65,8 @@ export const renderMockProductInfoOnly = (settingsObj, previewContext = {}) => {
   const productTemplateLayout = pp.templateLayout || 'media-left-details-right';
 
   const productTitle = previewProduct?.name || previewProduct?.title || "Elysian Silk Wrap Dress";
-  const productPrice = formatPrice(previewProduct?.salePrice ?? previewProduct?.price) || "$245.00";
+  const amount = previewProduct?.effectivePrice ?? previewProduct?.salePrice ?? previewProduct?.price;
+  const productPrice = previewContext.pricingVisible && amount != null ? formatPrice(amount) : null;
   const productBrand = previewProduct?.brand?.name || previewProduct?.brand || previewProduct?.vendor || "Studio Atelier";
   const productSku = previewProduct?.sku || previewProduct?.SKU || "SA-ELYS-SILK-02";
   const productDesc = previewProduct?.shortDescription || previewProduct?.description || "Indulge in pure luxury with the Elysian Silk Wrap Dress. Meticulously crafted from organic mulberry silk, this dress features a draped surplice neckline, an adjustable self-tie wrap closure, and elegant balloon sleeves with button cuffs. The soft, fluid drape creates a timeless silhouette perfect for both day and night.";
@@ -131,7 +132,7 @@ export const renderMockProductInfoOnly = (settingsObj, previewContext = {}) => {
                   {showStockBadge && <Chip label="In Stock" color="success" size="small" variant="outlined" sx={{ height: 20, fontSize: '0.7rem', fontWeight: 800 }} />}
                   {showSku && <Typography variant="caption" color="text.secondary">{productSku}</Typography>}
                 </Stack>
-                <Typography variant="h5" color="primary.main" fontWeight={800} sx={{ mb: 2 }}>{productPrice}</Typography>
+                {productPrice && <Typography variant="h5" color="primary.main" fontWeight={800} sx={{ mb: 2 }}>{productPrice}</Typography>}
               </Box>
               <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mb: 4 }}>{productDesc}</Typography>
 
@@ -194,7 +195,7 @@ export const renderMockProductInfoOnly = (settingsObj, previewContext = {}) => {
                 {showStockBadge && <Chip label="In Stock" color="success" size="small" variant="outlined" sx={{ height: 20, fontSize: '0.7rem', fontWeight: 800 }} />}
                 {showSku && <Typography variant="caption" color="text.secondary">{productSku}</Typography>}
               </Stack>
-              <Typography variant="h5" color="primary.main" fontWeight={800} sx={{ mb: 2 }}>{productPrice}</Typography>
+              {productPrice && <Typography variant="h5" color="primary.main" fontWeight={800} sx={{ mb: 2 }}>{productPrice}</Typography>}
               <Divider sx={{ my: 2 }} />
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>{productDesc}</Typography>
               {!showStickyPurchasePanel && purchaseControls}
@@ -247,7 +248,7 @@ export const renderMockProductInfoOnly = (settingsObj, previewContext = {}) => {
                   {showSku && <Typography variant="caption" color="text.secondary">{productSku}</Typography>}
                 </Stack>
 
-                <Typography variant="h5" color="primary.main" fontWeight={800} sx={{ mb: 3 }}>{productPrice}</Typography>
+                {productPrice && <Typography variant="h5" color="primary.main" fontWeight={800} sx={{ mb: 3 }}>{productPrice}</Typography>}
                 
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 3, lineHeight: 1.6 }}>{productDesc}</Typography>
                 

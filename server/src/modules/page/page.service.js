@@ -10,6 +10,21 @@ const AuditService = require('../audit/audit.service');
 const logger = require('../../utils/logger');
 const { ACTIONS, ENTITIES } = require('../../config/constants');
 
+const resolvePageSlug = async (title, requestedSlug, transaction, pageId) => {
+    const excludeCurrentPage = pageId ? { id: { [Op.ne]: pageId } } : {};
+    if (requestedSlug) {
+        const existing = await Page.findOne({
+            where: { slug: requestedSlug, ...excludeCurrentPage }, paranoid: false, transaction,
+        });
+        if (existing) throw new AppError('CONFLICT', 409, 'This page slug is already reserved.');
+        return requestedSlug;
+    }
+
+    const slug = await generateSlug(title, Page, 'slug', { where: excludeCurrentPage, transaction, maxLength: 255 });
+    if (!slug) throw new AppError('VALIDATION_ERROR', 400, 'Enter a page slug containing letters or numbers.');
+    return slug;
+};
+
 exports.getPages = async (filters, page, limit, isAdmin = false) => {
     const { limit: queryLimit, offset } = getPagination(page, limit);
     const where = {};
@@ -59,7 +74,7 @@ exports.getPageById = async (id) => {
 exports.createPage = async (data) => {
     const transaction = await Page.sequelize.transaction();
     try {
-        const slug = await generateSlug(data.title, Page, 'slug', { transaction });
+        const slug = await resolvePageSlug(data.title, data.slug, transaction);
         
         if (data.content) data.content = sanitizePageContent(data.content);
 
@@ -92,8 +107,8 @@ exports.updatePage = async (id, data) => {
 
     const transaction = await Page.sequelize.transaction();
     try {
-        if (data.title && data.title !== page.title) {
-            data.slug = await generateSlug(data.title, Page, 'slug', { transaction });
+        if (data.slug ? data.slug !== page.slug : data.title && data.title !== page.title) {
+            data.slug = await resolvePageSlug(data.title, data.slug, transaction, page.id);
         }
 
         if (data.content) data.content = sanitizePageContent(data.content);

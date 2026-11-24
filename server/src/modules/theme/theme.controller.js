@@ -60,6 +60,16 @@ const exportTheme = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const exportDraftTheme = async (req, res, next) => {
+  try {
+    const { draftRevision, ...options } = req.body || {};
+    if (!Number.isSafeInteger(draftRevision) || draftRevision < 1) {
+      return res.status(400).json({ success: false, message: 'A saved design draft revision is required.' });
+    }
+    return success(res, await ThemeService.exportCurrent(options, draftRevision));
+  } catch (err) { return next(err); }
+};
+
 const stageTheme = async (req, res, next) => {
   try {
     const { error, value } = applyRequestSchema.validate(req.body);
@@ -103,4 +113,4 @@ const getStoreStatus = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getBuiltin, getLibrary, getActivations, validate, preview, importTheme, exportTheme, stageTheme, applyTheme, rollbackActivation, removeLibrary, getStoreStatus };
+module.exports = { getBuiltin, getLibrary, getActivations, validate, preview, importTheme, exportTheme, exportDraftTheme, stageTheme, applyTheme, rollbackActivation, removeLibrary, getStoreStatus };

@@ -6,6 +6,7 @@ import { getOptimizedMediaUrl, imageLoadingProps } from '../../../utils/media';
 import { useComponentStyles } from '../../../hooks/useSettings';
 import { resolveRadius, resolveShadow } from '../../../utils/styleMaps';
 import { CanvasEditableText, CanvasEditableImage } from './SectionFallback';
+import { isValidPromoLink } from '../../../utils/urls';
 
 const DEFAULT_PLACEHOLDER_IMAGE = 'https://images.unsplash.com/photo-1511556532299-8f662fc26c06?auto=format&fit=crop&w=600&q=80';
 
@@ -75,9 +76,12 @@ const PromoBannerSection = ({ section = {}, banners = DEFAULT_BANNERS, mode = 'l
       <SectionHeader section={section} title={section.title} subtitle={section.subtitle} align={align} preview={preview} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />
       <Grid container spacing={2}>
         {items.map((banner, index) => {
+          const link = String(banner.link || section.ctaLink || '/products').trim() || '/products';
           const actionProps = preview
             ? { component: 'div' }
-            : { component: Link, to: banner.link || '/products' };
+            : !isValidPromoLink(link) ? { component: 'div' }
+              : link.startsWith('/') ? { component: Link, to: link }
+                : { component: 'a', href: link };
 
           return (
             <Grid item xs={12} md={getGridSize(index)} key={`${banner.title || 'promo'}-${index}`}>

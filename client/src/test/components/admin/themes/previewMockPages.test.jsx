@@ -12,6 +12,13 @@ import {
 } from '../../../../components/admin/themes/previewMockPages';
 
 describe('store designer sample page previews', () => {
+  it.each([[false, 0, false], [true, null, false], [true, 0, true]])(
+    'renders a product preview price only when visible and present (%s, %s)',
+    (pricingVisible, price, expected) => {
+      render(renderMockProductInfoOnly({}, { pricingVisible, products: [{ name: 'Preview product', price }] }));
+      expect(Boolean(screen.queryByText('$0.00'))).toBe(expected);
+    },
+  );
   it('keeps purchase controls inline when the sticky panel is disabled', () => {
     render(renderMockProductInfoOnly({ productPage: {
       templateLayout: 'sticky-purchase-panel',

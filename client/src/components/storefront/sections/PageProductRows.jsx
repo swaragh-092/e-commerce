@@ -9,13 +9,14 @@ import SectionRenderer from './SectionRenderer';
 import { SettingsContext } from '../../../context/ThemeContext';
 import ProductRow from '../../product/ProductRow';
 
-const DiscoveryRow = ({ row, category }) => {
+const DiscoveryRow = ({ row, category, designerPreview }) => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const count = row.source === 'staffPicks' ? row.productIds?.length || 0 : Math.min(24, Math.max(1, Number.parseInt(row.count, 10) || 8));
   const source = row.source || 'featured';
   useEffect(() => {
     let active = true;
+    setLoading(true);
     const limit = source === 'bestSellers' ? Math.max(4, count) : source === 'mostViewed' ? Math.max(5, count) : count;
     const request = source === 'staffPicks' ? fetchStaffPicks(row, getProducts) : getProducts({
       ...(PRODUCT_SOURCE_PARAMS[source] || PRODUCT_SOURCE_PARAMS.featured),
@@ -31,7 +32,9 @@ const DiscoveryRow = ({ row, category }) => {
     return () => { active = false; };
   }, [count, source, category, row]);
 
-  if (!loading && !products.length) return null;
+  if (!loading && !products.length) {
+    return designerPreview ? <SectionRenderer section={row} mode="preview" data={{ showProductEmptyState: true }} /> : null;
+  }
   const sourceLinks = {
     bestSellers: '/products?sort=best-selling',
     mostViewed: '/products?sort=most-viewed',
@@ -49,9 +52,9 @@ const DiscoveryRow = ({ row, category }) => {
   return <ProductRow title={row.title || 'Recommended products'} viewAllLink={viewAllLink} products={products} loading={loading} count={count} layout={layout} compact={layout === 'grid-compact'} />;
 };
 
-export default function PageProductRows({ rows = [], category }) {
+export default function PageProductRows({ rows = [], category, designerPreview = false }) {
   if (!Array.isArray(rows) || !rows.length) return null;
-  return <>{rows.filter(row => row?.type === 'product-row' && row.enabled !== false).map(row => <DiscoveryRow key={row.id} row={row} category={row.productScope === 'store' ? undefined : category} />)}</>;
+  return <>{rows.filter(row => row?.type === 'product-row' && row.enabled !== false).map(row => <DiscoveryRow key={row.id} row={row} category={row.productScope === 'store' ? undefined : category} designerPreview={designerPreview} />)}</>;
 }
 
 export function RoutedProductRows({ page, children }) {
@@ -66,7 +69,7 @@ export function RoutedProductRows({ page, children }) {
   const allowedTypes = getPageSectionTypes(page);
   const configuredRows = getPageProductRows(pageSettings, page);
   const showInsertion = designerPreview && page !== 'checkout' && configuredRows.length < 6;
-  const rows = configuredRows.filter((row) => allowedTypes.includes(row?.type) && row.enabled !== false && (row.source !== 'sale' || pricingEnabled));
+  const rows = configuredRows.filter((row) => allowedTypes.includes(row?.type) && row.enabled !== false && (row.source !== 'sale' || pricingEnabled || designerPreview));
   const category = page === 'category' ? categorySlug : undefined;
   const above = rows.filter(({ pagePosition }) => pagePosition === 'above');
   const below = rows.filter(({ pagePosition }) => pagePosition !== 'above');
@@ -81,9 +84,11 @@ export function RoutedProductRows({ page, children }) {
           xs: section.hideOnMobile ? 'none' : 'block',
           md: section.hideOnDesktop ? 'none' : 'block',
         } }}>
-          <PageProductRows rows={[section]} category={category} />
+          {section.source === 'sale' && !pricingEnabled
+            ? <SectionRenderer section={section} mode="preview" data={{ showProductEmptyState: true, pricingEnabled: false }} />
+            : <PageProductRows rows={[section]} category={category} designerPreview={designerPreview} />}
         </Container>
-      ) : <Box data-store-section={section.id}><SectionRenderer section={section} /></Box>}
+      ) : <Box data-store-section={section.id}><SectionRenderer section={section} mode={designerPreview && ['gallery', 'testimonials'].includes(section.type) ? 'preview' : 'live'} /></Box>}
     </React.Fragment>
   ));
 

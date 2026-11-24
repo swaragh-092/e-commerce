@@ -298,7 +298,10 @@ const HomeExperience = () => {
         const sparse = !loading && ((discoverySort && available < (['arrivals', 'trending'].includes(discoverySort) ? 1 : 4))
           || ((campaignLabel || section.source === 'staffPicks') && !available));
         if (sparse && !designerPreview) return null;
-        const previewSection = designerPreview && (sparse || section.type === 'recently-viewed');
+        const showProductEmptyState = designerPreview && section.type === 'product-row' &&
+          (sparse || (!loading && !available) || (section.source === 'sale' && !pricingEnabled));
+        const previewSection = designerPreview &&
+          (showProductEmptyState || ['gallery', 'testimonials', 'recently-viewed'].includes(section.type));
         const renderedSection = campaignLabel
           ? { ...section, viewAllLink: `/products?saleLabel=${encodeURIComponent(campaignLabel)}` }
           : discoverySort && (!section.viewAllLink || section.viewAllLink === '/products?sort=newest')
@@ -317,7 +320,7 @@ const HomeExperience = () => {
             <SectionRenderer
               section={renderedSection}
               mode={previewSection ? 'preview' : 'live'}
-              data={buildSectionData(section)}
+              data={{ ...buildSectionData(section), showProductEmptyState }}
               index={frameIndex}
             />
           </Box>

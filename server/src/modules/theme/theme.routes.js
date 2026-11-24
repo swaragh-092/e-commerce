@@ -32,6 +32,7 @@ router.post('/validate', ...read, controller.validate);
 router.post('/preview', ...read, controller.preview);
 router.post('/import', ...manage, enforceThemeImportSize, controller.importTheme);
 router.post('/export', ...read, controller.exportTheme);
+router.post('/export-draft', ...manage, controller.exportDraftTheme);
 router.post('/stage', ...manage, enforceThemeImportSize, controller.stageTheme);
 router.post('/apply', ...manage, enforceThemeImportSize, controller.applyTheme);
 router.post('/activations/:id/rollback', ...manage, controller.rollbackActivation);

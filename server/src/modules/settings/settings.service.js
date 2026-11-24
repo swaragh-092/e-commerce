@@ -719,6 +719,7 @@ module.exports = {
   getPublicGroup,
   getByGroup,
   getDesignState,
+  getGroupDefaults: (group) => ({ ...defaultSettings[group] }),
   resetDesignSetting,
   updateKey,
   bulkUpdate,

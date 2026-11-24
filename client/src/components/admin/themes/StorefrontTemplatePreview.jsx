@@ -385,6 +385,9 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
         section,
         products: resolvedData.products?.[section.id] || [],
         previewMode: mode,
+        pricingVisible: parentSettingsContext.features?.pricing === true &&
+          parentSettingsContext.features?.showPrice === true &&
+          parentSettingsContext.visibility?.storefront?.pricing === true,
         onSelectSection,
         onSelectComponent,
       });
