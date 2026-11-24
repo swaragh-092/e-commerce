@@ -64,6 +64,16 @@ describe('SEO output', () => {
     expect(output.script.toString()).not.toContain('</script><script>');
     expect(output.script.toString()).toContain('\\u003c/script>');
   });
+  it('uses the custom collection schema and preserves the supplied breadcrumbs', () => {
+    const output = head({ title: 'Seeds', type: 'collection', structuredData: [
+      { '@type': 'CollectionPage', name: 'Custom seed collection' },
+      { '@type': 'BreadcrumbList', itemListElement: [] },
+    ] });
+    const scripts = output.script.toString();
+    expect(scripts.match(/"@type":"CollectionPage"/g)).toHaveLength(1);
+    expect(scripts).toContain('Custom seed collection');
+    expect(scripts).toContain('"@type":"BreadcrumbList"');
+  });
 });
 
  it('renders custom keywords for a brand collection', () => {

@@ -4,10 +4,32 @@ const require = createRequire(import.meta.url);
 const db = require('../../src/modules');
 const tags = require('../../src/modules/product/tag.service');
 const seo = require('../../src/modules/seo/seo.service');
+const featureGate = require('../../src/middleware/featureGate.middleware');
 const { crawlerPrerender } = require('../../src/middleware/crawlerPrerender.middleware');
 const defaults = { title: 'Store', description: 'Default description', siteName: 'Store', titleSuffix: ' | Store', canonicalBaseUrl: 'https://shop.example.test' };
 beforeEach(() => { vi.spyOn(db.SeoOverride, 'findOne').mockResolvedValue(null); vi.spyOn(seo, '_getGlobalDefaults').mockResolvedValue(defaults); });
 afterEach(() => vi.restoreAllMocks());
+
+describe('entity schema overrides', () => {
+  it.each([
+    ['product', 'Product', '/products/seed'],
+    ['category', 'CollectionPage', '/category/seed'],
+  ])('replaces the %s schema and retains the automatic breadcrumb', async (kind, type, path) => {
+    vi.spyOn(featureGate, 'getResolvedFeature').mockResolvedValue(false);
+    const base = { entity: { name: 'Seed', price: 20 }, kind, defaults, override: null };
+    const custom = JSON.stringify({ '@type': type, name: 'Edited seed', description: '</script>', offers: { price: 20 } });
+    const metadata = await seo.getMetadataByPath(path, { ...base, entity: { ...base.entity, schemaOverride: custom } });
+    const html = seo.injectMetadataIntoHtml(metadata, '<html><head></head><body></body></html>');
+    const payload = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1];
+    const graph = JSON.parse(payload)['@graph'];
+    expect(payload).not.toContain('</script>');
+    expect(graph.filter((schema) => schema['@type'] === type)).toEqual([
+      { '@context': 'https://schema.org', '@type': type, name: 'Edited seed', description: '</script>' },
+    ]);
+    expect(graph.some((schema) => schema['@type'] === 'BreadcrumbList')).toBe(true);
+    expect(seo.buildPageSchema(metadata).name).toBe('Seed');
+  });
+});
 
 describe('tag SEO', () => {
   it('uses tag names, descriptions and canonical paths independently of query filters', async () => {

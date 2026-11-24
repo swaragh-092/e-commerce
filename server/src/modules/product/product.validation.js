@@ -1,5 +1,6 @@
 'use strict';
 const Joi = require('joi');
+const { schemaOverrideField } = require('../seo/schemaOverride.validation');
 const { productTagsSchema, tagFilterSchema } = require('./tag.validation');
 const { MIN_SEARCH_QUERY_LENGTH, MAX_SEARCH_QUERY_LENGTH, normalizeSearchQuery } = require('../search/search.utils');
 
@@ -59,6 +60,7 @@ const createProductSchema = Joi.object({
   metaTitle: Joi.string().max(255).allow('', null),
   metaDescription: Joi.string().max(500).allow('', null),
   metaKeywords: Joi.string().max(500).allow('', null),
+  schemaOverride: schemaOverrideField('product'),
   ogImage: Joi.string().max(2048).allow('', null),
   sku: Joi.string().trim().max(100).empty('').allow(null),
   unit: Joi.string().max(50).allow('', null),
@@ -131,6 +133,7 @@ const updateProductSchema = Joi.object({
   metaTitle: Joi.string().max(255).allow('', null),
   metaDescription: Joi.string().max(500).allow('', null),
   metaKeywords: Joi.string().max(500).allow('', null),
+  schemaOverride: schemaOverrideField('product'),
   ogImage: Joi.string().max(2048).allow('', null),
   sku: Joi.string().trim().max(100).empty('').allow(null),
   unit: Joi.string().max(50).allow('', null),

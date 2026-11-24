@@ -155,6 +155,10 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING(500),
             field: 'og_image'
         },
+        schemaOverride: {
+            type: DataTypes.TEXT,
+            field: 'schema_override',
+        },
         // Full-Text Search vector — managed by PostgreSQL trigger, read-only in app code
         searchVector: {
             type: DataTypes.TSVECTOR,

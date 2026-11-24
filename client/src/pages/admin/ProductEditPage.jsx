@@ -71,6 +71,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { formatSeoTitle } from '../../utils/seo/formatSeoTitle';
+import { validateSchemaOverride } from '../../utils/seo/schemaOverride';
+import SchemaOverrideField from '../../components/admin/SchemaOverrideField';
 import { formatOpenEndedDateRange } from '../../utils/dates';
 import ProductTagsInput from '../../components/admin/ProductTagsInput';
 import ProductCustomTabs from '../../components/admin/ProductCustomTabs';
@@ -295,6 +297,7 @@ const ProductEditPage = () => {
     metaTitle: '',
     metaDescription: '',
     metaKeywords: '',
+    schemaOverride: '',
     ogImage: '',
   });
   const [errors, setErrors] = useState({});
@@ -398,6 +401,7 @@ const ProductEditPage = () => {
               metaTitle: p.metaTitle || '',
               metaDescription: p.metaDescription || '',
               metaKeywords: p.metaKeywords || '',
+              schemaOverride: p.schemaOverride || '',
               ogImage: p.ogImage || '',
             };
             setFormData(loadedFormData);
@@ -547,6 +551,8 @@ const ProductEditPage = () => {
 
     const effectiveQuantity = formData.type === 'variable' ? variantStockTotal : formData.quantity;
     const errs = validate({ ...formData, quantity: effectiveQuantity, _features: { pricing: pricingCapability, shipping: shippingCapability } });
+    const schemaError = seoEnabled && validateSchemaOverride(formData.schemaOverride, 'product');
+    if (schemaError) errs.schemaOverride = schemaError;
 
     // Block type change if invariants are violated
     if (!isNew && dbProduct && formData.type !== dbProduct.type) {
@@ -600,6 +606,7 @@ const ProductEditPage = () => {
         metaTitle: formData.metaTitle || null,
         metaDescription: formData.metaDescription || null,
         metaKeywords: formData.metaKeywords || null,
+        schemaOverride: formData.schemaOverride.trim() || null,
         ogImage: formData.ogImage || null,
       };
 
@@ -613,7 +620,7 @@ const ProductEditPage = () => {
       }
       if (!brandsEnabled) delete payload.brandId;
       if (!tagsEnabled || !canManageTags) delete payload.tags;
-      if (!seoEnabled) for (const key of ['metaTitle', 'metaDescription', 'metaKeywords', 'ogImage']) delete payload[key];
+      if (!seoEnabled) for (const key of ['metaTitle', 'metaDescription', 'metaKeywords', 'ogImage', 'schemaOverride']) delete payload[key];
 
       // Variant and bundle stock is managed by their own editors.
       delete payload.quantity;
@@ -1654,6 +1661,16 @@ const ProductEditPage = () => {
               If left blank, the system will auto-generate metadata.
             </Alert>
 
+            <SchemaOverrideField
+              key={id}
+              kind="product"
+              value={formData.schemaOverride}
+              onChange={(value) => setField('schemaOverride', value)}
+              error={errors.schemaOverride}
+              path={dbProduct?.status === 'published' && dbProduct.isEnabled !== false && dbProduct.slug ? `/products/${encodeURIComponent(dbProduct.slug)}` : null}
+              name={formData.name}
+              description={formData.metaDescription || formData.shortDescription}
+            />
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 5fr) minmax(0, 3fr) minmax(0, 4fr)' }, gap: 3, alignItems: 'start' }}>
               <Box>
                 <TextField

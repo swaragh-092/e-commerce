@@ -18,6 +18,7 @@ const {
 } = require('../index');
 const tagService = require('../product/tag.service');
 const { isGalleryPath, normalizeSeoPath } = require('./seoPaths');
+const { parseSchemaOverride } = require('./schemaOverride');
 const { buildFeatures } = require('../../config/modes');
 const featureGate = require('../../middleware/featureGate.middleware');
 const { getEffectivePrice, getVariantUnitPrice, isSaleActive, resolveSaleLabel } = require('../product/product.pricing');
@@ -500,6 +501,13 @@ class SeoService {
       };
     }
 
+    if (entity.schemaOverride && !metadata.noIndex) {
+      const includePricing = type === 'product' &&
+        await featureGate.getResolvedFeature('pricing') &&
+        await featureGate.getResolvedFeature('showPrice');
+      metadata.schemaOverride = parseSchemaOverride(entity.schemaOverride, type, { includePricing });
+    }
+
     return metadata;
   }
 
@@ -580,63 +588,8 @@ class SeoService {
 </html>`;
   }
 
-  buildHead(metadata) {
+  buildPageSchema(metadata) {
     const rawTitle = metadata.title || metadata.siteName || 'Store';
-    const fullTitle = formatPageTitle(rawTitle, metadata);
-
-    const tags = [];
-
-    // Core SEO tags
-    tags.push(`<meta name="description" content="${escapeHtml(metadata.description)}" />`);
-    if (metadata.keywords) {
-      tags.push(`<meta name="keywords" content="${escapeHtml(metadata.keywords)}" />`);
-    }
-    if (metadata.canonicalUrl) {
-      tags.push(`<link rel="canonical" href="${escapeHtml(metadata.canonicalUrl)}" />`);
-    }
-    tags.push(`<meta name="robots" content="${metadata.noIndex ? 'noindex, nofollow' : 'index, follow'}" />`);
-
-    // Open Graph
-    tags.push(`<meta property="og:site_name" content="${escapeHtml(metadata.siteName)}" />`);
-    tags.push(`<meta property="og:title" content="${escapeHtml(fullTitle)}" />`);
-    tags.push(`<meta property="og:description" content="${escapeHtml(metadata.description)}" />`);
-    tags.push(`<meta property="og:type" content="${escapeHtml(metadata.type || 'website')}" />`);
-    if (metadata.canonicalUrl) {
-      tags.push(`<meta property="og:url" content="${escapeHtml(metadata.canonicalUrl)}" />`);
-    }
-    if (metadata.ogImage) {
-      tags.push(`<meta property="og:image" content="${escapeHtml(metadata.ogImage)}" />`);
-      tags.push(`<meta property="og:image:alt" content="${escapeHtml(metadata.ogImageAlt || rawTitle)}" />`);
-    }
-    if (metadata.type === 'article' && metadata.publishedAt && !Number.isNaN(new Date(metadata.publishedAt).getTime())) {
-      tags.push(`<meta property="article:published_time" content="${escapeHtml(new Date(metadata.publishedAt).toISOString())}" />`);
-    }
-
-    // Twitter Card
-    tags.push(`<meta name="twitter:card" content="${metadata.ogImage ? 'summary_large_image' : 'summary'}" />`);
-    tags.push(`<meta name="twitter:title" content="${escapeHtml(fullTitle)}" />`);
-    tags.push(`<meta name="twitter:description" content="${escapeHtml(metadata.description)}" />`);
-    if (metadata.ogImage) {
-      tags.push(`<meta name="twitter:image" content="${escapeHtml(metadata.ogImage)}" />`);
-      tags.push(`<meta name="twitter:image:alt" content="${escapeHtml(metadata.ogImageAlt || rawTitle)}" />`);
-    }
-    if (metadata.twitterHandle) {
-      tags.push(`<meta name="twitter:site" content="${escapeHtml(metadata.twitterHandle)}" />`);
-    }
-
-    // Product rich tags for WhatsApp / FB Product Catalog / Google
-    if (!metadata.noIndex && metadata.type === 'product' && metadata.productData) {
-      if (metadata.productData.price != null) {
-        tags.push(`<meta property="product:price:amount" content="${escapeHtml(metadata.productData.price)}" />`);
-      }
-      if (metadata.productData.price != null && metadata.productData.currency) {
-        tags.push(`<meta property="product:price:currency" content="${escapeHtml(metadata.productData.currency)}" />`);
-      }
-      if (metadata.productData.price != null && metadata.productData.availability) {
-        tags.push(`<meta property="product:availability" content="${escapeHtml(metadata.productData.availability)}" />`);
-      }
-    }
-
     // Schema.org JSON-LD
     let pageSchema = null;
     if (metadata.type === 'product' && metadata.productData) {
@@ -702,6 +655,67 @@ class SeoService {
         ...(metadata.schemaType === 'ImageGallery' && metadata.ogImage ? { image: metadata.ogImage } : {}),
       };
     }
+    return pageSchema;
+  }
+
+  buildHead(metadata) {
+    const rawTitle = metadata.title || metadata.siteName || 'Store';
+    const fullTitle = formatPageTitle(rawTitle, metadata);
+
+    const tags = [];
+
+    // Core SEO tags
+    tags.push(`<meta name="description" content="${escapeHtml(metadata.description)}" />`);
+    if (metadata.keywords) {
+      tags.push(`<meta name="keywords" content="${escapeHtml(metadata.keywords)}" />`);
+    }
+    if (metadata.canonicalUrl) {
+      tags.push(`<link rel="canonical" href="${escapeHtml(metadata.canonicalUrl)}" />`);
+    }
+    tags.push(`<meta name="robots" content="${metadata.noIndex ? 'noindex, nofollow' : 'index, follow'}" />`);
+
+    // Open Graph
+    tags.push(`<meta property="og:site_name" content="${escapeHtml(metadata.siteName)}" />`);
+    tags.push(`<meta property="og:title" content="${escapeHtml(fullTitle)}" />`);
+    tags.push(`<meta property="og:description" content="${escapeHtml(metadata.description)}" />`);
+    tags.push(`<meta property="og:type" content="${escapeHtml(metadata.type || 'website')}" />`);
+    if (metadata.canonicalUrl) {
+      tags.push(`<meta property="og:url" content="${escapeHtml(metadata.canonicalUrl)}" />`);
+    }
+    if (metadata.ogImage) {
+      tags.push(`<meta property="og:image" content="${escapeHtml(metadata.ogImage)}" />`);
+      tags.push(`<meta property="og:image:alt" content="${escapeHtml(metadata.ogImageAlt || rawTitle)}" />`);
+    }
+    if (metadata.type === 'article' && metadata.publishedAt && !Number.isNaN(new Date(metadata.publishedAt).getTime())) {
+      tags.push(`<meta property="article:published_time" content="${escapeHtml(new Date(metadata.publishedAt).toISOString())}" />`);
+    }
+
+    // Twitter Card
+    tags.push(`<meta name="twitter:card" content="${metadata.ogImage ? 'summary_large_image' : 'summary'}" />`);
+    tags.push(`<meta name="twitter:title" content="${escapeHtml(fullTitle)}" />`);
+    tags.push(`<meta name="twitter:description" content="${escapeHtml(metadata.description)}" />`);
+    if (metadata.ogImage) {
+      tags.push(`<meta name="twitter:image" content="${escapeHtml(metadata.ogImage)}" />`);
+      tags.push(`<meta name="twitter:image:alt" content="${escapeHtml(metadata.ogImageAlt || rawTitle)}" />`);
+    }
+    if (metadata.twitterHandle) {
+      tags.push(`<meta name="twitter:site" content="${escapeHtml(metadata.twitterHandle)}" />`);
+    }
+
+    // Product rich tags for WhatsApp / FB Product Catalog / Google
+    if (!metadata.noIndex && metadata.type === 'product' && metadata.productData) {
+      if (metadata.productData.price != null) {
+        tags.push(`<meta property="product:price:amount" content="${escapeHtml(metadata.productData.price)}" />`);
+      }
+      if (metadata.productData.price != null && metadata.productData.currency) {
+        tags.push(`<meta property="product:price:currency" content="${escapeHtml(metadata.productData.currency)}" />`);
+      }
+      if (metadata.productData.price != null && metadata.productData.availability) {
+        tags.push(`<meta property="product:availability" content="${escapeHtml(metadata.productData.availability)}" />`);
+      }
+    }
+
+    const pageSchema = this.buildPageSchema(metadata);
     const siteUrl = metadata.siteUrl || getPublicBaseUrl(metadata);
     const websiteSchema = {
       '@type': 'WebSite',
@@ -715,7 +729,7 @@ class SeoService {
       name: metadata.siteName,
       url: siteUrl,
     };
-    const schemaGraphItems = [websiteSchema, organizationSchema, pageSchema];
+    const schemaGraphItems = [websiteSchema, organizationSchema, metadata.schemaOverride || pageSchema];
     const pathSegments = metadata.path?.split('/').filter(Boolean) || [];
     const collectionCrumb = {
       products: { name: 'Products', path: '/products' },

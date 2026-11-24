@@ -1,6 +1,7 @@
 'use strict';
 
 const Joi = require('joi');
+const { schemaOverrideField } = require('../seo/schemaOverride.validation');
 const { hideEmptySchema } = require('../../utils/common.validation');
 
 const createCategorySchema = Joi.object({
@@ -15,6 +16,7 @@ const createCategorySchema = Joi.object({
     metaTitle: Joi.string().max(255).allow('', null),
     metaDescription: Joi.string().max(500).allow('', null),
     metaKeywords: Joi.string().max(500).allow('', null),
+    schemaOverride: schemaOverrideField('category'),
     ogImage: Joi.string().max(500).allow('', null),
 });
 
@@ -30,6 +32,7 @@ const updateCategorySchema = Joi.object({
     metaTitle: Joi.string().max(255).allow('', null),
     metaDescription: Joi.string().max(500).allow('', null),
     metaKeywords: Joi.string().max(500).allow('', null),
+    schemaOverride: schemaOverrideField('category'),
     ogImage: Joi.string().max(500).allow('', null),
 }).min(1);
 
