@@ -15,6 +15,21 @@ vi.mock('@hello-pangea/dnd', () => ({
 const sections = [{ id: 'one', type: 'hero-carousel' }, { id: 'footer', type: 'trust-badges', placement: 'footer' }, { id: 'two', type: 'product-row' }];
 const setup = (activePage = 'home') => { const reorder = vi.fn(); const select = vi.fn(); render(<DesignerTreePanel sections={activePage === 'home' ? sections : []} activePage={activePage} pageSettings={{}} onSectionClick={select} onReorderSection={reorder} />); return { reorder, select }; };
 describe('store designer section navigation', () => {
+  it('captures a primary mouse gesture on the named grip before the drag starts', () => {
+    render(<DesignerTreePanel activePage="home" pageSettings={{}}
+      sections={[{ ...sections[0], title: 'Shop The Studio' }]} />);
+    const handle = screen.getByRole('button', { name: 'Reorder Shop The Studio' });
+    handle.setPointerCapture = vi.fn();
+    const pointerDown = (pointerType, button = 0) => {
+      const event = new Event('pointerdown', { bubbles: true });
+      Object.assign(event, { isPrimary: true, pointerType, pointerId: 1, button });
+      fireEvent(handle, event);
+    };
+    pointerDown('mouse');
+    pointerDown('touch');
+    pointerDown('mouse', 2);
+    expect(handle.setPointerCapture).toHaveBeenCalledExactlyOnceWith(1);
+  });
   it('releases the preview iframe guard after a canceled drag', () => {
     const onDragActiveChange = vi.fn();
     render(<DesignerTreePanel activePage="home" sections={sections} pageSettings={{}} onDragActiveChange={onDragActiveChange} />);
