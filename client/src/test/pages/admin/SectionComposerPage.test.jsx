@@ -37,6 +37,7 @@ vi.mock('../../../components/admin/themes/SaveAsTemplateDialog', () => ({ defaul
 vi.mock('../../../components/admin/sections/AddSectionDialog', () => ({ default: () => null }));
 vi.mock('../../../components/admin/settings/LiveStorefrontPreview', () => ({ default: ({ path, device, settings, onSelectSection, onSelectBlock, selectedBlockId, inspectorActions }) => {
   const nestedSection = settings?.homepage?.sections?.find((section) => section.heroBlocks?.[0]?.children);
+  const productInfo = onSelectBlock && settings?.productPage?.sections?.find((section) => section.type === 'product-info');
   return <div data-testid="live-preview" data-device={device}>Real storefront {path}
     {onSelectSection && settings?.homepage?.sections?.map((section) => (
       <button key={section.id} onClick={() => onSelectSection(section.id)}>Preview {section.title}</button>
@@ -44,6 +45,12 @@ vi.mock('../../../components/admin/settings/LiveStorefrontPreview', () => ({ def
     {nestedSection && <>
       <output aria-label="Preview block order">{nestedSection.heroBlocks[0].children.filter((block) => block.enabled !== false).map((block) => block.text).join(', ')}</output>
       <button onClick={() => onSelectBlock(nestedSection.id, 'second')}>Select second nested block</button>
+      {selectedBlockId && inspectorActions?.map(({ label, disabled, onClick }) => (
+        <button key={label} disabled={disabled} onClick={onClick}>{label}</button>
+      ))}
+    </>}
+    {productInfo && <>
+      <button onClick={() => onSelectBlock(productInfo.id, 'care')}>Select care block</button>
       {selectedBlockId && inspectorActions?.map(({ label, disabled, onClick }) => (
         <button key={label} disabled={disabled} onClick={onClick}>{label}</button>
       ))}
@@ -63,6 +70,27 @@ beforeEach(() => {
   service.saveDesignDraft.mockImplementation(async (payload) => ({ revision: 1, payload }));
 });
 describe('Store Designer section editing', () => {
+  it('duplicates an ordered product detail immediately after the original', async () => {
+    const productPage = { sections: [{
+      id: 'details', type: 'product-info', enabled: true, detailsBlockOrder: ['title', 'custom:care', 'variants'],
+      heroBlocks: [{ id: 'care', type: 'text', text: 'Care instructions' }],
+    }] };
+    service.getDesignState.mockResolvedValue({ groups: { ...settings, productPage }, sources: {}, defaults: {} });
+    mount();
+    await screen.findByRole('button', { name: 'Preview Homepage hero' });
+    fireEvent.click(screen.getByRole('button', { name: /^Home/ }));
+    fireEvent.click(await screen.findByText('Product', { selector: '.MuiListItemText-primary' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Interactive editor preview' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Select care block' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Duplicate block' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    await waitFor(() => expect(service.saveDesignDraft).toHaveBeenCalledOnce());
+    const [payload] = service.saveDesignDraft.mock.calls[0];
+    const [section] = payload.find(({ group, key }) => group === 'productPage' && key === 'sections').value;
+    const [, copy] = section.heroBlocks;
+    expect(copy.id).not.toBe('care');
+    expect(section.detailsBlockOrder.slice(0, 4)).toEqual(['title', 'custom:care', `custom:${copy.id}`, 'variants']);
+  });
   it('moves a nested block from the preview and persists it after undo and redo', async () => {
     const nested = { id: 'nested', title: 'Nested hero', type: 'composed-hero', enabled: true, heroBlocks: [{
       id: 'group', type: 'group', children: [

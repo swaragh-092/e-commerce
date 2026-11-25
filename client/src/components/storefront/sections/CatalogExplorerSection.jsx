@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { Box, Button, MenuItem, Pagination, Stack, TextField, Typography } from '@mui/material';
 import ProductCard from '../../product/ProductCard';
 import useHeroCategories from '../../../hooks/useHeroCategories';
-import { useBrands } from '../../../context/BrandContext';
 import { useFeature, useFeatureVisible } from '../../../hooks/useSettings';
 import { getProducts } from '../../../services/productService';
+import { getEligibleBrands } from '../../../services/brandService';
 
 const sortLabels = { newest: 'Newest', name_asc: 'Name A–Z', price_asc: 'Price low to high', price_desc: 'Price high to low' };
 
@@ -14,7 +14,8 @@ export default function CatalogExplorerSection({ section = {} }) {
   const brandsEnabled = useFeature('brands') && config.showBrand !== false;
   const categoriesEnabled = config.showCategory !== false;
   const { categories } = useHeroCategories(categoriesEnabled);
-  const { brands } = useBrands();
+  const [brandOptions, setBrandOptions] = useState(null);
+  const [brandError, setBrandError] = useState(false);
   const [filters, setFilters] = useState({});
   const [page, setPage] = useState(1);
   const [result, setResult] = useState(null);
@@ -25,6 +26,17 @@ export default function CatalogExplorerSection({ section = {} }) {
   const sort = !pricing && requestedSort.startsWith('price_') ? 'newest' : requestedSort;
   const requestKey = JSON.stringify([category, brand, sort, page, limit]);
   const current = result?.key === requestKey ? result : null;
+
+  useEffect(() => {
+    if (!brandsEnabled) return undefined;
+    let active = true;
+    getEligibleBrands().then((brands) => {
+      if (active) { setBrandOptions(brands); setBrandError(false); }
+    }).catch(() => {
+      if (active) setBrandError(true);
+    });
+    return () => { active = false; };
+  }, [brandsEnabled]);
 
   useEffect(() => {
     let active = true;
@@ -52,10 +64,12 @@ export default function CatalogExplorerSection({ section = {} }) {
           <MenuItem value="">All categories</MenuItem>
           {categories.map((item) => <MenuItem key={item.slug} value={item.slug}>{item.label}</MenuItem>)}
         </TextField>}
-        {brandsEnabled && <TextField select size="small" label="Brand" value={brand}
+        {brandsEnabled && <TextField select size="small" label="Brand" value={brand} disabled={!brandOptions}
+          helperText={brandError ? 'Brands could not be loaded.' : undefined}
           onChange={(event) => updateFilter('brand', event.target.value)} sx={{ minWidth: 150 }}>
           <MenuItem value="">All brands</MenuItem>
-          {brands.map((item) => <MenuItem key={item.slug} value={item.slug}>{item.name}</MenuItem>)}
+          {brand && !brandOptions?.some(({ slug }) => slug === brand) && <MenuItem value={brand} disabled>{brand}</MenuItem>}
+          {brandOptions?.map((item) => <MenuItem key={item.slug} value={item.slug}>{item.name}</MenuItem>)}
         </TextField>}
         {config.showSort !== false && <TextField select size="small" label="Sort products" value={sort}
           onChange={(event) => updateFilter('sort', event.target.value)} sx={{ minWidth: 150 }}>

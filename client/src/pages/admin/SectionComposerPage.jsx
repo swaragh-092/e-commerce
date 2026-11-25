@@ -937,17 +937,7 @@ const SectionComposerPage = () => {
     }
     if (activePage === 'product' && !isSharedSection(editSection)) {
       if (editSection?.type === 'product-info' && key === 'heroBlocks') {
-        changeProductInfo(editSection.id, (section) => {
-          const next = { ...section, heroBlocks: value };
-          if (detailInsertion) {
-            const order = getProductDetailsOrder(section);
-            order.splice(detailInsertion.after === null ? 0 : order.indexOf(detailInsertion.after) + 1, 0, customDetailKey(detailInsertion.id));
-            next.detailsBlockOrder = getProductDetailsOrder({ ...next, detailsBlockOrder: order });
-          } else if (section.detailsBlockOrder) {
-            next.detailsBlockOrder = getProductDetailsOrder(next);
-          }
-          return next;
-        });
+        commitHeroBlocks(editSection, value, detailInsertion);
         return;
       }
       handlePageSettingChange('product', (current) => ({ ...current, sections: getPageSections({ productPage: current }, 'product').map((section) =>
@@ -972,10 +962,15 @@ const SectionComposerPage = () => {
     recordHistory({ sections: currentSections });
   };
 
-  const commitHeroBlocks = (section, heroBlocks) => {
+  const commitHeroBlocks = (section, heroBlocks, detailInsertion) => {
     const apply = (current) => {
       const next = { ...current, heroBlocks };
-      if (current.detailsBlockOrder) next.detailsBlockOrder = getProductDetailsOrder(next);
+      if (detailInsertion) {
+        const order = getProductDetailsOrder(current);
+        const insertAt = detailInsertion.after === null ? 0 : order.indexOf(detailInsertion.after) + 1;
+        order.splice(insertAt, 0, customDetailKey(detailInsertion.id));
+        next.detailsBlockOrder = getProductDetailsOrder({ ...next, detailsBlockOrder: order });
+      } else if (current.detailsBlockOrder) next.detailsBlockOrder = getProductDetailsOrder(next);
       return next;
     };
     if (activePage === 'home' || isSharedSection(section)) {
@@ -1327,7 +1322,7 @@ const SectionComposerPage = () => {
       const result = findDesignerBlock(blocks, panelView.blockIndex);
       if (!result) return [];
       const { block, index, siblings, parentId } = result;
-      const replace = (edit) => commitHeroBlocks(editSection, updateDesignerBlockList(blocks, parentId, edit));
+      const replace = (edit, detailInsertion) => commitHeroBlocks(editSection, updateDesignerBlockList(blocks, parentId, edit), detailInsertion);
       const actions = [];
       if (parentId === null && editSection.type === 'product-info') {
         actions.push(...productDetailActions(customDetailKey(block.id)));
@@ -1341,7 +1336,9 @@ const SectionComposerPage = () => {
         { label: 'Hide block', onClick: () => replace((list) => list.map((item) => item.id === block.id ? { ...item, enabled: false } : item)) },
         { label: 'Duplicate block', disabled: siblings.length >= 12, onClick: () => {
           const copy = duplicateDesignerBlock(block);
-          replace((list) => [...list.slice(0, index + 1), copy, ...list.slice(index + 1)]);
+          const insertion = parentId === null && editSection.type === 'product-info' && editSection.detailsBlockOrder
+            ? { after: customDetailKey(block.id), id: copy.id } : undefined;
+          replace((list) => [...list.slice(0, index + 1), copy, ...list.slice(index + 1)], insertion);
           handleInlineBlockFocus(editSection.id, 'heroBlocks', copy.id);
         } },
         { label: 'Delete block', onClick: () => {
