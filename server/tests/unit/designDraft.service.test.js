@@ -6,8 +6,28 @@ const { DesignDraft, DesignDraftVersion, DesignDraftArchive, Setting, sequelize 
 afterEach(() => vi.restoreAllMocks());
 const AuditService = require('../../src/modules/audit/audit.service');
 const DesignDraftService = require('../../src/modules/settings/designDraft.service');
+const SettingsService = require('../../src/modules/settings/settings.service');
 
 describe('Design draft safety', () => {
+  it('creates independent named drafts and clones the source navigation', async () => {
+    const transaction = { LOCK: { UPDATE: 'UPDATE' } };
+    const selectedLinks = [{ label: 'Catalog', url: '/products' }];
+    vi.spyOn(sequelize, 'transaction').mockImplementation(async (fn) => fn(transaction));
+    vi.spyOn(SettingsService, 'getGroupDefaults').mockReturnValue({});
+    vi.spyOn(Setting, 'findAll').mockResolvedValue([{ group: 'nav', key: 'headerLinks', value: [] }]);
+    vi.spyOn(DesignDraft, 'findOne').mockResolvedValue({
+      status: 'draft', baseSnapshot: {}, payload: [{ group: 'nav', key: 'headerLinks', value: selectedLinks }],
+    });
+    vi.spyOn(DesignDraft, 'create').mockImplementation(async (values) => ({ toJSON: () => ({ ...values }) }));
+    const first = await DesignDraftService.createNamedDraft({ name: 'Summer' }, { id: 'user' });
+    const second = await DesignDraftService.createNamedDraft({ name: 'Winter', sourceDraftKey: first.draftKey }, { id: 'user' });
+    expect(first.draftKey).not.toBe(second.draftKey);
+    expect(first.name).toBe('Summer');
+    expect(second.name).toBe('Winter');
+    expect(second.payload).toEqual([{ group: 'nav', key: 'headerLinks', operation: 'upsert', value: selectedLinks }]);
+    expect(DesignDraft.findOne).toHaveBeenCalledWith(expect.objectContaining({ where: { draftKey: first.draftKey } }));
+  });
+
   it.each([
     { draftRevision: 1, lastPublishedRevision: 46, expected: 47 },
     { draftRevision: 46, lastPublishedRevision: 46, expected: 47 },

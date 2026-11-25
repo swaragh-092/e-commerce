@@ -18,6 +18,7 @@ import ThemeImportDialog from '../../components/admin/themes/ThemeImportDialog';
 import ThemeHistoryPanel from '../../components/admin/themes/ThemeHistoryPanel';
 import ThemeDetailModal from '../../components/admin/themes/ThemeDetailModal';
 import SaveAsTemplateDialog from '../../components/admin/themes/SaveAsTemplateDialog';
+import NamedDraftsPanel from '../../components/admin/themes/NamedDraftsPanel';
 import SortIcon from '@mui/icons-material/Sort';
 import { updateSettings } from '../../services/adminService';
 import { getDesignDraft } from '../../services/settingsService';
@@ -654,6 +655,7 @@ const ThemeGalleryPage = () => {
 
       {tab === 3 && (
         <Box>
+          {canManageTemplates && <NamedDraftsPanel />}
           {!activeActivation ? (
             <Paper variant="outlined" sx={{ p: 4, borderRadius: 3, textAlign: 'center', color: 'text.secondary' }}>
               <Typography variant="h6" fontWeight={600} gutterBottom>

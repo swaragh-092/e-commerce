@@ -720,7 +720,7 @@ const importToLibrary = async (packageData, userId) => {
   });
 };
 
-const exportCurrent = async (options = {}, draftRevision) => {
+const exportCurrent = async (options = {}, draftRevision, draftKey) => {
   const { includeHomepageSections = true, includeDemoContent = true, includeComponentStyles = true, includeSectionPresets = true } = options;
   const groups = ['theme', 'componentStyles', 'sectionPresets', 'nav', 'footer', 'announcement', 'homepage', 'productPage', 'categoryPage', 'catalog', 'brandsPage', 'cartPage', 'accountPage', 'blogPage'];
   if (draftRevision !== undefined) {
@@ -731,7 +731,7 @@ const exportCurrent = async (options = {}, draftRevision) => {
     (section) => ({ ...section, enabled: section.enabled ?? true });
 
   if (draftRevision !== undefined) {
-    const { draft } = await DesignDraftService.getDraft();
+    const { draft } = await DesignDraftService.getDraft(draftKey);
     if (!draft || draft.revision !== draftRevision) {
       throw new AppError('CONFLICT', 409, 'The saved design draft changed. Reload Store Designer before saving the template.');
     }

@@ -9,6 +9,9 @@ const {
   bulkUpdateSchema,
   resetDesignSettingSchema,
   saveDesignDraftSchema,
+  designDraftQuerySchema,
+  createNamedDraftSchema,
+  renameNamedDraftSchema,
   publishDesignDraftSchema,
   restoreDesignVersionSchema,
   restoreDesignArchiveSchema,
@@ -85,8 +88,14 @@ router.get('/design-state',
 router.get('/design-draft',
   authenticate,
   authorizePermissions(PERMISSIONS.SETTINGS_MANAGE),
+  validate(designDraftQuerySchema, 'query'),
   settingsController.getDesignDraft
 );
+router.get('/design-drafts', authenticate, authorizePermissions(PERMISSIONS.SETTINGS_MANAGE), settingsController.getNamedDrafts);
+router.post('/design-drafts', authenticate, authorizePermissions(PERMISSIONS.SETTINGS_MANAGE),
+  validate(createNamedDraftSchema), settingsController.createNamedDraft);
+router.patch('/design-drafts', authenticate, authorizePermissions(PERMISSIONS.SETTINGS_MANAGE),
+  validate(renameNamedDraftSchema), settingsController.renameNamedDraft);
 
 router.get('/design-versions',
   authenticate,

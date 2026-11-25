@@ -216,6 +216,7 @@ const splitFallbackMenuItems = (value) => String(value || '')
   .map((label, index) => ({ id: 'fallback-menu-' + index, label, children: [] }));
 
 const resolvePreviewHeaderItems = (navSettings, navigationData) => {
+  if (Array.isArray(navSettings.headerLinks)) return navSettings.headerLinks.map((link, index) => ({ ...link, id: `theme-link-${index}`, children: [] }));
   const menuItems = getMenuItemsFromPayload(navigationData.headerMenu);
   if (menuItems.length) return menuItems;
   if (navigationData.topLinks.length) return navigationData.topLinks;

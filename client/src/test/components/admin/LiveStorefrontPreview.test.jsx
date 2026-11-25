@@ -3,6 +3,18 @@ import { describe, expect, it, vi } from 'vitest';
 import LiveStorefrontPreview from '../../../components/admin/settings/LiveStorefrontPreview';
 
 describe('real storefront inspector', () => {
+  it('stores simultaneous draft previews under separate keys', () => {
+    const { unmount } = render(<>
+      <LiveStorefrontPreview settings={{ theme: { primaryColor: '#112233' } }} />
+      <LiveStorefrontPreview settings={{ theme: { primaryColor: '#445566' } }} />
+    </>);
+    const keys = screen.getAllByTitle('Storefront design preview').map((frame) =>
+      `storePreviewTheme:${new URL(frame.src).searchParams.get('previewSession')}`);
+    expect(new Set(keys).size).toBe(2);
+    expect(keys.map((key) => JSON.parse(localStorage.getItem(key)).theme.primaryColor)).toEqual(['#112233', '#445566']);
+    unmount();
+    expect(keys.every((key) => localStorage.getItem(key) === null)).toBe(true);
+  });
   it('highlights only the owning nested block, restores highlight after DOM replacement, and runs its action', async () => {
     const onSelectBlock = vi.fn();
     const onClick = vi.fn();

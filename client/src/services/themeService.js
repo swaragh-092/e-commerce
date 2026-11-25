@@ -10,7 +10,7 @@ const themeService = {
   }),
   getActivations: () => api.get('/themes/activations').then(r => r.data.data),
   getStoreStatus: () => api.get('/themes/store-status').then(r => r.data.data),
-  validateTheme: (packageData) => api.post('/themes/validate', { packageData }).then(r => r.data.data),
+  validateTheme: (packageData, { checkReferences = false } = {}) => api.post('/themes/validate', { packageData, checkReferences }).then(r => r.data.data),
   previewTheme: (packageData, scopes) => api.post('/themes/preview', { packageData, scopes }).then(r => r.data.data),
   importTheme: (packageData) => api.post('/themes/import', { packageData }).then(r => r.data.data),
   exportTheme: (options = {}) => api.post('/themes/export', options).then(r => r.data.data),

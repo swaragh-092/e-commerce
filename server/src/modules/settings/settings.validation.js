@@ -33,12 +33,26 @@ const designDraftSettingSchema = Joi.object({
   value: Joi.any().optional(),
 }).unknown(false);
 
+const namedDraftKey = Joi.string().pattern(/^named-[a-f0-9-]{36}$/);
+const designDraftQuerySchema = Joi.object({ draftKey: namedDraftKey }).unknown(false);
+const createNamedDraftSchema = Joi.object({
+  name: Joi.string().trim().min(1).max(100).required(),
+  sourceDraftKey: Joi.alternatives().try(Joi.valid('store'), namedDraftKey),
+}).unknown(false);
+const renameNamedDraftSchema = Joi.object({
+  draftKey: namedDraftKey.required(),
+  name: Joi.string().trim().min(1).max(100).required(),
+  expectedRevision: Joi.number().integer().min(1).required(),
+}).unknown(false);
+
 const saveDesignDraftSchema = Joi.object({
+  draftKey: namedDraftKey,
   expectedRevision: Joi.number().integer().min(1).optional(),
   settings: Joi.array().items(designDraftSettingSchema).max(1000).required(),
 }).unknown(false);
 
 const publishDesignDraftSchema = Joi.object({
+  draftKey: namedDraftKey,
   conflictToken: Joi.string().hex().length(64).optional(),
   expectedRevision: Joi.number().integer().min(1).optional(),
 }).unknown(false);
@@ -55,6 +69,9 @@ module.exports = {
   bulkUpdateSchema,
   resetDesignSettingSchema,
   saveDesignDraftSchema,
+  designDraftQuerySchema,
+  createNamedDraftSchema,
+  renameNamedDraftSchema,
   publishDesignDraftSchema,
   restoreDesignVersionSchema,
   restoreDesignArchiveSchema,

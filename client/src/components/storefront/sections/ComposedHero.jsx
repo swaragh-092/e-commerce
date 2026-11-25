@@ -7,22 +7,43 @@ import { Box, Stack, Typography, Rating } from '@mui/material';
 import StorefrontButton from '../StorefrontButton';
 import { getMediaUrl } from '../../../utils/media';
 
-export const HERO_BLOCK_LABELS = {
-  group: 'Group', heading: 'Heading', text: 'Text', button: 'Button',
-  media: 'Media', 'product-attribute': 'Product attribute', 'product-rating': 'Product rating', enquiry: 'Enquiry form', newsletter: 'Newsletter signup', blog: 'Blog post card', availability: 'Product availability', fulfillment: 'Ships from', page: 'Page link', gallery: 'Gallery album', collection: 'Collection card', brand: 'Brand card', tag: 'Tag card', product: 'Product card',
-};
+import themeSections from '../../../../../shared/theme-sections.json';
 
-export const HERO_CARD_SOURCES = {
-  collection: { field: 'categorySlug', label: 'Category', path: 'category', fallback: 'Collection' },
-  brand: { field: 'brandSlug', label: 'Brand', path: 'brands', fallback: 'Brand' },
-  tag: { field: 'tagSlug', label: 'Tag', path: 'tags', fallback: 'Tag' },
-  product: { field: 'productSlug', label: 'Product', path: 'products', fallback: 'Product' },
-  blog: { field: 'blogSlug', label: 'Blog post', path: 'blogs', fallback: 'Blog post' },
-  page: { field: 'pageSlug', label: 'Page', path: 'p', fallback: 'Page' },
-  gallery: { field: 'gallerySlug', label: 'Gallery album', path: null, fallback: 'Gallery' },
-};
+const blockDefinitions = Object.entries(themeSections.composedBlocks.definitions);
+export const HERO_BLOCK_LABELS = Object.fromEntries(blockDefinitions.map(([type, { label }]) => [type, label]));
+export const HERO_CARD_SOURCES = Object.fromEntries(blockDefinitions.filter(([, def]) => def.source)
+  .map(([type, { source }]) => [type, source]));
 
 const safeLink = (value) => /^(https?:\/\/|\/(?![\/\\]))/i.test(value || '') ? value : undefined;
+const { bindings, maxDepth } = themeSections.composedBlocks;
+
+function getProductAttribute(product, name) {
+  const attribute = product?.attributes?.find((item) =>
+    (item.attribute?.name || item.customName || '').toLowerCase() === (name || '').toLowerCase());
+  return attribute?.value != null ? formatAttributeValue(attribute.value, attribute.attribute) : attribute?.customValue;
+}
+
+function resolveProductBinding(block, product) {
+  if (!product || !Object.hasOwn(bindings[block.type] || {}, block.binding)) return block;
+  if (block.binding === 'productLink') {
+    return product.slug ? { ...block, href: `/products/${encodeURIComponent(product.slug)}` } : block;
+  }
+  if (block.binding === 'productImage') {
+    const image = product.images?.[0];
+    const url = image?.url || image?.imageUrl || product.image;
+    return typeof url === 'string' && url
+      ? { ...block, url, mobileUrl: undefined, mediaType: 'image', alt: block.alt || product.name }
+      : block;
+  }
+  const values = {
+    productName: product.name,
+    productSku: product.selectedVariant?.sku || product.sku,
+    productSummary: product.shortDescription,
+    productAttribute: block.binding === 'productAttribute' ? getProductAttribute(product, block.attributeName) : undefined,
+  };
+  const value = values[block.binding];
+  return value != null && String(value).trim() ? { ...block, text: String(value) } : block;
+}
 
 const Media = ({ block }) => {
   if (!block.url && !block.mobileUrl) return null;
@@ -42,8 +63,9 @@ const Media = ({ block }) => {
   );
 };
 
-const HeroBlock = ({ block, onSelect, catalog, product, depth = 0, onEnquiry, owner }) => {
-  if (depth > 3 || block.enabled === false) return null;
+const HeroBlock = ({ block: configuredBlock, onSelect, catalog, product, depth = 0, onEnquiry, owner }) => {
+  if (depth > maxDepth || configuredBlock.enabled === false) return null;
+  const block = resolveProductBinding(configuredBlock, product);
 
   let content;
   switch (block.type) {
@@ -53,7 +75,9 @@ const HeroBlock = ({ block, onSelect, catalog, product, depth = 0, onEnquiry, ow
       </Stack>;
       break;
     case 'heading':
-      content = <Typography component="h2" variant="h2" sx={{ overflowWrap: 'anywhere' }}>{block.text}</Typography>;
+      content = <Typography component="h2" variant={{ small: 'h4', medium: 'h3', large: 'h2' }[block.textSize] || 'h2'}
+        sx={{ overflowWrap: 'anywhere', textAlign: block.textAlign,
+          fontWeight: { regular: 400, semibold: 600, bold: 700 }[block.textWeight] }}>{block.text}</Typography>;
       break;
     case 'text':
       content = <Typography sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{block.text}</Typography>;
@@ -98,11 +122,7 @@ const HeroBlock = ({ block, onSelect, catalog, product, depth = 0, onEnquiry, ow
       ) : null;
       break;
     case 'product-attribute': {
-      const attribute = product?.attributes?.find((item) =>
-        (item.attribute?.name || item.customName || '').toLowerCase() === (block.attributeName || '').toLowerCase());
-      const value = attribute?.value != null
-        ? formatAttributeValue(attribute.value, attribute.attribute)
-        : attribute?.customValue;
+      const value = getProductAttribute(product, block.attributeName);
       content = value != null && String(value).trim() ? (
         <Stack spacing={0.5}>
           {block.text && <Typography component="h2" variant="h6">{block.text}</Typography>}

@@ -35,26 +35,32 @@ export const resetDesignSetting = async (group, key = null) => {
   return response.data.data;
 };
 
-export const getDesignDraft = async () => {
-  const response = await api.get('/settings/design-draft');
+export const getDesignDraft = async (draftKey) => {
+  const response = await api.get('/settings/design-draft', draftKey ? { params: { draftKey } } : undefined);
   return response.data.data;
 };
+export const getNamedDesignDrafts = async () => (await api.get('/settings/design-drafts')).data.data;
+export const createNamedDesignDraft = async (name, sourceDraftKey) =>
+  (await api.post('/settings/design-drafts', { name, sourceDraftKey })).data.data;
+export const renameNamedDesignDraft = async (draftKey, name, expectedRevision) =>
+  (await api.patch('/settings/design-drafts', { draftKey, name, expectedRevision })).data.data;
 
 export const getDesignVersions = async (limit = 30) => {
   const response = await api.get('/settings/design-versions', { params: { limit } });
   return response.data.data;
 };
 
-export const saveDesignDraft = async (settings, expectedRevision = undefined) => {
+export const saveDesignDraft = async (settings, expectedRevision = undefined, draftKey) => {
   const response = await api.post('/settings/design-draft', {
     settings,
+    ...(draftKey && { draftKey }),
     ...(expectedRevision == null ? {} : { expectedRevision }),
   });
   return response.data.data;
 };
 
-export const publishDesignDraft = async (expectedRevision = undefined, conflictToken = undefined) => {
-  const response = await api.post('/settings/design-draft/publish', { expectedRevision, conflictToken });
+export const publishDesignDraft = async (expectedRevision = undefined, conflictToken = undefined, draftKey) => {
+  const response = await api.post('/settings/design-draft/publish', { expectedRevision, conflictToken, ...(draftKey && { draftKey }) });
   return response.data.data;
 };
 
@@ -73,8 +79,8 @@ export const restoreDraftArchive = async (archiveId, expectedRevision) => {
   return response.data.data;
 };
 
-export const discardDesignDraft = async (expectedRevision) => {
-  const response = await api.delete('/settings/design-draft', { data: { expectedRevision } });
+export const discardDesignDraft = async (expectedRevision, draftKey) => {
+  const response = await api.delete('/settings/design-draft', { data: { expectedRevision, ...(draftKey && { draftKey }) } });
   return response.data.data;
 };
 

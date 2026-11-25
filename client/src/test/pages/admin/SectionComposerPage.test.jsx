@@ -60,7 +60,7 @@ vi.mock('../../../components/admin/settings/LiveStorefrontPreview', () => ({ def
 const homeSection = { id: 'home-hero', type: 'hero-carousel', title: 'Homepage hero' };
 const productSection = { id: 'product-recommendations', type: 'product-row', title: 'Product recommendations', enabled: true };
 const settings = { homepage: { sections: [homeSection] }, productPage: { sections: [productSection] } };
-const mount = () => render(<MemoryRouter><SettingsContext.Provider value={{ settings, refreshSettings: vi.fn() }}><SectionComposerPage /></SettingsContext.Provider></MemoryRouter>);
+const mount = (path = '/') => render(<MemoryRouter initialEntries={[path]}><SettingsContext.Provider value={{ settings, refreshSettings: vi.fn() }}><SectionComposerPage /></SettingsContext.Provider></MemoryRouter>);
 beforeEach(() => {
   vi.clearAllMocks();
   previewResult.current = null;
@@ -70,6 +70,15 @@ beforeEach(() => {
   service.saveDesignDraft.mockImplementation(async (payload) => ({ revision: 1, payload }));
 });
 describe('Store Designer section editing', () => {
+  it('loads a named draft in a shareable preview without editor or publishing controls', async () => {
+    const draftKey = 'named-12345678-1234-1234-1234-123456789012';
+    service.getDesignDraft.mockResolvedValueOnce({ draft: { draftKey, revision: 2, name: 'Summer draft', payload: [] } });
+    mount(`/admin/store-designer?draftKey=${draftKey}&previewDraft=1`);
+    expect(await screen.findByText('Summer draft')).toBeInTheDocument();
+    expect(screen.getByTestId('live-preview')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Publish' })).not.toBeInTheDocument();
+    expect(service.getDesignDraft).toHaveBeenCalledWith(draftKey);
+  });
   it('duplicates an ordered product detail immediately after the original', async () => {
     const productPage = { sections: [{
       id: 'details', type: 'product-info', enabled: true, detailsBlockOrder: ['title', 'custom:care', 'variants'],
@@ -319,7 +328,11 @@ describe('Store Designer section editing', () => {
     await screen.findByRole('button', { name: 'Preview Homepage hero' });
     fireEvent.click(screen.getByRole('button', { name: 'Mobile', exact: true }));
     expect(await screen.findByTestId('live-preview')).toHaveAttribute('data-device', 'mobile');
-    expect(screen.getByRole('button', { name: 'Interactive editor preview' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Preview Homepage hero' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Interactive editor preview' }));
+    expect(await screen.findByRole('button', { name: 'Preview Homepage hero' })).toBeInTheDocument();
+    expect(screen.getByTestId('live-preview')).toHaveAttribute('data-device', 'mobile');
+    fireEvent.click(screen.getByRole('button', { name: 'Interactive preview of the current design' }));
     expect(screen.queryByRole('button', { name: 'Preview Homepage hero' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Desktop', exact: true }));
     expect(await screen.findByRole('button', { name: 'Preview Homepage hero' })).toBeInTheDocument();

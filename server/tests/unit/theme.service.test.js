@@ -67,10 +67,32 @@ describe('Theme package schema validation', () => {
     expect(ThemeService.validatePackage(pkg).layout.nav).toMatchObject({ showCategoryDropdown: true });
   });
 
+  it('reports catalog, local media, and menu references by package path', async () => {
+    const { Category, Media } = require('../../src/modules');
+    const { inspectThemeReferences } = require('../../src/modules/theme/theme.references');
+    const categories = vi.spyOn(Category, 'findAll').mockResolvedValue([{ slug: 'fruit' }]);
+    const media = vi.spyOn(Media, 'findAll').mockResolvedValue([]);
+    try {
+      const refs = await inspectThemeReferences({
+        layout: {
+          nav: { headerLinks: [{ label: 'Fruit', url: '/category/fruit' }] },
+          homepageSections: [{ selectedCategorySlugs: ['missing'], image: '/uploads/photo.png' }],
+        },
+      });
+      expect(refs).toEqual(expect.arrayContaining([
+        { path: ['layout', 'nav', 'headerLinks', 0, 'url'], value: '/category/fruit', resource: 'category', resolved: true },
+        { path: ['layout', 'homepageSections', 0, 'selectedCategorySlugs', 0], value: 'missing', resource: 'category', resolved: false },
+        { path: ['layout', 'homepageSections', 0, 'image'], value: '/uploads/photo.png', resource: 'media', resolved: false },
+      ]));
+    } finally { categories.mockRestore(); media.mockRestore(); }
+  });
+
   it('preserves visibility on nested composed blocks in theme packages', () => {
     const section = {
       id: 'hero', type: 'composed-hero', enabled: true,
-      heroBlocks: [{ id: 'group', type: 'group', children: [{ id: 'heading', type: 'heading', text: 'Hidden', enabled: false }] }],
+      heroBlocks: [{ id: 'group', type: 'group', children: [{
+        id: 'heading', type: 'heading', text: 'Hidden', enabled: false, textAlign: 'center', textSize: 'large', textWeight: 'bold',
+      }] }],
     };
     const pkg = buildMinimalPackage({ layout: { homepageSections: [section] } });
     expect(packageSchema.validate(JSON.parse(JSON.stringify(pkg))).value.layout.homepageSections[0]).toEqual(section);

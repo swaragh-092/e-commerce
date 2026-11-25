@@ -2,9 +2,10 @@ import { useState } from 'react';
 import {
   Box, Stack, Typography, IconButton, Button, Alert, Chip,
   Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle,
-  Switch, FormControlLabel,
+  Switch, FormControlLabel, TextField,
 } from '@mui/material';
 import { Link } from 'react-router-dom';
+import { isValidPromoLink } from '../../../../utils/urls';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import PaletteIcon from '@mui/icons-material/Palette';
 import GridViewIcon from '@mui/icons-material/GridView';
@@ -53,11 +54,27 @@ const HeaderLogoEditor = ({ value = {}, onChange }) => (
 );
 
 const HeaderMenuEditor = ({ value = {}, onChange }) => {
+  const custom = Array.isArray(value.headerLinks);
+  const changeLinks = (headerLinks) => onChange({ ...value, headerLinks });
+  const updateLink = (index, key, text) => changeLinks(value.headerLinks.map((link, i) => i === index ? { ...link, [key]: text } : link));
   return (
     <Stack spacing={2}>
       <Alert severity="info" action={<Button component={Link} to="/admin/menus" size="small" color="inherit">Open</Button>}>
-        Published header links come from Menu Builder. These fallback labels are used only when no header menu or top pages exist.
+        Use Menu Builder for shared navigation, or set header links for this design.
       </Alert>
+      <FormControlLabel label="Use theme-specific header links"
+        control={<Switch checked={custom} onChange={(event) => changeLinks(event.target.checked ? [] : false)} />} />
+      {custom && <>
+        {value.headerLinks.map((link, index) => <Stack key={index} spacing={1}>
+          <TextField label={`Link ${index + 1} label`} size="small" value={link.label}
+            onChange={(event) => updateLink(index, 'label', event.target.value)} inputProps={{ maxLength: 100 }} />
+          <TextField label={`Link ${index + 1} URL`} size="small" value={link.url} error={!link.url || !isValidPromoLink(link.url)}
+            onChange={(event) => updateLink(index, 'url', event.target.value)} inputProps={{ maxLength: 500 }} />
+          <Button size="small" onClick={() => changeLinks(value.headerLinks.filter((_, i) => i !== index))}>Remove link {index + 1}</Button>
+        </Stack>)}
+        <Button size="small" disabled={value.headerLinks.length >= 20}
+          onClick={() => changeLinks([...value.headerLinks, { label: 'New link', url: '/' }])}>Add header link</Button>
+      </>}
       <DesignSchemaFields
         schema={getDesignComponentControlSchema('headerMenu')}
         value={value}

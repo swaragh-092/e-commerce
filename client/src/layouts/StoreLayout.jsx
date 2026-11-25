@@ -129,8 +129,11 @@ const StoreLayout = () => {
   const navPosition  = nav.sticky !== false ? 'sticky' : 'static';
   const headerStyle = themeSettings.headerStyle || 'gradient';
   const hasDynamicHeaderItems = Array.isArray(headerMenu?.items) && headerMenu.items.length > 0;
+  const hasThemeLinks = Array.isArray(nav.headerLinks);
   const navigationFeatures = { ...features, cart: cartEnabled, checkout: checkoutVisible, orders: ordersEnabled };
-  const headerItems = filterFeatureLinks(hasDynamicHeaderItems
+  const headerItems = filterFeatureLinks(hasThemeLinks
+    ? nav.headerLinks.map(({ label, url }, index) => ({ id: `theme-link-${index}`, label, url, children: [] }))
+    : hasDynamicHeaderItems
     ? headerMenu.items
     : topLinks.map((link, index) => ({
         id: link.id,
@@ -155,7 +158,7 @@ const StoreLayout = () => {
 
   const headerAlignment = headerMenu?.alignment || 'left';
 
-  const hasDedicatedMobileItems = Array.isArray(mobileMenu?.items) && mobileMenu.items.length > 0;
+  const hasDedicatedMobileItems = !hasThemeLinks && Array.isArray(mobileMenu?.items) && mobileMenu.items.length > 0;
   const mobileHeaderItems = filterFeatureLinks(hasDedicatedMobileItems ? mobileMenu.items : desktopHeaderItems, navigationFeatures);
 
   const getLinkProps = (item) => {

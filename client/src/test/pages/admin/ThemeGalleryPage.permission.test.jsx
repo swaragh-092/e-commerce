@@ -23,7 +23,7 @@ vi.mock('../../../services/themeService', () => ({
 }));
 
 vi.mock('../../../services/adminService', () => ({ updateSettings: vi.fn() }));
-vi.mock('../../../services/settingsService', () => ({ getDesignDraft: vi.fn() }));
+vi.mock('../../../services/settingsService', () => ({ getDesignDraft: vi.fn(), getNamedDesignDrafts: vi.fn().mockResolvedValue([]) }));
 
 vi.mock('../../../context/NotificationContext', () => ({ useNotification: () => ({ notify: vi.fn() }) }));
 vi.mock('../../../context/ThemeContext', () => ({ SettingsContext: { Provider: ({ children }) => children } }));

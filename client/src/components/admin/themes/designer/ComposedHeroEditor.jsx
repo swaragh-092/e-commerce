@@ -7,6 +7,7 @@ import BlockPickerPreview from './BlockPickerPreview';
 import { HERO_BLOCK_LABELS, HERO_CARD_SOURCES } from '../../../storefront/sections/ComposedHero';
 
 import attributeService from '../../../../services/attributeService';
+import themeSections from '../../../../../../shared/theme-sections.json';
 
 function AttributePicker({ value, onChange, onCommit }) {
   const [options, setOptions] = useState([]);
@@ -50,7 +51,7 @@ function AttributePicker({ value, onChange, onCommit }) {
   );
 }
 
-const defaults = { newsletter: 'Stay in touch', heading: 'New heading', text: 'Add your text', button: 'Shop now', collection: '', brand: '', tag: '' };
+const { defaults, bindings } = themeSections.composedBlocks;
 
 const productInformationPresets = {
   care: 'Care instructions',
@@ -162,6 +163,28 @@ export default function ComposedHeroEditor({ productInformation, orderedDetails,
           <Stack spacing={1.25} sx={{ py: 1 }}>
             <FormControlLabel label="Show block" control={<Switch size="small" checked={block.enabled !== false}
               onChange={(event) => { edit('enabled', event.target.checked); onCommit(); }} />} />
+            {bindings[block.type] && (productInformation || block.binding) && (
+              <TextField select size="small" label="Dynamic content" value={block.binding || ''}
+                helperText="Manual content is used when the product field is unavailable."
+                onChange={(event) => { edit('binding', event.target.value || undefined); onCommit(); }}>
+                <MenuItem value="">Manual content</MenuItem>
+                {Object.entries(bindings[block.type]).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
+              </TextField>
+            )}
+            {block.binding === 'productAttribute' && (
+              <AttributePicker value={block.attributeName || ''} onChange={(name) => edit('attributeName', name)} onCommit={onCommit} />
+            )}
+            {block.type === 'heading' && [
+              ['textAlign', 'Text alignment', [['left', 'Left'], ['center', 'Center'], ['right', 'Right']]],
+              ['textSize', 'Text size', [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']]],
+              ['textWeight', 'Text weight', [['regular', 'Regular'], ['semibold', 'Semibold'], ['bold', 'Bold']]],
+            ].map(([key, label, options]) => (
+              <TextField key={key} select size="small" label={label} value={block[key] ?? ''}
+                onChange={(event) => { edit(key, event.target.value || undefined); onCommit(); }}>
+                <MenuItem value="">Use theme default</MenuItem>
+                {options.map(([value, name]) => <MenuItem key={value} value={value}>{name}</MenuItem>)}
+              </TextField>
+            ))}
             {productInformation && !orderedDetails && parent === null && (
               <TextField select size="small" label="Block placement" value={getProductBlockPlacement(block)}
                 onChange={(event) => { edit('productPlacement', event.target.value); onCommit(); }}>

@@ -4,6 +4,23 @@ import ComposedHero from '../../../components/storefront/sections/ComposedHero';
 
 vi.mock('../../../components/storefront/EnquiryModal', () => ({ default: () => null }));
 
+it('applies heading typography while preserving heading semantics', () => {
+  render(<ComposedHero embedded section={{ id: 'hero', heroBlocks: [{
+    id: 'heading', type: 'heading', text: 'Market', textAlign: 'center', textSize: 'small', textWeight: 'bold',
+  }] }} />);
+  const heading = screen.getByRole('heading', { level: 2, name: 'Market' });
+  expect(heading).toHaveClass('MuiTypography-h4');
+  expect(heading).toHaveStyle({ textAlign: 'center', fontWeight: '700' });
+});
+
+it('resolves the current product name and uses manual text when it is unavailable', () => {
+  const section = { id: 'hero', heroBlocks: [{ id: 'heading', type: 'heading', text: 'Fallback', binding: 'productName' }] };
+  const { rerender } = render(<ComposedHero embedded section={section} product={{ name: 'Olive oil' }} />);
+  expect(screen.getByRole('heading', { name: 'Olive oil' })).toBeVisible();
+  rerender(<ComposedHero embedded section={section} product={{}} />);
+  expect(screen.getByRole('heading', { name: 'Fallback' })).toBeVisible();
+});
+
 it('skips hidden nested blocks and keeps the remaining siblings visible', () => {
   render(<ComposedHero embedded section={{ id: 'hero', heroBlocks: [{
     id: 'group', type: 'group', children: [
