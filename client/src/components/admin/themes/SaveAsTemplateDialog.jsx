@@ -19,8 +19,9 @@ const slugify = (text) => {
   return slug || 'template-' + Date.now();
 };
 
-const SaveAsTemplateDialog = ({ open, onClose, onSaved, publishedOnly = false, draftRevision }) => {
-  const fromDraft = draftRevision != null;
+const SaveAsTemplateDialog = ({ open, onClose, onSaved, publishedOnly = false, draftRevision, allowSourceChoice = false }) => {
+  const [source, setSource] = useState(draftRevision != null ? 'draft' : 'published');
+  const fromDraft = draftRevision != null && (!allowSourceChoice || source === 'draft');
   const categoryLabelId = useId();
   const { user } = useAuth();
   const authorName = user?.name || user?.email || 'Unknown User';
@@ -76,6 +77,16 @@ const SaveAsTemplateDialog = ({ open, onClose, onSaved, publishedOnly = false, d
       <DialogContent>
         <Stack spacing={2.5} sx={{ mt: 1 }}>
           {publishedOnly && <Alert severity="info">This template uses your published store. Draft changes are not included.</Alert>}
+          {allowSourceChoice && draftRevision != null && (
+            <TextField select label="Template source" size="small" value={source} disabled={saving}
+              onChange={(event) => {
+                setSource(event.target.value);
+                setIncludeDemoContent(event.target.value === 'draft');
+              }}>
+              <MenuItem value="draft">Saved design draft</MenuItem>
+              <MenuItem value="published">Published design</MenuItem>
+            </TextField>
+          )}
           <TextField label="Template Name" value={name} onChange={(e) => setName(e.target.value)} size="small" fullWidth required placeholder="My Custom Template" />
           <FormControl size="small" fullWidth>
             <InputLabel id={categoryLabelId}>Category</InputLabel>

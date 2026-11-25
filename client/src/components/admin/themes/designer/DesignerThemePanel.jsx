@@ -136,6 +136,11 @@ const HeaderActionsEditor = ({ value = {}, onChange }) => {
           )}
         </Droppable>
       </DragDropContext>
+      {value.showSearch !== false && <FormControlLabel
+        label="Show category selector in search"
+        control={<Switch size="small" checked={value.showCategoryDropdown === true}
+          onChange={(event) => patch('showCategoryDropdown', event.target.checked)} />}
+      />}
     </Stack>
   );
 };

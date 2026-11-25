@@ -27,6 +27,8 @@
     "page": ["grid", "grid-compact", "carousel"]
   },
   "variants": ["carousel", "grid", "grid-compact"],
+  "responsiveColumns": { "mobile": [1, 2], "tablet": [2, 3, 4] },
+  "gridGapMax": 64,
   "pageGroups": {
     "product": "productPage",
     "category": "categoryPage",
@@ -49,7 +51,8 @@
     "trending": { "label": "Trending This Week", "params": { "sort": "trending", "discoveryRow": true }, "link": "/products?sort=trending", "presetLabel": "Trending This Week", "ignoresDataSource": true },
     "mostViewed": { "label": "Most Viewed", "params": { "sort": "most-viewed", "discoveryRow": true }, "link": "/products?sort=most-viewed", "presetLabel": "Most Viewed" },
     "newest": { "label": "Newest", "params": { "sort": "arrivals", "discoveryRow": true }, "link": "/products?sort=newest", "presetLabel": "New Arrivals" },
-    "recommended": { "label": "Recommended", "params": { "sort": "recommended" } }
+    "recommended": { "label": "Recommended", "params": { "sort": "recommended" } },
+    "combo": { "label": "Combos / Bundles", "params": { "productType": "combo" }, "presetLabel": "Combo Offers", "ignoresDataSource": true }
   },
   "query": {
     "sorts": ["newest", "oldest", "name_asc", "name_desc", "price_asc", "price_desc", "arrivals", "best-selling", "trending", "most-viewed", "recommended", "discount_desc", "ending_soon"],

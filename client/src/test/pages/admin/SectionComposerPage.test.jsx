@@ -1,4 +1,4 @@
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SectionComposerPage from '../../../pages/admin/SectionComposerPage';
@@ -12,10 +12,11 @@ vi.mock('../../../hooks/useAuth', () => ({ useAuth: () => ({ hasPermission: () =
 vi.mock('../../../services/settingsService', () => ({ getSettingsGroup: vi.fn(), getDesignDraft: vi.fn(), getDesignState: vi.fn(), getDesignVersions: vi.fn(), publishDesignDraft: vi.fn(), restoreDesignVersion: vi.fn(), saveDesignDraft: vi.fn(), discardDesignDraft: vi.fn() }));
 vi.mock('../../../components/admin/themes/StorefrontTemplatePreview', () => ({ default: ({ activePage, currentSettings, onSelectSection }) => <div>{(activePage === 'home' ? currentSettings.homepage.sections : currentSettings.productPage.sections)?.map((section) => <button key={section.id} onClick={() => onSelectSection(section)}>Preview {section.title}</button>)}</div> }));
 vi.mock('../../../components/admin/themes/designer/DesignerTreePanel', () => ({
-  default: ({ activePage, sections, onToggleSection, onFooterClick, onPageSettingChange, pageTemplateControls }) => (
+  default: ({ activePage, sections, onToggleSection, onFooterClick, onPageSettingChange, pageTemplateControls, onReorderSection }) => (
     <div>
       {pageTemplateControls}
       <button onClick={onFooterClick}>Edit footer</button>
+      {sections.length > 1 && <button onClick={() => onReorderSection(1, 0, 'template')}>Drop second section first</button>}
       {activePage === 'product' && <button onClick={() => {
         onPageSettingChange('product', (current) => ({ ...current, showSKU: false }));
         onPageSettingChange('product', (current) => ({ ...current, showBreadcrumbs: false }));
@@ -34,7 +35,28 @@ vi.mock('../../../components/admin/themes/designer/DesignerSectionEditor', () =>
 vi.mock('../../../components/admin/themes/DesignVersionHistoryDialog', () => ({ default: () => null }));
 vi.mock('../../../components/admin/themes/SaveAsTemplateDialog', () => ({ default: () => null }));
 vi.mock('../../../components/admin/sections/AddSectionDialog', () => ({ default: () => null }));
-vi.mock('../../../components/admin/settings/LiveStorefrontPreview', () => ({ default: ({ path, device, settings, onSelectSection }) => <div data-testid="live-preview" data-device={device}>Real storefront {path}{onSelectSection && settings?.homepage?.sections?.map((section) => <button key={section.id} onClick={() => onSelectSection(section.id)}>Preview {section.title}</button>)}</div> }));
+vi.mock('../../../components/admin/settings/LiveStorefrontPreview', () => ({ default: ({ path, device, settings, onSelectSection, onSelectBlock, selectedBlockId, inspectorActions }) => {
+  const nestedSection = settings?.homepage?.sections?.find((section) => section.heroBlocks?.[0]?.children);
+  const productInfo = onSelectBlock && settings?.productPage?.sections?.find((section) => section.type === 'product-info');
+  return <div data-testid="live-preview" data-device={device}>Real storefront {path}
+    {onSelectSection && settings?.homepage?.sections?.map((section) => (
+      <button key={section.id} onClick={() => onSelectSection(section.id)}>Preview {section.title}</button>
+    ))}
+    {nestedSection && <>
+      <output aria-label="Preview block order">{nestedSection.heroBlocks[0].children.filter((block) => block.enabled !== false).map((block) => block.text).join(', ')}</output>
+      <button onClick={() => onSelectBlock(nestedSection.id, 'second')}>Select second nested block</button>
+      {selectedBlockId && inspectorActions?.map(({ label, disabled, onClick }) => (
+        <button key={label} disabled={disabled} onClick={onClick}>{label}</button>
+      ))}
+    </>}
+    {productInfo && <>
+      <button onClick={() => onSelectBlock(productInfo.id, 'care')}>Select care block</button>
+      {selectedBlockId && inspectorActions?.map(({ label, disabled, onClick }) => (
+        <button key={label} disabled={disabled} onClick={onClick}>{label}</button>
+      ))}
+    </>}
+  </div>;
+} }));
 const homeSection = { id: 'home-hero', type: 'hero-carousel', title: 'Homepage hero' };
 const productSection = { id: 'product-recommendations', type: 'product-row', title: 'Product recommendations', enabled: true };
 const settings = { homepage: { sections: [homeSection] }, productPage: { sections: [productSection] } };
@@ -48,6 +70,93 @@ beforeEach(() => {
   service.saveDesignDraft.mockImplementation(async (payload) => ({ revision: 1, payload }));
 });
 describe('Store Designer section editing', () => {
+  it('duplicates an ordered product detail immediately after the original', async () => {
+    const productPage = { sections: [{
+      id: 'details', type: 'product-info', enabled: true, detailsBlockOrder: ['title', 'custom:care', 'variants'],
+      heroBlocks: [{ id: 'care', type: 'text', text: 'Care instructions' }],
+    }] };
+    service.getDesignState.mockResolvedValue({ groups: { ...settings, productPage }, sources: {}, defaults: {} });
+    mount();
+    await screen.findByRole('button', { name: 'Preview Homepage hero' });
+    fireEvent.click(screen.getByRole('button', { name: /^Home/ }));
+    fireEvent.click(await screen.findByText('Product', { selector: '.MuiListItemText-primary' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Interactive editor preview' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Select care block' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Duplicate block' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    await waitFor(() => expect(service.saveDesignDraft).toHaveBeenCalledOnce());
+    const [payload] = service.saveDesignDraft.mock.calls[0];
+    const [section] = payload.find(({ group, key }) => group === 'productPage' && key === 'sections').value;
+    const [, copy] = section.heroBlocks;
+    expect(copy.id).not.toBe('care');
+    expect(section.detailsBlockOrder.slice(0, 4)).toEqual(['title', 'custom:care', `custom:${copy.id}`, 'variants']);
+  });
+  it('moves a nested block from the preview and persists it after undo and redo', async () => {
+    const nested = { id: 'nested', title: 'Nested hero', type: 'composed-hero', enabled: true, heroBlocks: [{
+      id: 'group', type: 'group', children: [
+        { id: 'first', type: 'heading', text: 'First' },
+        { id: 'second', type: 'text', text: 'Second' },
+      ],
+    }] };
+    const homepage = { sections: [nested] };
+    service.getDesignState.mockResolvedValue({ groups: { ...settings, homepage }, sources: {}, defaults: {} });
+    service.getSettingsGroup.mockResolvedValue(homepage);
+    const { unmount } = mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Select second nested block' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move up', exact: true }));
+    expect(screen.getByLabelText('Preview block order')).toHaveTextContent('Second, First');
+    fireEvent.click(screen.getByRole('button', { name: 'Undo section change' }));
+    expect(screen.getByLabelText('Preview block order')).toHaveTextContent('First, Second');
+    fireEvent.click(screen.getByRole('button', { name: 'Redo section change' }));
+    expect(screen.getByLabelText('Preview block order')).toHaveTextContent('Second, First');
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    await waitFor(() => expect(service.saveDesignDraft).toHaveBeenCalledOnce());
+    const [payload] = service.saveDesignDraft.mock.calls[0];
+    unmount();
+    service.getDesignDraft.mockResolvedValue({ draft: { revision: 1, payload } });
+    mount();
+    expect(await screen.findByLabelText('Preview block order')).toHaveTextContent('Second, First');
+    fireEvent.click(screen.getByRole('button', { name: 'Select second nested block' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate block' }));
+    expect(screen.getByLabelText('Preview block order')).toHaveTextContent('Second, Second, First');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete block' }));
+    expect(screen.getByLabelText('Preview block order')).toHaveTextContent('Second, First');
+    fireEvent.click(screen.getByRole('button', { name: 'Select second nested block' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Hide block' }));
+    expect(screen.getByLabelText('Preview block order')).toHaveTextContent(/^First$/);
+    fireEvent.click(screen.getByRole('button', { name: 'Undo section change' }));
+    expect(screen.getByLabelText('Preview block order')).toHaveTextContent('Second, First');
+  });
+  it('updates the preview order on drop and restores the order from the saved draft', async () => {
+    const studio = { id: 'studio', type: 'product-row', title: 'Shop The Studio' };
+    const initialLayout = { sections: [homeSection, studio] };
+    service.getDesignState.mockResolvedValue({ groups: { ...settings, homepage: initialLayout }, sources: {}, defaults: {} });
+    service.getSettingsGroup.mockResolvedValue(initialLayout);
+    const { unmount } = mount();
+    await screen.findByRole('button', { name: 'Preview Shop The Studio' });
+    fireEvent.click(screen.getByRole('button', { name: 'Drop second section first' }));
+    const previewTitles = () => within(screen.getByTestId('live-preview')).getAllByRole('button').map((button) => button.textContent);
+    expect(previewTitles()).toEqual(['Preview Shop The Studio', 'Preview Homepage hero']);
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    await waitFor(() => expect(service.saveDesignDraft).toHaveBeenCalledOnce());
+    const [payload] = service.saveDesignDraft.mock.calls[0];
+    expect(payload).toContainEqual(expect.objectContaining({ group: 'homepage', key: 'sections', value: [studio, homeSection] }));
+    unmount();
+    service.getDesignDraft.mockResolvedValue({ draft: { revision: 1, payload } });
+    mount();
+    await screen.findByRole('button', { name: 'Preview Shop The Studio' });
+    expect(previewTitles()).toEqual(['Preview Shop The Studio', 'Preview Homepage hero']);
+  });
+
+  it('opens the selected preview section inside the design controls sidebar', async () => {
+    mount();
+    const sidebar = await screen.findByRole('complementary', { name: 'Design controls' });
+    expect(within(sidebar).queryByRole('textbox', { name: 'Section title' })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview Homepage hero' }));
+    expect(within(sidebar).getByRole('textbox', { name: 'Section title' })).toHaveValue('Homepage hero');
+    expect(within(sidebar).getByRole('button', { name: 'Hide Homepage hero' })).toBeVisible();
+  });
+
   it('identifies the editable draft and its saved library template source', async () => {
     service.getDesignDraft.mockResolvedValueOnce({ draft: {
       revision: 2, payload: [], templateSource: { name: 'Fresh Harvest', kind: 'library' },

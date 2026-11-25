@@ -17,10 +17,13 @@ vi.mock('../../../services/themeService', () => ({
     getBuiltinThemes: vi.fn(),
     getLibraryThemes: vi.fn(),
     getActivations: vi.fn(),
+    exportDraftTheme: vi.fn(),
+    exportTheme: vi.fn(),
   },
 }));
 
 vi.mock('../../../services/adminService', () => ({ updateSettings: vi.fn() }));
+vi.mock('../../../services/settingsService', () => ({ getDesignDraft: vi.fn() }));
 
 vi.mock('../../../context/NotificationContext', () => ({ useNotification: () => ({ notify: vi.fn() }) }));
 vi.mock('../../../context/ThemeContext', () => ({ SettingsContext: { Provider: ({ children }) => children } }));
@@ -49,6 +52,7 @@ vi.mock('../../../components/admin/themes/SaveAsTemplateDialog', () => ({
 }));
 
 const themeService = await import('../../../services/themeService').then((m) => m.default);
+const { getDesignDraft } = await import('../../../services/settingsService');
 
 const BUILTIN = { id: 't1', meta: { slug: 'aurora', name: 'Aurora' } };
 const ACTIVE_ACTIVATION = {
@@ -72,6 +76,7 @@ describe('ThemeGalleryPage permission gating', () => {
     themeService.getBuiltinThemes.mockResolvedValue([BUILTIN]);
     themeService.getLibraryThemes.mockResolvedValue([]);
     themeService.getActivations.mockResolvedValue([ACTIVE_ACTIVATION]);
+    getDesignDraft.mockResolvedValue({ draft: null });
   });
 
   it('hides filters for an empty saved library and keeps built-in filters available', async () => {
@@ -84,6 +89,17 @@ describe('ThemeGalleryPage permission gating', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Built-in Templates (1)' }));
     expect(screen.getByLabelText('Search templates')).toBeInTheDocument();
     expect(screen.getByText('Sort:')).toBeInTheDocument();
+  });
+
+  it('defaults Export Current to the saved draft revision for a settings manager', async () => {
+    getDesignDraft.mockResolvedValue({ draft: { revision: 12 } });
+    themeService.exportDraftTheme.mockRejectedValue(new Error('Download unavailable in this test'));
+    render(<MemoryRouter><ThemeGalleryPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Export Current' }));
+    expect(await screen.findByText('Saved design draft')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Export Template' }));
+    await waitFor(() => expect(themeService.exportDraftTheme).toHaveBeenCalledWith(12, expect.any(Object)));
+    expect(themeService.exportTheme).not.toHaveBeenCalled();
   });
 
   it('shows the draft-tab write controls to a settings manager', async () => {

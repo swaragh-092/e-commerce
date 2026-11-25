@@ -20,6 +20,7 @@ import {
   IconButton,
   Tooltip,
   Button,
+  NativeSelect,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import SearchOffIcon from '@mui/icons-material/SearchOff';
@@ -29,6 +30,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useDebounce } from '../../hooks/useDebounce';
+import useHeroCategories from '../../hooks/useHeroCategories';
 import { useCurrency, useFeature, useFeatureVisible } from '../../hooks/useSettings';
 import { searchProducts } from '../../services/searchService';
 import normalizeSearchQuery, { getSearchQueryLength } from '../../utils/searchQuery';
@@ -62,6 +64,8 @@ const SearchWidget = ({
   collapseToIcon = false,
   onExpandedChange,
   headerStyle,
+  showCategoryDropdown = false,
+  categoryScope = '',
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -69,6 +73,10 @@ const SearchWidget = ({
 
   const routeParams = new URLSearchParams(location.search);
   const routeSearchValue = routeParams.get('search') || routeParams.get('q') || '';
+  const routeCategory = location.pathname === '/search' ? routeParams.get('category') || '' : '';
+  const [selectedCategory, setSelectedCategory] = useState(routeCategory);
+  const category = showCategoryDropdown ? selectedCategory : categoryScope;
+  useEffect(() => { setSelectedCategory(routeCategory); }, [routeCategory]);
   const [query, setQuery] = useState(initialValue || (variant === 'header' ? routeSearchValue : ''));
   const [results, setResults] = useState(null);
   const [suggestion, setSuggestion] = useState(null);
@@ -76,9 +84,11 @@ const SearchWidget = ({
   const [open, setOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [isExpanded, setIsExpanded] = useState(variant !== 'header');
+  const { categories: searchCategories } = useHeroCategories(showCategoryDropdown && (!collapseToIcon || isExpanded));
   const [recentSearches, setRecentSearches] = useState([]);
 
   const inputRef = useRef(null);
+  const containerRef = useRef(null);
   const debouncedQuery = useDebounce(query, DEBOUNCE_MS);
   const normalizedQuery = normalizeSearchQuery(query);
   const normalizedDebouncedQuery = normalizeSearchQuery(debouncedQuery);
@@ -192,7 +202,7 @@ const SearchWidget = ({
     const fetchResults = async () => {
       setLoading(true);
       try {
-        const res = await searchProducts({ q: normalizedDebouncedQuery, limit: PRODUCT_LIMIT });
+        const res = await searchProducts({ q: normalizedDebouncedQuery, limit: PRODUCT_LIMIT, ...(category && { category }) });
         if (!cancelled) {
           setResults(res.data);
           setSuggestion(res.data?.suggestion || null);
@@ -212,7 +222,7 @@ const SearchWidget = ({
 
     fetchResults();
     return () => { cancelled = true; };
-  }, [normalizedDebouncedQuery, showSuggestions]);
+  }, [normalizedDebouncedQuery, showSuggestions, category]);
 
   const closeDropdown = useCallback(() => {
     setOpen(false);
@@ -226,7 +236,7 @@ const SearchWidget = ({
     if (onSearch) {
       onSearch(searchTerm);
     } else {
-      navigate(`/search?q=${encodeURIComponent(searchTerm)}`);
+      navigate(`/search?q=${encodeURIComponent(searchTerm)}${category ? `&category=${encodeURIComponent(category)}` : ''}`);
     }
     saveRecentSearch(searchTerm);
     closeDropdown();
@@ -392,7 +402,7 @@ const SearchWidget = ({
       closeDropdown();
       if (variant === 'header' && !query) setIsExpanded(false);
     }}>
-      <Box sx={mergedContainerSx}>
+      <Box ref={containerRef} sx={mergedContainerSx}>
         {showCollapsedIcon ? (
           <IconButton
             color="inherit"
@@ -408,7 +418,7 @@ const SearchWidget = ({
           >
             <SearchIcon fontSize="small" />
           </IconButton>
-        ) : (
+        ) : (<>
           <TextField
             inputRef={inputRef}
             size="small"
@@ -477,12 +487,20 @@ const SearchWidget = ({
               }
             }}
           />
-        )}
+          {showCategoryDropdown && <NativeSelect fullWidth size="small"
+            inputProps={{ 'aria-label': 'Search category' }} value={category}
+            onChange={(event) => { setSelectedCategory(event.target.value); setResults(null); setSuggestion(null); closeDropdown(); }}
+            sx={{ mt: 0.5, fontSize: '0.78rem', bgcolor: 'background.paper', color: 'text.primary', borderRadius: 1, px: 0.75 }}>
+            <option value="">All categories</option>
+            {category && !searchCategories.some((item) => item.slug === category) && <option value={category}>{category}</option>}
+            {searchCategories.map(({ slug, label }) => <option key={slug} value={slug}>{label}</option>)}
+          </NativeSelect>}
+        </>)}
 
         {showSuggestions && (
           <Popper
             open={open && (hasAnyResults || hasRecentSearches)}
-            anchorEl={inputRef.current}
+            anchorEl={showCategoryDropdown ? containerRef.current : inputRef.current}
             placement="bottom-start"
             disablePortal
             style={{

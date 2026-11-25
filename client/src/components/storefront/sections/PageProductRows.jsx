@@ -41,7 +41,10 @@ const DiscoveryRow = ({ row, category, designerPreview }) => {
     : defaultLink;
   const viewAllLink = row.viewAllLink || scopedLink;
   const layout = row.variant || row.layout || productRow.defaults.layout;
-  return <ProductRow title={row.title || 'Recommended products'} viewAllLink={viewAllLink} products={products} loading={loading} count={count} layout={layout} compact={layout === 'grid-compact'} />;
+  return <ProductRow title={row.title || 'Recommended products'} viewAllLink={viewAllLink} products={products}
+    loading={loading} count={count} layout={layout} compact={layout === 'grid-compact'}
+    columnsDesktop={row.columnsDesktop} columnsMobile={row.columnsMobile} columnsTablet={row.columnsTablet}
+    horizontalGap={row.horizontalGap} verticalGap={row.verticalGap} mobileCarousel={row.mobileCarousel} />;
 };
 
 export default function PageProductRows({ rows = [], category, designerPreview = false }) {

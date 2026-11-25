@@ -9,6 +9,24 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useScrollState } from '../../hooks/useScrollState';
 
+export const mobileProductCarousel = (compact, horizontalGap) => (theme) => ({
+  [theme.breakpoints.down('sm')]: {
+    flexWrap: 'nowrap',
+    width: '100%',
+    margin: 0,
+    overflowX: 'auto',
+    scrollSnapType: 'x proximity',
+    columnGap: horizontalGap == null ? theme.spacing(compact ? 1 : 1.5) : `${horizontalGap}px`,
+    paddingBottom: theme.spacing(1),
+    '& > .MuiGrid-item': {
+      flex: `0 0 min(100%, ${compact ? 170 : 210}px)`,
+      maxWidth: '100%',
+      padding: 0,
+      scrollSnapAlign: 'start',
+    },
+  },
+});
+
 /**
  * ProductRow — reusable section component used on the homepage.
  */
@@ -21,6 +39,12 @@ const ProductRow = ({
   count = 4,
   layout = 'grid',
   compact = false,
+  columnsDesktop,
+  columnsMobile,
+  columnsTablet,
+  horizontalGap,
+  verticalGap,
+  mobileCarousel,
   align = 'left',
 }) => {
   const scrollRef = useRef(null);
@@ -39,6 +63,13 @@ const ProductRow = ({
   const carouselCardWidth = compact
     ? { xs: '170px', sm: '190px', md: '210px', lg: '220px' }
     : { xs: '210px', sm: '230px', md: '248px', lg: '260px' };
+  const gridColumns = {
+    xs: 12 / (columnsMobile || 2),
+    sm: 12 / (columnsTablet || (compact ? 4 : 3)),
+    md: columnsDesktop ? 12 / columnsDesktop : compact ? 2 : 3,
+    lg: columnsDesktop ? 12 / columnsDesktop : compact ? 2 : 2.4,
+  };
+  const defaultGridGap = compact ? { xs: 1, md: 1.25 } : { xs: 1.5, md: 2 };
 
   const carouselStyles = {
     display: 'flex',
@@ -166,10 +197,13 @@ const ProductRow = ({
           </Box>
         </Box>
       ) : (
-        <Grid container spacing={compact ? { xs: 1, md: 1.25 } : { xs: 1.5, md: 2 }}>
+        <Grid container
+          sx={mobileCarousel ? mobileProductCarousel(compact, horizontalGap) : undefined}
+          columnSpacing={horizontalGap == null ? defaultGridGap : horizontalGap && `${horizontalGap}px`}
+          rowSpacing={verticalGap == null ? defaultGridGap : verticalGap && `${verticalGap}px`}>
           {loading
             ? Array.from({ length: count }).map((_, i) => (
-              <Grid item xs={6} sm={compact ? 3 : 4} md={compact ? 2 : 3} lg={compact ? 2 : 2.4} key={i}>
+              <Grid item {...gridColumns} key={i}>
                 <Box sx={{ aspectRatio: compact ? '1 / 1' : '4 / 3.2', mb: compact ? 1 : 1.5, bgcolor: 'action.hover', borderRadius: 2 }}>
                   <Skeleton variant="rectangular" sx={{ width: '100%', height: '100%', borderRadius: 2 }} />
                 </Box>
@@ -178,7 +212,7 @@ const ProductRow = ({
               </Grid>
             ))
             : products.map((product) => (
-              <Grid item xs={6} sm={compact ? 3 : 4} md={compact ? 2 : 3} lg={compact ? 2 : 2.4} key={product.id} sx={{ display: 'flex' }}>
+              <Grid item {...gridColumns} key={product.id} sx={{ display: 'flex' }}>
                 <ProductCard product={product} compact={compact} />
               </Grid>
             ))

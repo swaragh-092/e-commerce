@@ -31,7 +31,7 @@ const BUTTON_STYLES = ['solid', 'soft', 'outline', 'pill'];
 const CARD_STYLES = ['elevated', 'outlined', 'flat'];
 const BG_STYLES = ['softGradient', 'solid'];
 const FONT_WEIGHTS = ['300', '400', '500', '600', '700', '800', '900'];
-const SECTION_TYPES = ['tag-showcase', 'gallery-grid', 'composed-hero', 'hero-carousel', 'value-props', 'category-shortcuts', 'promo-banners', 'product-row', 'brand-showcase', 'editorial-image-text', 'testimonials', 'logo-cloud', 'newsletter-signup', 'countdown-sale', 'featured-collection-grid', 'faq', 'trust-badges', 'recently-viewed', 'gallery'];
+const SECTION_TYPES = ['tag-showcase', 'gallery-grid', 'composed-hero', 'hero-carousel', 'value-props', 'category-shortcuts', 'promo-banners', 'product-row', 'catalog-explorer', 'brand-showcase', 'editorial-image-text', 'testimonials', 'logo-cloud', 'newsletter-signup', 'countdown-sale', 'featured-collection-grid', 'faq', 'trust-badges', 'recently-viewed', 'gallery'];
 const DATA_SOURCE_TYPES = ['apiBuilder'];
 const API_BUILDER_RESOURCES = ['products', 'categories', 'brands', 'productImages', 'tags', 'media', 'pages'];
 const API_BUILDER_OPERATORS = ['equals', 'contains', 'in', 'gte', 'lte', 'between'];
@@ -161,6 +161,7 @@ const navSchema = Joi.object({
   menuItems: safeText,
   showMenu: Joi.boolean(),
   showSearch: Joi.boolean(),
+  showCategoryDropdown: Joi.boolean(),
   showCart: Joi.boolean(),
   showWishlist: Joi.boolean(),
   showAccount: Joi.boolean(),
@@ -203,6 +204,7 @@ const productDetailsOrderSchema = Joi.array().items(Joi.alternatives().try(
 
 const heroBlockSchema = (depth = 0) => Joi.object({
   id: Joi.string().max(50).required(),
+  enabled: Joi.boolean(),
   type: Joi.string().valid('group', 'heading', 'text', 'button', 'media', 'collection', 'brand', 'tag', 'product', 'product-attribute', 'product-rating', 'availability', 'fulfillment', 'enquiry', 'newsletter', 'blog', 'page', 'gallery').required(),
   text: Joi.string().max(1500).allow(''),
   productPlacement: depth === 0 ? productBlockPlacementSchema : Joi.forbidden(),
@@ -257,6 +259,18 @@ const homepageSectionSchema = Joi.object({
   gallerySlug: Joi.string().pattern(/^[a-z0-9-]+$/).max(140).allow(''),
   id: Joi.string().max(50).required(),
   type: Joi.string().valid(...SECTION_TYPES).required(),
+  catalogFilters: Joi.when('type', {
+    is: 'catalog-explorer',
+    then: Joi.object({
+      showCategory: Joi.boolean(),
+      showBrand: Joi.boolean(),
+      showSort: Joi.boolean(),
+      pageSize: Joi.number().integer().min(1).max(24),
+      columnsDesktop: Joi.number().valid(2, 3, 4, 6),
+      defaultSort: Joi.string().valid('newest', 'name_asc', 'price_asc', 'price_desc'),
+    }).unknown(false),
+    otherwise: Joi.forbidden(),
+  }),
   enabled: Joi.boolean().required(),
   heroBlocks: Joi.when('type', { is: Joi.valid('composed-hero', 'product-info', 'editorial-image-text'), then: Joi.array().items(heroBlockSchema()).max(12).unique('id'), otherwise: Joi.forbidden() }),
   detailsBlockOrder: Joi.when('type', { is: 'product-info', then: productDetailsOrderSchema, otherwise: Joi.forbidden() }),
@@ -287,6 +301,46 @@ const homepageSectionSchema = Joi.object({
   dataSourceBlock: Joi.string().max(80).allow('', null),
   dataSourceSlug: Joi.string().max(140).pattern(/^[a-z0-9-]+$/).allow('', null),
   count: Joi.number().integer().min(productRow.limits.minCount).max(productRow.limits.packageMaxCount),
+  columnsDesktop: Joi.when('type', {
+    is: Joi.valid('product-row', 'category-shortcuts', 'brand-showcase', 'value-props', 'trust-badges'),
+    then: Joi.number().valid(2, 3, 4, 6),
+    otherwise: Joi.forbidden(),
+  }),
+  selectedCategorySlugs: Joi.when('type', {
+    is: 'category-shortcuts',
+    then: Joi.array().items(Joi.string().pattern(/^[a-z0-9-]+$/).max(140)).unique().max(16),
+    otherwise: Joi.forbidden(),
+  }),
+  selectedBrandSlugs: Joi.when('type', {
+    is: 'brand-showcase',
+    then: Joi.array().items(Joi.string().pattern(/^[a-z0-9-]+$/).max(140)).unique().max(24),
+    otherwise: Joi.forbidden(),
+  }),
+  columnsMobile: Joi.when('type', {
+    is: productRow.type,
+    then: Joi.number().valid(...productRow.responsiveColumns.mobile),
+    otherwise: Joi.forbidden(),
+  }),
+  columnsTablet: Joi.when('type', {
+    is: productRow.type,
+    then: Joi.number().valid(...productRow.responsiveColumns.tablet),
+    otherwise: Joi.forbidden(),
+  }),
+  horizontalGap: Joi.when('type', {
+    is: productRow.type,
+    then: Joi.number().integer().min(0).max(productRow.gridGapMax),
+    otherwise: Joi.forbidden(),
+  }),
+  mobileCarousel: Joi.when('type', {
+    is: productRow.type,
+    then: Joi.boolean(),
+    otherwise: Joi.forbidden(),
+  }),
+  verticalGap: Joi.when('type', {
+    is: productRow.type,
+    then: Joi.number().integer().min(0).max(productRow.gridGapMax),
+    otherwise: Joi.forbidden(),
+  }),
   layout: Joi.string().valid(...productRow.layouts.homepage),
   viewAllLabel: safeText,
   viewAllLink: linkUrl,
@@ -346,6 +400,7 @@ const homepageSectionSchema = Joi.object({
     color: hexColor.allow('', null),
     backgroundColor: hexColor.allow('', null),
     accentColor: hexColor.allow('', null),
+    requiresFeatureFlag: Joi.string().valid('pricing', 'cart', 'checkout', 'payments', 'shipping').allow(''),
   }).unknown(false)).max(12),
 }).unknown(false);
 
@@ -353,6 +408,7 @@ const valuePropSchema = Joi.object({
   icon: Joi.string().max(50).allow('', null),
   title: safeText,
   text: safeText,
+  requiresFeatureFlag: Joi.string().valid('pricing', 'cart', 'checkout', 'payments', 'shipping').allow(''),
 }).unknown(false);
 
 const promoBannerSchema = Joi.object({
@@ -390,7 +446,7 @@ const pageLayoutSectionsSchema = (...types) => Joi.array().items(
 ).max(6);
 
 const pageProductRowsSchema = pageLayoutSectionsSchema();
-const contentPageLayoutSchema = pageLayoutSectionsSchema('composed-hero', 'editorial-image-text', 'faq', 'promo-banners');
+const contentPageLayoutSchema = pageLayoutSectionsSchema('composed-hero', 'editorial-image-text', 'faq', 'promo-banners', 'catalog-explorer');
 
 const pageSectionsSchema = (systemTypes) => Joi.array().items(
   homepageSectionSchema.keys({ type: Joi.string().valid(...SECTION_TYPES, ...systemTypes).required() }),
@@ -521,7 +577,10 @@ const componentStyleSchema = Joi.object({
 }).unknown(false);
 
 const componentStylesSchema = Joi.object({
-  productCard: componentStyleSchema,
+  productCard: componentStyleSchema.keys({
+    cardBorderColor: hexColor.allow(''),
+    cardBorderWidth: Joi.number().integer().min(0).max(4).allow(''),
+  }),
   categoryCard: componentStyleSchema,
   promoCard: componentStyleSchema,
   brandCard: componentStyleSchema,

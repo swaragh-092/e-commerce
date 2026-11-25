@@ -50,8 +50,9 @@ const useMockRenderers = () => {
 const PREVIEW_WIDTHS = { desktop: '100%', tablet: 768, mobile: 375 };
 const createPreviewTheme = (design) => {
   const theme = createTheme(buildStorefrontTheme(design));
-  const viewportUp = theme.breakpoints.up;
-  theme.breakpoints.up = (key) => viewportUp(key).replace('@media', '@container store-preview');
+  const { up, down } = theme.breakpoints;
+  theme.breakpoints.up = (key) => up(key).replace('@media', '@container store-preview');
+  theme.breakpoints.down = (key) => down(key).replace('@media', '@container store-preview');
   return theme;
 };
 
@@ -380,6 +381,9 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
         pricingVisible: parentSettingsContext.features?.pricing === true &&
           parentSettingsContext.features?.showPrice === true &&
           parentSettingsContext.visibility?.storefront?.pricing === true,
+        cartVisible: parentSettingsContext.features?.cart === true && parentSettingsContext.visibility?.storefront?.cart === true,
+        checkoutVisible: parentSettingsContext.features?.checkout === true && parentSettingsContext.visibility?.storefront?.checkout === true,
+        ordersVisible: parentSettingsContext.features?.orders === true && parentSettingsContext.visibility?.storefront?.orders === true,
         onSelectSection,
         onSelectComponent,
       });
@@ -539,6 +543,9 @@ const StorefrontTemplatePreview = ({ packageData, mode = "desktop", currentSetti
               >
                 <SearchIcon fontSize="small" />
                 <Typography variant="body2" sx={{ opacity: 0.9 }} noWrap>Search products...</Typography>
+                {navSettings.showCategoryDropdown && (
+                  <Typography variant="caption" sx={{ ml: 'auto' }} noWrap>All categories</Typography>
+                )}
               </Box>
             )}
             <Stack

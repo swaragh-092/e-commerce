@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import HeroSection from '../../../components/storefront/sections/HeroSection';
@@ -10,6 +10,11 @@ vi.mock('../../../hooks/useSettings', () => ({
 }));
 
 describe('HeroSection live and preview synchronization', () => {
+  it('switches to the slide selected by the designer inspector', () => {
+    render(<HeroSection section={{ id: 'hero', autoPlay: false, slides: [{ title: 'First slide' }, { title: 'Second slide' }] }} />);
+    act(() => document.dispatchEvent(new CustomEvent('designer-select-hero-slide', { detail: { sectionId: 'hero', slideIndex: 1 } })));
+    expect(screen.getByRole('heading', { name: 'Second slide' })).toHaveAttribute('data-store-block', 'field:slides:1');
+  });
   it('uses an opaque theme surface for the product spotlight overlay', () => {
     const theme = createTheme({ palette: { mode: 'dark', background: { paper: '#0f172a' } } });
     render(<ThemeProvider theme={theme}>

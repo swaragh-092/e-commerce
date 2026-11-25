@@ -61,6 +61,80 @@ describe('Theme package schema validation', () => {
     expect(error.message).toContain('customCSS');
   });
 
+  it('preserves the Header Search category switch in theme packages', () => {
+    const pkg = buildMinimalPackage({ layout: { nav: { showSearch: true, showCategoryDropdown: true } } });
+    const ThemeService = require('../../src/modules/theme/theme.service');
+    expect(ThemeService.validatePackage(pkg).layout.nav).toMatchObject({ showCategoryDropdown: true });
+  });
+
+  it('preserves visibility on nested composed blocks in theme packages', () => {
+    const section = {
+      id: 'hero', type: 'composed-hero', enabled: true,
+      heroBlocks: [{ id: 'group', type: 'group', children: [{ id: 'heading', type: 'heading', text: 'Hidden', enabled: false }] }],
+    };
+    const pkg = buildMinimalPackage({ layout: { homepageSections: [section] } });
+    expect(packageSchema.validate(JSON.parse(JSON.stringify(pkg))).value.layout.homepageSections[0]).toEqual(section);
+  });
+
+  it('preserves Catalog Explorer settings in a Wishlist package and rejects unsupported values', () => {
+    const catalogFilters = { showBrand: false, showSort: true, pageSize: 12, columnsDesktop: 6, defaultSort: 'name_asc' };
+    const section = { ...createDefaultSection('catalog-explorer', { id: 'explore' }), catalogFilters };
+    const pkg = buildMinimalPackage({ pageTemplates: { wishlist: { productRows: [section] } } });
+    const ThemeService = require('../../src/modules/theme/theme.service');
+    expect(ThemeService.validatePackage(JSON.parse(JSON.stringify(pkg))).pageTemplates.wishlist.productRows[0])
+      .toMatchObject({ type: 'catalog-explorer', catalogFilters });
+    expect(packageSchema.validate({
+      ...pkg,
+      pageTemplates: { wishlist: { productRows: [{ ...section, catalogFilters: { columnsDesktop: 5 } }] } },
+    }).error?.details[0].path).toEqual(['pageTemplates', 'wishlist', 'productRows', 0, 'catalogFilters', 'columnsDesktop']);
+  });
+
+  it('preserves ordered Category Shortcuts references and rejects duplicate slugs', () => {
+    const selectedCategorySlugs = ['produce', 'grocery'];
+    const section = { id: 'categories', enabled: true, type: 'category-shortcuts', selectedCategorySlugs };
+    const pkg = buildMinimalPackage({ layout: { homepageSections: [section] } });
+    expect(packageSchema.validate(JSON.parse(JSON.stringify(pkg))).value.layout.homepageSections[0]).toEqual(section);
+    expect(packageSchema.validate(buildMinimalPackage({
+      layout: { homepageSections: [{ ...section, selectedCategorySlugs: ['produce', 'produce'] }] },
+    })).error?.details[0].type).toBe('array.unique');
+  });
+
+  it('preserves ordered Brand Showcase references and rejects them on other section types', () => {
+    const section = { id: 'brands', enabled: true, type: 'brand-showcase', selectedBrandSlugs: ['craft', 'local'] };
+    expect(packageSchema.validate(buildMinimalPackage({
+      layout: { homepageSections: [section] },
+    })).value.layout.homepageSections[0]).toEqual(section);
+    expect(packageSchema.validate(buildMinimalPackage({
+      layout: { homepageSections: [{ ...section, type: 'category-shortcuts' }] },
+    })).error?.details[0].type).toBe('any.unknown');
+  });
+
+  it('preserves combo Product Rows, responsive columns, and product card border tokens', () => {
+    const row = {
+      ...applyProductSourcePreset(createDefaultSection('product-row', { id: 'bundles' }), 'combo'),
+      query: { brand: 'craft' },
+      columnsDesktop: 2,
+      columnsMobile: 1,
+      columnsTablet: 3,
+      horizontalGap: 0,
+      verticalGap: 24,
+      mobileCarousel: true,
+    };
+    const productCard = { cardBorderWidth: 1, cardBorderColor: '#e3e8e1' };
+    const pkg = buildMinimalPackage({ layout: { homepageSections: [row] }, componentStyles: { productCard } });
+    const ThemeService = require('../../src/modules/theme/theme.service');
+    expect(ThemeService.validatePackage(pkg)).toMatchObject({
+      layout: { homepageSections: [{ source: 'combo', query: { brand: 'craft' }, columnsDesktop: 2, columnsMobile: 1, columnsTablet: 3, horizontalGap: 0, verticalGap: 24, mobileCarousel: true }] },
+      componentStyles: { productCard },
+    });
+    expect(packageSchema.validate(buildMinimalPackage({
+      pageTemplates: { wishlist: { productRows: [{ ...row, columnsMobile: 3 }] } },
+    })).error?.details[0].path).toEqual(['pageTemplates', 'wishlist', 'productRows', 0, 'columnsMobile']);
+    expect(packageSchema.validate(buildMinimalPackage({
+      layout: { homepageSections: [{ ...row, horizontalGap: 65 }] },
+    })).error?.details[0].path).toEqual(['layout', 'homepageSections', 0, 'horizontalGap']);
+  });
+
   it('rejects packages with headScripts', () => {
     const pkg = buildMinimalPackage({ headScripts: '<script>alert(1)</script>' });
     const { error } = packageSchema.validate(pkg, { abortEarly: false });

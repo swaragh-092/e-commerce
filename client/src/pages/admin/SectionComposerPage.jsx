@@ -48,6 +48,7 @@ import { getSectionLabel, SECTION_VARIANTS } from '../../components/storefront/s
 import { createDefaultSection } from '../../utils/sectionPresets';
 import AddSectionDialog from '../../components/admin/sections/AddSectionDialog';
 import { customDetailKey, getProductDetailsOrder, PRODUCT_DETAILS_LABELS } from '../../utils/productDetailsOrder';
+import { duplicateDesignerBlock, findDesignerBlock, updateDesignerBlockList } from '../../utils/designerBlocks';
 import SaveAsTemplateDialog from '../../components/admin/themes/SaveAsTemplateDialog';
 import DraftReviewDialog from '../../components/admin/themes/DraftReviewDialog';
 import DraftArchivesDialog from '../../components/admin/themes/DraftArchivesDialog';
@@ -250,7 +251,7 @@ const SectionComposerPage = () => {
   const { notify } = useNotification();
   const { hasPermission } = useAuth();
   const canManageAdvancedSettings = hasPermission(PERMISSIONS.SETTINGS_ADVANCED);
-  const { settings, refreshSettings, mode: storeMode } = useContext(SettingsContext) || {};
+  const { settings, refreshSettings, mode: storeMode, features } = useContext(SettingsContext) || {};
   const liveSettingsRef = useRef(settings);
   liveSettingsRef.current = settings;
 
@@ -296,6 +297,8 @@ const SectionComposerPage = () => {
   // FSM helper transitions
   const selectSection = (section) => {
     setPanelView({ mode: 'section-editor', sectionId: section?.id || null, componentKey: null, blockKey: null, blockIndex: null });
+    if (!devicePreview) setPreviewRenderMode('mock');
+    setMobileTab('editor');
   };
 
   const openProductBlockPicker = (section, insertion) => {
@@ -313,10 +316,21 @@ const SectionComposerPage = () => {
 
   const handleInlineBlockFocus = (sectionId, blockKey, blockIndex) => {
     setPanelView({ mode: 'section-editor', sectionId, componentKey: null, blockKey, blockIndex });
+    if (!devicePreview) setPreviewRenderMode('mock');
+  };
+
+  const selectPreviewBlock = (sectionId, id) => {
+    const field = /^field:(items|slides):(\d+)$/.exec(id);
+    if (id.startsWith('builtin:')) handleInlineBlockFocus(sectionId, 'detailsBlockOrder', id.slice(8));
+    else if (field) handleInlineBlockFocus(sectionId, field[1], Number(field[2]));
+    else handleInlineBlockFocus(sectionId, 'heroBlocks', id);
+    setMobileTab('editor');
   };
 
   const openComponentEditor = (componentKey) => {
     setPanelView({ mode: 'theme-settings', sectionId: null, componentKey, blockKey: null, blockIndex: null });
+    if (!devicePreview) setPreviewRenderMode('mock');
+    setMobileTab('editor');
   };
 
   const backToTree = () => {
@@ -349,10 +363,22 @@ const SectionComposerPage = () => {
     : null;
 
   const activeComponent = panelView.mode === 'theme-settings' ? panelView.componentKey : null;
+  useEffect(() => {
+    if (panelView.mode !== 'section-editor') return;
+    if (!editSection) {
+      setPanelView({ mode: 'tree', sectionId: null, componentKey: null });
+    } else if (panelView.blockKey === 'heroBlocks' && !findDesignerBlock(editSection.heroBlocks || [], panelView.blockIndex)) {
+      setPanelView((previous) => ({ ...previous, blockKey: null, blockIndex: null }));
+    }
+  }, [editSection, panelView.mode, panelView.blockKey, panelView.blockIndex]);
 
   const getBlockLabel = (section, blockKey, blockIndex) => {
     if (!section || blockKey == null || blockIndex == null) return null;
     if (blockKey === 'detailsBlockOrder') return PRODUCT_DETAILS_LABELS[blockIndex];
+    if (blockKey === 'heroBlocks') {
+      const result = findDesignerBlock(section.heroBlocks || [], blockIndex);
+      return result?.block.text || result?.block.title || result?.block.type;
+    }
     const blocks = section[blockKey];
     if (!Array.isArray(blocks) || !blocks[blockIndex]) return null;
     const block = blocks[blockIndex];
@@ -911,17 +937,7 @@ const SectionComposerPage = () => {
     }
     if (activePage === 'product' && !isSharedSection(editSection)) {
       if (editSection?.type === 'product-info' && key === 'heroBlocks') {
-        changeProductInfo(editSection.id, (section) => {
-          const next = { ...section, heroBlocks: value };
-          if (detailInsertion) {
-            const order = getProductDetailsOrder(section);
-            order.splice(detailInsertion.after === null ? 0 : order.indexOf(detailInsertion.after) + 1, 0, customDetailKey(detailInsertion.id));
-            next.detailsBlockOrder = getProductDetailsOrder({ ...next, detailsBlockOrder: order });
-          } else if (section.detailsBlockOrder) {
-            next.detailsBlockOrder = getProductDetailsOrder(next);
-          }
-          return next;
-        });
+        commitHeroBlocks(editSection, value, detailInsertion);
         return;
       }
       handlePageSettingChange('product', (current) => ({ ...current, sections: getPageSections({ productPage: current }, 'product').map((section) =>
@@ -944,6 +960,53 @@ const SectionComposerPage = () => {
       return;
     }
     recordHistory({ sections: currentSections });
+  };
+
+  const commitHeroBlocks = (section, heroBlocks, detailInsertion) => {
+    const apply = (current) => {
+      const next = { ...current, heroBlocks };
+      if (detailInsertion) {
+        const order = getProductDetailsOrder(current);
+        const insertAt = detailInsertion.after === null ? 0 : order.indexOf(detailInsertion.after) + 1;
+        order.splice(insertAt, 0, customDetailKey(detailInsertion.id));
+        next.detailsBlockOrder = getProductDetailsOrder({ ...next, detailsBlockOrder: order });
+      } else if (current.detailsBlockOrder) next.detailsBlockOrder = getProductDetailsOrder(next);
+      return next;
+    };
+    if (activePage === 'home' || isSharedSection(section)) {
+      update(sectionsRef.current.map((item) => item.id === section.id ? apply(item) : item));
+    } else if (section.type === 'product-info') {
+      changeProductInfo(section.id, apply);
+    } else {
+      changePageSections(pageSections.map((item) => item.id === section.id ? apply(item) : item));
+    }
+  };
+
+  const reorderHeroBlocks = (sectionId, parentId, from, to) => {
+    const section = editableSections.find(({ id }) => id === sectionId);
+    if (!section || (parentId === null && section.detailsBlockOrder)) return;
+    const blocks = section.heroBlocks || [];
+    const siblings = parentId === null ? blocks : findDesignerBlock(blocks, parentId)?.block.children;
+    if (!siblings?.[from] || !siblings[to] || from === to) return;
+    const next = updateDesignerBlockList(blocks, parentId, (list) => {
+      const moved = [...list];
+      moved.splice(to, 0, moved.splice(from, 1)[0]);
+      return moved;
+    });
+    commitHeroBlocks(section, next);
+    handleInlineBlockFocus(sectionId, 'heroBlocks', siblings[from].id);
+  };
+
+  const reorderSectionItems = (sectionId, key, from, to) => {
+    const section = editableSections.find(({ id }) => id === sectionId);
+    const items = section?.[key];
+    if (!items?.[from] || !items[to] || from === to) return;
+    const next = [...items];
+    next.splice(to, 0, next.splice(from, 1)[0]);
+    const replace = (item) => item.id === sectionId ? { ...item, [key]: next } : item;
+    if (activePage === 'home' || isSharedSection(section)) update(sectionsRef.current.map(replace));
+    else changePageSections(pageSections.map(replace));
+    handleInlineBlockFocus(sectionId, key, to);
   };
 
   const updateSectionField = (section, key, value) => {
@@ -1233,6 +1296,116 @@ const SectionComposerPage = () => {
     setPageSearch('');
   };
   const blockLabel = editSection ? getBlockLabel(editSection, panelView.blockKey, panelView.blockIndex) : null;
+  const selectedPreviewBlock = panelView.blockKey === 'detailsBlockOrder' ? `builtin:${panelView.blockIndex}`
+    : panelView.blockKey === 'heroBlocks' ? panelView.blockIndex
+      : ['items', 'slides'].includes(panelView.blockKey) ? `field:${panelView.blockKey}:${panelView.blockIndex}` : undefined;
+  const getInspectorActions = () => {
+    if (!editSection) return [];
+    const productDetailActions = (key) => {
+      const order = getProductDetailsOrder(editSection);
+      const index = order.indexOf(key);
+      if (index < 0) return [];
+      return [-1, 1].map((direction) => {
+        const target = index + direction;
+        return { label: direction < 0 ? 'Move up' : 'Move down', disabled: target < 0 || target >= order.length, onClick: () => {
+          const next = [...order];
+          [next[index], next[target]] = [next[target], next[index]];
+          changeProductInfo(editSection.id, (section) => ({ ...section, detailsBlockOrder: next }));
+        } };
+      });
+    };
+    if (panelView.blockKey === 'detailsBlockOrder' && editSection.type === 'product-info') {
+      return productDetailActions(panelView.blockIndex);
+    }
+    if (panelView.blockKey === 'heroBlocks') {
+      const blocks = editSection.heroBlocks || [];
+      const result = findDesignerBlock(blocks, panelView.blockIndex);
+      if (!result) return [];
+      const { block, index, siblings, parentId } = result;
+      const replace = (edit, detailInsertion) => commitHeroBlocks(editSection, updateDesignerBlockList(blocks, parentId, edit), detailInsertion);
+      const actions = [];
+      if (parentId === null && editSection.type === 'product-info') {
+        actions.push(...productDetailActions(customDetailKey(block.id)));
+      } else {
+        actions.push(
+          { label: 'Move up', disabled: index === 0, onClick: () => reorderHeroBlocks(editSection.id, parentId, index, index - 1) },
+          { label: 'Move down', disabled: index === siblings.length - 1, onClick: () => reorderHeroBlocks(editSection.id, parentId, index, index + 1) },
+        );
+      }
+      return [...actions,
+        { label: 'Hide block', onClick: () => replace((list) => list.map((item) => item.id === block.id ? { ...item, enabled: false } : item)) },
+        { label: 'Duplicate block', disabled: siblings.length >= 12, onClick: () => {
+          const copy = duplicateDesignerBlock(block);
+          const insertion = parentId === null && editSection.type === 'product-info' && editSection.detailsBlockOrder
+            ? { after: customDetailKey(block.id), id: copy.id } : undefined;
+          replace((list) => [...list.slice(0, index + 1), copy, ...list.slice(index + 1)], insertion);
+          handleInlineBlockFocus(editSection.id, 'heroBlocks', copy.id);
+        } },
+        { label: 'Delete block', onClick: () => {
+          replace((list) => list.filter(({ id }) => id !== block.id));
+          clearBlockFocus();
+        } },
+      ];
+    }
+    if (['items', 'slides'].includes(panelView.blockKey)) {
+      const { blockKey, blockIndex: index } = panelView;
+      const list = editSection[blockKey];
+      if (!list?.[index]) return [];
+      const commit = (next) => {
+        handleInlineFieldChange(blockKey, next);
+        handleInlineFieldBlur();
+      };
+      return [
+        ...[-1, 1].map((direction) => ({
+          label: direction < 0 ? 'Move up' : 'Move down',
+          disabled: index + direction < 0 || index + direction >= list.length,
+          onClick: () => {
+            const next = [...list];
+            [next[index], next[index + direction]] = [next[index + direction], next[index]];
+            commit(next);
+            focusBlock(blockKey, index + direction);
+          },
+        })),
+        { label: 'Duplicate block', disabled: list.length >= 12, onClick: () => {
+          commit([...list.slice(0, index + 1), { ...list[index] }, ...list.slice(index + 1)]);
+          focusBlock(blockKey, index + 1);
+        } },
+        { label: 'Delete block', onClick: () => {
+          commit(list.filter((_, i) => i !== index));
+          clearBlockFocus();
+        } },
+      ];
+    }
+    if (panelView.blockKey) return [];
+    const isGlobal = activePage === 'home' || isSharedSection(editSection);
+    const list = isGlobal ? sections : pageSections;
+    const index = list.findIndex(({ id }) => id === editSection.id);
+    if (index === -1) return [];
+    const placement = isGlobal ? editSection.placement || 'template' : editSection.pagePosition || 'below';
+    const sameGroup = (section) => (isGlobal ? section.placement || 'template' : section.pagePosition || 'below') === placement;
+    const moveAction = (direction) => {
+      const target = direction < 0 ? list.findLastIndex((item, i) => i < index && sameGroup(item))
+        : list.findIndex((item, i) => i > index && sameGroup(item));
+      return { label: direction < 0 ? 'Move up' : 'Move down', disabled: target === -1, onClick: () => {
+        if (isGlobal) move(index, direction, placement);
+        else {
+          const next = [...list];
+          [next[index], next[target]] = [next[target], next[index]];
+          changePageSections(next);
+        }
+      } };
+    };
+    return [
+      moveAction(-1), moveAction(1),
+      { label: 'Hide section', onClick: () => {
+        if (isGlobal) toggle(index);
+        else changePageSections(list.map((item) => item.id === editSection.id ? { ...item, enabled: false } : item));
+      } },
+      { label: 'Duplicate section', disabled: list.length >= (isGlobal ? 20 : 6), onClick: () => isGlobal ? duplicateSection(editSection) : duplicatePageSection() },
+      { label: 'Delete section', onClick: () => isGlobal ? removeSectionById(editSection) : removePageSection() },
+    ];
+  };
+  const inspectorActions = !livePreview ? getInspectorActions() : undefined;
   const designerBreadcrumbs = assignmentKey
     ? [activePageLabel, selectedTemplate?.name || 'Default template']
     : activePage !== 'home'
@@ -1290,6 +1463,8 @@ const SectionComposerPage = () => {
         return next;
       })}
       onSelectProductBlock={(section, id, key = 'heroBlocks') => handleInlineBlockFocus(section.id, key, id)}
+      onReorderHeroBlocks={reorderHeroBlocks}
+      onReorderSectionItems={reorderSectionItems}
       inheritedBlocksForSection={getInheritedBlocksForSection}
       onAddSectionItem={(section, schema, items, index) => {
         const next = [...items];
@@ -1488,35 +1663,34 @@ const SectionComposerPage = () => {
       {/* Main Designer Grid */}
       <Box sx={{ display: 'flex', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden', bgcolor: '#f6f6f7' }}>
         
-        <Box sx={{
-          display: !isMobile || (mobileTab === 'editor' && !editSection && panelView.mode !== 'theme-settings') ? 'flex' : 'none',
-          width: isMobile ? '100%' : { md: 235, lg: 280 }, flexShrink: 0, flexDirection: 'column',
+        <Box component="aside" aria-label="Design controls" sx={{
+          display: !isMobile || mobileTab === 'editor' ? 'flex' : 'none',
+          width: isMobile ? '100%' : { md: 300, lg: 340 }, flexShrink: 0, flexDirection: 'column',
           bgcolor: 'background.paper', borderRight: 1, borderColor: 'divider', minHeight: 0,
         }}>
-          {treePanel}
-        </Box>
+          <Box sx={{
+            display: isMobile && (editSection || panelView.mode === 'theme-settings') ? 'none' : 'flex',
+            flexDirection: 'column', minHeight: 0, overflow: 'hidden',
+            flex: editSection || panelView.mode === 'theme-settings' ? '0 0 30%' : 1,
+          }}>
+            {treePanel}
+          </Box>
 
-        {/* Section and theme settings */}
-        <Box sx={{
-          width: isMobile ? '100%' : { md: 280, lg: 330 },
-          order: isMobile ? 0 : 2,
-          minWidth: 0,
-          flexShrink: 0,
-          display: (editSection || panelView.mode === 'theme-settings') && (!isMobile || mobileTab === 'editor') ? 'flex' : 'none',
-          borderLeft: isMobile ? 'none' : '1px solid',
-          borderColor: 'divider',
-          bgcolor: 'background.paper',
-          flexDirection: 'column',
-          height: '100%',
-          overflow: 'hidden',
-        }}>
+          <Box sx={{
+            minWidth: 0, minHeight: 0, flex: 1, flexDirection: 'column', overflow: 'hidden',
+            display: editSection || panelView.mode === 'theme-settings' ? 'flex' : 'none',
+            borderTop: isMobile ? 0 : 1, borderColor: 'divider',
+          }}>
 
           {editSection ? (
             <DesignerSectionEditor
+              key={editSection.id}
               allowSharedPlacement={activePage === 'home'}
               section={editSection}
               inheritedBlocks={getInheritedBlocksForSection(editSection)}
               onBack={backToTree}
+              onBackToSection={clearBlockFocus}
+              activeBlockLabel={blockLabel}
               onChange={handleInlineFieldChange}
               onBlur={handleInlineFieldBlur}
               onApplyPreset={activePage === 'home' ? applySmartPreset : undefined}
@@ -1525,6 +1699,7 @@ const SectionComposerPage = () => {
               onDelete={activePage === 'home' || isSharedSection(editSection) ? removeSectionById
                 : pageSections.includes(editSection) ? removePageSection : undefined}
               pageSection={pageSections.includes(editSection)}
+              brandsEnabled={features?.brands === true}
               categoryPage={activePage === 'category'}
               onComponentEdit={openComponentEditor}
               activeBlockKey={panelView.blockKey}
@@ -1558,6 +1733,7 @@ const SectionComposerPage = () => {
             />
           ) : null}
 
+          </Box>
         </Box>
 
         {/* Mount device previews only when visible, rather than loading hidden iframes. */}
@@ -1700,11 +1876,10 @@ const SectionComposerPage = () => {
                         : previewTarget.path || '/'}
                       reloadOnSettingsChange
                       selectedSectionId={panelView.sectionId}
-                       selectedBlockId={panelView.blockKey === 'detailsBlockOrder' ? `builtin:${panelView.blockIndex}`
-                         : panelView.blockKey === 'heroBlocks' ? panelView.blockIndex : undefined}
-                       onSelectBlock={!livePreview ? (owner, id) => id.startsWith('builtin:')
-                         ? handleInlineBlockFocus(owner, 'detailsBlockOrder', id.slice(8))
-                         : handleInlineBlockFocus(owner, 'heroBlocks', id) : undefined}
+                      selectedBlockId={selectedPreviewBlock}
+                      selectedComponent={panelView.componentKey}
+                      inspectorActions={inspectorActions}
+                      onSelectBlock={!livePreview ? selectPreviewBlock : undefined}
                       onSelectSection={!livePreview ? (id) => {
                         const section = editableSections.find((item) => item.id === id);
                         if (section) selectSection(section);
@@ -1762,8 +1937,10 @@ const SectionComposerPage = () => {
                       if (section) selectSection(section);
                     }}
                     selectedSectionId={panelView.sectionId}
-                    selectedBlockId={panelView.blockKey === 'heroBlocks' ? panelView.blockIndex : undefined}
-                    onSelectBlock={(owner, id) => handleInlineBlockFocus(owner, 'heroBlocks', id)}
+                    selectedBlockId={selectedPreviewBlock}
+                    selectedComponent={panelView.componentKey}
+                    inspectorActions={inspectorActions}
+                    onSelectBlock={selectPreviewBlock}
                     onInsertBlock={(owner, _placement, afterId) => {
                       const section = sections.find(({ id }) => id === owner);
                       if (section && (section.heroBlocks?.length || 0) < 12) openProductBlockPicker(section, { atStart: !afterId, afterId });

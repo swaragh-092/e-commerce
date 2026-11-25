@@ -527,6 +527,7 @@ const ProductDetailPage = () => {
 
                 <Grid item xs={12} md={orderedDetails ? 12 - layoutGrid.media || 12 : layoutGrid.details || 12} sx={isGalleryTopLayout ? { maxWidth: 780, mx: 'auto', width: '100%' } : undefined}>
                     <Box
+                        data-store-section={designerPreview ? productInfo?.id : undefined}
                         sx={{
                             p: { xs: 2, sm: 0 },
                         }}

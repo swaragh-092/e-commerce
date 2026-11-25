@@ -379,6 +379,7 @@ const ProductSpotlightHero = ({ section, slide, preview, active, visibleSlides, 
 
 const HeroSection = ({ section = {}, slides = [], mode = 'live', onSelectComponent, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
   const [active, setActive] = useState(0);
+  const [inspectingSlide, setInspectingSlide] = useState(false);
   const { mode: storeMode } = useSettings();
   const preview = mode === 'preview';
   const hasCustomSlides = Array.isArray(section?.slides);
@@ -387,8 +388,22 @@ const HeroSection = ({ section = {}, slides = [], mode = 'live', onSelectCompone
     : (Array.isArray(slides) && slides.length ? slides : defaultSlides))
     .map((slide) => ({ ...slide, title: getHeroTitle(slide.title, storeMode) }));
 
-  const canRotate = !preview && visibleSlides.length > 1;
+  const canRotate = !preview && !inspectingSlide && visibleSlides.length > 1;
   const interval = num(section?.interval, 6500);
+
+  useEffect(() => {
+    const selectSlide = ({ detail }) => {
+      if (detail?.sectionId !== section.id) return;
+      const index = detail.slideIndex;
+      if (index === null) setInspectingSlide(false);
+      else if (Number.isInteger(index) && index >= 0 && index < visibleSlides.length) {
+        setActive(index);
+        setInspectingSlide(true);
+      }
+    };
+    document.addEventListener('designer-select-hero-slide', selectSlide);
+    return () => document.removeEventListener('designer-select-hero-slide', selectSlide);
+  }, [section.id, visibleSlides.length]);
 
   useEffect(() => {
     if (!canRotate || section?.autoPlay === false || !visibleSlides.length) return undefined;
@@ -434,15 +449,15 @@ const HeroSection = ({ section = {}, slides = [], mode = 'live', onSelectCompone
 
   const hero = (() => {
     if (variant === 'split' || variant === 'split-editorial' || variant === 'editorial') {
-      return <SplitHero section={section} slide={slide} preview={preview} active={active} visibleSlides={visibleSlides} onSelectComponent={onSelectComponent} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />;
+      return <SplitHero section={section} slide={slide} preview={preview} active={safeActive} visibleSlides={visibleSlides} onSelectComponent={onSelectComponent} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />;
     }
     if (variant === 'product-spotlight' || variant === 'spotlight') {
-      return <ProductSpotlightHero section={section} slide={slide} preview={preview} active={active} visibleSlides={visibleSlides} onSelectComponent={onSelectComponent} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />;
+      return <ProductSpotlightHero section={section} slide={slide} preview={preview} active={safeActive} visibleSlides={visibleSlides} onSelectComponent={onSelectComponent} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />;
     }
     if (variant === 'centered') {
-      return <OverlayHero section={{ ...section, align: 'center' }} slide={slide} visibleSlides={visibleSlides} active={active} preview={preview} onSelectComponent={onSelectComponent} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />;
+      return <OverlayHero section={{ ...section, align: 'center' }} slide={slide} visibleSlides={visibleSlides} active={safeActive} preview={preview} onSelectComponent={onSelectComponent} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />;
     }
-    return <OverlayHero section={section} slide={slide} visibleSlides={visibleSlides} active={active} preview={preview} onSelectComponent={onSelectComponent} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />;
+    return <OverlayHero section={section} slide={slide} visibleSlides={visibleSlides} active={safeActive} preview={preview} onSelectComponent={onSelectComponent} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} />;
   })();
 
   return (
@@ -464,7 +479,7 @@ const HeroSection = ({ section = {}, slides = [], mode = 'live', onSelectCompone
             width: 1,
           }}
         >
-          {`Slide ${active + 1} of ${visibleSlides.length}: ${slide.title || 'Homepage promotion'}`}
+          {`Slide ${safeActive + 1} of ${visibleSlides.length}: ${slide.title || 'Homepage promotion'}`}
         </Typography>
       )}
 

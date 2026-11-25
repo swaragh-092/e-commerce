@@ -10,6 +10,7 @@ import EditorialSection from './EditorialSection';
 import ContentGridSection from './ContentGridSection';
 import CategorySection from './CategorySection';
 import ProductRowSection from './ProductRowSection';
+import CatalogExplorerSection from './CatalogExplorerSection';
 import GallerySection from './GallerySection';
 import NewsletterSection from './NewsletterSection';
 import CountdownSection from './CountdownSection';
@@ -142,6 +143,9 @@ const SectionRenderer = ({
       break;
     case SECTION_TYPES.PROMO_BANNERS:
       content = <PromoBannerSection section={section} banners={data.banners || data.promoBanners || []} mode={mode} onSelectComponent={onSelectComponent} {...editorProps} />;
+      break;
+    case SECTION_TYPES.CATALOG_EXPLORER:
+      content = <CatalogExplorerSection section={section} />;
       break;
     case SECTION_TYPES.PRODUCT_ROW:
       if (preview && data.showProductEmptyState) {

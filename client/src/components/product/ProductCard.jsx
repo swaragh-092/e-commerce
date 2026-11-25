@@ -147,8 +147,10 @@ const ProductCard = React.memo(({ product, fromCategory, compact = false }) => {
         textDecoration: 'none',
         overflow: 'hidden',
         borderRadius: cardRadius,
-        border: cardVariant === 'deal' && hasSale ? '2px solid' : (isMinimal ? '1px solid' : 'none'),
-        borderColor: cardVariant === 'deal' && hasSale ? 'error.main' : 'divider',
+        border: typeof productCardStyle.cardBorderWidth === 'number'
+          ? `${productCardStyle.cardBorderWidth}px solid`
+          : cardVariant === 'deal' && hasSale ? '2px solid' : (isMinimal ? '1px solid' : 'none'),
+        borderColor: productCardStyle.cardBorderColor || (cardVariant === 'deal' && hasSale ? 'error.main' : 'divider'),
         boxShadow: cardVariant === 'deal' && hasSale ? '0 10px 30px rgba(239, 68, 68, 0.15)' : (isMinimal ? 'none' : cardShadow),
         transition: 'transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease, opacity 0.22s ease',
         '@media (prefers-reduced-motion: reduce)': {
@@ -359,20 +361,20 @@ const ProductCard = React.memo(({ product, fromCategory, compact = false }) => {
           );
         })()}
         <Box sx={{ flexGrow: 1 }} />
-        {pricingEnabled && showPrice && (
+        {pricingEnabled && showPrice && displayPrice != null && (
           <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: contentAlign === 'center' ? 'center' : contentAlign === 'right' ? 'flex-end' : 'flex-start', gap: 0.75, mt: 'auto', flexWrap: 'wrap', width: '100%' }}>
             {hasSale ? (
               <>
                 <Typography variant={effectiveCompact ? 'body2' : 'subtitle1'} color="primary" sx={{ fontWeight: productCardStyle.priceStyle === 'regular' ? 700 : 900, lineHeight: 1.2 }}>
                   {formatPrice(displayPrice)}
                 </Typography>
-                <Typography
+                {product.price != null && <Typography
                   variant="body2"
                   color="text.secondary"
                   sx={{ textDecoration: 'line-through' }}
                 >
                   {formatPrice(product.price)}
-                </Typography>
+                </Typography>}
               </>
             ) : (
               <Typography variant={effectiveCompact ? 'body2' : 'subtitle1'} sx={{ fontWeight: productCardStyle.priceStyle === 'regular' ? 700 : 900, lineHeight: 1.2 }}>{formatPrice(displayPrice)}</Typography>

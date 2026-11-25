@@ -429,7 +429,7 @@ const StoreLayout = () => {
           {/* Global Search Bar */}
           {showSearch && (
             <Box sx={{ display: { xs: 'none', md: 'flex' }, width: { md: 200, lg: 320 }, flexShrink: 0, mx: 1 }}>
-              <SearchWidget variant="header" headerStyle={headerStyle} />
+              <SearchWidget variant="header" headerStyle={headerStyle} showCategoryDropdown={nav.showCategoryDropdown === true} />
             </Box>
           )}
 
@@ -468,6 +468,7 @@ const StoreLayout = () => {
                     <SearchWidget
                       variant="header"
                       headerStyle={headerStyle}
+                      showCategoryDropdown={nav.showCategoryDropdown === true}
                       placeholder="Search..."
                       collapseToIcon
                       fullWidth={false}

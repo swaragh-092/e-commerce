@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SearchWidget from '../../../components/search/SearchWidget';
@@ -9,6 +9,10 @@ import { SettingsContext } from '../../../context/ThemeContext';
 
 vi.mock('../../../services/searchService', () => ({
   searchProducts: vi.fn(),
+}));
+vi.mock('../../../services/categoryService', async (importOriginal) => ({
+  ...await importOriginal(),
+  getCategories: vi.fn().mockResolvedValue([{ slug: 'fresh-fruit', name: 'Fresh fruit' }]),
 }));
 
 const renderSearchWidget = (children, config = { features: { pricing: false } }) => render(
@@ -60,6 +64,17 @@ describe('SearchWidget', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
     expect(onSearch).toHaveBeenCalledWith('demo');
+  });
+
+  it('uses the selected category for suggestions and the submitted search URL', async () => {
+    const Location = () => <output>{useLocation().search}</output>;
+    const { container } = renderSearchWidget(<><SearchWidget variant="header" showCategoryDropdown /><Location /></>);
+    await screen.findByRole('option', { name: 'Fresh fruit' });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Search category' }), { target: { value: 'fresh-fruit' } });
+    fireEvent.change(container.querySelector('input'), { target: { value: 'apple' } });
+    await waitFor(() => expect(searchProducts).toHaveBeenCalledWith({ q: 'apple', limit: 5, category: 'fresh-fruit' }));
+    fireEvent.keyDown(container.querySelector('input'), { key: 'Enter' });
+    expect(screen.getByText('?q=apple&category=fresh-fruit')).toBeInTheDocument();
   });
 
   it('formats a zero price and omits missing prices when storefront pricing is enabled', async () => {

@@ -42,9 +42,10 @@ describe('getPageSections', () => {
   });
 
   it('offers content sections only for templates that support them', () => {
-    expect(getPageSectionTypes('product')).toEqual(['product-row', 'editorial-image-text', 'faq', 'promo-banners']);
+    expect(getPageSectionTypes('product')).toEqual(['product-row', 'catalog-explorer', 'editorial-image-text', 'faq', 'promo-banners', 'composed-hero']);
     expect(getPageSectionTypes('category')).toEqual(getPageSectionTypes('product'));
-    expect(getPageSectionTypes('cart')).toEqual(['product-row']);
+    expect(getPageSectionTypes('cart')).toEqual(getPageSectionTypes('product'));
+    expect(getPageSectionTypes('checkout')).toEqual(['product-row']);
   });
 
   it('returns independent defaults so editing one draft cannot alter another', () => {

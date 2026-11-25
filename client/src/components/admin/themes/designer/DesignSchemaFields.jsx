@@ -24,7 +24,7 @@ const getFieldValue = (value, field) => {
   return rawValue;
 };
 
-export const HexColorField = ({ label, value, onChange, placeholder, allowEmpty = false }) => {
+export const HexColorField = ({ label, value, onChange, onBlur, placeholder, allowEmpty = false }) => {
   const [invalidInput, setInvalidInput] = useState(null);
   const isValid = (color) => /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(color)
     || (allowEmpty && color === '');
@@ -38,6 +38,7 @@ export const HexColorField = ({ label, value, onChange, placeholder, allowEmpty 
       label={label}
       value={text}
       placeholder={placeholder}
+      onBlur={onBlur}
       error={invalid}
       helperText={invalid ? 'Enter a hex color such as #1a7a3a.' : undefined}
       onChange={(event) => {
@@ -60,7 +61,7 @@ const SchemaField = ({ field, value, onChange }) => {
   const currentValue = getFieldValue(value, field);
 
   if (field.type === 'color') {
-    return <HexColorField label={field.label} value={currentValue} onChange={(next) => onChange(field.key, next)} />;
+    return <HexColorField label={field.label} value={currentValue} allowEmpty={field.allowEmpty} onChange={(next) => onChange(field.key, next)} />;
   }
 
   if (field.type === 'boolean') {

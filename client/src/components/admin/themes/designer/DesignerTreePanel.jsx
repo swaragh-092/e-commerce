@@ -113,6 +113,7 @@ const SidebarDragHandle = ({ handleProps, label }) => handleProps && (
   <Box
     {...handleProps}
     aria-label={`Reorder ${label}`}
+    data-sidebar-drag-handle
     onPointerDown={(event) => {
       if (!event.isPrimary || event.pointerType === 'touch' || event.button !== 0 ||
         event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
@@ -129,6 +130,15 @@ const SidebarDragHandle = ({ handleProps, label }) => handleProps && (
     <DragIndicatorIcon sx={{ fontSize: 18, pointerEvents: 'none' }} />
   </Box>
 );
+
+const dropZoneProps = (drop, snapshot) => ({
+  ref: drop.innerRef,
+  ...drop.droppableProps,
+  'data-drop-active': snapshot?.isDraggingOver || undefined,
+  sx: (theme) => ({
+    '&[data-drop-active]': { outline: `2px dashed ${theme.palette.primary.main}`, outlineOffset: '-2px' },
+  }),
+});
 
 const SectionRow = ({ section, index, total, isSelected, onSelect, onMove, onToggle, onDelete, dragHandleProps, expandControl }) => {
   const rowRef = useRef(null);
@@ -289,6 +299,8 @@ const DesignerTreePanel = ({
   onAddSectionItem,
   inheritedBlocksForSection,
   onSelectProductBlock,
+  onReorderHeroBlocks,
+  onReorderSectionItems,
   onMoveSection,
   onReorderSection,
   onToggleSection,
@@ -304,11 +316,32 @@ const DesignerTreePanel = ({
   const [expandedSections, setExpandedSections] = useState({});
   const [headerExpanded, setHeaderExpanded] = useState(false);
   const headerRef = useRef(null);
+  const selectedBlockRef = useRef(null);
+  const pendingPointer = useRef(null);
+  useEffect(() => {
+    const releasePending = (event) => {
+      if (pendingPointer.current == null) return;
+      if (event.pointerId != null && event.pointerId !== pendingPointer.current) return;
+      pendingPointer.current = null;
+      onDragActiveChange?.(false);
+    };
+    window.addEventListener('pointerup', releasePending, true);
+    window.addEventListener('pointercancel', releasePending, true);
+    window.addEventListener('blur', releasePending);
+    return () => {
+      window.removeEventListener('pointerup', releasePending, true);
+      window.removeEventListener('pointercancel', releasePending, true);
+      window.removeEventListener('blur', releasePending);
+    };
+  }, [onDragActiveChange]);
   useEffect(() => {
     if (componentSelection?.componentKey === 'headerLayout') {
       headerRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
     }
   }, [componentSelection]);
+  useEffect(() => {
+    selectedBlockRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  }, [componentSelection?.sectionId, componentSelection?.blockKey, componentSelection?.blockIndex]);
   const [pageSettingsOpen, setPageSettingsOpen] = useState(true);
   const [cartExpanded, setCartExpanded] = useState(false);
 
@@ -338,61 +371,104 @@ const DesignerTreePanel = ({
   const footerStartIndex = footerSectionRows.length > 0 ? footerSectionRows[0].originalIndex : sharedSections.length;
   const showSectionPicker = (index, area) => (event) => onAddSection(index, area, event.currentTarget);
   const isComposedSection = (section) => ['composed-hero', 'editorial-image-text'].includes(section.type);
-  const expandSectionControl = (section) => (isComposedSection(section) || BLOCK_FIELD_PRESETS[section.type] || section.type === 'product-info') && (
+  const blockSchemaFor = (section) => Array.isArray(section.selectedCategorySlugs) || Array.isArray(section.selectedBrandSlugs)
+    ? undefined : BLOCK_FIELD_PRESETS[section.type];
+  const expandSectionControl = (section) => (isComposedSection(section) || blockSchemaFor(section) || section.type === 'product-info') && (
     <ExpandItemsButton label={section.title || getSectionLabel(section)} expanded={Boolean(expandedSections[section.id])}
       onToggle={() => setExpandedSections((current) => ({ ...current, [section.id]: !current[section.id] }))} />
   );
 
-  const renderBlockList = (section, blocks, parentId = null, depth = 0) => (
-    <Stack sx={{ pl: 1.5, borderLeft: 1, borderColor: 'divider' }} spacing={0.1}>
-      {blocks.length < 12 && <AddSectionButton compact onClick={(event) => onAddProductBlock(section, { parentId, depth, atStart: true, anchorEl: event.currentTarget })}>
-        Add block
-      </AddSectionButton>}
-      {blocks.map((block) => (
-        <Fragment key={block.id}>
-          <Button size="small" sx={{ justifyContent: 'flex-start', textTransform: 'none', minWidth: 0 }}
-            onClick={() => onSelectProductBlock(section, block.id)}>
-            <Typography variant="inherit" noWrap>
-              {HERO_BLOCK_LABELS[block.type]}{block.text?.trim() ? ` – ${block.text.trim()}` : ''}
-            </Typography>
-          </Button>
-          {block.type === 'group' && depth < 3 && renderBlockList(section, block.children || [], block.id, depth + 1)}
-          {blocks.length < 12 && <InsertSectionControl label="Add block below"
-            onClick={(event) => onAddProductBlock(section, { parentId, depth, afterId: block.id, anchorEl: event.currentTarget })} />}
-        </Fragment>
-      ))}
-    </Stack>
-  );
+  const renderBlockList = (section, blocks, parentId = null, depth = 0) => {
+    const group = JSON.stringify([section.id, parentId]);
+    return (
+      <Droppable type={'designer-block:' + group} droppableId={'hero-blocks:' + group}>
+        {(drop, snapshot) => (
+          <Box {...dropZoneProps(drop, snapshot)}>
+            <Stack sx={{ pl: 1.5, borderLeft: 1, borderColor: 'divider' }} spacing={0.1}>
+              {blocks.length < 12 && <AddSectionButton compact
+                onClick={(event) => onAddProductBlock(section, { parentId, depth, atStart: true, anchorEl: event.currentTarget })}>
+                Add block
+              </AddSectionButton>}
+              {blocks.map((block, index) => {
+                const selected = componentSelection?.sectionId === section.id &&
+                  componentSelection.blockKey === 'heroBlocks' && componentSelection.blockIndex === block.id;
+                const text = block.text?.trim();
+                const label = HERO_BLOCK_LABELS[block.type];
+                return (
+                  <Draggable key={block.id} draggableId={'hero-block:' + JSON.stringify([section.id, parentId, block.id])} index={index}>
+                    {(drag) => (
+                      <Box ref={drag.innerRef} {...drag.draggableProps}>
+                        <Stack ref={selected ? selectedBlockRef : null} direction="row" alignItems="center"
+                          sx={{ bgcolor: selected ? 'action.selected' : undefined, borderRadius: 1 }}>
+                          <SidebarDragHandle handleProps={drag.dragHandleProps} label={text || label} />
+                          <Button size="small" aria-current={selected || undefined}
+                            sx={{ justifyContent: 'flex-start', textTransform: 'none', minWidth: 0 }}
+                            onClick={() => onSelectProductBlock(section, block.id)}>
+                            <Typography variant="inherit" noWrap>{label}{text ? ' \u2013 ' + text : ''}</Typography>
+                          </Button>
+                          {block.enabled === false && <Typography variant="caption" color="text.secondary">Hidden</Typography>}
+                        </Stack>
+                        {block.type === 'group' && depth < 3 && renderBlockList(section, block.children || [], block.id, depth + 1)}
+                        {blocks.length < 12 && <InsertSectionControl label="Add block below"
+                          onClick={(event) => onAddProductBlock(section, { parentId, depth, afterId: block.id, anchorEl: event.currentTarget })} />}
+                      </Box>
+                    )}
+                  </Draggable>
+                );
+              })}
+              {drop.placeholder}
+            </Stack>
+          </Box>
+        )}
+      </Droppable>
+    );
+  };
   const renderExpandableBlocks = (section) => {
-    if (!expandedSections[section.id]) return null;
     const composed = isComposedSection(section);
-    const schema = BLOCK_FIELD_PRESETS[section.type];
+    const schema = blockSchemaFor(section);
     if (!composed && !schema) return null;
+    const selectionKey = componentSelection?.sectionId === section.id ? componentSelection.blockKey : null;
+    if (!expandedSections[section.id] && !(selectionKey && (composed || selectionKey === schema?.key))) return null;
     const items = schema && (section[schema.key] ?? inheritedBlocksForSection?.(section) ?? []);
+    const itemGroup = schema && JSON.stringify([section.id, schema.key]);
+    const configured = schema && Array.isArray(section[schema.key]);
 
     return <>
         {composed && renderBlockList(section, section.heroBlocks || [])}
-        {schema && <Stack sx={{ pl: 1.5, borderLeft: 1, borderColor: 'divider' }}>
+        {schema && <Droppable type={'section-items:' + itemGroup} droppableId={'section-items:' + itemGroup}
+          isDropDisabled={!configured}>{(drop, snapshot) => <Box {...dropZoneProps(drop, snapshot)}>
+          <Stack sx={{ pl: 1.5, borderLeft: 1, borderColor: 'divider' }}>
           {items.length < 12 && <AddSectionButton compact onClick={() => onAddSectionItem(section, schema, items, 0)}>
             {schema.addLabel}
           </AddSectionButton>}
-          {items.map((item, index) => (
-            <Fragment key={item.id || index}>
-              <Button size="small" sx={{ justifyContent: 'flex-start', textTransform: 'none' }}
+          {items.map((item, index) => {
+            const selected = selectionKey === schema.key && componentSelection.blockIndex === index;
+            const label = schema.label(item, index);
+            return <Draggable key={item.id || index} draggableId={`section-item:${itemGroup}:${index}`} index={index}
+              isDragDisabled={!configured}>{(drag) => <Box ref={drag.innerRef} {...drag.draggableProps}>
+              <Stack ref={selected ? selectedBlockRef : null} direction="row" alignItems="center" sx={{ bgcolor: selected ? 'action.selected' : undefined }}>
+              <SidebarDragHandle handleProps={drag.dragHandleProps} label={label} />
+              <Button size="small" aria-current={selected || undefined} sx={{ justifyContent: 'flex-start', textTransform: 'none' }}
                 onClick={() => onSelectProductBlock(section, index, schema.key)}>
-                {schema.label(item, index)}
+                {label}
               </Button>
+              </Stack>
               {items.length < 12 && <AddSectionButton compact onClick={() => onAddSectionItem(section, schema, items, index + 1)}>
                 {schema.addLabel} below
               </AddSectionButton>}
-            </Fragment>
-          ))}
-        </Stack>}
+              </Box>}</Draggable>;
+          })}
+          {drop.placeholder}
+          </Stack>
+        </Box>}</Droppable>}
     </>;
   };
 
   return (
-    <DragDropContext onBeforeDragStart={() => onDragActiveChange?.(true)} onDragEnd={({ source, destination }) => {
+    <DragDropContext onBeforeDragStart={() => {
+      pendingPointer.current = null;
+      onDragActiveChange?.(true);
+    }} onDragEnd={({ source, destination }) => {
       onDragActiveChange?.(false);
       if (!destination) return;
       if (source.droppableId !== destination.droppableId) {
@@ -410,6 +486,16 @@ const DesignerTreePanel = ({
         return;
       }
       if (source.index === destination.index) return;
+      if (source.droppableId.startsWith('hero-blocks:')) {
+        const [sectionId, parentId] = JSON.parse(source.droppableId.slice('hero-blocks:'.length));
+        onReorderHeroBlocks?.(sectionId, parentId, source.index, destination.index);
+        return;
+      }
+      if (source.droppableId.startsWith('section-items:')) {
+        const [sectionId, key] = JSON.parse(source.droppableId.slice('section-items:'.length));
+        onReorderSectionItems?.(sectionId, key, source.index, destination.index);
+        return;
+      }
       if (source.droppableId === 'product-details') {
         moveDetail(source.index, destination.index);
         return;
@@ -431,7 +517,14 @@ const DesignerTreePanel = ({
       const target = rows[destination.index].originalIndex;
       onReorderSection?.(from, target + (destination.index > source.index ? 1 : 0), source.droppableId);
     }}>
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden' }}>
+    <Box onPointerDownCapture={(event) => {
+      if (!event.target.closest('[data-sidebar-drag-handle]') || !event.isPrimary ||
+        event.pointerType === 'touch' || event.button !== 0 ||
+        event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      pendingPointer.current = event.pointerId;
+      // Keep mouse moves in the parent document before the library's drag threshold is crossed.
+      onDragActiveChange?.(true);
+    }} sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden' }}>
 
       {/* Panel Header */}
       <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
@@ -520,7 +613,7 @@ const DesignerTreePanel = ({
             <HeaderBlockRow icon={<MenuIcon sx={{ fontSize: 15 }} />} label="Menu" description="Primary links and categories" onClick={() => onHeaderPartClick?.('headerMenu')} />
             <HeaderBlockRow icon={<ShoppingBagIcon sx={{ fontSize: 15 }} />} label="Actions" description="Search, account, cart" onClick={() => onHeaderPartClick?.('headerActions')} />
           </Stack>}
-          <Droppable droppableId="header">{(drop) => <Box ref={drop.innerRef} {...drop.droppableProps}>
+          <Droppable droppableId="header">{(drop, snapshot) => <Box {...dropZoneProps(drop, snapshot)}>
             {headerSectionRows.map(({ section, originalIndex }, index) => (
               <Draggable key={section.id} draggableId={`header:${section.id}`} index={index}>{(drag) => (
               <Box ref={drag.innerRef} {...drag.draggableProps}>
@@ -562,9 +655,7 @@ const DesignerTreePanel = ({
               </Button>
             </Box>
           ) : (
-            <Droppable droppableId="template">{(provided, snapshot) => <Box ref={provided.innerRef} {...provided.droppableProps}
-              data-drop-active={snapshot?.isDraggingOver || undefined}
-              sx={{ outline: snapshot?.isDraggingOver ? '2px dashed' : undefined, outlineColor: 'primary.main', outlineOffset: '-2px' }}>
+            <Droppable droppableId="template">{(provided, snapshot) => <Box {...dropZoneProps(provided, snapshot)}>
             {templateSectionRows.map(({ section, originalIndex }, index) => (
               <Draggable key={section.id} draggableId={String(section.id)} index={index}>{(drag) => <Box ref={drag.innerRef} {...drag.draggableProps}>
                 <InsertSectionControl label={`Add section before ${section.title || getSectionLabel(section)}`}
@@ -602,7 +693,7 @@ const DesignerTreePanel = ({
                     <FixedNode icon={<StorefrontIcon fontSize="small" />} label="Product Information"
                       expandControl={expandSectionControl(mainSection)}
                       description="Edit blocks" onClick={() => onSectionClick(mainSection)} />
-                    {expandedSections[mainSection.id] && <Stack sx={{ pl: 2, borderLeft: 1, borderColor: 'divider' }} spacing={0.25}>
+                    {(expandedSections[mainSection.id] || (componentSelection?.sectionId === mainSection.id && componentSelection.blockKey)) && <Stack sx={{ pl: 2, borderLeft: 1, borderColor: 'divider' }} spacing={0.25}>
                       <Typography variant="body2" sx={{ py: 0.5 }}>Product media</Typography>
                       <Typography component="h4" variant="caption" fontWeight={700}>Details</Typography>
                       {(mainSection.heroBlocks?.length || 0) < 12 && (
@@ -610,21 +701,24 @@ const DesignerTreePanel = ({
                           Add block
                         </AddSectionButton>
                       )}
-                      <Droppable droppableId="product-details">{(drop) => <Box ref={drop.innerRef} {...drop.droppableProps}>
+                      <Droppable droppableId="product-details">{(drop, snapshot) => <Box {...dropZoneProps(drop, snapshot)}>
                         {detailsOrder.map((key, index) => {
                           const block = mainSection.heroBlocks?.find(({ id }) => customDetailKey(id) === key);
                           const label = block ? block.text || HERO_BLOCK_LABELS[block.type] : PRODUCT_DETAILS_LABELS[key];
+                          const selected = componentSelection?.sectionId === mainSection.id && componentSelection.blockIndex === (block?.id || key);
                           return <Draggable key={key} draggableId={`product-detail:${key}`} index={index}>{(drag) => (
                             <Box ref={drag.innerRef} {...drag.draggableProps}>
-                              <Stack direction="row" alignItems="center">
+                              <Stack ref={selected ? selectedBlockRef : null} direction="row" alignItems="center"
+                                sx={{ bgcolor: selected ? 'action.selected' : undefined }}>
                                 <SidebarDragHandle handleProps={drag.dragHandleProps} label={label} />
-                                <Button size="small" sx={{ justifyContent: 'flex-start', textTransform: 'none', flex: 1, minWidth: 0 }}
+                                <Button size="small" aria-current={selected || undefined} sx={{ justifyContent: 'flex-start', textTransform: 'none', flex: 1, minWidth: 0 }}
                                   onClick={() => onSelectProductBlock(mainSection, block?.id || key, block ? 'heroBlocks' : 'detailsBlockOrder')}>
                                   <Typography variant="inherit" noWrap>{label}</Typography>
                                 </Button>
                                 <IconButton size="small" disabled={index === 0} aria-label={`Move ${label} up`} onClick={() => moveDetail(index, index - 1)}><ArrowUpwardIcon fontSize="inherit" /></IconButton>
                                 <IconButton size="small" disabled={index === detailsOrder.length - 1} aria-label={`Move ${label} down`} onClick={() => moveDetail(index, index + 1)}><ArrowDownwardIcon fontSize="inherit" /></IconButton>
                               </Stack>
+                              {block?.type === 'group' && renderBlockList(mainSection, block.children || [], block.id, 1)}
                               {(mainSection.heroBlocks?.length || 0) < 12 && <InsertSectionControl label={`Add block after ${label}`}
                                 onClick={(event) => onAddProductBlock(mainSection, { detailAfter: key, anchorEl: event.currentTarget })} />}
                             </Box>
@@ -658,7 +752,7 @@ const DesignerTreePanel = ({
                     ))}
                   </Stack>}
                 </>)}
-                <Droppable droppableId={`page-template-${position}`}>{(drop) => <Box ref={drop.innerRef} {...drop.droppableProps}>
+                <Droppable droppableId={`page-template-${position}`}>{(drop, snapshot) => <Box {...dropZoneProps(drop, snapshot)}>
                 {rows.map(({ section, originalIndex }, index) => (
                   <Draggable key={section.id} draggableId={`page-template:${section.id}`} index={index}>{(drag) => <Box ref={drag.innerRef} {...drag.draggableProps}>
                     {activePage !== 'checkout' && pageSections.length < 6 && (
@@ -711,7 +805,7 @@ const DesignerTreePanel = ({
             label={footerSectionRows.length ? 'Add footer section here' : 'Add section to footer'}
             onClick={showSectionPicker(footerStartIndex, 'footer')}
           />
-          <Droppable droppableId="footer">{(provided) => <Box ref={provided.innerRef} {...provided.droppableProps}>
+          <Droppable droppableId="footer">{(provided, snapshot) => <Box {...dropZoneProps(provided, snapshot)}>
           {footerSectionRows.map(({ section, originalIndex }, index) => (
             <Draggable key={section.id} draggableId={String(section.id)} index={index}>{(drag) => <Box ref={drag.innerRef} {...drag.draggableProps}>
               {index > 0 && <InsertSectionControl label={`Add section before ${section.title || getSectionLabel(section)}`}

@@ -8,7 +8,7 @@ import ReplayIcon from '@mui/icons-material/Replay';
 import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import VerifiedIcon from '@mui/icons-material/Verified';
-import { useComponentStyles } from '../../../hooks/useSettings';
+import { useComponentStyles, useSettings } from '../../../hooks/useSettings';
 import { getOptimizedMediaUrl } from '../../../utils/media';
 import { resolveRadius, resolveShadow } from '../../../utils/styleMaps';
 import { CanvasEditableImage, CanvasEditableText } from './SectionFallback';
@@ -38,18 +38,22 @@ const DEFAULT_ITEMS = [
 
 const TrustSection = ({ section = {}, items = DEFAULT_ITEMS, mode = 'live', onSelectComponent, onInlineFieldChange, onInlineFieldCommit, onInlineBlockFocus }) => {
   const trustCardStyle = useComponentStyles('trustCard');
+  const { features } = useSettings();
   const compact = mode === 'preview';
   const hasCustomItems = Array.isArray(section?.items);
   const resolvedItems = hasCustomItems
     ? section.items
     : (Array.isArray(items) && items.length ? items : DEFAULT_ITEMS);
 
-  if (!resolvedItems.length) {
+  const visibleItems = resolvedItems.map((item, index) => ({ item, index })).filter(({ item }) =>
+    !item.requiresFeatureFlag || features?.[item.requiresFeatureFlag] === true);
+
+  if (!visibleItems.length) {
     if (compact) {
       return (
         <Box sx={{ p: 3, textAlign: 'center', bgcolor: 'action.hover', border: '1px dashed', borderColor: 'divider', borderRadius: 2, m: 2 }}>
           <Typography variant="body2" color="text.secondary">
-            Trust Badges section has no items. Add an item or reset to default content in the sidebar.
+            {resolvedItems.length ? 'No items are visible with the current store features.' : 'Trust Badges section has no items. Add an item or reset to default content in the sidebar.'}
           </Typography>
         </Box>
       );
@@ -107,11 +111,11 @@ const TrustSection = ({ section = {}, items = DEFAULT_ITEMS, mode = 'live', onSe
         </Box>
       )}
       <Grid container spacing={cardGrid ? (compact ? 1.5 : 2) : 1.5}>
-      {resolvedItems.map((item, index) => {
+      {visibleItems.map(({ item, index }) => {
         const Icon = iconMap[item.icon] || VerifiedIcon;
         const itemImage = imageUrl(item.image);
         return (
-          <Grid item xs={6} md={3} key={`${item.title || 'trust'}-${index}`}>
+          <Grid item xs={6} md={12 / (section.columnsDesktop || 4)} key={`${item.title || 'trust'}-${index}`}>
             <Box
               data-component="trust-card"
               data-variant={variant}
