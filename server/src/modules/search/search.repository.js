@@ -28,6 +28,7 @@ const {
 const logger = require('../../utils/logger');
 const { buildSearchPattern } = require('./search.utils');
 const { buildCategorySearchSql } = require('./search.category');
+const { getCategoryAndDescendantIds } = require('../category/category.service');
 
 const { Op } = Sequelize;
 
@@ -176,14 +177,19 @@ const trigramRelevance = (queryText, options = {}) => [
   'relevance',
 ];
 
-const baseQueryOptions = (queryText, limit, offset, relevanceAttr, whereClause, { includeBrands = true } = {}) => ({
-  where: whereClause,
+const baseQueryOptions = (queryText, limit, offset, relevanceAttr, whereClause, { includeBrands = true, categoryIds } = {}) => ({
+  where: categoryIds ? {
+    [Op.and]: [whereClause, Sequelize.literal(`EXISTS (
+      SELECT 1 FROM "product_categories"
+      WHERE "product_id" = "Product"."id" AND "category_id" = ANY(CAST($categoryIds AS uuid[]))
+    )`)],
+  } : whereClause,
   attributes: {
     exclude: ['search_vector'],
     include: [relevanceAttr],
   },
   include: buildIncludes(includeBrands),
-  bind: { queryText, queryPattern: buildSearchPattern(queryText) },
+  bind: { queryText, queryPattern: buildSearchPattern(queryText), ...(categoryIds && { categoryIds }) },
   order: [
     [Sequelize.literal('"relevance"'), 'DESC'],
     ['createdAt', 'DESC'],
@@ -208,7 +214,13 @@ const baseQueryOptions = (queryText, limit, offset, relevanceAttr, whereClause, 
  * @param {number} offset - Pagination offset
  * @returns {{ rows: Product[], count: number }}
  */
-const searchProducts = async (queryText, limit, offset, { includeBrands = true } = {}) => {
+const searchProducts = async (queryText, limit, offset, { includeBrands = true, category } = {}) => {
+  let categoryIds;
+  if (category) {
+    const selected = await Category.findOne({ where: { slug: category }, attributes: ['id'] });
+    if (!selected) return { rows: [], count: 0 };
+    categoryIds = await getCategoryAndDescendantIds(selected.id);
+  }
   const ftsResults = await Product.unscoped().findAndCountAll(
     baseQueryOptions(
       queryText,
@@ -216,7 +228,7 @@ const searchProducts = async (queryText, limit, offset, { includeBrands = true }
       offset,
       ftsRelevance(queryText, { includeBrands }),
       ftsWhere(queryText, { includeBrands }),
-      { includeBrands }
+      { includeBrands, categoryIds }
     )
   );
 
@@ -234,7 +246,7 @@ const searchProducts = async (queryText, limit, offset, { includeBrands = true }
         offset,
         trigramRelevance(queryText, { includeBrands }),
         trigramWhere(queryText, { includeBrands }),
-        { includeBrands }
+        { includeBrands, categoryIds }
       )
     );
 

@@ -479,6 +479,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
 
   // Always restrict storefront results to published + enabled products. Admins can filter by state.
   applyProductStorefrontFilters(where, filters, isAdmin);
+  if (filters.productType) where.type = filters.productType;
   if (typeof filters.hasVariants === 'boolean' || filters.hasVariants === 'true' || filters.hasVariants === 'false') {
     const hasVariants = filters.hasVariants === true || filters.hasVariants === 'true';
     where[Op.and] = [...(where[Op.and] || []), Sequelize.literal(`${hasVariants ? '' : 'NOT '}EXISTS (SELECT 1 FROM "product_variants" AS copy_variant WHERE copy_variant.product_id = "Product".id AND copy_variant.deleted_at IS NULL)`)];

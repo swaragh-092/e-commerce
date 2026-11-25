@@ -10,7 +10,7 @@ import SectionLayoutPreview from './SectionLayoutPreview';
 import productRow from '../../../../../shared/product-row.json';
 import { applyProductSourcePreset } from '../../../utils/productRowSources';
 
-const productChoices = ['mostViewed', 'trending', 'staffPicks', 'bestSellers', 'featured', 'newest', 'sale'].map((source) => ({
+const productChoices = ['mostViewed', 'trending', 'staffPicks', 'bestSellers', 'featured', 'newest', 'sale', 'combo'].map((source) => ({
   key: `products-${source}`,
   label: productRow.sources[source].presetLabel,
   source,

@@ -576,6 +576,14 @@ const COMPONENT_CONTROL_SCHEMAS = {
         key: 'surface',
         label: 'Surface & Interaction',
         fields: [
+          { key: 'cardBorderColor', label: 'Border Color', type: 'color', allowEmpty: true },
+          {
+            key: 'cardBorderWidth', label: 'Border Width', type: 'select',
+            options: [
+              { value: '', label: 'Use variant default' },
+              ...[0, 1, 2, 3, 4].map((value) => ({ value, label: `${value} px` })),
+            ],
+          },
           {
             key: 'hoverEffect',
             label: 'Hover Effect',

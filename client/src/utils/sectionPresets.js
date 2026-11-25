@@ -19,6 +19,7 @@ const SECTION_PRESET_META = Object.freeze({
   [SECTION_TYPES.COMPOSED_HERO]: { goal: 'hero', description: 'Build a hero with grouped text, links, and responsive media.' },
   [SECTION_TYPES.HERO_CAROUSEL]: { goal: 'hero', description: 'A high-impact first screen for launches, brand stories, or campaigns.' },
   [SECTION_TYPES.PRODUCT_ROW]: { goal: 'merchandising', description: 'Feature products, new arrivals, offers, or recommended items.' },
+  [SECTION_TYPES.CATALOG_EXPLORER]: { goal: 'merchandising', description: 'Let shoppers browse and filter products within this page.' },
   [SECTION_TYPES.CATEGORY_SHORTCUTS]: { goal: 'merchandising', description: 'Give shoppers fast visual routes into important categories.' },
   [SECTION_TYPES.FEATURED_COLLECTION_GRID]: { goal: 'merchandising', description: 'Promote curated collections with larger visual tiles.' },
   [SECTION_TYPES.BRAND_SHOWCASE]: { goal: 'merchandising', description: 'Help shoppers discover products by brand or partner.' },
@@ -49,6 +50,7 @@ const SECTION_PRESETS = Object.freeze({
     interval: 6500,
   },
   [SECTION_TYPES.PRODUCT_ROW]: productRow.defaults,
+  [SECTION_TYPES.CATALOG_EXPLORER]: { title: 'Explore products' },
   [SECTION_TYPES.CATEGORY_SHORTCUTS]: {
     title: 'Shop by Category',
     subtitle: 'Help shoppers jump into the right collection faster.',

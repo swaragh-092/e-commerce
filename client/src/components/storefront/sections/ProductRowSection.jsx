@@ -9,7 +9,7 @@ import {
   Typography,
 } from '@mui/material';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import ProductRow from '../../product/ProductRow';
+import ProductRow, { mobileProductCarousel } from '../../product/ProductRow';
 import ProductCard from '../../product/ProductCard';
 import { useComponentStyles } from '../../../hooks/useSettings';
 import { CanvasEditableText } from './SectionFallback';
@@ -92,6 +92,7 @@ const PreviewProductRow = ({ section, onSelectComponent, onInlineFieldChange, on
   const variant = section?.variant || section?.layout || 'grid';
   const isCarousel = variant === 'carousel';
   const isCompact = variant === 'grid-compact';
+  const defaultGridGap = isCompact ? { xs: 1, md: 1.25 } : { xs: 1.5, md: 2 };
 
   const align = section?.textAlign || 'left';
   const carouselCardWidth = isCompact
@@ -161,9 +162,15 @@ const PreviewProductRow = ({ section, onSelectComponent, onInlineFieldChange, on
           </Box>
         </Box>
       ) : (
-        <Grid container spacing={isCompact ? { xs: 1, md: 1.25 } : { xs: 1.5, md: 2 }}>
+        <Grid container
+          sx={section.mobileCarousel ? mobileProductCarousel(isCompact, section.horizontalGap) : undefined}
+          columnSpacing={section.horizontalGap == null ? defaultGridGap : section.horizontalGap && `${section.horizontalGap}px`}
+          rowSpacing={section.verticalGap == null ? defaultGridGap : section.verticalGap && `${section.verticalGap}px`}>
           {items.map((product, index) => (
-            <Grid item xs={6} sm={isCompact ? 3 : 4} md={isCompact ? 2 : 3} lg={isCompact ? 2 : 2.4} key={`${product.name}-${index}`} sx={{ display: 'flex' }}>
+            <Grid item xs={12 / (section.columnsMobile || 2)} sm={12 / (section.columnsTablet || (isCompact ? 4 : 3))}
+              md={section.columnsDesktop ? 12 / section.columnsDesktop : isCompact ? 2 : 3}
+              lg={section.columnsDesktop ? 12 / section.columnsDesktop : isCompact ? 2 : 2.4}
+              key={`${product.name}-${index}`} sx={{ display: 'flex' }}>
               <PreviewProductCardWrapper product={product} index={index} compact={isCompact} onSelectComponent={onSelectComponent} source={section?.source} />
             </Grid>
           ))}
@@ -202,6 +209,12 @@ const ProductRowSection = ({
       count={count}
       layout={variant === 'grid-compact' ? 'grid' : variant}
       compact={variant === 'grid-compact'}
+      columnsDesktop={section?.columnsDesktop}
+      columnsMobile={section?.columnsMobile}
+      columnsTablet={section?.columnsTablet}
+      horizontalGap={section?.horizontalGap}
+      verticalGap={section?.verticalGap}
+      mobileCarousel={section?.mobileCarousel}
       align={section?.textAlign || 'left'}
     />
   );

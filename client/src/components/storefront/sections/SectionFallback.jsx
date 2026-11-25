@@ -140,6 +140,12 @@ export const resolveSectionMaxWidth = (section = {}) => {
 };
 
 
+const configuredBlockMarker = (section, field) => {
+  const match = /^(items|slides)\.(\d+)\./.exec(field || '');
+  if (!section?.id || !match || !section[match[1]]?.[Number(match[2])]) return {};
+  return { 'data-store-block': `field:${match[1]}:${match[2]}`, 'data-store-owner': section.id };
+};
+
 export const CanvasEditableText = ({
   section,
   field,
@@ -160,8 +166,8 @@ export const CanvasEditableText = ({
 
   if (!editable) {
     return typeof Component === 'string'
-      ? <Component {...props}>{children}</Component>
-      : <Component sx={sx} {...props}>{children}</Component>;
+      ? <Component {...configuredBlockMarker(section, field)} {...props}>{children}</Component>
+      : <Component sx={sx} {...configuredBlockMarker(section, field)} {...props}>{children}</Component>;
   }
 
   const stop = (event) => event.stopPropagation();
@@ -253,7 +259,7 @@ export const CanvasEditableImage = ({
   const editable = preview && Boolean(onInlineFieldCommit || onInlineFieldChange) && section?.id;
 
   if (!editable) {
-    return <Box sx={sx} {...props}>{children}</Box>;
+    return <Box sx={sx} {...configuredBlockMarker(section, field)} {...props}>{children}</Box>;
   }
 
   const stop = (event) => event.stopPropagation();

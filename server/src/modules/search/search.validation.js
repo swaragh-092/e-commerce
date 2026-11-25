@@ -17,6 +17,7 @@ const { MIN_SEARCH_QUERY_LENGTH, MAX_SEARCH_QUERY_LENGTH, normalizeSearchQuery }
  */
 const searchQuerySchema = Joi.object({
   hideEmpty: hideEmptySchema,
+  category: Joi.string().max(140).pattern(/^[a-z0-9-]+$/),
   q: Joi.string().custom((value, helpers) => {
     const normalized = normalizeSearchQuery(value);
     const normalizedLength = Array.from(normalized).length;

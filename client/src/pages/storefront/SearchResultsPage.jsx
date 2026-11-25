@@ -42,6 +42,7 @@ const SearchResultsPage = () => {
 
   // URL state
   const urlQuery = searchParams.get('q') || '';
+  const category = searchParams.get('category') || '';
   const normalizedQuery = normalizeSearchQuery(urlQuery);
   const parsedPage = Number(searchParams.get('page'));
   const urlPage = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
@@ -92,7 +93,7 @@ const SearchResultsPage = () => {
       setSearchError('');
       setCanRetry(false);
       try {
-        const res = await searchProducts({ q: normalizedQuery, page: urlPage, limit: resultsPerPage });
+        const res = await searchProducts({ q: normalizedQuery, page: urlPage, limit: resultsPerPage, ...(category && { category }) });
         if (cancelled) return;
         const data = res.data || {};
         const productData = data.products || {};
@@ -124,13 +125,13 @@ const SearchResultsPage = () => {
 
     fetchResults();
     return () => { cancelled = true; };
-  }, [normalizedQuery, urlPage, retryNonce, resultsPerPage]);
+  }, [normalizedQuery, urlPage, retryNonce, resultsPerPage, category]);
 
   const visibleBrands = showMatchingBrands ? brands : [];
   const visibleCategories = showMatchingCategories ? categories : [];
 
   const handlePageChange = (_, page) => {
-    setSearchParams({ q: normalizedQuery, page: String(page) });
+    setSearchParams({ q: normalizedQuery, page: String(page), ...(category && { category }) });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -169,9 +170,13 @@ const SearchResultsPage = () => {
             variant="inline"
             placeholder={searchStyle.searchPlaceholder || 'Search products...'}
             initialValue={normalizedQuery}
-            onSearch={(q) => setSearchParams({ q, page: '1' })}
+            categoryScope={category}
+            onSearch={(q) => setSearchParams({ q, page: '1', ...(category && { category }) })}
             sx={{ maxWidth: { sm: 500 } }}
           />
+          {category && <Button size="small" onClick={() => setSearchParams({ q: normalizedQuery })}>
+            Search all categories
+          </Button>}
 
           {searchStyle.showResultCount !== false && normalizedQuery && hasSearched && !loading && !searchError && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>

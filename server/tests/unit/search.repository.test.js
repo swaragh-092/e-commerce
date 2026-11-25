@@ -10,6 +10,19 @@ afterEach(() => {
 });
 
 describe('search relevance', () => {
+  it('applies the category and descendant restriction to full-text and fuzzy search', async () => {
+    vi.spyOn(db.Category, 'findOne').mockResolvedValue({ id: 'parent' });
+    vi.spyOn(db.Category, 'findAll').mockResolvedValue([{ id: 'child', parentId: 'parent' }]);
+    const findProducts = vi.spyOn(db.Product, 'findAndCountAll').mockResolvedValue({ rows: [], count: 0 });
+    await SearchRepository.searchProducts('apple', 10, 0, { category: 'fruit' });
+    expect(db.Category.findOne).toHaveBeenCalledWith({ where: { slug: 'fruit' }, attributes: ['id'] });
+    expect(findProducts).toHaveBeenCalledTimes(2);
+    for (const [query] of findProducts.mock.calls) {
+      expect(query.bind.categoryIds).toEqual(['parent', 'child']);
+      expect(query.where[db.Sequelize.Op.and][1].val).toContain('ANY(CAST($categoryIds AS uuid[]))');
+    }
+  });
+
   it('matches exact categories and includes partial category matching in relevance', () => {
     const exactSql = SearchRepository.categoryMatchSql();
     const relevanceSql = SearchRepository.buildRelevanceSql('similarity("Product"."name", $queryText)');

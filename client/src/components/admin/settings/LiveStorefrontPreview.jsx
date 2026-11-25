@@ -60,11 +60,12 @@ const formToNestedSettings = (form) => {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function LiveStorefrontPreview({ form, settings, path = '/', device: controlledDevice, showToolbar = true, showStatusText = showToolbar, frameHeight, onSelectSection, onSelectComponent, onInsertSection, onInsertBlock, onSelectBlock, selectedSectionId, selectedBlockId }) {
+export default function LiveStorefrontPreview({ form, settings, path = '/', device: controlledDevice, showToolbar = true, showStatusText = showToolbar, frameHeight, onSelectSection, onSelectComponent, onInsertSection, onInsertBlock, onSelectBlock, selectedSectionId, selectedBlockId, selectedComponent, inspectorActions }) {
   const iframeRef  = useRef(null);
   const inspectorCleanup = useRef(() => {});
   const selectionCallbacks = useRef({ onSelectSection, onSelectComponent, onInsertSection, onInsertBlock, onSelectBlock, selectedSectionId, selectedBlockId });
-  selectionCallbacks.current = { onSelectSection, onSelectComponent, onInsertSection, onInsertBlock, onSelectBlock };
+  selectionCallbacks.current = { onSelectSection, onSelectComponent, onInsertSection, onInsertBlock, onSelectBlock, inspectorActions };
+  const actionSignature = JSON.stringify(inspectorActions?.map(({ label, disabled }) => [label, disabled]));
   const canInsertSection = Boolean(onInsertSection);
   const canInsertBlock = Boolean(onInsertBlock);
   const inspecting = Boolean(onSelectSection || onSelectComponent || onInsertSection || onInsertBlock || onSelectBlock);
@@ -74,17 +75,8 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', devi
     const doc = iframeRef.current?.contentDocument;
     if (!doc?.head || !inspecting) return;
     const style = doc.createElement('style');
-    style.textContent = '[data-store-section]:hover,[data-store-component]:hover,[data-store-block]:hover{outline:2px solid #4f46e5;outline-offset:-2px;cursor:pointer}';
-    if (selectedSectionId) {
-      const selected = JSON.stringify(String(selectedBlockId || selectedSectionId));
-      const attribute = selectedBlockId ? 'data-store-block' : 'data-store-section';
-      style.textContent += `[${attribute}=${selected}]{outline:2px solid #4f46e5;outline-offset:-2px}`;
-      const target = [...doc.querySelectorAll(`[${attribute}]`)].find(
-        (element) => element.getAttribute(attribute) === String(selectedBlockId || selectedSectionId)
-          && (!selectedBlockId || element.closest('[data-store-section]')?.dataset.storeSection === String(selectedSectionId))
-      );
-      target?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
-    }
+    style.textContent = '[data-store-section]:hover,[data-store-component]:hover,[data-store-block]:hover{outline:2px solid #4f46e5;outline-offset:-2px;cursor:pointer}[data-designer-selected]{outline:2px solid #4f46e5!important;outline-offset:-2px}';
+    style.textContent += '[data-designer-actions]{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);z-index:2147483647;display:flex;flex-wrap:wrap;justify-content:center;width:max-content;max-width:calc(100% - 24px);gap:6px;padding:6px;background:#fff;color:#1f2937;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 4px 16px #0003}[data-designer-actions] button{font:inherit;font-size:13px;min-height:36px;padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:inherit;cursor:pointer}[data-designer-actions] button:disabled{opacity:.5;cursor:default}';
     const insertionSelectors = [
       canInsertSection && '[data-store-add-section]',
       canInsertBlock && '[data-store-add-block]',
@@ -93,7 +85,50 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', devi
       style.textContent += `${insertionSelectors.join(',')}{display:block!important;margin:8px auto;padding:5px 12px;border:1px dashed #4f46e5;border-radius:6px;background:white;color:#3730a3;cursor:pointer;font:inherit}`;
     }
     doc.head.appendChild(style);
+    let highlighted;
+    let slideRequested = false;
+    let slideFrame;
+    const toolbar = doc.createElement('div');
+    toolbar.dataset.designerActions = '';
+    toolbar.setAttribute('role', 'group');
+    toolbar.setAttribute('aria-label', 'Preview selection actions');
+    selectionCallbacks.current.inspectorActions?.forEach(({ label, disabled }, index) => {
+      const button = doc.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.disabled = Boolean(disabled);
+      button.addEventListener('click', () => selectionCallbacks.current.inspectorActions?.[index]?.onClick());
+      toolbar.appendChild(button);
+    });
+    const find = (attribute, value, predicate = () => true) => value == null ? undefined
+      : [...doc.querySelectorAll(`[${attribute}]`)].find((node) => node.getAttribute(attribute) === String(value) && predicate(node));
+    const syncSelection = () => {
+      const block = find('data-store-block', selectedBlockId, (node) => node.dataset.storeOwner === String(selectedSectionId));
+      const section = find('data-store-section', selectedSectionId);
+      const slide = /^field:slides:(\d+)$/.exec(selectedBlockId || '');
+      if (section && slide && !slideRequested && doc.defaultView) {
+        slideRequested = true;
+        slideFrame = doc.defaultView.requestAnimationFrame(() => {
+          doc.dispatchEvent(new doc.defaultView.CustomEvent('designer-select-hero-slide', {
+            detail: { sectionId: selectedSectionId, slideIndex: Number(slide[1]) },
+          }));
+        });
+      }
+      const target = block || section || find('data-store-component', selectedComponent);
+      if (highlighted === target) return;
+      highlighted?.removeAttribute('data-designer-selected');
+      highlighted = target;
+      target?.setAttribute('data-designer-selected', '');
+      target?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+      if (target && toolbar.childElementCount && (!selectedBlockId || block)) doc.body.appendChild(toolbar);
+      else toolbar.remove();
+    };
+    syncSelection();
+    const observer = new MutationObserver(syncSelection);
+    observer.observe(doc.body, { childList: true, subtree: true, attributes: true,
+      attributeFilter: ['data-store-section', 'data-store-block', 'data-store-owner', 'data-store-component'] });
     const select = (event) => {
+      if (event.target?.closest?.('[data-designer-actions]')) return;
       const target = event.target?.closest?.('[data-store-add-section],[data-store-add-block],[data-store-block],[data-store-section],[data-store-component]');
       // Edit mode must not follow links or submit storefront forms.
       event.preventDefault();
@@ -101,7 +136,7 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', devi
       if (!target) return;
       if (target.dataset.storeAddSection) selectionCallbacks.current.onInsertSection?.(target.dataset.storeAddSection, target.dataset.storeAnchor);
       else if (target.dataset.storeAddBlock) selectionCallbacks.current.onInsertBlock?.(target.dataset.storeOwner, target.dataset.storeAddBlock, target.dataset.storeAnchor);
-      else if (target.dataset.storeBlock) selectionCallbacks.current.onSelectBlock?.(target.dataset.storeOwner, target.dataset.storeBlock);
+      else if (target.dataset.storeBlock && target.dataset.storeOwner) selectionCallbacks.current.onSelectBlock?.(target.dataset.storeOwner, target.dataset.storeBlock);
       else if (target.dataset.storeSection) selectionCallbacks.current.onSelectSection?.(target.dataset.storeSection);
       else selectionCallbacks.current.onSelectComponent?.(target.dataset.storeComponent);
     };
@@ -111,8 +146,17 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', devi
       doc.removeEventListener('click', select, true);
       doc.removeEventListener('submit', select, true);
       style.remove();
+      observer.disconnect();
+      if (slideFrame != null) doc.defaultView?.cancelAnimationFrame(slideFrame);
+      if (slideRequested && doc.defaultView) {
+        doc.dispatchEvent(new doc.defaultView.CustomEvent('designer-select-hero-slide', {
+          detail: { sectionId: selectedSectionId, slideIndex: null },
+        }));
+      }
+      toolbar.remove();
+      highlighted?.removeAttribute('data-designer-selected');
     };
-  }, [inspecting, canInsertSection, canInsertBlock, selectedSectionId, selectedBlockId]);
+  }, [inspecting, canInsertSection, canInsertBlock, selectedSectionId, selectedBlockId, selectedComponent, actionSignature]);
 
   useEffect(() => {
     attachInspector();

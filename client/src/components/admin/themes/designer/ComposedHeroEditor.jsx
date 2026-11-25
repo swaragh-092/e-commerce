@@ -1,7 +1,7 @@
 import { DEFAULT_PRODUCT_BLOCK_PLACEMENT, PRODUCT_BLOCK_PLACEMENTS, getProductBlockPlacement } from '../../../../utils/productBlockPlacement';
 import useHeroCategories from '../../../../hooks/useHeroCategories';
 import { useEffect, useRef, useState } from 'react';
-import { Autocomplete, Box, Button, Dialog, DialogContent, DialogTitle, IconButton, MenuItem, Popover, Stack, TextField, Typography } from '@mui/material';
+import { Autocomplete, Box, Button, Dialog, DialogContent, DialogTitle, FormControlLabel, IconButton, MenuItem, Popover, Stack, Switch, TextField, Typography } from '@mui/material';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import BlockPickerPreview from './BlockPickerPreview';
 import { HERO_BLOCK_LABELS, HERO_CARD_SOURCES } from '../../../storefront/sections/ComposedHero';
@@ -160,6 +160,8 @@ export default function ComposedHeroEditor({ productInformation, orderedDetails,
           || (block.type === 'product-attribute' && block.text) || HERO_BLOCK_LABELS[block.type]}</Button>
         {active && (
           <Stack spacing={1.25} sx={{ py: 1 }}>
+            <FormControlLabel label="Show block" control={<Switch size="small" checked={block.enabled !== false}
+              onChange={(event) => { edit('enabled', event.target.checked); onCommit(); }} />} />
             {productInformation && !orderedDetails && parent === null && (
               <TextField select size="small" label="Block placement" value={getProductBlockPlacement(block)}
                 onChange={(event) => { edit('productPlacement', event.target.value); onCommit(); }}>

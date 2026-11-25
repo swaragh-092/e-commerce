@@ -9,9 +9,18 @@ import {
   renderMockCheckoutMain,
   renderMockOrdersMain,
   renderMockProductInfoOnly,
+  renderMockSearchMain,
+  renderMockWishlistMain,
 } from '../../../../components/admin/themes/previewMockPages';
 
 describe('store designer sample page previews', () => {
+  it.each([renderMockCategoryProductsOnly, renderMockCatalogProductsOnly, renderMockSearchMain, renderMockWishlistMain])(
+    'hides sample prices and price filters with pricing disabled',
+    (renderPage) => {
+      render(renderPage({}, { pricingVisible: false }));
+      expect(screen.queryByText(/[$₹][\d,.]+|price range/i)).not.toBeInTheDocument();
+    },
+  );
   it.each([[false, 0, false], [true, null, false], [true, 0, true]])(
     'renders a product preview price only when visible and present (%s, %s)',
     (pricingVisible, price, expected) => {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useContext, useCallback } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
-import { Box, Typography, Button, Tab, Tabs, Grid, TextField, InputAdornment, CircularProgress, Stack, Chip, Paper, Dialog, DialogTitle, DialogContent, DialogActions, FormControlLabel, Checkbox, Divider, IconButton, Tooltip } from '@mui/material';
+import { Box, Typography, Button, Tab, Tabs, Grid, TextField, InputAdornment, CircularProgress, Stack, Chip, Paper, Dialog, DialogTitle, DialogContent, DialogActions, FormControlLabel, Checkbox, Divider, IconButton, Tooltip, MenuItem } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
@@ -20,6 +20,8 @@ import ThemeDetailModal from '../../components/admin/themes/ThemeDetailModal';
 import SaveAsTemplateDialog from '../../components/admin/themes/SaveAsTemplateDialog';
 import SortIcon from '@mui/icons-material/Sort';
 import { updateSettings } from '../../services/adminService';
+import { getDesignDraft } from '../../services/settingsService';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 
@@ -144,6 +146,9 @@ const ThemeGalleryPage = () => {
   const [applyPkg, setApplyPkg] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportSource, setExportSource] = useState('published');
+  const [draftStatus, setDraftStatus] = useState(null);
   const [exportOpts, setExportOpts] = useState({ includeHomepageSections: true, includeDemoContent: true, includeComponentStyles: true, includeSectionPresets: true });
   const [detailPkg, setDetailPkg] = useState(null);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
@@ -154,6 +159,25 @@ const ThemeGalleryPage = () => {
   // Write actions (import/apply/rollback/save-template) require settings.manage
   // on the server; hide them from read-only viewers instead of 403-ing.
   const canManageTemplates = hasPermission(PERMISSIONS.SETTINGS_MANAGE);
+  const needsDraftStatus = canManageTemplates && (exportOpen || saveTemplateOpen);
+  const draftRevision = canManageTemplates ? draftStatus?.revision : undefined;
+  useEffect(() => {
+    if (!needsDraftStatus) {
+      setDraftStatus(null);
+      setExportSource('published');
+      return;
+    }
+    let active = true;
+    getDesignDraft().then(({ draft }) => {
+      if (!active) return;
+      setDraftStatus({ revision: draft?.revision });
+      setExportSource(draft?.revision ? 'draft' : 'published');
+    }).catch(() => {
+      if (!active) return;
+      setDraftStatus({ unavailable: true });
+    });
+    return () => { active = false; };
+  }, [needsDraftStatus]);
   const onApplyTemplate = canManageTemplates ? setApplyPkg : undefined;
 
   // Close write dialogs the moment settings.manage is lost so a revoked admin
@@ -300,8 +324,11 @@ const ThemeGalleryPage = () => {
   };
 
   const handleExport = async () => {
+    setExporting(true);
     try {
-      const pkg = await themeService.exportTheme(exportOpts);
+      const pkg = await (canManageTemplates && exportSource === 'draft'
+        ? themeService.exportDraftTheme(draftRevision, exportOpts)
+        : themeService.exportTheme(exportOpts));
       const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -312,7 +339,9 @@ const ThemeGalleryPage = () => {
       setExportOpen(false);
       notify('Template exported', 'success');
     } catch (e) {
-      notify('Export failed', 'error');
+      notify(getApiErrorMessage(e, 'Export failed'), 'error');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -793,15 +822,23 @@ const ThemeGalleryPage = () => {
       <ThemeApplyDialog open={!!applyPkg} onClose={() => setApplyPkg(null)} packageData={applyPkg} onConfirm={handleApply} loading={actionLoading} />
       <ThemeImportDialog open={importOpen} onClose={() => setImportOpen(false)} onImport={handleImport} onPreview={(pkg) => { setImportOpen(false); setPreviewPkg(pkg); }} loading={actionLoading} />
       <ThemeDetailModal open={!!detailPkg} onClose={() => setDetailPkg(null)} packageData={detailPkg} onPreview={setPreviewPkg} onApply={onApplyTemplate} />
-      <SaveAsTemplateDialog open={saveTemplateOpen} onClose={() => setSaveTemplateOpen(false)} onSaved={() => { notify('Template saved to library', 'success'); fetchData(); }} />
+      {canManageTemplates && saveTemplateOpen && draftStatus && <SaveAsTemplateDialog open draftRevision={draftRevision} allowSourceChoice publishedOnly={!draftRevision}
+        onClose={() => setSaveTemplateOpen(false)} onSaved={() => { notify('Template saved to library', 'success'); fetchData(); }} />}
 
-      <Dialog open={exportOpen} onClose={() => setExportOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog open={exportOpen} onClose={exporting ? undefined : () => setExportOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>Export Current Store Template</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Choose how much of the current store configuration should be included in the exported .theme.json file. Advanced custom code, payments, shipping, credentials, and private settings are never exported.
           </Typography>
           <Stack spacing={1}>
+            {needsDraftStatus && !draftStatus && <Typography role="status">Checking for a saved design draft…</Typography>}
+            {draftStatus?.unavailable && <Typography color="warning.main">Draft lookup failed. Only the published design is available to export.</Typography>}
+            {draftRevision && <TextField select size="small" label="Export source" value={exportSource}
+              disabled={exporting} onChange={(event) => setExportSource(event.target.value)}>
+              <MenuItem value="draft">Saved design draft</MenuItem>
+              <MenuItem value="published">Published design</MenuItem>
+            </TextField>}
             <FormControlLabel
               control={
                 <Checkbox
@@ -841,8 +878,9 @@ const ThemeGalleryPage = () => {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setExportOpen(false)}>Cancel</Button>
-          <Button variant="contained" startIcon={<FileDownloadIcon />} onClick={handleExport}>Export Template</Button>
+          <Button disabled={exporting} onClick={() => setExportOpen(false)}>Cancel</Button>
+          <Button variant="contained" startIcon={<FileDownloadIcon />} onClick={handleExport}
+            disabled={exporting || (needsDraftStatus && !draftStatus)}>Export Template</Button>
         </DialogActions>
       </Dialog>
     </Box>

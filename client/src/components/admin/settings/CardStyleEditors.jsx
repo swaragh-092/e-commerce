@@ -127,8 +127,8 @@ const ProductCardPreview = ({ style, product }) => {
         flexDirection: 'column',
         borderRadius: cardRadius,
         overflow: 'hidden',
-        border: style.variant === 'deal' ? '2px solid' : (isMinimal ? '1px solid' : 'none'),
-        borderColor: style.variant === 'deal' ? 'error.main' : 'divider',
+        border: typeof style.cardBorderWidth === 'number' ? `${style.cardBorderWidth}px solid` : style.variant === 'deal' ? '2px solid' : (isMinimal ? '1px solid' : 'none'),
+        borderColor: style.cardBorderColor || (style.variant === 'deal' ? 'error.main' : 'divider'),
         boxShadow: style.variant === 'deal' ? '0 10px 30px rgba(239, 68, 68, 0.15)' : (isMinimal ? 'none' : cardShadow),
       }}
     >

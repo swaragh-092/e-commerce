@@ -13,6 +13,31 @@ describe('page product rows', () => {
     getProducts.mockResolvedValue({ data: [] });
   });
 
+  it('requests the selected brand and preserves the combo source', async () => {
+    const row = { id: 'brand-combos', type: 'product-row', source: 'combo', query: { brand: 'craft' } };
+    render(<MemoryRouter><PageProductRows rows={[row]} /></MemoryRouter>);
+    await waitFor(() => expect(getProducts).toHaveBeenCalledWith(expect.objectContaining({
+      brand: 'craft', productType: 'combo', status: 'published',
+    })));
+  });
+
+  it('uses saved responsive columns and pixel gaps on storefront grids', async () => {
+    let finishRequest;
+    getProducts.mockReturnValueOnce(new Promise((resolve) => { finishRequest = resolve; }));
+    const row = {
+      id: 'responsive', type: 'product-row', variant: 'grid', count: 3,
+      columnsMobile: 1, columnsTablet: 4, horizontalGap: 12, verticalGap: 24, mobileCarousel: true,
+    };
+    const { container } = render(<MemoryRouter><PageProductRows rows={[row]} /></MemoryRouter>);
+    expect(container.querySelectorAll('.MuiGrid-grid-xs-12.MuiGrid-grid-sm-3')).toHaveLength(3);
+    expect(container.querySelector('.MuiGrid-container')).toHaveStyle({ marginLeft: '-12px', marginTop: '-24px' });
+    const rules = Array.from(document.styleSheets).flatMap((sheet) => Array.from(sheet.cssRules));
+    expect(rules.some(({ cssText }) => cssText.includes('599.95px') &&
+      cssText.includes('scroll-snap-type: x proximity') && cssText.includes('column-gap: 12px'))).toBe(true);
+    finishRequest({ data: [] });
+    await waitFor(() => expect(container.querySelector('.MuiGrid-container')).toBeNull());
+  });
+
   it('shows a fallback for an empty product row in Designer', async () => {
     render(<SettingsContext.Provider value={{ settings: {} }}>
       <MemoryRouter><PageProductRows designerPreview rows={[{ id: 'empty', type: 'product-row', title: 'Seasonal picks' }]} /></MemoryRouter>

@@ -2,19 +2,63 @@ import React from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import DesignerTreePanel from '../../components/admin/themes/designer/DesignerTreePanel';
-const dnd = vi.hoisted(() => ({ start: null, end: null }));
+const dnd = vi.hoisted(() => ({ start: null, end: null, over: null }));
 vi.mock('@hello-pangea/dnd', () => ({
   DragDropContext: ({ onBeforeDragStart, onDragEnd, children }) => {
     dnd.start = onBeforeDragStart;
     dnd.end = onDragEnd;
     return children;
   },
-  Droppable: ({ children }) => children({ innerRef: () => {}, droppableProps: {}, placeholder: null }),
+  Droppable: ({ children, droppableId, type }) => children({
+    innerRef: () => {}, droppableProps: { 'data-drop-zone': droppableId, 'data-drop-type': type }, placeholder: null,
+  }, { isDraggingOver: dnd.over === droppableId }),
   Draggable: ({ children }) => children({ innerRef: () => {}, draggableProps: {}, dragHandleProps: { role: 'button', tabIndex: 0 } }),
 }));
 const sections = [{ id: 'one', type: 'hero-carousel' }, { id: 'footer', type: 'trust-badges', placement: 'footer' }, { id: 'two', type: 'product-row' }];
 const setup = (activePage = 'home') => { const reorder = vi.fn(); const select = vi.fn(); render(<DesignerTreePanel sections={activePage === 'home' ? sections : []} activePage={activePage} pageSettings={{}} onSectionClick={select} onReorderSection={reorder} />); return { reorder, select }; };
 describe('store designer section navigation', () => {
+  it('routes configured slide reordering to the owning section and field', () => {
+    const section = { id: 'hero', type: 'hero-carousel', slides: [{ title: 'First' }, { title: 'Second' }] };
+    const onReorderSectionItems = vi.fn();
+    const { container } = render(<DesignerTreePanel activePage="home" sections={[section]} pageSettings={{}}
+      componentSelection={{ sectionId: 'hero', blockKey: 'slides', blockIndex: 1 }}
+      onReorderSectionItems={onReorderSectionItems} />);
+    expect(screen.getByRole('button', { name: 'Second', exact: true })).toHaveAttribute('aria-current', 'true');
+    const droppableId = container.querySelector('[data-drop-zone^="section-items:"]').dataset.dropZone;
+    act(() => dnd.end({ source: { droppableId, index: 1 }, destination: { droppableId, index: 0 } }));
+    expect(onReorderSectionItems).toHaveBeenCalledWith('hero', 'slides', 1, 0);
+  });
+  it('isolates nested block drop targets and identifies the selected block in the tree', () => {
+    const section = { id: 'hero', type: 'composed-hero', heroBlocks: [{ id: 'group', type: 'group', children: [
+      { id: 'first', type: 'heading', text: 'First' },
+      { id: 'second', type: 'text', text: 'Second' },
+    ] }] };
+    const onReorderHeroBlocks = vi.fn();
+    const { container } = render(<DesignerTreePanel activePage="home" sections={[section]} pageSettings={{}}
+      componentSelection={{ sectionId: 'hero', blockKey: 'heroBlocks', blockIndex: 'second' }}
+      onReorderHeroBlocks={onReorderHeroBlocks} />);
+    const zones = [...container.querySelectorAll('[data-drop-zone^="hero-blocks:"]')];
+    expect(zones).toHaveLength(2);
+    expect(new Set(zones.map((zone) => zone.dataset.dropType)).size).toBe(2);
+    expect(screen.getByRole('button', { name: /Text.*Second/ })).toHaveAttribute('aria-current', 'true');
+    const droppableId = zones[1].dataset.dropZone;
+    act(() => dnd.end({ source: { droppableId, index: 1 }, destination: { droppableId, index: 0 } }));
+    expect(onReorderHeroBlocks).toHaveBeenCalledWith('hero', 'group', 1, 0);
+  });
+  it('shows drop feedback only in the drag target', () => {
+    const tree = <DesignerTreePanel activePage="home" sections={sections} pageSettings={{}} />;
+    const { container, rerender } = render(tree);
+    expect(container.querySelector('[data-drop-active]')).toBeNull();
+    dnd.over = 'footer';
+    try {
+      rerender(React.cloneElement(tree));
+      const highlighted = container.querySelectorAll('[data-drop-active]');
+      expect(highlighted).toHaveLength(1);
+      expect(highlighted[0]).toHaveAttribute('data-drop-zone', 'footer');
+    } finally {
+      dnd.over = null;
+    }
+  });
   it('captures a primary mouse gesture on the named grip before the drag starts', () => {
     render(<DesignerTreePanel activePage="home" pageSettings={{}}
       sections={[{ ...sections[0], title: 'Shop The Studio' }]} />);
@@ -35,6 +79,20 @@ describe('store designer section navigation', () => {
     render(<DesignerTreePanel activePage="home" sections={sections} pageSettings={{}} onDragActiveChange={onDragActiveChange} />);
     act(() => dnd.start());
     act(() => dnd.end({ destination: null }));
+    expect(onDragActiveChange.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it('guards the preview while a mouse gesture is pending and releases it on a click', () => {
+    const onDragActiveChange = vi.fn();
+    render(<DesignerTreePanel activePage="home" sections={sections} pageSettings={{}} onDragActiveChange={onDragActiveChange} />);
+    const handle = screen.getByRole('button', { name: 'Reorder Hero carousel' });
+    const pointerDown = new Event('pointerdown', { bubbles: true });
+    Object.assign(pointerDown, { isPrimary: true, pointerType: 'mouse', pointerId: 1, button: 0 });
+    fireEvent(handle, pointerDown);
+    expect(onDragActiveChange.mock.calls).toEqual([[true]]);
+    const pointerUp = new Event('pointerup', { bubbles: true });
+    Object.assign(pointerUp, { pointerId: 1 });
+    fireEvent(handle, pointerUp);
     expect(onDragActiveChange.mock.calls).toEqual([[true], [false]]);
   });
 

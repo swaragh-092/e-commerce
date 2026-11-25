@@ -1,9 +1,9 @@
 import StaffPicksEditor from './StaffPicksEditor';
 import ComposedHeroEditor from './ComposedHeroEditor';
 import { isValidPromoLink } from '../../../../utils/urls';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
-  Box, Stack, Typography, IconButton, Button, Chip, Divider,
+  Box, Stack, Typography, IconButton, Button, Divider,
   TextField, FormControl, InputLabel, Select, MenuItem, InputAdornment,
   ToggleButtonGroup, ToggleButton, Switch, FormControlLabel,
   Accordion, AccordionSummary, AccordionDetails,
@@ -23,13 +23,26 @@ import StorageIcon from '@mui/icons-material/Storage';
 import { SECTION_VARIANTS, getSectionLabel } from '../../../storefront/sections/sectionRegistry';
 import { SHADOW_PRESETS, WIDTH_PRESETS } from '../../../storefront/sections/SectionFallback';
 import { useFeature } from '../../../../hooks/useSettings';
+import useHeroCategories from '../../../../hooks/useHeroCategories';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import { getSaleLabels } from '../../../../services/adminService';
 import { galleryService } from '../../../../services/galleryService';
 import MediaPicker from '../../../common/MediaPicker';
 import { getMediaUrl } from '../../../../utils/media';
+import { HexColorField } from './DesignSchemaFields';
+import { usesProductRowSource } from '../../../../utils/productRowSources';
 
 import productRow from '../../../../../../shared/product-row.json';
 
+const featureRequirementField = {
+  key: 'requiresFeatureFlag', label: 'Show when feature is enabled', type: 'select',
+  options: [
+    { value: '', label: 'Always' }, { value: 'pricing', label: 'Pricing' },
+    { value: 'cart', label: 'Cart' }, { value: 'checkout', label: 'Checkout' },
+    { value: 'payments', label: 'Payments' }, { value: 'shipping', label: 'Shipping' },
+  ],
+};
 
 export const BLOCK_FIELD_PRESETS = {
   'hero-carousel': {
@@ -87,6 +100,7 @@ export const BLOCK_FIELD_PRESETS = {
       { key: 'image', label: 'Image', type: 'image' },
       { key: 'backgroundColor', label: 'Background', type: 'color' },
       { key: 'accentColor', label: 'Accent', type: 'color' },
+      featureRequirementField,
     ],
   },
   'trust-badges': {
@@ -102,6 +116,7 @@ export const BLOCK_FIELD_PRESETS = {
       { key: 'image', label: 'Image', type: 'image' },
       { key: 'backgroundColor', label: 'Background', type: 'color' },
       { key: 'accentColor', label: 'Accent', type: 'color' },
+      featureRequirementField,
     ],
   },
   testimonials: {
@@ -235,9 +250,15 @@ const ImageField = ({ label, value, onChange, onBlur, placeholder = 'Image URL..
   );
 };
 
-const FieldGroup = ({ label, icon, defaultOpen = true, children }) => (
-  <Accordion
-    defaultExpanded={defaultOpen}
+const FieldGroup = ({ label, icon, defaultOpen = true, openForBlock, children }) => {
+  const [expanded, setExpanded] = useState(defaultOpen);
+  useEffect(() => {
+    if (openForBlock != null) setExpanded(true);
+  }, [openForBlock]);
+
+  return <Accordion
+    expanded={expanded}
+    onChange={(_, next) => setExpanded(next)}
     disableGutters
     elevation={0}
     sx={{
@@ -258,8 +279,58 @@ const FieldGroup = ({ label, icon, defaultOpen = true, children }) => (
     <AccordionDetails sx={{ px: 1.5, pb: 2, pt: 0.5 }}>
       <Stack spacing={1.5}>{children}</Stack>
     </AccordionDetails>
-  </Accordion>
-);
+  </Accordion>;
+};
+
+function CatalogSelectionPicker({ source, selected, onChange }) {
+  const curated = Array.isArray(selected);
+  const { categories: records, status } = useHeroCategories(curated, source);
+  const isBrand = source === 'brand';
+  const options = records.filter(({ slug }) => !selected?.includes(slug));
+  return <>
+    <TextField select size="small" label={isBrand ? 'Brand source' : 'Category source'} value={curated ? 'selected' : 'default'}
+      onChange={(event) => onChange(event.target.value === 'selected' ? [] : undefined)}>
+      <MenuItem value="default">{isBrand ? 'Use automatic brands' : 'Use existing tiles or automatic categories'}</MenuItem>
+      <MenuItem value="selected">{isBrand ? 'Choose brands' : 'Choose categories'}</MenuItem>
+    </TextField>
+    {curated && <>
+      <TextField select size="small" label={isBrand ? 'Add brand' : 'Add category'} value="" disabled={status !== 'ready' || !options.length || selected.length >= (isBrand ? 24 : 16)}
+        helperText={status === 'error' ? `${isBrand ? 'Brands' : 'Categories'} could not be loaded.` : undefined}
+        onChange={(event) => onChange([...selected, event.target.value])}>
+        <MenuItem value="" disabled>{isBrand ? 'Choose a brand' : 'Choose a category'}</MenuItem>
+        {options.map(({ slug, label, name }) => <MenuItem key={slug} value={slug}>{label || name}</MenuItem>)}
+      </TextField>
+      {selected.map((slug, index) => {
+        const record = records.find((item) => item.slug === slug);
+        const label = record?.label || record?.name || slug;
+        const move = (direction) => {
+          const next = [...selected];
+          const target = index + direction;
+          [next[index], next[target]] = [next[target], next[index]];
+          onChange(next);
+        };
+        return <Stack key={slug} direction="row" alignItems="center">
+          <Typography variant="body2" sx={{ flex: 1 }}>{label}{status === 'ready' && !record ? ' (unavailable)' : ''}</Typography>
+          <IconButton size="small" aria-label={`Move ${label} up`} disabled={index === 0} onClick={() => move(-1)}><ArrowUpwardIcon fontSize="small" /></IconButton>
+          <IconButton size="small" aria-label={`Move ${label} down`} disabled={index === selected.length - 1} onClick={() => move(1)}><ArrowDownwardIcon fontSize="small" /></IconButton>
+          <IconButton size="small" aria-label={`Remove ${label}`} onClick={() => onChange(selected.filter((value) => value !== slug))}><DeleteIcon fontSize="small" /></IconButton>
+        </Stack>;
+      })}
+    </>}
+  </>;
+}
+
+function ProductRowBrandFilter({ brand, enabled, onChange }) {
+  const { categories: brands, status } = useHeroCategories(enabled, 'brand');
+  const unavailable = brand && !brands.some(({ slug }) => slug === brand);
+  return <TextField select size="small" label="Filter by brand" value={brand || ''}
+    helperText={enabled ? (status === 'error' ? 'Brands could not be loaded.' : undefined) : 'Brands are disabled in store settings.'}
+    onChange={(event) => onChange(event.target.value)}>
+    <MenuItem value="">All brands</MenuItem>
+    {unavailable && <MenuItem value={brand} disabled>{brand}{status === 'ready' ? ' (unavailable)' : ''}</MenuItem>}
+    {brands.map(({ slug, name }) => <MenuItem key={slug} value={slug}>{name}</MenuItem>)}
+  </TextField>;
+}
 
 
 const BlockListEditor = ({
@@ -278,6 +349,12 @@ const BlockListEditor = ({
     ? inheritedBlocks
     : [];
   const [expandedIndex, setExpandedIndex] = useState(0);
+  const focusedBlockRef = useRef(null);
+  const hasBlockFocus = activeBlockKey === schema.key && Number.isInteger(activeBlockIndex);
+
+  useEffect(() => {
+    if (hasBlockFocus) focusedBlockRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [activeBlockIndex, hasBlockFocus]);
 
   useEffect(() => {
     if (activeBlockKey === schema.key && Number.isInteger(activeBlockIndex) && activeBlockIndex >= 0 && activeBlockIndex < blocks.length) {
@@ -316,7 +393,7 @@ const BlockListEditor = ({
   };
 
   return (
-    <FieldGroup label={schema.title} defaultOpen={activeBlockKey === schema.key || !activeBlockKey} icon={<TextFieldsIcon sx={{ fontSize: 15 }} />}>
+    <FieldGroup label={schema.title} openForBlock={hasBlockFocus ? activeBlockIndex : undefined} icon={<TextFieldsIcon sx={{ fontSize: 15 }} />}>
       {!isCustomized ? (
         <Stack spacing={1.5}>
           <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: 'action.hover', border: '1px dashed', borderColor: 'divider' }}>
@@ -359,6 +436,7 @@ const BlockListEditor = ({
           {blocks.map((block, index) => (
             <Accordion
               key={`${schema.key}-${index}`}
+              ref={hasBlockFocus && activeBlockIndex === index ? focusedBlockRef : undefined}
               expanded={expandedIndex === index}
               onChange={handleAccordionChange(index)}
               disableGutters
@@ -380,6 +458,9 @@ const BlockListEditor = ({
                         onChange={(value) => updateField(index, field.key, value)}
                         onBlur={onBlur}
                       />
+                    ) : field.type === 'color' ? (
+                      <HexColorField key={field.key} label={field.label} value={block?.[field.key] || ''} allowEmpty
+                        onChange={(value) => updateField(index, field.key, value)} onBlur={onBlur} />
                     ) : field.type === 'select' ? (
                       <FormControl key={field.key} size="small" fullWidth>
                         <InputLabel>{field.label}</InputLabel>
@@ -414,7 +495,6 @@ const BlockListEditor = ({
                         fullWidth
                         multiline={Boolean(field.multiline)}
                         rows={field.multiline ? 2 : undefined}
-                        InputLabelProps={field.type === 'color' ? { shrink: true } : undefined}
                       />
                     )
                   ))}
@@ -570,10 +650,13 @@ const CampaignLabelSelect = ({ value, onChange }) => {
 const DesignerSectionEditor = ({
   allowSharedPlacement,
   pageSection,
+  brandsEnabled,
   categoryPage,
   section,
   inheritedBlocks = [],
   onBack,
+  onBackToSection,
+  activeBlockLabel,
   onChange,
   onBlur,
   onApplyPreset,
@@ -587,6 +670,7 @@ const DesignerSectionEditor = ({
   mappedComponentLabel,
   onBlockFocus,
 }) => {
+  const formRef = useRef(null);
   if (!section) return null;
 
   const variants = SECTION_VARIANTS[section.type] || [];
@@ -597,8 +681,13 @@ const DesignerSectionEditor = ({
   const isHero        = section.type === 'hero-carousel';
   const isEditorial   = section.type === 'editorial-image-text';
   const hasCategories = has('category-shortcuts', 'featured-collection-grid')(section);
+  const curatedCategories = section.type === 'category-shortcuts' && Array.isArray(section.selectedCategorySlugs);
+  const isBrandShowcase = section.type === 'brand-showcase';
+  const curatedBrands = isBrandShowcase && Array.isArray(section.selectedBrandSlugs);
   const hasCtaLink    = isCountdown || has('editorial-image-text', 'promo-banners')(section);
   const blockSchema   = BLOCK_FIELD_PRESETS[section.type];
+  const productLayout = section.variant || section.layout || (pageSection && isProductRow ? productRow.defaults.layout : 'grid');
+  const sectionName = section.title || getSectionLabel(section);
 
   // System page section flags — these sections have no editable blocks but do have layout options
   const isCheckoutMain  = section.type === 'checkout-main';
@@ -614,22 +703,29 @@ const DesignerSectionEditor = ({
 
       {/* Panel Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
-        <IconButton size="small" onClick={onBack} sx={{ flexShrink: 0 }}>
+        <IconButton size="small" aria-label={activeBlockLabel ? 'Back to section settings' : 'Close section settings'}
+          onClick={activeBlockLabel ? () => {
+            onBackToSection?.();
+            formRef.current?.scrollTo?.({ top: 0 });
+          } : onBack} sx={{ flexShrink: 0 }}>
           <ArrowBackIcon fontSize="small" />
         </IconButton>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="subtitle2" fontWeight={800} noWrap sx={{ fontSize: '0.88rem' }}>
-            {section.title || getSectionLabel(section)}
+            {activeBlockLabel || sectionName}
           </Typography>
-          <Chip label={getSectionLabel(section)} size="small" variant="outlined"
-            sx={{ height: 17, fontSize: '0.66rem', fontWeight: 700, letterSpacing: 0.2, mt: 0.25 }} />
+          {(activeBlockLabel || sectionName !== getSectionLabel(section)) && (
+            <Typography variant="caption" color="text.secondary" noWrap display="block">
+              {activeBlockLabel ? sectionName : getSectionLabel(section)}
+            </Typography>
+          )}
         </Box>
-        {onDuplicate && (
+        {onDuplicate && !activeBlockLabel && (
           <IconButton size="small" title="Duplicate" onClick={() => onDuplicate(section)}>
             <ContentCopyIcon sx={{ fontSize: 15 }} />
           </IconButton>
         )}
-        {onDelete && (
+        {onDelete && !activeBlockLabel && (
           <IconButton size="small" color="error" title="Delete" onClick={() => onDelete(section)}>
             <DeleteIcon sx={{ fontSize: 15 }} />
           </IconButton>
@@ -637,9 +733,9 @@ const DesignerSectionEditor = ({
       </Box>
 
       {/* Quick actions */}
-      <Box sx={{ px: 1.5, pt: 1.5, pb: 1 }}>
+      {!activeBlockLabel && (onApplyPreset || mappedComponent) && <Box sx={{ px: 1.5, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
         <Stack direction="row" spacing={1}>
-          <Button
+          {onApplyPreset && <Button
             size="small"
             variant="outlined"
             fullWidth
@@ -648,7 +744,7 @@ const DesignerSectionEditor = ({
             sx={{ fontSize: '0.75rem', py: 0.5 }}
           >
             Smart Preset
-          </Button>
+          </Button>}
           {mappedComponent && (
             <Button
               size="small"
@@ -661,13 +757,164 @@ const DesignerSectionEditor = ({
             </Button>
           )}
         </Stack>
-      </Box>
-
-      <Divider />
+      </Box>}
 
       {/* Scrollable form */}
-      <Box sx={{ flex: 1, overflowY: 'auto', p: 1.5 }}>
+      <Box ref={formRef} sx={{ flex: 1, overflowY: 'auto', p: 1.5 }}>
         <Stack spacing={1.5}>
+
+          {(onDelete || onDuplicate) && (
+            <FieldGroup label="Visibility" icon={<DevicesIcon sx={{ fontSize: 15 }} />}>
+              {[
+                ['enabled', 'Show section', section.enabled !== false],
+                ['hideOnMobile', 'Hide on mobile', section.hideOnMobile === true],
+                ['hideOnDesktop', 'Hide on desktop', section.hideOnDesktop === true],
+              ].map(([key, label, checked]) => (
+                <FormControlLabel key={key} label={label} labelPlacement="start" sx={{ m: 0, justifyContent: 'space-between' }}
+                  control={<Switch size="small" checked={checked} inputProps={{ role: 'switch' }} onChange={(event) => {
+                    onChange(key, key === 'enabled' ? event.target.checked : (event.target.checked || undefined));
+                    onBlur();
+                  }} />}
+                />
+              ))}
+            </FieldGroup>
+          )}
+          {/* ── DATA SOURCE (product-row / category sections) ── */}
+          {(isProductRow || isRecentlyViewed || hasCategories || isBrandShowcase) && (
+            <FieldGroup label="Content source" icon={<StorageIcon sx={{ fontSize: 15 }} />} defaultOpen={isProductRow || section.type === 'category-shortcuts' || isBrandShowcase}>
+              {section.type === 'category-shortcuts' && (
+                <CatalogSelectionPicker source="category" selected={section.selectedCategorySlugs}
+                  onChange={(value) => { onChange('selectedCategorySlugs', value); onBlur(); }} />
+              )}
+              {isBrandShowcase && (
+                <CatalogSelectionPicker source="brand" selected={section.selectedBrandSlugs}
+                  onChange={(value) => { onChange('selectedBrandSlugs', value); onBlur(); }} />
+              )}
+              {(isProductRow || isRecentlyViewed) && (
+                <>
+                  {isProductRow && <FormControl size="small" fullWidth>
+                    <InputLabel>Product Source</InputLabel>
+                    <Select
+                      value={section.source || productRow.defaults.source}
+                      label="Product Source"
+                      onChange={(event) => {
+                        const source = event.target.value;
+                        onChange('source', source);
+                        if (source === 'staffPicks' && section.viewAllLink?.startsWith('/products?')) {
+                          onChange('viewAllLink', '');
+                        }
+                        if (source === 'trending' && section.viewAllLink === '/products?featured=true') {
+                          onChange('viewAllLink', '/products?sort=trending');
+                        }
+                        onBlur();
+                      }}
+                    >
+                      {Object.entries(productRow.sources).map(([value, source]) => <MenuItem key={value} value={value}>{source.label}</MenuItem>)}
+                    </Select>
+                  </FormControl>}
+                  {isProductRow && section.source !== 'staffPicks' && usesProductRowSource(section) &&
+                    (brandsEnabled || section.query?.brand) && (
+                      <ProductRowBrandFilter brand={section.query?.brand} enabled={brandsEnabled}
+                        onChange={(brand) => {
+                          const query = { ...section.query };
+                          if (brand) query.brand = brand;
+                          else delete query.brand;
+                          onChange('query', Object.keys(query).length ? query : undefined);
+                          onBlur();
+                        }} />
+                    )}
+                  {isProductRow && (
+                    <TextField select label="Product layout" size="small" value={productLayout}
+                      onChange={(event) => { onChange('variant', event.target.value); onBlur(); }}>
+                      <MenuItem value="carousel">Carousel</MenuItem>
+                      <MenuItem value="grid">Grid</MenuItem>
+                      <MenuItem value="grid-compact">Compact grid</MenuItem>
+                    </TextField>
+                  )}
+                  {isProductRow && section.source === 'sale' && (
+                    <CampaignLabelSelect value={section.saleLabel} onChange={(value) => {
+                      onChange('saleLabel', value);
+                      onBlur();
+                    }} />
+                  )}
+                  {isProductRow && section.source === 'staffPicks' && (
+                    <StaffPicksEditor ids={section.productIds || []} onChange={(ids) => {
+                      onChange('productIds', ids);
+                      onBlur();
+                    }} />
+                  )}
+                  <TextField
+                    label="Count"
+                    type="number"
+                    disabled={section.source === 'staffPicks'}
+                    value={section.source === 'staffPicks' ? section.productIds?.length || 0 : section.count || productRow.defaults.count}
+                    onChange={(e) => onChange('count', Math.min(isRecentlyViewed ? 12 : productRow.limits.editorMaxCount, Math.max(productRow.limits.minCount, parseInt(e.target.value) || productRow.defaults.count)))}
+                    onBlur={onBlur}
+                    size="small"
+                    fullWidth
+                    inputProps={{ min: productRow.limits.minCount, max: isRecentlyViewed ? 12 : productRow.limits.editorMaxCount }}
+                  />
+                  {isProductRow && productLayout !== 'carousel' && (
+                    <FormControlLabel label="Carousel on mobile" labelPlacement="start" sx={{ m: 0, justifyContent: 'space-between' }}
+                      control={<Switch size="small" checked={section.mobileCarousel === true} inputProps={{ role: 'switch' }}
+                        onChange={(event) => { onChange('mobileCarousel', event.target.checked || undefined); onBlur(); }} />}
+                    />
+                  )}
+                  {isProductRow && productLayout !== 'carousel' && (
+                    [
+                      ['columnsMobile', 'Mobile columns', productRow.responsiveColumns.mobile],
+                      ['columnsTablet', 'Tablet columns', productRow.responsiveColumns.tablet],
+                      ['columnsDesktop', 'Desktop columns', [2, 3, 4, 6]],
+                    ].filter(([key]) => key !== 'columnsMobile' || !section.mobileCarousel).map(([key, label, options]) => (
+                      <TextField key={key} select size="small" label={label} value={section[key] ?? ''}
+                        onChange={(event) => { onChange(key, event.target.value || undefined); onBlur(); }}>
+                        <MenuItem value="">Use layout default</MenuItem>
+                        {options.map((columns) => <MenuItem key={columns} value={columns}>{columns}</MenuItem>)}
+                      </TextField>
+                    ))
+                  )}
+                  {isProductRow && productLayout !== 'carousel' && [
+                    ['horizontalGap', 'Horizontal gap'],
+                    ['verticalGap', 'Vertical gap'],
+                  ].map(([key, label]) => (
+                    <TextField key={key} size="small" type="number" label={label} value={section[key] ?? ''}
+                      placeholder="Layout default"
+                      inputProps={{ min: 0, max: productRow.gridGapMax, step: 1 }}
+                      InputProps={{ endAdornment: <InputAdornment position="end">px</InputAdornment> }}
+                      onChange={(event) => {
+                        const input = event.target.value;
+                        const pixels = Number(input);
+                        if (input === '') onChange(key, undefined);
+                        else if (Number.isInteger(pixels) && pixels >= 0 && pixels <= productRow.gridGapMax) onChange(key, pixels);
+                      }}
+                      onBlur={onBlur}
+                    />
+                  ))}
+                  {isProductRow && !(section.source === 'sale' && section.saleLabel) && <TextField
+                    label="View All Link"
+                    value={section.viewAllLink || ''}
+                    onChange={(e) => onChange('viewAllLink', e.target.value)}
+                    onBlur={onBlur}
+                    size="small"
+                    fullWidth
+                    placeholder="/products?featured=true"
+                  />}
+                </>
+              )}
+              {hasCategories && !curatedCategories && (
+                <TextField
+                  label="Count"
+                  type="number"
+                  value={section.count || 10}
+                  onChange={(e) => onChange('count', parseInt(e.target.value) || 10)}
+                  onBlur={onBlur}
+                  size="small"
+                  fullWidth
+                  inputProps={{ min: 1, max: 16 }}
+                />
+              )}
+            </FieldGroup>
+          )}
 
           {pageSection && (
             <TextField select size="small" label="Position on page" value={section.pagePosition || 'below'}
@@ -956,7 +1203,7 @@ const DesignerSectionEditor = ({
           </FieldGroup>
           )}
 
-          {blockSchema && !isSystemSection && (
+          {blockSchema && !isSystemSection && !curatedCategories && !curatedBrands && (
             <BlockListEditor
               section={section}
               schema={blockSchema}
@@ -970,7 +1217,7 @@ const DesignerSectionEditor = ({
           )}
 
           {/* ── LAYOUT ── */}
-          <FieldGroup label="Layout" defaultOpen={false} icon={<ViewQuiltIcon sx={{ fontSize: 15 }} />}>
+          <FieldGroup label="Layout" defaultOpen={isProductRow} icon={<ViewQuiltIcon sx={{ fontSize: 15 }} />}>
             {isRecentlyViewed && (
               <TextField select label="Product layout" size="small" value={section.variant || section.layout || 'carousel'}
                 onChange={(e) => { onChange('variant', e.target.value); onBlur(); }}>
@@ -1276,7 +1523,7 @@ const DesignerSectionEditor = ({
               </Select>
             </FormControl>
 
-            {variants.length > 0 && (
+            {variants.length > 0 && !isProductRow && !isRecentlyViewed && (
               <>
                 <Divider sx={{ my: 0.5 }} />
                 <FormControl size="small" fullWidth>
@@ -1295,7 +1542,7 @@ const DesignerSectionEditor = ({
           </FieldGroup>
 
           {/* ── RESPONSIVE ── */}
-          <FieldGroup
+          {!(onDelete || onDuplicate) && <FieldGroup
             label="Responsive"
             icon={<DevicesIcon sx={{ fontSize: 15 }} />}
             defaultOpen={false}
@@ -1320,9 +1567,56 @@ const DesignerSectionEditor = ({
               }
               label={<Typography variant="body2" sx={{ fontSize: '0.8rem' }}>Hide on desktop</Typography>}
             />
-          </FieldGroup>
+          </FieldGroup>}
 
           {/* ── ADVANCED ── */}
+          {['category-shortcuts', 'brand-showcase', 'value-props', 'trust-badges'].includes(section.type) && (
+            <FieldGroup label="Grid columns">
+              <TextField select size="small" fullWidth label="Desktop columns" value={section.columnsDesktop ?? ''}
+                onChange={(event) => {
+                  onChange('columnsDesktop', event.target.value || undefined);
+                  onBlur();
+                }}>
+                <MenuItem value="">Use layout default</MenuItem>
+                {[2, 3, 4, 6].map((columns) => <MenuItem key={columns} value={columns}>{columns}</MenuItem>)}
+              </TextField>
+            </FieldGroup>
+          )}
+          {section.type === 'catalog-explorer' && (
+            <FieldGroup label="Catalog filters and layout" defaultOpen>
+              {[
+                ['showCategory', 'Show category filter'],
+                ['showBrand', 'Show brand filter'],
+                ['showSort', 'Show sorting'],
+              ].map(([key, label]) => (
+                <FormControlLabel key={key} label={label} control={<Switch
+                  checked={section.catalogFilters?.[key] !== false}
+                  onChange={(event) => {
+                    onChange('catalogFilters', { ...section.catalogFilters, [key]: event.target.checked });
+                    onBlur();
+                  }}
+                />} />
+              ))}
+              {[
+                ['columnsDesktop', 'Desktop columns', 4, [2, 3, 4, 6]],
+                ['pageSize', 'Products per page', 8, [4, 6, 8, 12, 16, 24]],
+                ['defaultSort', 'Default sort', 'newest', ['newest', 'name_asc', 'price_asc', 'price_desc']],
+              ].map(([key, label, fallback, options]) => (
+                <TextField key={key} select size="small" fullWidth label={label}
+                  value={section.catalogFilters?.[key] ?? fallback}
+                  onChange={(event) => {
+                    onChange('catalogFilters', { ...section.catalogFilters, [key]: event.target.value });
+                    onBlur();
+                  }}>
+                  {[...new Set([...options, section.catalogFilters?.[key]].filter((value) => value != null))].map((value) => (
+                    <MenuItem key={value} value={value}>
+                      {{ newest: 'Newest', name_asc: 'Name A to Z', price_asc: 'Price low to high', price_desc: 'Price high to low' }[value] || value}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              ))}
+            </FieldGroup>
+          )}
           <FieldGroup label="Advanced" icon={<TuneIcon sx={{ fontSize: 15 }} />} defaultOpen={false}>
             <TextField
               label="Anchor ID"
@@ -1345,80 +1639,6 @@ const DesignerSectionEditor = ({
               helperText="Add custom classes for advanced styling"
             />
           </FieldGroup>
-
-          {/* ── DATA SOURCE (product-row / category sections) ── */}
-          {(isProductRow || isRecentlyViewed || hasCategories) && (
-            <FieldGroup label="Content source" icon={<StorageIcon sx={{ fontSize: 15 }} />} defaultOpen={false}>
-              {(isProductRow || isRecentlyViewed) && (
-                <>
-                  {isProductRow && <FormControl size="small" fullWidth>
-                    <InputLabel>Product Source</InputLabel>
-                    <Select
-                      value={section.source || productRow.defaults.source}
-                      label="Product Source"
-                      onChange={(event) => {
-                        const source = event.target.value;
-                        onChange('source', source);
-                        if (source === 'staffPicks' && section.viewAllLink?.startsWith('/products?')) {
-                          onChange('viewAllLink', '');
-                        }
-                        if (source === 'trending' && section.viewAllLink === '/products?featured=true') {
-                          onChange('viewAllLink', '/products?sort=trending');
-                        }
-                        onBlur();
-                      }}
-                    >
-                      {Object.entries(productRow.sources).map(([value, source]) => <MenuItem key={value} value={value}>{source.label}</MenuItem>)}
-                    </Select>
-                  </FormControl>}
-                  {isProductRow && section.source === 'sale' && (
-                    <CampaignLabelSelect value={section.saleLabel} onChange={(value) => {
-                      onChange('saleLabel', value);
-                      onBlur();
-                    }} />
-                  )}
-                  {isProductRow && section.source === 'staffPicks' && (
-                    <StaffPicksEditor ids={section.productIds || []} onChange={(ids) => {
-                      onChange('productIds', ids);
-                      onBlur();
-                    }} />
-                  )}
-                  <TextField
-                    label="Count"
-                    type="number"
-                    disabled={section.source === 'staffPicks'}
-                    value={section.source === 'staffPicks' ? section.productIds?.length || 0 : section.count || productRow.defaults.count}
-                    onChange={(e) => onChange('count', Math.min(isRecentlyViewed ? 12 : productRow.limits.editorMaxCount, Math.max(productRow.limits.minCount, parseInt(e.target.value) || productRow.defaults.count)))}
-                    onBlur={onBlur}
-                    size="small"
-                    fullWidth
-                    inputProps={{ min: productRow.limits.minCount, max: isRecentlyViewed ? 12 : productRow.limits.editorMaxCount }}
-                  />
-                  {isProductRow && !(section.source === 'sale' && section.saleLabel) && <TextField
-                    label="View All Link"
-                    value={section.viewAllLink || ''}
-                    onChange={(e) => onChange('viewAllLink', e.target.value)}
-                    onBlur={onBlur}
-                    size="small"
-                    fullWidth
-                    placeholder="/products?featured=true"
-                  />}
-                </>
-              )}
-              {hasCategories && (
-                <TextField
-                  label="Count"
-                  type="number"
-                  value={section.count || 10}
-                  onChange={(e) => onChange('count', parseInt(e.target.value) || 10)}
-                  onBlur={onBlur}
-                  size="small"
-                  fullWidth
-                  inputProps={{ min: 1, max: 16 }}
-                />
-              )}
-            </FieldGroup>
-          )}
 
           {/* ── CAROUSEL settings ── */}
           {isHero && (

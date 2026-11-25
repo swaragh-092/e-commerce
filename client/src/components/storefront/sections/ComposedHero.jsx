@@ -43,7 +43,7 @@ const Media = ({ block }) => {
 };
 
 const HeroBlock = ({ block, onSelect, catalog, product, depth = 0, onEnquiry, owner }) => {
-  if (depth > 3) return null;
+  if (depth > 3 || block.enabled === false) return null;
 
   let content;
   switch (block.type) {

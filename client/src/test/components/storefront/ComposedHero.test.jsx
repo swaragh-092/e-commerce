@@ -4,6 +4,17 @@ import ComposedHero from '../../../components/storefront/sections/ComposedHero';
 
 vi.mock('../../../components/storefront/EnquiryModal', () => ({ default: () => null }));
 
+it('skips hidden nested blocks and keeps the remaining siblings visible', () => {
+  render(<ComposedHero embedded section={{ id: 'hero', heroBlocks: [{
+    id: 'group', type: 'group', children: [
+      { id: 'hidden', type: 'heading', text: 'Hidden heading', enabled: false },
+      { id: 'visible', type: 'text', text: 'Visible text' },
+    ],
+  }] }} />);
+  expect(screen.getByText('Visible text')).toBeVisible();
+  expect(screen.queryByText('Hidden heading')).not.toBeInTheDocument();
+});
+
 it('reads care instructions from each product and hides the heading when the field is empty', () => {
   const section = { heroBlocks: [{
     id: 'care', type: 'product-attribute', attributeName: 'Care instructions', text: 'Care instructions',

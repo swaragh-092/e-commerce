@@ -413,7 +413,7 @@ export const renderMockCategoryProductsOnly = (settingsObj, previewContext = {})
                     <Typography variant="caption" color="text.secondary">Product Image</Typography>
                   </Box>
                   <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }} noWrap>{product.title}</Typography>
-                  <Typography variant="body2" color="primary.main" fontWeight={800}>{product.price}</Typography>
+                  {previewContext.pricingVisible !== false && <Typography variant="body2" color="primary.main" fontWeight={800}>{product.price}</Typography>}
                 </Box>
               </Grid>
             ))}
@@ -479,8 +479,8 @@ export const renderMockCatalogProductsOnly = (settingsObj, previewContext = {}) 
                 ))}
               </Stack>
 
+              {previewContext.pricingVisible !== false && <>
               <Divider sx={{ my: 2 }} />
-
               <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ display: 'block', mb: 1 }}>Price Range</Typography>
               <Box sx={{ px: 1, py: 1 }}>
                 <Box sx={{ height: 4, bgcolor: 'divider', borderRadius: 2, position: 'relative', mb: 2 }}>
@@ -493,6 +493,7 @@ export const renderMockCatalogProductsOnly = (settingsObj, previewContext = {}) 
                   <Typography variant="caption" fontWeight={700}>Max: ${priceRangeMax}</Typography>
                 </Stack>
               </Box>
+              </>}
             </Box>
           </Grid>
         )}
@@ -519,7 +520,7 @@ export const renderMockCatalogProductsOnly = (settingsObj, previewContext = {}) 
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, border: '1px solid', borderColor: 'divider', borderRadius: 'var(--store-radius-card)', p: 1.5, bgcolor: 'background.paper' }}>
                   <Box sx={{ width: 64, height: 64, flexShrink: 0, aspectRatio: '1/1', bgcolor: 'action.hover', borderRadius: 'var(--store-radius)', display: 'grid', placeItems: 'center' }}><Typography variant="caption" color="text.secondary">Image</Typography></Box>
                   <Typography variant="body2" fontWeight={700} sx={{ flex: 1 }}>{p.title}</Typography>
-                  <Typography variant="body2" color="primary.main" fontWeight={800}>{p.price}</Typography>
+                  {previewContext.pricingVisible !== false && <Typography variant="body2" color="primary.main" fontWeight={800}>{p.price}</Typography>}
                 </Box>
               </Grid>
             ) : (
@@ -529,7 +530,7 @@ export const renderMockCatalogProductsOnly = (settingsObj, previewContext = {}) 
                     <Typography variant="caption" color="text.secondary">Product Image</Typography>
                   </Box>
                   <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }} noWrap>{p.title}</Typography>
-                  <Typography variant="body2" color="primary.main" fontWeight={800}>{p.price}</Typography>
+                  {previewContext.pricingVisible !== false && <Typography variant="body2" color="primary.main" fontWeight={800}>{p.price}</Typography>}
                 </Box>
               </Grid>
             ))}
@@ -760,6 +761,7 @@ export const renderMockAccountMain = (settingsObj) => {
 // ─── Cart Main ───────────────────────────────────────────────────────────────
 
 export const renderMockCartMain = (settingsObj, previewContext = {}) => {
+  if (previewContext.cartVisible === false) return <Typography role="status">Cart is disabled in this store.</Typography>;
   const cp = settingsObj?.cartPage || {};
   const layout = cp.layout || 'standard';
   const isCompact = layout === 'compact';
@@ -852,6 +854,7 @@ export const renderMockCartMain = (settingsObj, previewContext = {}) => {
 // ─── Checkout Main ───────────────────────────────────────────────────────────
 
 export const renderMockCheckoutMain = (settingsObj, previewContext = {}) => {
+  if (previewContext.checkoutVisible === false) return <Typography role="status">Checkout is disabled in this store.</Typography>;
   const cp = settingsObj?.checkoutPage || {};
   const layout = cp.layout || 'two-column';
   const isOneColumn = layout === 'one-column' || layout === 'accordion';
@@ -936,7 +939,7 @@ export const renderMockCheckoutMain = (settingsObj, previewContext = {}) => {
 
 // ─── Wishlist Main ───────────────────────────────────────────────────────────
 
-export const renderMockWishlistMain = () => (
+export const renderMockWishlistMain = (settingsObj, previewContext = {}) => (
   <Box sx={{ p: 4, maxWidth: 1000, mx: 'auto', bgcolor: 'background.default' }}>
     <Typography variant="h4" fontWeight={800} sx={{ mb: 1, fontFamily: 'var(--store-font-heading)' }}>My Wishlist</Typography>
     <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>3 saved items</Typography>
@@ -953,7 +956,7 @@ export const renderMockWishlistMain = () => (
             </Box>
             <Chip label={item.badge} size="small" color={item.badge === 'Low Stock' ? 'warning' : 'success'} variant="outlined" sx={{ position: 'absolute', top: 12, left: 12, height: 20, fontSize: '0.68rem', fontWeight: 800 }} />
             <Typography variant="body2" fontWeight={700} noWrap sx={{ mb: 0.5 }}>{item.title}</Typography>
-            <Typography variant="body2" color="primary.main" fontWeight={800} sx={{ mb: 1.5 }}>{item.price}</Typography>
+            {previewContext.pricingVisible !== false && <Typography variant="body2" color="primary.main" fontWeight={800} sx={{ mb: 1.5 }}>{item.price}</Typography>}
             <Button variant="contained" fullWidth size="small" startIcon={<ShoppingBagOutlinedIcon />}>Add to Cart</Button>
           </Box>
         </Grid>
@@ -964,7 +967,7 @@ export const renderMockWishlistMain = () => (
 
 // ─── Search Main ─────────────────────────────────────────────────────────────
 
-export const renderMockSearchMain = (settingsObj) => {
+export const renderMockSearchMain = (settingsObj, previewContext = {}) => {
   const sp = settingsObj?.searchPage || {};
   const gridColumns = Number(sp.gridColumns) || 4;
   const showFilters = sp.showFilters !== false;
@@ -1015,7 +1018,7 @@ export const renderMockSearchMain = (settingsObj) => {
                   <Typography variant="caption" color="text.secondary">Product Image</Typography>
                 </Box>
                 <Typography variant="body2" fontWeight={700} noWrap sx={{ mb: 0.5 }}>{p.title}</Typography>
-                <Typography variant="body2" color="primary.main" fontWeight={800}>{p.price}</Typography>
+                {previewContext.pricingVisible !== false && <Typography variant="body2" color="primary.main" fontWeight={800}>{p.price}</Typography>}
               </Box>
             </Grid>
           )) : (
@@ -1059,7 +1062,8 @@ export const renderMockNotFoundMain = (settingsObj) => {
 
 // ─── Orders Main ─────────────────────────────────────────────────────────────
 
-export const renderMockOrdersMain = (settingsObj) => {
+export const renderMockOrdersMain = (settingsObj, previewContext = {}) => {
+  if (previewContext.ordersVisible === false) return <Typography role="status">Orders are disabled in this store.</Typography>;
   const op = settingsObj?.ordersPage || {};
   const showStatusBadge = op.showStatusBadge !== false;
   const showTotal       = op.showTotal !== false;
@@ -1136,8 +1140,8 @@ export const SECTION_TYPE_TO_MOCK_RENDERER = {
   'account-main':      (s) => renderMockAccountMain(s),
   'cart-main':         (s, c) => renderMockCartMain(s, c),
   'checkout-main':     (s, c) => renderMockCheckoutMain(s, c),
-  'wishlist-main':     ()  => renderMockWishlistMain(),
-  'search-main':       (s) => renderMockSearchMain(s),
+  'wishlist-main':     (s, c) => renderMockWishlistMain(s, c),
+  'search-main':       (s, c) => renderMockSearchMain(s, c),
   'not-found-main':    (s) => renderMockNotFoundMain(s),
-  'orders-main':       (s) => renderMockOrdersMain(s),
+  'orders-main':       (s, c) => renderMockOrdersMain(s, c),
 };

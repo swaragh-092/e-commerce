@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SearchResultsPage from '../../../pages/storefront/SearchResultsPage';
@@ -13,6 +13,14 @@ beforeEach(() => { vi.clearAllMocks(); state.settings = { searchPage: {} }; sear
 const mount = path => render(<MemoryRouter initialEntries={[path]}><SearchResultsPage /></MemoryRouter>);
 
 describe('search page designer controls', () => {
+  it('keeps a category scope when searching again and lets shoppers clear it', async () => {
+    mount('/search?q=apple&category=fruit');
+    await waitFor(() => expect(searchProducts).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'apple', category: 'fruit' })));
+    fireEvent.click(screen.getByRole('button', { name: 'Search now' }));
+    await waitFor(() => expect(searchProducts).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'rose', category: 'fruit' })));
+    fireEvent.click(screen.getByRole('button', { name: 'Search all categories' }));
+    await waitFor(() => expect(searchProducts).toHaveBeenLastCalledWith({ q: 'rose', page: 1, limit: 20 }));
+  });
   it('applies result page size, visibility toggles, text, and grid columns', async () => {
     state.settings = { searchPage: { gridColumns: 5, resultsPerPage: 12, showMatchingBrands: false, showMatchingCategories: false, showResultCount: false, searchTitle: 'Find your next flower', searchPlaceholder: 'Type flowers', noResultsTitle: 'No match', noResultsMessage: 'Try another flower.' } };
     mount('/search?q=rose');

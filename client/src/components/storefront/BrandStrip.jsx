@@ -25,6 +25,10 @@ const BrandStrip = ({ title, section = {}, brands = [], loading = false, align =
     const cardShadow = resolveShadow(brandCardStyle.shadow);
     const isLogoOnly = brandCardStyle.variant === 'logo-only';
     const hoverEffect = brandCardStyle.hoverEffect || 'lift';
+    const desktopColumns = section.columnsDesktop;
+    const desktopWidth = desktopColumns
+        ? `calc((100% - ${(desktopColumns - 1) * 16}px) / ${desktopColumns})`
+        : isLogoOnly ? 132 : 154;
 
     if (!loading && brands.length === 0) return null;
 
@@ -195,7 +199,7 @@ const BrandStrip = ({ title, section = {}, brands = [], loading = false, align =
                             data-component="brand-card"
                             data-variant={isLogoOnly ? 'logo-only' : 'standard'}
                             sx={{
-                                width: isLogoOnly ? { xs: 116, sm: 124, md: 132 } : { xs: 142, sm: 150, md: 154 },
+                                width: { xs: isLogoOnly ? 116 : 142, sm: isLogoOnly ? 124 : 150, md: desktopWidth },
                                 flex: '0 0 auto',
                                 scrollSnapAlign: 'start',
                                 display: 'block',

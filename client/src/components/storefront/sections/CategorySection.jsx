@@ -4,6 +4,7 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { Link } from 'react-router-dom';
 import { getOptimizedMediaUrl, imageLoadingProps, onImageError, PLACEHOLDER_CATEGORY } from '../../../utils/media';
 import { useComponentStyles } from '../../../hooks/useSettings';
+import useHeroCategories from '../../../hooks/useHeroCategories';
 import { resolveRadius, resolveShadow } from '../../../utils/styleMaps';
 import { CanvasEditableText, CanvasEditableImage } from './SectionFallback';
 
@@ -63,17 +64,19 @@ const placeholderTiles = (count) => Array.from({ length: count }).map((_, index)
   link: '/products',
 }));
 
+const categoryTile = (cat) => ({
+  id: cat.id,
+  title: cat.name,
+  subtitle: cat.description,
+  productCount: cat.productCount || cat.productsCount || cat.product_count,
+  image: cat.image,
+  link: `/category/${cat.slug}`,
+});
+
 const normalizeCategoryTiles = ({ categories = [], configuredTiles = [], count, preview }) => {
   if (Array.isArray(configuredTiles) && configuredTiles.length) return configuredTiles.slice(0, count);
   if (preview) return placeholderTiles(Math.min(count, 8));
-  return (Array.isArray(categories) ? categories : []).slice(0, count).map((cat) => ({
-    id: cat.id,
-    title: cat.name,
-    subtitle: cat.description,
-    productCount: cat.productCount || cat.productsCount || cat.product_count,
-    image: cat.image,
-    link: `/category/${cat.slug}`,
-  }));
+  return (Array.isArray(categories) ? categories : []).slice(0, count).map(categoryTile);
 };
 
 const CategorySection = ({
@@ -88,9 +91,16 @@ const CategorySection = ({
   onInlineFieldCommit, onInlineBlockFocus,
 }) => {
   const preview = mode === 'preview';
+  const curated = Array.isArray(section.selectedCategorySlugs);
+  const editTiles = preview && !curated;
+  const { categories: categoryTree, status } = useHeroCategories(curated && section.selectedCategorySlugs.length > 0);
   const categoryCardStyle = useComponentStyles('categoryCard');
-  const count = Math.min(num(section.count, preview ? 6 : 10), preview ? 8 : 16);
-  const tiles = normalizeCategoryTiles({ categories, configuredTiles, count, preview });
+  const count = curated ? section.selectedCategorySlugs.length : Math.min(num(section.count, preview ? 6 : 10), preview ? 8 : 16);
+  const categoriesBySlug = new Map(categoryTree.map((category) => [category.slug, category]));
+  const tiles = curated
+    ? section.selectedCategorySlugs.map((slug) => categoriesBySlug.get(slug)).filter(Boolean).map(categoryTile)
+    : normalizeCategoryTiles({ categories, configuredTiles, count, preview });
+  const isLoading = curated ? count > 0 && status === 'loading' : loading && !preview;
   const variant = normalizeVariant(section.variant || categoryCardStyle.variant);
   const isChips = variant === 'compact-chips';
   const imageRatio = ratioToCss(categoryCardStyle.imageRatio, '1/1');
@@ -100,7 +110,11 @@ const CategorySection = ({
   const isOverlay = titlePlacement === 'overlay' || titlePlacement === 'centered';
   const densityPadding = categoryCardStyle.density === 'compact' ? 0.75 : categoryCardStyle.density === 'spacious' ? 1.75 : 1.25;
 
-  if (!loading && tiles.length === 0) return null;
+  if (!isLoading && tiles.length === 0) {
+    return curated && preview
+      ? <Typography variant="body2" sx={{ p: 2 }} color="text.secondary">Choose available categories in section settings.</Typography>
+      : null;
+  }
 
   const seedPatch = { items: tiles };
 
@@ -122,8 +136,10 @@ const CategorySection = ({
         onInlineFieldChange={onInlineFieldChange}
         onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus}
       />
-      <Box sx={gridSx}>
-        {loading && !preview
+      <Box sx={[gridSx, !isChips && section.columnsDesktop && {
+        gridTemplateColumns: { md: `repeat(${section.columnsDesktop}, minmax(0, 1fr))` },
+      }]}>
+        {isLoading
           ? Array.from({ length: count }).map((_, index) => (
             <Box key={index}>
               <Skeleton variant="rounded" height={isChips ? 32 : 96} width={isChips ? 80 : undefined} sx={{ borderRadius: isChips ? 4 : 2 }} />
@@ -142,7 +158,7 @@ const CategorySection = ({
                     onSelectComponent('categoryCard');
                   }}
                   sx={{ px: 2, py: 0.75, borderRadius: 5, bgcolor: 'action.hover', textDecoration: 'none', color: 'text.primary', fontWeight: 700, fontSize: '0.82rem', whiteSpace: 'nowrap', cursor: onSelectComponent ? 'pointer' : undefined, '&:hover': preview ? (onSelectComponent ? { outline: '2px dashed #1976d2', outlineOffset: 2 } : {}) : { bgcolor: 'primary.main', color: 'primary.contrastText' } }}>
-                  <CanvasEditableText section={section} field={`items.${index}.title`} preview={preview} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} seedPatch={seedPatch} component="span">
+                  <CanvasEditableText section={section} field={`items.${index}.title`} preview={editTiles} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} seedPatch={seedPatch} component="span">
                     {tile.title}
                   </CanvasEditableText>
                 </Box>
@@ -172,7 +188,7 @@ const CategorySection = ({
               >
                 <CardActionArea {...actionProps} sx={{ height: '100%', p: isOverlay ? 0 : densityPadding, textAlign: 'center', cursor: preview ? 'default' : 'pointer' }}>
                   <Box sx={{ width: '100%', aspectRatio: imageRatio, borderRadius: isOverlay ? 0 : cardRadius, overflow: 'hidden', bgcolor: tile.color || 'action.hover', display: 'grid', placeItems: 'center', position: 'relative' }}>
-                    {preview ? (
+                    {editTiles ? (
                       <CanvasEditableImage
                         section={section}
                         field={`items.${index}.image`}
@@ -204,7 +220,7 @@ const CategorySection = ({
                     )}
                     {isOverlay && (
                       <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: titlePlacement === 'centered' ? 'center' : 'flex-end', justifyContent: 'center', p: 1.25, background: 'linear-gradient(180deg, transparent 0%, var(--store-overlay-dark, rgba(15, 23, 42, 0.72)) 100%)' }}>
-                        <CanvasEditableText section={section} field={`items.${index}.title`} preview={preview} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} seedPatch={seedPatch} variant="body2" sx={{ fontWeight: 900, color: '#fff', textAlign: 'center' }}>
+                        <CanvasEditableText section={section} field={`items.${index}.title`} preview={editTiles} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} seedPatch={seedPatch} variant="body2" sx={{ fontWeight: 900, color: '#fff', textAlign: 'center' }}>
                           {tile.title}
                         </CanvasEditableText>
                       </Box>
@@ -212,11 +228,11 @@ const CategorySection = ({
                   </Box>
                   {!isOverlay && (
                     <>
-                      <CanvasEditableText section={section} field={`items.${index}.title`} preview={preview} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} seedPatch={seedPatch} variant="body2" sx={{ mt: 1, fontWeight: 800, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: categoryCardStyle.showSubtitle ? 22 : 40 }}>
+                      <CanvasEditableText section={section} field={`items.${index}.title`} preview={editTiles} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} seedPatch={seedPatch} variant="body2" sx={{ mt: 1, fontWeight: 800, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: categoryCardStyle.showSubtitle ? 22 : 40 }}>
                         {tile.title}
                       </CanvasEditableText>
                       {categoryCardStyle.showSubtitle && (tile.subtitle || preview) && (
-                        <CanvasEditableText section={section} field={`items.${index}.subtitle`} preview={preview} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} seedPatch={seedPatch} variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }} noWrap>
+                        <CanvasEditableText section={section} field={`items.${index}.subtitle`} preview={editTiles} onInlineFieldChange={onInlineFieldChange} onInlineFieldCommit={onInlineFieldCommit} onInlineBlockFocus={onInlineBlockFocus} seedPatch={seedPatch} variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }} noWrap>
                           {tile.subtitle || 'Shop collection'}
                         </CanvasEditableText>
                       )}
