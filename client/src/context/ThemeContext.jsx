@@ -7,6 +7,7 @@ import { DEFAULT_STORE_NAME } from '../utils/store';
 import { buildCriticalThemeCss, buildStorefrontCssVariables, buildStorefrontTheme } from '../utils/theme';
 import { resolveDesignTokens } from '../utils/designTokens';
 import { buildAdminTheme } from '../theme/adminTheme';
+import { getPreviewStorageKey } from '../utils/previewStorage';
 
 export const SettingsContext = createContext(null);
 // Separate context for components that ONLY need the resolved design tokens
@@ -26,7 +27,6 @@ export const useDesignTokens = () => useContext(DesignTokensContext);
 // Detect preview mode — storefront iframe loaded by the admin settings panel.
 // When true, settings come from localStorage instead of the API so the admin
 // can preview unsaved changes without touching production data.
-const PREVIEW_KEY = 'storePreviewTheme';
 const isPreviewMode = () =>
   typeof window !== 'undefined' &&
   new URLSearchParams(window.location.search).get('previewMode') === '1';
@@ -77,7 +77,8 @@ export const SettingsProvider = ({ children }) => {
       // In preview mode read from localStorage — avoids API call and keeps
       // production data untouched while the admin previews unsaved changes.
       if (previewMode) {
-        const raw = localStorage.getItem(PREVIEW_KEY);
+        const session = new URLSearchParams(window.location.search).get('previewSession');
+        const raw = localStorage.getItem(getPreviewStorageKey(session));
         data = raw ? JSON.parse(raw) : {};
       } else if (!useAdminSettings) {
         data = await settingsService.getPublicSettings();

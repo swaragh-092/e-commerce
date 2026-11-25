@@ -38,7 +38,7 @@ import FavoriteBorderOutlinedIcon from '@mui/icons-material/FavoriteBorderOutlin
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDesignerPreviewPath } from '../../hooks/useDesignerPreviewPath';
 
 import { discardDesignDraft, getDesignDraft, getDesignState, getDesignVersions, getSettingsGroup, publishDesignDraft, restoreDesignVersion, saveDesignDraft } from '../../services/settingsService';
@@ -159,8 +159,9 @@ const DESIGNER_PAGE_GROUP_MAP = {
   orders: 'ordersPage',
 };
 
-const SectionComposerPage = () => {
-  const [searchParams] = useSearchParams();
+const SectionComposerWorkspace = ({ searchParams, draftKey }) => {
+  const navigate = useNavigate();
+  const readOnlyDraftPreview = Boolean(draftKey && searchParams.get('previewDraft') === '1');
   const [sections, setSections] = useState([]);
   const sectionsRef = useRef(sections);
   sectionsRef.current = sections;
@@ -241,9 +242,13 @@ const SectionComposerPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileTab, setMobileTab] = useState('editor');
+  const [editDevicePreview, setEditDevicePreview] = useState(false);
   // A real iframe gives device previews their own responsive CSS viewport.
   const devicePreview = viewportMode !== 'desktop' || isMobile;
-  const livePreview = previewRenderMode === 'live' || devicePreview;
+  const livePreview = devicePreview ? !editDevicePreview : previewRenderMode === 'live';
+  const designerSurface = theme.palette.mode === 'dark' ? theme.palette.background.paper : '#fffdfa';
+  const designerCanvas = theme.palette.mode === 'dark' ? theme.palette.background.default : '#f3efeb';
+  const designerAccent = theme.palette.mode === 'dark' ? '#e8b9d0' : '#713654';
 
   const activePageConfig = DESIGNER_PAGES.find((page) => page.value === activePage) || DESIGNER_PAGES[0];
   const previewTarget = useDesignerPreviewPath(activePage, activePageConfig.previewPath || '/');
@@ -480,12 +485,13 @@ const SectionComposerPage = () => {
     try {
       const [homepage, draftState, designState] = await Promise.all([
         getSettingsGroup('homepage'),
-        getDesignDraft(),
+        getDesignDraft(...(draftKey ? [draftKey] : [])),
         getDesignState().catch(() => ({ groups: {}, sources: {}, defaults: {} })),
       ]);
       setDesignSources(designState?.sources || {});
       setDesignDefaults(designState?.defaults || {});
       const existingDraft = draftState?.draft || null;
+      if (draftKey && !existingDraft) throw new Error('This named draft is no longer available.');
       const baseGroups = { ...liveSettingsRef.current, ...designState?.groups, homepage };
       const draftResult = applyDraftPayload(existingDraft?.payload || [], baseGroups, designState?.defaults || {});
       const initialSections = draftResult?.groups?.homepage?.sections || homepage?.sections || [];
@@ -508,7 +514,7 @@ const SectionComposerPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [applyDraftPayload, notify, setDesignHistory, setDraftDeletes]);
+  }, [applyDraftPayload, draftKey, notify, setDesignHistory, setDraftDeletes]);
 
   useEffect(() => {
     fetchSections();
@@ -517,11 +523,12 @@ const SectionComposerPage = () => {
   const handleUseLive = async () => {
     setUsingLive(true);
     try {
-      await discardDesignDraft(draft.revision);
+      await discardDesignDraft(draft.revision, ...(draftKey ? [draftKey] : []));
       setDirty(false);
       setUseLiveOpen(false);
       setPanelView({ mode: 'tree', sectionId: null, componentKey: null, blockKey: null, blockIndex: null });
-      await fetchSections();
+      if (draftKey) navigate('/admin/store-designer', { replace: true });
+      else await fetchSections();
     } catch (error) {
       notify(error.response?.data?.error?.message || 'Could not load the live design. Please retry.', 'error');
     } finally {
@@ -612,13 +619,13 @@ const SectionComposerPage = () => {
         ...(canManageAdvancedSettings ? Object.entries(advancedSettings || {}).map(([key, value]) => ({ key, value, group: 'advanced' })) : []),
         ...pageEntries,
       ]);
-      const savedDraft = await saveDesignDraft(payload, draft?.revision);
+      const savedDraft = await saveDesignDraft(payload, draft?.revision, ...(draftKey ? [draftKey] : []));
       setDraft(savedDraft);
       if (designEditRevision.current === savedEditRevision && sectionsRef.current === sectionsToSave) {
         setDraftDeletes((savedDraft?.payload || []).filter((entry) => entry.operation === 'delete').map(({ group, key }) => ({ group, key })));
       }
       try {
-        const latestDraftState = await getDesignDraft();
+        const latestDraftState = await getDesignDraft(...(draftKey ? [draftKey] : []));
         setDraftConflicts(latestDraftState?.conflicts || []);
       } catch (error) {
         setLoadError('Draft saved, but conflict status could not be refreshed. Retry loading before publishing.');
@@ -690,13 +697,14 @@ const SectionComposerPage = () => {
   const handleDiscard = async () => {
     setDiscarding(true);
     try {
-      await discardDesignDraft(draft.revision);
+      await discardDesignDraft(draft.revision, ...(draftKey ? [draftKey] : []));
       draftHydratedRef.current = false;
       setDraft(null);
       setDirty(false);
       setDiscardOpen(false);
       notify('Design draft discarded.', 'success');
-      await fetchSections();
+      if (draftKey) navigate('/admin/store-designer', { replace: true });
+      else await fetchSections();
     } catch (error) {
       notify(error.response?.data?.error?.message || 'Failed to discard the design draft.', 'error');
     } finally {
@@ -712,7 +720,7 @@ const SectionComposerPage = () => {
     if (!draft || dirty) return;
     setPublishing(true);
     try {
-      await publishDesignDraft(draft.revision, publishConflict?.conflictToken);
+      await publishDesignDraft(draft.revision, publishConflict?.conflictToken, ...(draftKey ? [draftKey] : []));
       draftHydratedRef.current = false;
       setDraft(null);
       setDraftDeletes([]);
@@ -722,6 +730,7 @@ const SectionComposerPage = () => {
       setDesignDefaults(state?.defaults || {});
       notify('Design draft published to the storefront.', 'success');
       setPublishOpen(false);
+      if (draftKey) navigate('/admin/store-designer', { replace: true });
     } catch (error) {
       const apiError = error.response?.data?.error;
       if (apiError?.code === 'DRAFT_CONFLICT' && apiError.details?.conflictToken) {
@@ -1250,6 +1259,13 @@ const SectionComposerPage = () => {
       </Container>
     );
   }
+  if (readOnlyDraftPreview) {
+    return <Stack spacing={1.5} sx={{ p: 2, height: '100%' }}>
+      <Typography variant="h6">{draft?.name || 'Named draft preview'}</Typography>
+      {loadError ? <Alert severity="error">{loadError}</Alert>
+        : <LiveStorefrontPreview settings={livePreviewSettings} path="/" frameHeight="75vh" />}
+    </Stack>;
+  }
 
   // Determine section types for conditional form controls
   const isProductRow = editSection?.type === 'product-row';
@@ -1487,15 +1503,17 @@ const SectionComposerPage = () => {
   );
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, flex: 1, overflow: 'hidden', bgcolor: '#f6f6f7' }}>
+    <Box sx={{ '--designer-accent': designerAccent, '--designer-selection': theme.palette.mode === 'dark' ? '#493343' : '#f2e4ec',
+      '--designer-surface': designerSurface, display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, flex: 1, overflow: 'hidden', bgcolor: designerCanvas }}>
       
       {/* Top Action Bar */}
-      <Paper elevation={0} variant="outlined" sx={{ px: 1.5, py: 1, borderTop: 'none', borderLeft: 'none', borderRight: 'none', borderRadius: 0, bgcolor: 'background.paper', zIndex: 10 }}>
+      <Paper elevation={0} variant="outlined" sx={{ px: { xs: 1.5, md: 2 }, py: 1, borderTop: 'none', borderLeft: 'none', borderRight: 'none', borderRadius: 0, bgcolor: designerSurface, zIndex: 10 }}>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, '& .MuiButton-root': { minHeight: { xs: 40, md: 36 }, borderRadius: '6px', textTransform: 'none', fontWeight: 600, whiteSpace: 'nowrap', boxShadow: 'none' }, '& .MuiIconButton-root': { width: 40, height: 40, borderRadius: '6px' } }}>
           <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0, flex: { xs: '1 0 100%', md: '1 1 180px' } }}>
+            <Typography variant="subtitle2" fontWeight={800} noWrap sx={{ display: { xs: 'none', lg: 'block' }, pr: 1.5, borderRight: 1, borderColor: 'divider' }}>Store Designer</Typography>
             <Box sx={{ minWidth: 0 }}>
               <Typography variant="subtitle2" fontWeight={800} noWrap title={draft?.templateSource?.name}>
-                {draft?.templateSource?.name || settings?.general?.storeName || 'Store design'}
+                {draft?.name || draft?.templateSource?.name || settings?.general?.storeName || 'Store design'}
               </Typography>
               {draft?.templateSource && (
                 <Typography variant="caption" color="text.secondary" noWrap display="block">
@@ -1510,7 +1528,7 @@ const SectionComposerPage = () => {
               size="small"
               color={dirty ? 'warning' : draft ? 'info' : 'success'}
               variant={dirty ? 'outlined' : 'filled'}
-              sx={{ height: 22, fontWeight: 600, bgcolor: dirty ? '#fff7ed' : 'transparent', color: dirty ? '#9a3412' : 'text.secondary', border: '1px solid', borderColor: dirty ? '#fed7aa' : 'divider' }}
+              sx={{ height: 22, fontWeight: 700, bgcolor: !dirty && draft ? 'var(--designer-selection)' : undefined, color: !dirty && draft ? designerAccent : undefined }}
             />
           </Stack>
 
@@ -1593,7 +1611,7 @@ const SectionComposerPage = () => {
                 }
                 setSaveTemplateOpen(true);
               }}><SaveIcon fontSize="small" sx={{ mr: 1.5 }} />Save as template</MenuItem>
-              <MenuItem onClick={() => { setActionsAnchor(null); openVersionHistory(); }} disabled={saving || publishing}><HistoryIcon fontSize="small" sx={{ mr: 1.5 }} />Version history</MenuItem>
+              {!draftKey && <MenuItem onClick={() => { setActionsAnchor(null); openVersionHistory(); }} disabled={saving || publishing}><HistoryIcon fontSize="small" sx={{ mr: 1.5 }} />Version history</MenuItem>}
               {draft && <MenuItem onClick={() => { setActionsAnchor(null); setDiscardOpen(true); }} disabled={saving || publishing || discarding}>Discard draft</MenuItem>}
               {isMobile && <MenuItem onClick={() => { setActionsAnchor(null); handleUndo(); }} disabled={historyIndex <= 0}><UndoIcon fontSize="small" sx={{ mr: 1.5 }} />Undo section change</MenuItem>}
               {isMobile && <MenuItem onClick={() => { setActionsAnchor(null); handleRedo(); }} disabled={historyIndex >= history.length - 1}><RedoIcon fontSize="small" sx={{ mr: 1.5 }} />Redo section change</MenuItem>}
@@ -1602,7 +1620,8 @@ const SectionComposerPage = () => {
               {saving ? 'Saving...' : 'Save draft'}
             </Button>
             <Tooltip title={dirty ? 'Save your draft before publishing' : !draft ? 'Save a draft to publish changes' : 'Publish your saved draft to the store'}>
-              <span><Button size="small" variant="contained" onClick={() => { setPublishConflict(null); setPublishOpen(true); }} disabled={Boolean(loadError) || !draft || dirty || saving || publishing}>Publish</Button></span>
+              <span><Button size="small" variant="contained" sx={{ '&:not(.Mui-disabled)': { bgcolor: '#713654', color: '#fff', '&:hover': { bgcolor: '#572840' } } }}
+                onClick={() => { setPublishConflict(null); setPublishOpen(true); }} disabled={Boolean(loadError) || !draft || dirty || saving || publishing}>Publish</Button></span>
             </Tooltip>
           </Stack>
         </Box>
@@ -1661,17 +1680,20 @@ const SectionComposerPage = () => {
       </Box>
 
       {/* Main Designer Grid */}
-      <Box sx={{ display: 'flex', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden', bgcolor: '#f6f6f7' }}>
+      <Box sx={{ display: 'flex', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden', bgcolor: designerCanvas, gap: { xs: 0, md: 1 }, p: { xs: 0, md: 1 } }}>
         
         <Box component="aside" aria-label="Design controls" sx={{
           display: !isMobile || mobileTab === 'editor' ? 'flex' : 'none',
           width: isMobile ? '100%' : { md: 300, lg: 340 }, flexShrink: 0, flexDirection: 'column',
-          bgcolor: 'background.paper', borderRight: 1, borderColor: 'divider', minHeight: 0,
+          minHeight: 0, gap: { xs: 0, md: 0.75 },
+          '& .MuiSwitch-switchBase.Mui-checked': { color: designerAccent },
+          '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: designerAccent },
         }}>
           <Box sx={{
             display: isMobile && (editSection || panelView.mode === 'theme-settings') ? 'none' : 'flex',
             flexDirection: 'column', minHeight: 0, overflow: 'hidden',
-            flex: editSection || panelView.mode === 'theme-settings' ? '0 0 30%' : 1,
+            flex: editSection || panelView.mode === 'theme-settings' ? '0 0 32%' : 1,
+            bgcolor: designerSurface, borderStyle: 'solid', borderWidth: { xs: 0, md: 1 }, borderColor: 'divider', borderRadius: { xs: 0, md: 2 },
           }}>
             {treePanel}
           </Box>
@@ -1679,7 +1701,7 @@ const SectionComposerPage = () => {
           <Box sx={{
             minWidth: 0, minHeight: 0, flex: 1, flexDirection: 'column', overflow: 'hidden',
             display: editSection || panelView.mode === 'theme-settings' ? 'flex' : 'none',
-            borderTop: isMobile ? 0 : 1, borderColor: 'divider',
+            bgcolor: designerSurface, borderStyle: 'solid', borderWidth: { xs: 0, md: 1 }, borderColor: 'divider', borderRadius: { xs: 0, md: 2 },
           }}>
 
           {editSection ? (
@@ -1746,6 +1768,7 @@ const SectionComposerPage = () => {
           flexDirection: 'column',
           height: '100%',
           overflow: 'hidden',
+          bgcolor: designerSurface, borderStyle: 'solid', borderWidth: { xs: 0, md: 1 }, borderColor: 'divider', borderRadius: { xs: 0, md: 2 },
         }}>
           
           {/* Preview Toolbar */}
@@ -1755,19 +1778,27 @@ const SectionComposerPage = () => {
                 Storefront Preview
               </Typography>
               <ToggleButtonGroup
-                value={devicePreview ? 'live' : previewRenderMode}
+                value={livePreview ? 'live' : 'mock'}
                 exclusive
-                onChange={(_, v) => v && setPreviewRenderMode(v)}
+                onChange={(_, value) => {
+                  if (!value) return;
+                  if (devicePreview) setEditDevicePreview(value === 'mock');
+                  else setPreviewRenderMode(value);
+                }}
                 size="small"
               >
-                <ToggleButton value="mock" disabled={devicePreview} aria-label="Interactive editor preview">Edit design</ToggleButton>
+                <ToggleButton value="mock" aria-label="Interactive editor preview">Edit design</ToggleButton>
                 <ToggleButton value="live" aria-label="Interactive preview of the current design">Test design</ToggleButton>
               </ToggleButtonGroup>
             </Stack>
             <ToggleButtonGroup
               value={viewportMode}
               exclusive
-              onChange={(_, v) => v && setViewportMode(v)}
+              onChange={(_, value) => {
+                if (!value) return;
+                setEditDevicePreview(false);
+                setViewportMode(value);
+              }}
               size="small"
             >
               <ToggleButton value="desktop" aria-label="Desktop" title="Desktop View"><DesktopWindowsIcon fontSize="small" /></ToggleButton>
@@ -1791,9 +1822,9 @@ const SectionComposerPage = () => {
               >
                 Previewing <strong>{activePageLabel}</strong> with draft settings. Configure page settings in the sidebar.
               </Alert>
-            ) : devicePreview ? (
+            ) : devicePreview && livePreview ? (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', py: 0.5 }}>
-                Device preview shows your draft as shoppers see it. {isMobile ? 'Use Controls & Settings to edit.' : 'Choose Desktop to edit sections in the preview.'}
+                Device preview shows your draft as shoppers see it. Choose Edit design to select sections or blocks.
               </Typography>
             ) : previewRenderMode === 'live' ? (
               <Alert
@@ -1827,7 +1858,7 @@ const SectionComposerPage = () => {
                 variant="standard"
                 sx={{ py: 0, alignItems: 'center', '& .MuiAlert-message': { py: 0.5, fontSize: '0.78rem' } }}
               >
-                Click any section to edit it. Save draft to keep your changes, then Publish to update your store.
+                Select a section or block to edit. Save draft to keep your changes, then Publish to update your store.
               </Alert>
             )}
           </Box>
@@ -1839,7 +1870,7 @@ const SectionComposerPage = () => {
           )}
 
           {/* Preview Canvas Area */}
-          <Box sx={{ flex: 1, minHeight: 0, minWidth: 0, p: viewportMode === 'desktop' ? 0 : { xs: 0, sm: 1.5 }, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden', bgcolor: '#f6f6f7' }}>
+          <Box sx={{ flex: 1, minHeight: 0, minWidth: 0, p: viewportMode === 'desktop' ? 0 : { xs: 0, sm: 1.5 }, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden', bgcolor: designerCanvas }}>
             <Box
               sx={{
                 width: PREVIEW_WIDTHS[viewportMode] || '100%',
@@ -1998,6 +2029,7 @@ const SectionComposerPage = () => {
         <SaveAsTemplateDialog
           open
           draftRevision={draft?.revision}
+          draftKey={draftKey}
           publishedOnly={!draft}
           onClose={() => setSaveTemplateOpen(false)}
           onSaved={() => notify('Template saved to library', 'success')}
@@ -2043,7 +2075,7 @@ const SectionComposerPage = () => {
       </Dialog>
 
       <Dialog open={publishOpen} onClose={() => !publishing && setPublishOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Publish design draft?</DialogTitle>
+        <DialogTitle>{draft?.name ? `Publish ${draft.name}?` : 'Publish design draft?'}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary">
             {publishConflict
@@ -2070,4 +2102,8 @@ const SectionComposerPage = () => {
   );
 };
 
-export default SectionComposerPage;
+export default function SectionComposerPage() {
+  const [searchParams] = useSearchParams();
+  const draftKey = searchParams.get('draftKey') || undefined;
+  return <SectionComposerWorkspace key={draftKey || 'store'} draftKey={draftKey} searchParams={searchParams} />;
+}

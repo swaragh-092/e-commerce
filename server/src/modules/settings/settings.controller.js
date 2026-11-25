@@ -59,10 +59,25 @@ const resetDesignSetting = async (req, res, next) => {
 
 const getDesignDraft = async (req, res, next) => {
   try {
-    return success(res, await DesignDraftService.getDraft());
+    return success(res, await DesignDraftService.getDraft(req.query.draftKey));
   } catch (err) {
     next(err);
   }
+};
+
+const getNamedDrafts = async (_req, res, next) => {
+  try { return success(res, await DesignDraftService.listNamedDrafts()); }
+  catch (err) { next(err); }
+};
+
+const createNamedDraft = async (req, res, next) => {
+  try { return success(res, await DesignDraftService.createNamedDraft(req.body, req.user), 'Draft created', 201); }
+  catch (err) { next(err); }
+};
+
+const renameNamedDraft = async (req, res, next) => {
+  try { return success(res, await DesignDraftService.renameNamedDraft(req.body, req.user)); }
+  catch (err) { next(err); }
 };
 
 const getDesignVersions = async (req, res, next) => {
@@ -114,7 +129,7 @@ const restoreDesignVersion = async (req, res, next) => {
 
 const discardDesignDraft = async (req, res, next) => {
   try {
-    const result = await DesignDraftService.discardDraft(req.user, req.body.expectedRevision);
+    const result = await DesignDraftService.discardDraft(req.user, req.body.expectedRevision, req.body.draftKey);
     return success(res, result, 'Design draft discarded.');
   } catch (err) {
     next(err);
@@ -169,6 +184,9 @@ module.exports = {
   getDesignState,
   resetDesignSetting,
   getDesignDraft,
+  getNamedDrafts,
+  createNamedDraft,
+  renameNamedDraft,
   getDesignVersions,
   getDesignArchives,
   restoreDesignArchive,

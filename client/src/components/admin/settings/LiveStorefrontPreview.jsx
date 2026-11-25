@@ -4,10 +4,9 @@
  * Renders a real iframe of the storefront using the admin's UNSAVED form values.
  *
  * How it works (same-origin, zero server changes):
- *  1. Admin form values are serialized and written to localStorage['storePreviewTheme'].
+ *  1. Admin form values are serialized and written to a preview-specific storage key.
  *  2. The iframe loads /?previewMode=1.
- *  3. ThemeContext detects previewMode=1 and reads settings from localStorage['storePreviewTheme']
- *     instead of the API, giving an isolated preview without touching production data.
+ *  3. ThemeContext reads the settings from that storage key without touching production data.
  *  4. The iframe receives the latest draft settings when it loads and whenever they change.
  *
  * Device frames:
@@ -31,6 +30,7 @@ import TabletIcon from '@mui/icons-material/Tablet';
 import DesktopWindowsIcon from '@mui/icons-material/DesktopWindows';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import { getPreviewStorageKey } from '../../../utils/previewStorage';
 
 // ─── Device configuration ─────────────────────────────────────────────────────
 
@@ -42,7 +42,6 @@ const DEVICES = {
 
 // ─── localStorage bridge key ──────────────────────────────────────────────────
 
-const PREVIEW_KEY = 'storePreviewTheme';
 
 /**
  * Flatten the admin form (dot-notation keys) back into a nested settings object
@@ -75,8 +74,8 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', devi
     const doc = iframeRef.current?.contentDocument;
     if (!doc?.head || !inspecting) return;
     const style = doc.createElement('style');
-    style.textContent = '[data-store-section]:hover,[data-store-component]:hover,[data-store-block]:hover{outline:2px solid #4f46e5;outline-offset:-2px;cursor:pointer}[data-designer-selected]{outline:2px solid #4f46e5!important;outline-offset:-2px}';
-    style.textContent += '[data-designer-actions]{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);z-index:2147483647;display:flex;flex-wrap:wrap;justify-content:center;width:max-content;max-width:calc(100% - 24px);gap:6px;padding:6px;background:#fff;color:#1f2937;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 4px 16px #0003}[data-designer-actions] button{font:inherit;font-size:13px;min-height:36px;padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:inherit;cursor:pointer}[data-designer-actions] button:disabled{opacity:.5;cursor:default}';
+    style.textContent = '[data-store-section]:hover,[data-store-component]:hover,[data-store-block]:hover{outline:2px solid #92466d;outline-offset:-2px;cursor:pointer}[data-designer-selected]{outline:2px solid #92466d!important;outline-offset:-2px}';
+    style.textContent += '[data-designer-actions]{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);z-index:2147483647;display:flex;flex-wrap:wrap;justify-content:center;width:max-content;max-width:calc(100% - 24px);gap:4px;padding:5px;background:#fffdfa;color:#32272d;border:1px solid #d9cbd2;border-radius:10px;box-shadow:0 4px 16px #32132630}[data-designer-actions] button{font:inherit;font-size:13px;min-height:36px;padding:4px 8px;border:1px solid transparent;border-radius:6px;background:transparent;color:inherit;cursor:pointer}[data-designer-actions] button:hover:not(:disabled){background:#f2e4ec}[data-designer-actions] button:focus-visible{outline:2px solid #713654}[data-designer-actions] button:disabled{opacity:.5;cursor:default}@media(pointer:coarse){[data-designer-actions] button{min-height:44px}}';
     const insertionSelectors = [
       canInsertSection && '[data-store-add-section]',
       canInsertBlock && '[data-store-add-block]',
@@ -163,6 +162,8 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', devi
     return () => inspectorCleanup.current();
   }, [attachInspector]);
   const [localDevice, setLocalDevice] = useState('desktop');
+  const [previewSession] = useState(() => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);
+  const previewStorageKey = getPreviewStorageKey(previewSession);
   const [iframeKey, setIframeKey] = useState(() => Date.now()); // cache-bust each preview load
   const [ready, setReady]       = useState(false);
   const [loadTimedOut, setLoadTimedOut] = useState(false);
@@ -182,7 +183,7 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', devi
     if (!Object.keys(nested).length) return;
 
     try {
-      localStorage.setItem(PREVIEW_KEY, JSON.stringify(nested));
+      localStorage.setItem(previewStorageKey, JSON.stringify(nested));
     } catch {
       // The iframe can still receive settings through postMessage.
     }
@@ -190,17 +191,17 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', devi
       { type: 'PREVIEW_SETTINGS_UPDATE', settings: nested },
       window.location.origin,
     );
-  }, [form, settings]);
+  }, [form, settings, previewStorageKey]);
 
   useEffect(syncSettings, [syncSettings]);
 
   useEffect(() => () => {
     try {
-      localStorage.removeItem(PREVIEW_KEY);
+      localStorage.removeItem(previewStorageKey);
     } catch {
       // Storage is optional for the embedded preview.
     }
-  }, []);
+  }, [previewStorageKey]);
 
   const handleLoad = () => {
     syncSettings();
@@ -217,6 +218,7 @@ export default function LiveStorefrontPreview({ form, settings, path = '/', devi
   const previewUrl = new URL(normalizedPath, window.location.origin);
   previewUrl.searchParams.set('previewMode', '1');
   previewUrl.searchParams.set('designerPreview', String(iframeKey));
+  previewUrl.searchParams.set('previewSession', previewSession);
   const iframeSrc = previewUrl.toString();
 
   // ── Outer container width ─────────────────────────────────────────────────

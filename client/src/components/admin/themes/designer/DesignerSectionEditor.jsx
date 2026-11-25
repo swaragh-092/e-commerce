@@ -20,7 +20,7 @@ import PaletteIcon from '@mui/icons-material/Palette';
 import DevicesIcon from '@mui/icons-material/Devices';
 import TuneIcon from '@mui/icons-material/Tune';
 import StorageIcon from '@mui/icons-material/Storage';
-import { SECTION_VARIANTS, getSectionLabel } from '../../../storefront/sections/sectionRegistry';
+import { BLOCK_FIELD_PRESETS, SECTION_DEFINITIONS, SECTION_VARIANTS, getSectionLabel } from '../../../storefront/sections/sectionRegistry';
 import { SHADOW_PRESETS, WIDTH_PRESETS } from '../../../storefront/sections/SectionFallback';
 import { useFeature } from '../../../../hooks/useSettings';
 import useHeroCategories from '../../../../hooks/useHeroCategories';
@@ -34,168 +34,6 @@ import { HexColorField } from './DesignSchemaFields';
 import { usesProductRowSource } from '../../../../utils/productRowSources';
 
 import productRow from '../../../../../../shared/product-row.json';
-
-const featureRequirementField = {
-  key: 'requiresFeatureFlag', label: 'Show when feature is enabled', type: 'select',
-  options: [
-    { value: '', label: 'Always' }, { value: 'pricing', label: 'Pricing' },
-    { value: 'cart', label: 'Cart' }, { value: 'checkout', label: 'Checkout' },
-    { value: 'payments', label: 'Payments' }, { value: 'shipping', label: 'Shipping' },
-  ],
-};
-
-export const BLOCK_FIELD_PRESETS = {
-  'hero-carousel': {
-    key: 'slides',
-    title: 'Slides',
-    addLabel: 'Add Slide',
-    label: (item, index) => item?.title || item?.heading || `Slide ${index + 1}`,
-    create: () => ({ eyebrow: 'New arrival', title: 'Fresh arrivals are here', subtitle: 'Discover new products selected for your next shop.', buttonText: 'Shop now', buttonLink: '/products', secondaryButtonText: '', secondaryButtonLink: '', image: '', position: 'center', color: '#ffffff' }),
-    fields: [
-      { key: 'eyebrow', label: 'Eyebrow' },
-      { key: 'title', label: 'Heading' },
-      { key: 'subtitle', label: 'Text', multiline: true },
-      { key: 'buttonText', label: 'Button Label' },
-      { key: 'buttonLink', label: 'Button Link' },
-      { key: 'secondaryButtonText', label: 'Secondary Button Label' },
-      { key: 'secondaryButtonLink', label: 'Secondary Button Link' },
-      { key: 'image', label: 'Image', type: 'image' },
-      { key: 'position', label: 'Image Focus', type: 'select', options: [
-        { value: 'center', label: 'Center' },
-        { value: 'top', label: 'Top' },
-        { value: 'bottom', label: 'Bottom' },
-        { value: 'left', label: 'Left' },
-        { value: 'right', label: 'Right' },
-      ] },
-      { key: 'color', label: 'Text Color', type: 'color' },
-    ],
-  },
-  'promo-banners': {
-    key: 'items',
-    title: 'Promo Blocks',
-    addLabel: 'Add Promo',
-    label: (item, index) => item?.title || `Promo ${index + 1}`,
-    create: () => ({ kicker: 'Offer', title: 'Promo headline', subtitle: 'Describe this offer.', ctaText: 'Shop now', link: '/products', color: '#ffffff', accentColor: '#1976d2' }),
-    fields: [
-      { key: 'kicker', label: 'Kicker' },
-      { key: 'title', label: 'Heading' },
-      { key: 'subtitle', label: 'Text', multiline: true },
-      { key: 'ctaText', label: 'Button Label' },
-      { key: 'link', label: 'Button Link' },
-      { key: 'image', label: 'Image', type: 'image' },
-      { key: 'color', label: 'Background', type: 'color' },
-      { key: 'accentColor', label: 'Accent', type: 'color' },
-    ],
-  },
-  'value-props': {
-    key: 'items',
-    title: 'Value Prop Blocks',
-    addLabel: 'Add Value Prop',
-    label: (item, index) => item?.title || `Value prop ${index + 1}`,
-    create: () => ({ title: 'Fast delivery', text: 'Tracked shipping on every order.', icon: 'shipping', image: '', backgroundColor: '', accentColor: '' }),
-    fields: [
-      { key: 'title', label: 'Heading' },
-      { key: 'text', label: 'Text', multiline: true },
-      { key: 'icon', label: 'Icon Name' },
-      { key: 'image', label: 'Image', type: 'image' },
-      { key: 'backgroundColor', label: 'Background', type: 'color' },
-      { key: 'accentColor', label: 'Accent', type: 'color' },
-      featureRequirementField,
-    ],
-  },
-  'trust-badges': {
-    key: 'items',
-    title: 'Trust Blocks',
-    addLabel: 'Add Trust Block',
-    label: (item, index) => item?.title || `Trust block ${index + 1}`,
-    create: () => ({ title: 'Secure checkout', text: 'Encrypted checkout from cart to confirmation.', icon: 'secure', image: '', backgroundColor: '', accentColor: '' }),
-    fields: [
-      { key: 'title', label: 'Heading' },
-      { key: 'text', label: 'Text', multiline: true },
-      { key: 'icon', label: 'Icon Name' },
-      { key: 'image', label: 'Image', type: 'image' },
-      { key: 'backgroundColor', label: 'Background', type: 'color' },
-      { key: 'accentColor', label: 'Accent', type: 'color' },
-      featureRequirementField,
-    ],
-  },
-  testimonials: {
-    key: 'items',
-    title: 'Testimonial Blocks',
-    addLabel: 'Add Testimonial',
-    label: (item, index) => item?.title || item?.author || `Testimonial ${index + 1}`,
-    create: () => ({ title: 'Great experience', text: 'Add the customer quote here.', author: 'Customer name', role: 'Verified buyer' }),
-    fields: [
-      { key: 'title', label: 'Headline' },
-      { key: 'text', label: 'Quote', multiline: true },
-      { key: 'author', label: 'Author' },
-      { key: 'role', label: 'Role' },
-      { key: 'image', label: 'Image', type: 'image' },
-    ],
-  },
-  faq: {
-    key: 'items',
-    title: 'FAQ Blocks',
-    addLabel: 'Add Question',
-    label: (item, index) => item?.title || `Question ${index + 1}`,
-    create: () => ({ title: 'Question title', text: 'Answer text.' }),
-    fields: [
-      { key: 'title', label: 'Question' },
-      { key: 'text', label: 'Answer', multiline: true },
-    ],
-  },
-  'logo-cloud': {
-    key: 'items',
-    title: 'Logo Blocks',
-    addLabel: 'Add Logo',
-    label: (item, index) => item?.title || `Logo ${index + 1}`,
-    create: () => ({ title: 'Partner', image: '', link: '' }),
-    fields: [
-      { key: 'title', label: 'Name' },
-      { key: 'image', label: 'Logo', type: 'image' },
-      { key: 'link', label: 'Link URL' },
-    ],
-  },
-  'category-shortcuts': {
-    key: 'items',
-    title: 'Category Tiles',
-    addLabel: 'Add Tile',
-    label: (item, index) => item?.title || `Tile ${index + 1}`,
-    create: () => ({ title: 'Collection', subtitle: 'Short description', link: '/products', image: '' }),
-    fields: [
-      { key: 'title', label: 'Title' },
-      { key: 'subtitle', label: 'Subtitle' },
-      { key: 'link', label: 'Link URL' },
-      { key: 'image', label: 'Image', type: 'image' },
-    ],
-  },
-  'featured-collection-grid': {
-    key: 'items',
-    title: 'Collection Tiles',
-    addLabel: 'Add Collection',
-    label: (item, index) => item?.title || `Collection ${index + 1}`,
-    create: () => ({ title: 'Featured collection', subtitle: 'Short description', link: '/products', image: '' }),
-    fields: [
-      { key: 'title', label: 'Title' },
-      { key: 'subtitle', label: 'Subtitle' },
-      { key: 'link', label: 'Link URL' },
-      { key: 'image', label: 'Image', type: 'image' },
-    ],
-  },
-  'brand-showcase': {
-    key: 'items',
-    title: 'Brand Blocks',
-    addLabel: 'Add Brand',
-    label: (item, index) => item?.title || item?.name || `Brand ${index + 1}`,
-    create: () => ({ title: 'Brand name', subtitle: '', link: '/brands', image: '' }),
-    fields: [
-      { key: 'title', label: 'Name' },
-      { key: 'subtitle', label: 'Subtitle' },
-      { key: 'link', label: 'Link URL' },
-      { key: 'image', label: 'Image', type: 'image' },
-    ],
-  },
-};
 
 // Section type flags
 const is = (type) => (section) => section?.type === type;
@@ -265,6 +103,7 @@ const FieldGroup = ({ label, icon, defaultOpen = true, openForBlock, children })
       border: '1px solid',
       borderColor: 'divider',
       borderRadius: '8px !important',
+      bgcolor: 'var(--designer-surface, inherit)',
       '&:before': { display: 'none' },
       overflow: 'hidden',
     }}
@@ -702,7 +541,7 @@ const DesignerSectionEditor = ({
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
       {/* Panel Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'var(--designer-surface, inherit)' }}>
         <IconButton size="small" aria-label={activeBlockLabel ? 'Back to section settings' : 'Close section settings'}
           onClick={activeBlockLabel ? () => {
             onBackToSection?.();
@@ -1584,24 +1423,18 @@ const DesignerSectionEditor = ({
           )}
           {section.type === 'catalog-explorer' && (
             <FieldGroup label="Catalog filters and layout" defaultOpen>
-              {[
-                ['showCategory', 'Show category filter'],
-                ['showBrand', 'Show brand filter'],
-                ['showSort', 'Show sorting'],
-              ].map(([key, label]) => (
+              {Object.entries(SECTION_DEFINITIONS['catalog-explorer'].settings).filter(([, field]) => field.type === 'boolean')
+                .map(([key, { label, default: defaultValue }]) => (
                 <FormControlLabel key={key} label={label} control={<Switch
-                  checked={section.catalogFilters?.[key] !== false}
+                  checked={section.catalogFilters?.[key] ?? defaultValue}
                   onChange={(event) => {
                     onChange('catalogFilters', { ...section.catalogFilters, [key]: event.target.checked });
                     onBlur();
                   }}
                 />} />
               ))}
-              {[
-                ['columnsDesktop', 'Desktop columns', 4, [2, 3, 4, 6]],
-                ['pageSize', 'Products per page', 8, [4, 6, 8, 12, 16, 24]],
-                ['defaultSort', 'Default sort', 'newest', ['newest', 'name_asc', 'price_asc', 'price_desc']],
-              ].map(([key, label, fallback, options]) => (
+              {Object.entries(SECTION_DEFINITIONS['catalog-explorer'].settings).filter(([, field]) => field.type !== 'boolean')
+                .map(([key, { label, default: fallback, options }]) => (
                 <TextField key={key} select size="small" fullWidth label={label}
                   value={section.catalogFilters?.[key] ?? fallback}
                   onChange={(event) => {

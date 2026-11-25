@@ -3,6 +3,7 @@
 const ThemeService = require('./theme.service');
 const { success } = require('../../utils/response');
 const { applyRequestSchema, previewRequestSchema, importRequestSchema, idParamSchema } = require('./theme.validation');
+const { inspectThemeReferences } = require('./theme.references');
 
 const getBuiltin = async (req, res, next) => {
   try {
@@ -31,7 +32,8 @@ const validate = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid request: missing packageData' });
     }
     const validated = ThemeService.validatePackage(req.body.packageData);
-    return success(res, { valid: true, package: validated }, 'Package is valid');
+    const references = req.body.checkReferences === true ? await inspectThemeReferences(validated) : undefined;
+    return success(res, { valid: true, package: validated, references }, 'Package is valid');
   } catch (err) { next(err); }
 };
 
@@ -62,11 +64,14 @@ const exportTheme = async (req, res, next) => {
 
 const exportDraftTheme = async (req, res, next) => {
   try {
-    const { draftRevision, ...options } = req.body || {};
+    const { draftRevision, draftKey, ...options } = req.body || {};
     if (!Number.isSafeInteger(draftRevision) || draftRevision < 1) {
       return res.status(400).json({ success: false, message: 'A saved design draft revision is required.' });
     }
-    return success(res, await ThemeService.exportCurrent(options, draftRevision));
+    if (draftKey !== undefined && (typeof draftKey !== 'string' || !/^named-[a-f0-9-]{36}$/.test(draftKey))) {
+      return res.status(400).json({ success: false, message: 'Invalid named draft key' });
+    }
+    return success(res, await ThemeService.exportCurrent(options, draftRevision, draftKey));
   } catch (err) { return next(err); }
 };
 

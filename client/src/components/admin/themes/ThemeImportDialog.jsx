@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography, Alert, Box, Chip, Stack, Divider } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography, Alert, Box, Chip, Stack, Divider, TextField } from '@mui/material';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import SaveIcon from '@mui/icons-material/Save';
@@ -13,6 +13,16 @@ const ThemeImportDialog = ({ open, onClose, onImport, onPreview, loading }) => {
   const [parsed, setParsed] = useState(null);
   const [error, setError] = useState('');
   const [validating, setValidating] = useState(false);
+  const [references, setReferences] = useState([]);
+  const [replacements, setReplacements] = useState({});
+
+  const validatePackage = async (data) => {
+    const result = await themeService.validateTheme(data, { checkReferences: true });
+    setParsed(result?.package || data);
+    setReferences(result?.references || []);
+    setReplacements({});
+    setStep(STEPS.SUMMARY);
+  };
 
   const handleFileChange = (e) => {
     const f = e.target.files?.[0];
@@ -33,9 +43,7 @@ const ThemeImportDialog = ({ open, onClose, onImport, onPreview, loading }) => {
         // Server-side validation
         setValidating(true);
         try {
-          await themeService.validateTheme(data);
-          setParsed(data);
-          setStep(STEPS.SUMMARY);
+          await validatePackage(data);
         } catch (err) {
           setError(
             err.response?.data?.error?.message ||
@@ -60,10 +68,31 @@ const ThemeImportDialog = ({ open, onClose, onImport, onPreview, loading }) => {
     if (parsed && onPreview) onPreview(parsed);
   };
 
+  const applyReplacements = async () => {
+    const data = structuredClone(parsed);
+    for (const [index, replacement] of Object.entries(replacements)) {
+      if (!replacement.trim()) continue;
+      const { path } = references[index];
+      const parent = path.slice(0, -1).reduce((current, key) => current[key], data);
+      parent[path.at(-1)] = replacement.trim();
+    }
+    setError('');
+    setValidating(true);
+    try {
+      await validatePackage(data);
+    } catch (err) {
+      setError(err.response?.data?.error?.message || 'The replacement references could not be validated.');
+    } finally {
+      setValidating(false);
+    }
+  };
+
   const handleClose = () => {
     setFile(null);
     setParsed(null);
     setError('');
+    setReferences([]);
+    setReplacements({});
     setStep(STEPS.UPLOAD);
     onClose();
   };
@@ -72,6 +101,8 @@ const ThemeImportDialog = ({ open, onClose, onImport, onPreview, loading }) => {
   const sections = parsed?.layout?.homepageSections || [];
   const hasDemo = !!(parsed?.demoContent?.heroSlides?.length || parsed?.demoContent?.promoBanners?.length || parsed?.demoContent?.valueProps?.length);
   const pageTemplateCount = parsed?.pageTemplates ? Object.keys(parsed.pageTemplates).length : 0;
+  const unresolvedCount = references.filter(({ resolved }) => !resolved).length;
+  const pendingReplacements = Object.values(replacements).some((value) => value.trim());
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
@@ -122,6 +153,21 @@ const ThemeImportDialog = ({ open, onClose, onImport, onPreview, loading }) => {
               {parsed?.layout?.announcementStyle && <Typography variant="body2">• Announcement bar styling</Typography>}
               {pageTemplateCount > 0 && <Typography variant="body2">• {pageTemplateCount} page template layout{pageTemplateCount > 1 ? 's' : ''}</Typography>}
             </Stack>
+            {references.length > 0 && <Stack spacing={1.5} sx={{ mt: 2 }}>
+              <Typography variant="subtitle2">Store references</Typography>
+              <Alert severity={unresolvedCount ? 'warning' : 'success'}>
+                {references.length - unresolvedCount} of {references.length} references found in this store.
+                {unresolvedCount > 0 && ' Replace missing values or keep them for another store.'}
+              </Alert>
+              {references.map(({ path, resource, value, resolved }, index) => !resolved && (
+                <TextField key={JSON.stringify(path)} size="small" fullWidth
+                  label={`Replace missing ${resource}: ${value}`} helperText={path.join('.')}
+                  value={replacements[index] || ''} disabled={validating}
+                  onChange={(event) => setReplacements((current) => ({ ...current, [index]: event.target.value }))} />
+              ))}
+              {pendingReplacements && <Button onClick={applyReplacements} disabled={validating}>Apply replacements and recheck</Button>}
+              {error && <Alert severity="error">{error}</Alert>}
+            </Stack>}
           </>
         )}
       </DialogContent>
@@ -130,9 +176,9 @@ const ThemeImportDialog = ({ open, onClose, onImport, onPreview, loading }) => {
         {step === STEPS.SUMMARY && (
           <>
             {onPreview && (
-              <Button startIcon={<VisibilityIcon />} onClick={handlePreview}>Preview</Button>
+              <Button startIcon={<VisibilityIcon />} onClick={handlePreview} disabled={validating || pendingReplacements}>Preview</Button>
             )}
-            <Button variant="contained" startIcon={<SaveIcon />} onClick={handleSaveToLibrary} disabled={loading}>
+            <Button variant="contained" startIcon={<SaveIcon />} onClick={handleSaveToLibrary} disabled={loading || validating || pendingReplacements}>
               {loading ? 'Saving...' : 'Save to Library'}
             </Button>
           </>

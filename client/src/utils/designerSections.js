@@ -1,6 +1,7 @@
 import productRow from '../../../shared/product-row.json';
+import themeSections from '../../../shared/theme-sections.json';
 
-const CONTENT_PAGE_SECTIONS = [productRow.type, 'catalog-explorer', 'editorial-image-text', 'faq', 'promo-banners', 'composed-hero'];
+const CONTENT_PAGE_SECTIONS = themeSections.pageSectionTypes;
 
 export const getPageSectionTypes = (page) =>
   page === 'checkout' ? [productRow.type] : CONTENT_PAGE_SECTIONS;

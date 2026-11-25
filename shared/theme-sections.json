@@ -1,0 +1,1332 @@
+{
+  "sections": {
+    "COMPOSED_HERO": {
+      "type": "composed-hero",
+      "label": "Composable hero",
+      "family": "hero",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null,
+      "preset": {
+        "heroBlocks": [
+          {
+            "id": "heading",
+            "type": "heading",
+            "text": "Welcome to our store"
+          }
+        ]
+      },
+      "gallery": {
+        "goal": "hero",
+        "description": "Build a hero with grouped text, links, and responsive media."
+      }
+    },
+    "HERO_CAROUSEL": {
+      "type": "hero-carousel",
+      "label": "Hero carousel",
+      "family": "hero",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": "overlay",
+      "variants": [
+        "overlay",
+        "split",
+        "split-editorial",
+        "centered",
+        "full-bleed"
+      ],
+      "blocks": [
+        "eyebrow",
+        "heading",
+        "text",
+        "button",
+        "secondary-button",
+        "image"
+      ],
+      "preset": {
+        "title": "Build your dream store",
+        "subtitle": "Curated collections, sharp deals, and a smoother shopping experience.",
+        "variant": "split-editorial",
+        "autoPlay": true,
+        "interval": 6500
+      },
+      "gallery": {
+        "goal": "hero",
+        "description": "A high-impact first screen for launches, brand stories, or campaigns."
+      },
+      "itemEditor": {
+        "key": "slides",
+        "title": "Slides",
+        "addLabel": "Add Slide",
+        "labelKeys": [
+          "title",
+          "heading"
+        ],
+        "fallbackLabel": "Slide",
+        "defaultItem": {
+          "eyebrow": "New arrival",
+          "title": "Fresh arrivals are here",
+          "subtitle": "Discover new products selected for your next shop.",
+          "buttonText": "Shop now",
+          "buttonLink": "/products",
+          "secondaryButtonText": "",
+          "secondaryButtonLink": "",
+          "image": "",
+          "position": "center",
+          "color": "#ffffff"
+        },
+        "fields": [
+          {
+            "key": "eyebrow",
+            "label": "Eyebrow"
+          },
+          {
+            "key": "title",
+            "label": "Heading"
+          },
+          {
+            "key": "subtitle",
+            "label": "Text",
+            "multiline": true
+          },
+          {
+            "key": "buttonText",
+            "label": "Button Label"
+          },
+          {
+            "key": "buttonLink",
+            "label": "Button Link"
+          },
+          {
+            "key": "secondaryButtonText",
+            "label": "Secondary Button Label"
+          },
+          {
+            "key": "secondaryButtonLink",
+            "label": "Secondary Button Link"
+          },
+          {
+            "key": "image",
+            "label": "Image",
+            "type": "image"
+          },
+          {
+            "key": "position",
+            "label": "Image Focus",
+            "type": "select",
+            "options": [
+              {
+                "value": "center",
+                "label": "Center"
+              },
+              {
+                "value": "top",
+                "label": "Top"
+              },
+              {
+                "value": "bottom",
+                "label": "Bottom"
+              },
+              {
+                "value": "left",
+                "label": "Left"
+              },
+              {
+                "value": "right",
+                "label": "Right"
+              }
+            ]
+          },
+          {
+            "key": "color",
+            "label": "Text Color",
+            "type": "color"
+          }
+        ]
+      }
+    },
+    "VALUE_PROPS": {
+      "type": "value-props",
+      "label": "Value props",
+      "family": "trust",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": "icon-row",
+      "variants": [
+        "icon-row",
+        "card-grid"
+      ],
+      "preset": {
+        "title": "Why Shop With Us",
+        "subtitle": "Give customers quick reasons to trust the store.",
+        "variant": "icon-row",
+        "items": [
+          {
+            "title": "Fast delivery",
+            "text": "Tracked shipping on every order."
+          },
+          {
+            "title": "Secure checkout",
+            "text": "Safe payments and protected data."
+          },
+          {
+            "title": "Easy support",
+            "text": "Helpful service when customers need it."
+          }
+        ]
+      },
+      "gallery": {
+        "goal": "trust",
+        "description": "Explain why customers should buy from this store."
+      },
+      "itemEditor": {
+        "key": "items",
+        "title": "Value Prop Blocks",
+        "addLabel": "Add Value Prop",
+        "labelKeys": [
+          "title"
+        ],
+        "fallbackLabel": "Value prop",
+        "defaultItem": {
+          "title": "Fast delivery",
+          "text": "Tracked shipping on every order.",
+          "icon": "shipping",
+          "image": "",
+          "backgroundColor": "",
+          "accentColor": ""
+        },
+        "fields": [
+          {
+            "key": "title",
+            "label": "Heading"
+          },
+          {
+            "key": "text",
+            "label": "Text",
+            "multiline": true
+          },
+          {
+            "key": "icon",
+            "label": "Icon Name"
+          },
+          {
+            "key": "image",
+            "label": "Image",
+            "type": "image"
+          },
+          {
+            "key": "backgroundColor",
+            "label": "Background",
+            "type": "color"
+          },
+          {
+            "key": "accentColor",
+            "label": "Accent",
+            "type": "color"
+          },
+          {
+            "key": "requiresFeatureFlag",
+            "label": "Show when feature is enabled",
+            "type": "select",
+            "options": [
+              {
+                "value": "",
+                "label": "Always"
+              },
+              {
+                "value": "pricing",
+                "label": "Pricing"
+              },
+              {
+                "value": "cart",
+                "label": "Cart"
+              },
+              {
+                "value": "checkout",
+                "label": "Checkout"
+              },
+              {
+                "value": "payments",
+                "label": "Payments"
+              },
+              {
+                "value": "shipping",
+                "label": "Shipping"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "CATEGORY_SHORTCUTS": {
+      "type": "category-shortcuts",
+      "label": "Category shortcuts",
+      "family": "merchandising",
+      "data": "categories",
+      "live": true,
+      "preview": true,
+      "defaultVariant": "image-tiles",
+      "variants": [
+        "icon-grid",
+        "image-tiles",
+        "compact-chips"
+      ],
+      "preset": {
+        "title": "Shop by Category",
+        "subtitle": "Help shoppers jump into the right collection faster.",
+        "variant": "image-tiles",
+        "count": 8
+      },
+      "gallery": {
+        "goal": "merchandising",
+        "description": "Give shoppers fast visual routes into important categories."
+      },
+      "itemEditor": {
+        "key": "items",
+        "title": "Category Tiles",
+        "addLabel": "Add Tile",
+        "labelKeys": [
+          "title"
+        ],
+        "fallbackLabel": "Tile",
+        "defaultItem": {
+          "title": "Collection",
+          "subtitle": "Short description",
+          "link": "/products",
+          "image": ""
+        },
+        "fields": [
+          {
+            "key": "title",
+            "label": "Title"
+          },
+          {
+            "key": "subtitle",
+            "label": "Subtitle"
+          },
+          {
+            "key": "link",
+            "label": "Link URL"
+          },
+          {
+            "key": "image",
+            "label": "Image",
+            "type": "image"
+          }
+        ]
+      }
+    },
+    "PROMO_BANNERS": {
+      "type": "promo-banners",
+      "label": "Promo banners",
+      "family": "campaign",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": "cards",
+      "variants": [
+        "cards",
+        "banner-stack",
+        "asymmetric"
+      ],
+      "blocks": [
+        "kicker",
+        "heading",
+        "text",
+        "button"
+      ],
+      "preset": {
+        "title": "Current Promotions",
+        "subtitle": "Spotlight your strongest offers and campaign moments.",
+        "variant": "asymmetric",
+        "ctaText": "Shop now",
+        "ctaLink": "/products"
+      },
+      "gallery": {
+        "goal": "campaign",
+        "description": "Highlight offers, bundles, shipping promos, or seasonal pushes."
+      },
+      "itemEditor": {
+        "key": "items",
+        "title": "Promo Blocks",
+        "addLabel": "Add Promo",
+        "labelKeys": [
+          "title"
+        ],
+        "fallbackLabel": "Promo",
+        "defaultItem": {
+          "kicker": "Offer",
+          "title": "Promo headline",
+          "subtitle": "Describe this offer.",
+          "ctaText": "Shop now",
+          "link": "/products",
+          "color": "#ffffff",
+          "accentColor": "#1976d2"
+        },
+        "fields": [
+          {
+            "key": "kicker",
+            "label": "Kicker"
+          },
+          {
+            "key": "title",
+            "label": "Heading"
+          },
+          {
+            "key": "subtitle",
+            "label": "Text",
+            "multiline": true
+          },
+          {
+            "key": "ctaText",
+            "label": "Button Label"
+          },
+          {
+            "key": "link",
+            "label": "Button Link"
+          },
+          {
+            "key": "image",
+            "label": "Image",
+            "type": "image"
+          },
+          {
+            "key": "color",
+            "label": "Background",
+            "type": "color"
+          },
+          {
+            "key": "accentColor",
+            "label": "Accent",
+            "type": "color"
+          }
+        ]
+      }
+    },
+    "PRODUCT_ROW": {
+      "type": "product-row",
+      "label": "Product row",
+      "family": "merchandising",
+      "data": "products",
+      "live": true,
+      "preview": true,
+      "gallery": {
+        "goal": "merchandising",
+        "description": "Feature products, new arrivals, offers, or recommended items."
+      }
+    },
+    "CATALOG_EXPLORER": {
+      "type": "catalog-explorer",
+      "label": "Catalog Explorer",
+      "family": "merchandising",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null,
+      "preset": {
+        "title": "Explore products"
+      },
+      "gallery": {
+        "goal": "merchandising",
+        "description": "Let shoppers browse and filter products within this page."
+      },
+      "settings": {
+        "showCategory": {
+          "type": "boolean",
+          "label": "Show category filter",
+          "default": true
+        },
+        "showBrand": {
+          "type": "boolean",
+          "label": "Show brand filter",
+          "default": true
+        },
+        "showSort": {
+          "type": "boolean",
+          "label": "Show sorting",
+          "default": true
+        },
+        "columnsDesktop": {
+          "type": "select",
+          "label": "Desktop columns",
+          "default": 4,
+          "options": [
+            2,
+            3,
+            4,
+            6
+          ]
+        },
+        "pageSize": {
+          "type": "integer",
+          "label": "Products per page",
+          "default": 8,
+          "min": 1,
+          "max": 24,
+          "options": [
+            4,
+            6,
+            8,
+            12,
+            16,
+            24
+          ]
+        },
+        "defaultSort": {
+          "type": "select",
+          "label": "Default sort",
+          "default": "newest",
+          "options": [
+            "newest",
+            "name_asc",
+            "price_asc",
+            "price_desc"
+          ]
+        }
+      }
+    },
+    "BRAND_SHOWCASE": {
+      "type": "brand-showcase",
+      "label": "Brand showcase",
+      "family": "merchandising",
+      "data": "brands",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null,
+      "preset": {
+        "title": "Popular Brands",
+        "subtitle": "Let shoppers discover products by brand.",
+        "count": 8
+      },
+      "gallery": {
+        "goal": "merchandising",
+        "description": "Help shoppers discover products by brand or partner."
+      },
+      "itemEditor": {
+        "key": "items",
+        "title": "Brand Blocks",
+        "addLabel": "Add Brand",
+        "labelKeys": [
+          "title",
+          "name"
+        ],
+        "fallbackLabel": "Brand",
+        "defaultItem": {
+          "title": "Brand name",
+          "subtitle": "",
+          "link": "/brands",
+          "image": ""
+        },
+        "fields": [
+          {
+            "key": "title",
+            "label": "Name"
+          },
+          {
+            "key": "subtitle",
+            "label": "Subtitle"
+          },
+          {
+            "key": "link",
+            "label": "Link URL"
+          },
+          {
+            "key": "image",
+            "label": "Image",
+            "type": "image"
+          }
+        ]
+      }
+    },
+    "TAG_SHOWCASE": {
+      "type": "tag-showcase",
+      "preset": {
+        "title": "Shop by Tag",
+        "tagSlugs": [],
+        "count": 8
+      }
+    },
+    "GALLERY_GRID": {
+      "type": "gallery-grid",
+      "preset": {
+        "title": "Gallery",
+        "gallerySlug": "",
+        "count": 8
+      }
+    },
+    "EDITORIAL_IMAGE_TEXT": {
+      "type": "editorial-image-text",
+      "label": "Editorial image and text",
+      "family": "story",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": "image-right",
+      "variants": [
+        "image-left",
+        "image-right",
+        "overlap-card"
+      ],
+      "blocks": [
+        "heading",
+        "text",
+        "button",
+        "image"
+      ],
+      "preset": {
+        "title": "Designed for better shopping",
+        "subtitle": "Tell the story behind your products, craft, quality, or service promise.",
+        "variant": "overlap-card",
+        "ctaText": "Explore more",
+        "ctaLink": "/products",
+        "imagePosition": "right"
+      },
+      "gallery": {
+        "goal": "content",
+        "description": "Add story-led content, brand education, or product context."
+      }
+    },
+    "TESTIMONIALS": {
+      "type": "testimonials",
+      "label": "Testimonials",
+      "family": "trust",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": "cards",
+      "variants": [
+        "cards",
+        "quote-wall",
+        "carousel"
+      ],
+      "preset": {
+        "title": "Loved by Customers",
+        "subtitle": "Use social proof to make the store feel alive.",
+        "variant": "cards",
+        "items": []
+      },
+      "gallery": {
+        "goal": "trust",
+        "description": "Show customer proof and social validation."
+      },
+      "itemEditor": {
+        "key": "items",
+        "title": "Testimonial Blocks",
+        "addLabel": "Add Testimonial",
+        "labelKeys": [
+          "title",
+          "author"
+        ],
+        "fallbackLabel": "Testimonial",
+        "defaultItem": {
+          "title": "Great experience",
+          "text": "Add the customer quote here.",
+          "author": "Customer name",
+          "role": "Verified buyer"
+        },
+        "fields": [
+          {
+            "key": "title",
+            "label": "Headline"
+          },
+          {
+            "key": "text",
+            "label": "Quote",
+            "multiline": true
+          },
+          {
+            "key": "author",
+            "label": "Author"
+          },
+          {
+            "key": "role",
+            "label": "Role"
+          },
+          {
+            "key": "image",
+            "label": "Image",
+            "type": "image"
+          }
+        ]
+      }
+    },
+    "LOGO_CLOUD": {
+      "type": "logo-cloud",
+      "label": "Logo cloud",
+      "family": "trust",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null,
+      "preset": {
+        "title": "Featured Brands",
+        "subtitle": "Show brand partners, press mentions, or trusted labels."
+      },
+      "gallery": {
+        "goal": "content",
+        "description": "Show partners, press, brands, or trusted labels."
+      },
+      "itemEditor": {
+        "key": "items",
+        "title": "Logo Blocks",
+        "addLabel": "Add Logo",
+        "labelKeys": [
+          "title"
+        ],
+        "fallbackLabel": "Logo",
+        "defaultItem": {
+          "title": "Partner",
+          "image": "",
+          "link": ""
+        },
+        "fields": [
+          {
+            "key": "title",
+            "label": "Name"
+          },
+          {
+            "key": "image",
+            "label": "Logo",
+            "type": "image"
+          },
+          {
+            "key": "link",
+            "label": "Link URL"
+          }
+        ]
+      }
+    },
+    "GALLERY": {
+      "type": "gallery",
+      "label": "Gallery",
+      "family": "story",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null,
+      "preset": {
+        "title": "Gallery",
+        "count": 8
+      },
+      "gallery": {
+        "goal": "content",
+        "description": "Display photos from an active Gallery album."
+      }
+    },
+    "NEWSLETTER_SIGNUP": {
+      "type": "newsletter-signup",
+      "label": "Newsletter signup",
+      "family": "conversion",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": "banner",
+      "variants": [
+        "banner",
+        "inline-form"
+      ],
+      "blocks": [
+        "heading",
+        "text",
+        "button"
+      ],
+      "preset": {
+        "title": "Get updates and offers",
+        "subtitle": "Send new arrivals, promotions, and store updates to subscribers.",
+        "variant": "banner",
+        "ctaText": "Subscribe"
+      },
+      "gallery": {
+        "goal": "conversion",
+        "description": "Capture subscribers for launches, offers, and updates."
+      }
+    },
+    "COUNTDOWN_SALE": {
+      "type": "countdown-sale",
+      "label": "Countdown sale",
+      "family": "campaign",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": "bar",
+      "variants": [
+        "bar",
+        "card"
+      ],
+      "blocks": [
+        "heading",
+        "text",
+        "timer",
+        "button"
+      ],
+      "preset": {
+        "title": "Limited Time Offer",
+        "subtitle": "Create urgency around seasonal campaigns or flash sales.",
+        "variant": "bar",
+        "ctaText": "Shop sale",
+        "ctaLink": "/products?onSale=true"
+      },
+      "gallery": {
+        "goal": "campaign",
+        "description": "Create urgency around sales and limited-time campaigns."
+      }
+    },
+    "FEATURED_COLLECTION_GRID": {
+      "type": "featured-collection-grid",
+      "label": "Featured collection grid",
+      "family": "merchandising",
+      "data": "categories",
+      "live": true,
+      "preview": true,
+      "defaultVariant": "image-tiles",
+      "variants": [
+        "image-tiles",
+        "icon-grid",
+        "compact-chips"
+      ],
+      "preset": {
+        "title": "Featured Collections",
+        "subtitle": "Promote your most important collections with visual tiles.",
+        "variant": "image-tiles",
+        "count": 6
+      },
+      "gallery": {
+        "goal": "merchandising",
+        "description": "Promote curated collections with larger visual tiles."
+      },
+      "itemEditor": {
+        "key": "items",
+        "title": "Collection Tiles",
+        "addLabel": "Add Collection",
+        "labelKeys": [
+          "title"
+        ],
+        "fallbackLabel": "Collection",
+        "defaultItem": {
+          "title": "Featured collection",
+          "subtitle": "Short description",
+          "link": "/products",
+          "image": ""
+        },
+        "fields": [
+          {
+            "key": "title",
+            "label": "Title"
+          },
+          {
+            "key": "subtitle",
+            "label": "Subtitle"
+          },
+          {
+            "key": "link",
+            "label": "Link URL"
+          },
+          {
+            "key": "image",
+            "label": "Image",
+            "type": "image"
+          }
+        ]
+      }
+    },
+    "FAQ": {
+      "type": "faq",
+      "label": "FAQ",
+      "family": "trust",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null,
+      "preset": {
+        "title": "Frequently Asked Questions",
+        "subtitle": "Answer common questions before customers ask.",
+        "items": [
+          {
+            "title": "How long does delivery take?",
+            "text": "Delivery timelines depend on location and shipping method."
+          },
+          {
+            "title": "Can I return an item?",
+            "text": "Return rules can be configured in your store policy."
+          }
+        ]
+      },
+      "gallery": {
+        "goal": "trust",
+        "description": "Answer common questions before checkout."
+      },
+      "itemEditor": {
+        "key": "items",
+        "title": "FAQ Blocks",
+        "addLabel": "Add Question",
+        "labelKeys": [
+          "title"
+        ],
+        "fallbackLabel": "Question",
+        "defaultItem": {
+          "title": "Question title",
+          "text": "Answer text."
+        },
+        "fields": [
+          {
+            "key": "title",
+            "label": "Question"
+          },
+          {
+            "key": "text",
+            "label": "Answer",
+            "multiline": true
+          }
+        ]
+      }
+    },
+    "TRUST_BADGES": {
+      "type": "trust-badges",
+      "label": "Trust badges",
+      "family": "trust",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": "icon-row",
+      "variants": [
+        "icon-row",
+        "card-grid"
+      ],
+      "preset": {
+        "title": "Shop With Confidence",
+        "subtitle": "Reduce buyer hesitation before checkout.",
+        "variant": "card-grid",
+        "items": [
+          {
+            "title": "Authentic products",
+            "text": "Quality checked and verified."
+          },
+          {
+            "title": "Easy returns",
+            "text": "Simple support if something is not right."
+          },
+          {
+            "title": "Secure payments",
+            "text": "Encrypted checkout from cart to confirmation."
+          }
+        ]
+      },
+      "gallery": {
+        "goal": "trust",
+        "description": "Reduce hesitation with shipping, returns, and security proof."
+      },
+      "itemEditor": {
+        "key": "items",
+        "title": "Trust Blocks",
+        "addLabel": "Add Trust Block",
+        "labelKeys": [
+          "title"
+        ],
+        "fallbackLabel": "Trust block",
+        "defaultItem": {
+          "title": "Secure checkout",
+          "text": "Encrypted checkout from cart to confirmation.",
+          "icon": "secure",
+          "image": "",
+          "backgroundColor": "",
+          "accentColor": ""
+        },
+        "fields": [
+          {
+            "key": "title",
+            "label": "Heading"
+          },
+          {
+            "key": "text",
+            "label": "Text",
+            "multiline": true
+          },
+          {
+            "key": "icon",
+            "label": "Icon Name"
+          },
+          {
+            "key": "image",
+            "label": "Image",
+            "type": "image"
+          },
+          {
+            "key": "backgroundColor",
+            "label": "Background",
+            "type": "color"
+          },
+          {
+            "key": "accentColor",
+            "label": "Accent",
+            "type": "color"
+          },
+          {
+            "key": "requiresFeatureFlag",
+            "label": "Show when feature is enabled",
+            "type": "select",
+            "options": [
+              {
+                "value": "",
+                "label": "Always"
+              },
+              {
+                "value": "pricing",
+                "label": "Pricing"
+              },
+              {
+                "value": "cart",
+                "label": "Cart"
+              },
+              {
+                "value": "checkout",
+                "label": "Checkout"
+              },
+              {
+                "value": "payments",
+                "label": "Payments"
+              },
+              {
+                "value": "shipping",
+                "label": "Shipping"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "RECENTLY_VIEWED": {
+      "type": "recently-viewed",
+      "label": "Recently viewed",
+      "family": "merchandising",
+      "data": "local",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null,
+      "preset": {
+        "title": "Recently Viewed",
+        "count": 8
+      },
+      "gallery": {
+        "goal": "merchandising",
+        "description": "Bring customers back to products they already considered."
+      }
+    },
+    "PRODUCT_INFO": {
+      "type": "product-info",
+      "label": "Product information",
+      "family": "system",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null
+    },
+    "PRODUCT_REVIEWS": {
+      "type": "product-reviews",
+      "label": "Product reviews",
+      "family": "system",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null
+    },
+    "CATEGORY_HEADER": {
+      "type": "category-header",
+      "label": "Category header",
+      "family": "system",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null
+    },
+    "CATEGORY_PRODUCTS": {
+      "type": "category-products",
+      "label": "Category products",
+      "family": "system",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null
+    },
+    "CATALOG_HEADER": {
+      "type": "catalog-header",
+      "label": "Catalog header",
+      "family": "system",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null
+    },
+    "CATALOG_PRODUCTS": {
+      "type": "catalog-products",
+      "label": "Catalog products",
+      "family": "system",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null
+    },
+    "BRANDS_HEADER": {
+      "type": "brands-header",
+      "label": "Brands header",
+      "family": "system",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null
+    },
+    "BRANDS_LIST": {
+      "type": "brands-list",
+      "label": "Brands list",
+      "family": "system",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null
+    },
+    "BLOG_HEADER": {
+      "type": "blog-header",
+      "label": "Blog header",
+      "family": "system",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null
+    },
+    "BLOG_POSTS": {
+      "type": "blog-posts",
+      "label": "Blog posts",
+      "family": "system",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null
+    },
+    "ACCOUNT_MAIN": {
+      "type": "account-main",
+      "label": "Account dashboard",
+      "family": "system",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null
+    },
+    "CART_MAIN": {
+      "type": "cart-main",
+      "label": "Cart items and checkout",
+      "family": "system",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null
+    },
+    "ORDERS_MAIN": {
+      "type": "orders-main",
+      "label": "Orders list",
+      "family": "system",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null
+    },
+    "WISHLIST_MAIN": {
+      "type": "wishlist-main",
+      "label": "Wishlist items",
+      "family": "system",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null
+    },
+    "SEARCH_MAIN": {
+      "type": "search-main",
+      "label": "Search results",
+      "family": "system",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null
+    },
+    "CHECKOUT_MAIN": {
+      "type": "checkout-main",
+      "label": "Checkout form and summary",
+      "family": "system",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null
+    },
+    "NOT_FOUND_MAIN": {
+      "type": "not-found-main",
+      "label": "404 error page",
+      "family": "system",
+      "data": "content",
+      "live": true,
+      "preview": true,
+      "defaultVariant": null
+    }
+  },
+  "presetOrder": [
+    "tag-showcase",
+    "gallery-grid",
+    "composed-hero",
+    "hero-carousel",
+    "product-row",
+    "catalog-explorer",
+    "category-shortcuts",
+    "featured-collection-grid",
+    "promo-banners",
+    "editorial-image-text",
+    "value-props",
+    "trust-badges",
+    "testimonials",
+    "logo-cloud",
+    "brand-showcase",
+    "gallery",
+    "newsletter-signup",
+    "countdown-sale",
+    "faq",
+    "recently-viewed"
+  ],
+  "pageSectionTypes": [
+    "product-row",
+    "catalog-explorer",
+    "editorial-image-text",
+    "faq",
+    "promo-banners",
+    "composed-hero"
+  ],
+  "composedBlocks": {
+    "definitions": {
+      "group": {
+        "label": "Group",
+        "allowsChildren": true
+      },
+      "heading": {
+        "label": "Heading"
+      },
+      "text": {
+        "label": "Text"
+      },
+      "button": {
+        "label": "Button"
+      },
+      "media": {
+        "label": "Media"
+      },
+      "product-attribute": {
+        "label": "Product attribute"
+      },
+      "product-rating": {
+        "label": "Product rating"
+      },
+      "enquiry": {
+        "label": "Enquiry form"
+      },
+      "newsletter": {
+        "label": "Newsletter signup"
+      },
+      "blog": {
+        "label": "Blog post card",
+        "source": {
+          "field": "blogSlug",
+          "label": "Blog post",
+          "path": "blogs",
+          "fallback": "Blog post"
+        }
+      },
+      "availability": {
+        "label": "Product availability"
+      },
+      "fulfillment": {
+        "label": "Ships from"
+      },
+      "page": {
+        "label": "Page link",
+        "source": {
+          "field": "pageSlug",
+          "label": "Page",
+          "path": "p",
+          "fallback": "Page"
+        }
+      },
+      "gallery": {
+        "label": "Gallery album",
+        "source": {
+          "field": "gallerySlug",
+          "label": "Gallery album",
+          "path": null,
+          "fallback": "Gallery"
+        }
+      },
+      "collection": {
+        "label": "Collection card",
+        "source": {
+          "field": "categorySlug",
+          "label": "Category",
+          "path": "category",
+          "fallback": "Collection"
+        }
+      },
+      "brand": {
+        "label": "Brand card",
+        "source": {
+          "field": "brandSlug",
+          "label": "Brand",
+          "path": "brands",
+          "fallback": "Brand"
+        }
+      },
+      "tag": {
+        "label": "Tag card",
+        "source": {
+          "field": "tagSlug",
+          "label": "Tag",
+          "path": "tags",
+          "fallback": "Tag"
+        }
+      },
+      "product": {
+        "label": "Product card",
+        "source": {
+          "field": "productSlug",
+          "label": "Product",
+          "path": "products",
+          "fallback": "Product"
+        }
+      }
+    },
+    "defaults": {
+      "newsletter": "Stay in touch",
+      "heading": "New heading",
+      "text": "Add your text",
+      "button": "Shop now",
+      "collection": "",
+      "brand": "",
+      "tag": ""
+    },
+    "maxSiblings": 12,
+    "maxDepth": 3,
+    "bindings": {
+      "heading": {
+        "productName": "Product name",
+        "productAttribute": "Product attribute"
+      },
+      "text": {
+        "productName": "Product name",
+        "productSku": "Product SKU",
+        "productSummary": "Product short description",
+        "productAttribute": "Product attribute"
+      },
+      "media": {
+        "productImage": "Product image"
+      },
+      "button": {
+        "productLink": "Product page link"
+      }
+    }
+  },
+  "maxLegacyBlocks": 12
+}

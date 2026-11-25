@@ -5,11 +5,14 @@ import useHeroCategories from '../../../hooks/useHeroCategories';
 import { useFeature, useFeatureVisible } from '../../../hooks/useSettings';
 import { getProducts } from '../../../services/productService';
 import { getEligibleBrands } from '../../../services/brandService';
+import { SECTION_DEFINITIONS } from './sectionRegistry';
 
 const sortLabels = { newest: 'Newest', name_asc: 'Name A–Z', price_asc: 'Price low to high', price_desc: 'Price high to low' };
+const defaults = Object.fromEntries(Object.entries(SECTION_DEFINITIONS['catalog-explorer'].settings)
+  .map(([key, field]) => [key, field.default]));
 
 export default function CatalogExplorerSection({ section = {} }) {
-  const config = section.catalogFilters || {};
+  const config = { ...defaults, ...section.catalogFilters };
   const pricing = useFeatureVisible('pricing');
   const brandsEnabled = useFeature('brands') && config.showBrand !== false;
   const categoriesEnabled = config.showCategory !== false;
@@ -19,10 +22,10 @@ export default function CatalogExplorerSection({ section = {} }) {
   const [filters, setFilters] = useState({});
   const [page, setPage] = useState(1);
   const [result, setResult] = useState(null);
-  const limit = config.pageSize || 8;
+  const limit = config.pageSize;
   const category = categoriesEnabled ? filters.category || '' : '';
   const brand = brandsEnabled ? filters.brand || '' : '';
-  const requestedSort = (config.showSort !== false && filters.sort) || config.defaultSort || 'newest';
+  const requestedSort = (config.showSort && filters.sort) || config.defaultSort;
   const sort = !pricing && requestedSort.startsWith('price_') ? 'newest' : requestedSort;
   const requestKey = JSON.stringify([category, brand, sort, page, limit]);
   const current = result?.key === requestKey ? result : null;
@@ -84,7 +87,7 @@ export default function CatalogExplorerSection({ section = {} }) {
       </Typography>
       {!!current?.products?.length && <Box sx={{
         display: 'grid', gap: 2,
-        gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: `repeat(${config.columnsDesktop || 4}, minmax(0, 1fr))` },
+        gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: `repeat(${config.columnsDesktop}, minmax(0, 1fr))` },
       }}>
         {current.products.map((product) => <ProductCard key={product.id} product={product} />)}
       </Box>}

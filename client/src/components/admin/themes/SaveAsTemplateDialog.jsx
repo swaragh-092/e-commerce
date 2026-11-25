@@ -19,7 +19,7 @@ const slugify = (text) => {
   return slug || 'template-' + Date.now();
 };
 
-const SaveAsTemplateDialog = ({ open, onClose, onSaved, publishedOnly = false, draftRevision, allowSourceChoice = false }) => {
+const SaveAsTemplateDialog = ({ open, onClose, onSaved, publishedOnly = false, draftRevision, draftKey, allowSourceChoice = false }) => {
   const [source, setSource] = useState(draftRevision != null ? 'draft' : 'published');
   const fromDraft = draftRevision != null && (!allowSourceChoice || source === 'draft');
   const categoryLabelId = useId();
@@ -47,7 +47,7 @@ const SaveAsTemplateDialog = ({ open, onClose, onSaved, publishedOnly = false, d
         includeSectionPresets,
       };
       const exported = await (fromDraft
-        ? themeService.exportDraftTheme(draftRevision, options)
+        ? themeService.exportDraftTheme(draftRevision, { ...options, ...(draftKey && { draftKey }) })
         : themeService.exportTheme(options));
       // Override meta with user input
       exported.meta = {

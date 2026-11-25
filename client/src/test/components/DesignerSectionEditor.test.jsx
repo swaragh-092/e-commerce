@@ -20,6 +20,19 @@ vi.mock('../../services/brandService', async (importOriginal) => ({
 }));
 
 describe('DesignerSectionEditor BlockListEditor', () => {
+  it('commits a nested heading typography choice without changing other blocks', async () => {
+    const onChange = vi.fn();
+    const onBlur = vi.fn();
+    const textBlock = { id: 'text', type: 'text', text: 'Seasonal produce' };
+    const heading = { id: 'heading', type: 'heading', text: 'Fresh from the market' };
+    const group = { id: 'group', type: 'group', children: [heading, textBlock] };
+    render(<DesignerSectionEditor section={{ id: 'hero', type: 'composed-hero', heroBlocks: [group] }}
+      activeBlockKey="heroBlocks" activeBlockIndex="heading" onChange={onChange} onBlur={onBlur} />);
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Text alignment' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Center' }));
+    expect(onChange).toHaveBeenCalledWith('heroBlocks', [{ ...group, children: [{ ...heading, textAlign: 'center' }, textBlock] }]);
+    expect(onBlur).toHaveBeenCalledOnce();
+  });
   it('filters a Product Row by a live brand while preserving its other query fields', async () => {
     const onChange = vi.fn();
     const onBlur = vi.fn();

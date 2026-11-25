@@ -1,4 +1,4 @@
-import { BLOCK_FIELD_PRESETS } from './DesignerSectionEditor';
+import { BLOCK_FIELD_PRESETS } from '../../../storefront/sections/sectionRegistry';
 import { getProductDetailsOrder, PRODUCT_DETAILS_LABELS, customDetailKey } from '../../../../utils/productDetailsOrder';
 import { HERO_BLOCK_LABELS } from '../../../storefront/sections/ComposedHero';
 import { Fragment, useEffect, useRef, useState } from 'react';
@@ -124,6 +124,7 @@ const SidebarDragHandle = ({ handleProps, label }) => handleProps && (
       display: 'grid', placeItems: 'center', width: 32, height: 32, flexShrink: 0,
       color: 'text.secondary', cursor: 'grab', touchAction: 'none', userSelect: 'none',
       borderRadius: 1, '&:hover, &:focus-visible': { bgcolor: 'action.hover', color: 'text.primary' },
+      '@media (pointer: coarse)': { width: 44, height: 44 },
       '&:active': { cursor: 'grabbing' },
     }}
   >
@@ -160,15 +161,15 @@ const SectionRow = ({ section, index, total, isSelected, onSelect, onMove, onTog
       py: 0.75,
       borderRadius: 1.5,
       cursor: 'pointer',
-      bgcolor: isSelected ? 'primary.50' : 'transparent',
+      bgcolor: isSelected ? 'var(--designer-selection, #f2e4ec)' : 'transparent',
       border: '1px solid',
-      borderColor: isSelected ? 'primary.main' : 'transparent',
+      borderColor: isSelected ? 'var(--designer-accent, #713654)' : 'transparent',
       opacity: section.enabled === false ? 0.55 : 1,
       transition: 'all 0.15s',
       '&:hover .section-actions, &:focus-within .section-actions': { opacity: 1 },
       '&:hover': {
-        bgcolor: isSelected ? 'primary.50' : 'action.hover',
-        borderColor: isSelected ? 'primary.main' : 'divider',
+        bgcolor: isSelected ? 'var(--designer-selection, #f2e4ec)' : 'action.hover',
+        borderColor: isSelected ? 'var(--designer-accent, #713654)' : 'divider',
       },
     }}
   >
@@ -399,7 +400,7 @@ const DesignerTreePanel = ({
                     {(drag) => (
                       <Box ref={drag.innerRef} {...drag.draggableProps}>
                         <Stack ref={selected ? selectedBlockRef : null} direction="row" alignItems="center"
-                          sx={{ bgcolor: selected ? 'action.selected' : undefined, borderRadius: 1 }}>
+                          sx={{ bgcolor: selected ? 'var(--designer-selection, #f2e4ec)' : undefined, borderRadius: 1 }}>
                           <SidebarDragHandle handleProps={drag.dragHandleProps} label={text || label} />
                           <Button size="small" aria-current={selected || undefined}
                             sx={{ justifyContent: 'flex-start', textTransform: 'none', minWidth: 0 }}
@@ -446,7 +447,8 @@ const DesignerTreePanel = ({
             const label = schema.label(item, index);
             return <Draggable key={item.id || index} draggableId={`section-item:${itemGroup}:${index}`} index={index}
               isDragDisabled={!configured}>{(drag) => <Box ref={drag.innerRef} {...drag.draggableProps}>
-              <Stack ref={selected ? selectedBlockRef : null} direction="row" alignItems="center" sx={{ bgcolor: selected ? 'action.selected' : undefined }}>
+              <Stack ref={selected ? selectedBlockRef : null} direction="row" alignItems="center"
+                sx={{ bgcolor: selected ? 'var(--designer-selection, #f2e4ec)' : undefined, borderRadius: 1 }}>
               <SidebarDragHandle handleProps={drag.dragHandleProps} label={label} />
               <Button size="small" aria-current={selected || undefined} sx={{ justifyContent: 'flex-start', textTransform: 'none' }}
                 onClick={() => onSelectProductBlock(section, index, schema.key)}>
@@ -709,7 +711,7 @@ const DesignerTreePanel = ({
                           return <Draggable key={key} draggableId={`product-detail:${key}`} index={index}>{(drag) => (
                             <Box ref={drag.innerRef} {...drag.draggableProps}>
                               <Stack ref={selected ? selectedBlockRef : null} direction="row" alignItems="center"
-                                sx={{ bgcolor: selected ? 'action.selected' : undefined }}>
+                                sx={{ bgcolor: selected ? 'var(--designer-selection, #f2e4ec)' : undefined, borderRadius: 1 }}>
                                 <SidebarDragHandle handleProps={drag.dragHandleProps} label={label} />
                                 <Button size="small" aria-current={selected || undefined} sx={{ justifyContent: 'flex-start', textTransform: 'none', flex: 1, minWidth: 0 }}
                                   onClick={() => onSelectProductBlock(mainSection, block?.id || key, block ? 'heroBlocks' : 'detailsBlockOrder')}>

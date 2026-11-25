@@ -23,19 +23,19 @@
       "$ref": "#/definitions/schema14"
     },
     "demoContent": {
-      "$ref": "#/definitions/schema42"
+      "$ref": "#/definitions/schema44"
     },
     "dataSources": {
-      "$ref": "#/definitions/schema48"
+      "$ref": "#/definitions/schema50"
     },
     "pageTemplates": {
-      "$ref": "#/definitions/schema60"
+      "$ref": "#/definitions/schema62"
     },
     "componentStyles": {
-      "$ref": "#/definitions/schema96"
+      "$ref": "#/definitions/schema98"
     },
     "sectionPresets": {
-      "$ref": "#/definitions/schema99"
+      "$ref": "#/definitions/schema101"
     },
     "customCSS": false,
     "headScripts": false,
@@ -1305,7 +1305,51 @@
       ],
       "additionalProperties": false
     },
+    "schema17": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "string",
+              "pattern": "^\\/(?![\\/\\\\])[^\\s\\\\]*$",
+              "maxLength": 500
+            }
+          ]
+        }
+      },
+      "required": [
+        "label",
+        "url"
+      ],
+      "additionalProperties": false
+    },
     "schema16": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/schema17"
+          },
+          "maxItems": 20
+        },
+        {
+          "enum": [
+            false
+          ]
+        }
+      ]
+    },
+    "schema18": {
       "type": "array",
       "items": {
         "enum": [
@@ -1434,6 +1478,9 @@
             }
           ]
         },
+        "headerLinks": {
+          "$ref": "#/definitions/schema16"
+        },
         "showMenu": {
           "type": "boolean"
         },
@@ -1453,12 +1500,12 @@
           "type": "boolean"
         },
         "actionsOrder": {
-          "$ref": "#/definitions/schema16"
+          "$ref": "#/definitions/schema18"
         }
       },
       "additionalProperties": false
     },
-    "schema17": {
+    "schema19": {
       "type": "object",
       "properties": {
         "bgColor": {
@@ -1492,7 +1539,7 @@
       },
       "additionalProperties": false
     },
-    "schema18": {
+    "schema20": {
       "type": "object",
       "properties": {
         "bgColor": {
@@ -1529,7 +1576,7 @@
       },
       "additionalProperties": false
     },
-    "schema21": {
+    "schema23": {
       "type": "array",
       "items": {
         "type": "string",
@@ -1538,14 +1585,14 @@
       },
       "maxItems": 12
     },
-    "schema22": {
+    "schema24": {
       "type": "array",
       "items": {
         "type": "string"
       },
       "maxItems": 12
     },
-    "schema24": {
+    "schema26": {
       "type": "object",
       "properties": {
         "eyebrow": {
@@ -1746,14 +1793,14 @@
       },
       "additionalProperties": false
     },
-    "schema23": {
+    "schema25": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/schema24"
+        "$ref": "#/definitions/schema26"
       },
       "maxItems": 12
     },
-    "schema26": {
+    "schema28": {
       "type": "object",
       "properties": {
         "title": {
@@ -1981,25 +2028,25 @@
         },
         "requiresFeatureFlag": {
           "enum": [
+            "",
             "pricing",
             "cart",
             "checkout",
             "payments",
-            "shipping",
-            ""
+            "shipping"
           ]
         }
       },
       "additionalProperties": false
     },
-    "schema25": {
+    "schema27": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/schema26"
+        "$ref": "#/definitions/schema28"
       },
       "maxItems": 12
     },
-    "schema27": {
+    "schema29": {
       "type": "object",
       "properties": {
         "showCategory": {
@@ -2011,11 +2058,6 @@
         "showSort": {
           "type": "boolean"
         },
-        "pageSize": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 24
-        },
         "columnsDesktop": {
           "enum": [
             2,
@@ -2023,6 +2065,11 @@
             4,
             6
           ]
+        },
+        "pageSize": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 24
         },
         "defaultSort": {
           "enum": [
@@ -2035,7 +2082,7 @@
       },
       "additionalProperties": false
     },
-    "schema35": {
+    "schema37": {
       "type": "object",
       "properties": {
         "id": {
@@ -2052,21 +2099,25 @@
             "text",
             "button",
             "media",
-            "collection",
-            "brand",
-            "tag",
-            "product",
             "product-attribute",
             "product-rating",
-            "availability",
-            "fulfillment",
             "enquiry",
             "newsletter",
             "blog",
+            "availability",
+            "fulfillment",
             "page",
-            "gallery"
+            "gallery",
+            "collection",
+            "brand",
+            "tag",
+            "product"
           ]
         },
+        "textAlign": {},
+        "textSize": {},
+        "textWeight": {},
+        "binding": {},
         "text": {
           "anyOf": [
             {
@@ -2238,6 +2289,96 @@
             "properties": {
               "type": {
                 "enum": [
+                  "heading"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "textAlign": {
+                "enum": [
+                  "left",
+                  "center",
+                  "right"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "textAlign": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "heading"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "textSize": {
+                "enum": [
+                  "small",
+                  "medium",
+                  "large"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "textSize": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "heading"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "textWeight": {
+                "enum": [
+                  "regular",
+                  "semibold",
+                  "bold"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "textWeight": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
                   "collection"
                 ]
               }
@@ -2310,7 +2451,9 @@
             "properties": {
               "type": {
                 "enum": [
-                  "product-attribute"
+                  "product-attribute",
+                  "heading",
+                  "text"
                 ]
               }
             }
@@ -2593,14 +2736,14 @@
         }
       ]
     },
-    "schema34": {
+    "schema36": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/schema35"
+        "$ref": "#/definitions/schema37"
       },
       "maxItems": 12
     },
-    "schema33": {
+    "schema35": {
       "type": "object",
       "properties": {
         "id": {
@@ -2617,21 +2760,25 @@
             "text",
             "button",
             "media",
-            "collection",
-            "brand",
-            "tag",
-            "product",
             "product-attribute",
             "product-rating",
-            "availability",
-            "fulfillment",
             "enquiry",
             "newsletter",
             "blog",
+            "availability",
+            "fulfillment",
             "page",
-            "gallery"
+            "gallery",
+            "collection",
+            "brand",
+            "tag",
+            "product"
           ]
         },
+        "textAlign": {},
+        "textSize": {},
+        "textWeight": {},
+        "binding": {},
         "text": {
           "anyOf": [
             {
@@ -2803,6 +2950,96 @@
             "properties": {
               "type": {
                 "enum": [
+                  "heading"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "textAlign": {
+                "enum": [
+                  "left",
+                  "center",
+                  "right"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "textAlign": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "heading"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "textSize": {
+                "enum": [
+                  "small",
+                  "medium",
+                  "large"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "textSize": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "heading"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "textWeight": {
+                "enum": [
+                  "regular",
+                  "semibold",
+                  "bold"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "textWeight": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
                   "collection"
                 ]
               }
@@ -2875,7 +3112,696 @@
             "properties": {
               "type": {
                 "enum": [
+                  "product-attribute",
+                  "heading",
+                  "text"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "attributeName": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  {
+                    "enum": [
+                      "",
+                      null
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "attributeName": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
                   "product-attribute"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "prefix": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  {
+                    "enum": [
+                      ""
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "prefix": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "product-attribute"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "suffix": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  {
+                    "enum": [
+                      ""
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "suffix": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "page"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "pageSlug": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  {
+                    "enum": [
+                      ""
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "pageSlug": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "gallery"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "gallerySlug": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  {
+                    "enum": [
+                      ""
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "gallerySlug": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "blog"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "blogSlug": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  {
+                    "enum": [
+                      ""
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "blogSlug": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "product"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "productSlug": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  {
+                    "enum": [
+                      ""
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "productSlug": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "tag"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "tagSlug": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  {
+                    "enum": [
+                      ""
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "tagSlug": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "group"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "children": {
+                "$ref": "#/definitions/schema36"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "children": false
+            }
+          }
+        }
+      ]
+    },
+    "schema34": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/schema35"
+      },
+      "maxItems": 12
+    },
+    "schema33": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "type": {
+          "enum": [
+            "group",
+            "heading",
+            "text",
+            "button",
+            "media",
+            "product-attribute",
+            "product-rating",
+            "enquiry",
+            "newsletter",
+            "blog",
+            "availability",
+            "fulfillment",
+            "page",
+            "gallery",
+            "collection",
+            "brand",
+            "tag",
+            "product"
+          ]
+        },
+        "textAlign": {},
+        "textSize": {},
+        "textWeight": {},
+        "binding": {},
+        "text": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 1500
+            },
+            {
+              "enum": [
+                ""
+              ]
+            }
+          ]
+        },
+        "productPlacement": false,
+        "href": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    {
+                      "enum": [
+                        "",
+                        null
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\/(?!\\/)",
+                  "maxLength": 500
+                }
+              ]
+            },
+            {
+              "enum": [
+                "",
+                null
+              ]
+            }
+          ]
+        },
+        "url": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    {
+                      "enum": [
+                        "",
+                        null
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\/(?!\\/)[^\\\\\\s\"']*$",
+                  "maxLength": 2000
+                }
+              ]
+            },
+            {
+              "enum": [
+                "",
+                null
+              ]
+            }
+          ]
+        },
+        "mobileUrl": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    {
+                      "enum": [
+                        "",
+                        null
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\/(?!\\/)[^\\\\\\s\"']*$",
+                  "maxLength": 2000
+                }
+              ]
+            },
+            {
+              "enum": [
+                "",
+                null
+              ]
+            }
+          ]
+        },
+        "mediaType": {
+          "enum": [
+            "image",
+            "video"
+          ]
+        },
+        "mobileMediaType": {
+          "enum": [
+            "image",
+            "video"
+          ]
+        },
+        "alt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "enum": [
+                "",
+                null
+              ]
+            }
+          ]
+        },
+        "direction": {
+          "enum": [
+            "row",
+            "column"
+          ]
+        },
+        "categorySlug": {},
+        "brandSlug": {},
+        "attributeName": {},
+        "prefix": {},
+        "suffix": {},
+        "pageSlug": {},
+        "gallerySlug": {},
+        "blogSlug": {},
+        "productSlug": {},
+        "tagSlug": {},
+        "children": {}
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "heading"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "textAlign": {
+                "enum": [
+                  "left",
+                  "center",
+                  "right"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "textAlign": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "heading"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "textSize": {
+                "enum": [
+                  "small",
+                  "medium",
+                  "large"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "textSize": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "heading"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "textWeight": {
+                "enum": [
+                  "regular",
+                  "semibold",
+                  "bold"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "textWeight": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "collection"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "categorySlug": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  {
+                    "enum": [
+                      ""
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "categorySlug": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "brand"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "brandSlug": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  {
+                    "enum": [
+                      ""
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "brandSlug": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "product-attribute",
+                  "heading",
+                  "text"
                 ]
               }
             }
@@ -3208,21 +4134,25 @@
             "text",
             "button",
             "media",
-            "collection",
-            "brand",
-            "tag",
-            "product",
             "product-attribute",
             "product-rating",
-            "availability",
-            "fulfillment",
             "enquiry",
             "newsletter",
             "blog",
+            "availability",
+            "fulfillment",
             "page",
-            "gallery"
+            "gallery",
+            "collection",
+            "brand",
+            "tag",
+            "product"
           ]
         },
+        "textAlign": {},
+        "textSize": {},
+        "textWeight": {},
+        "binding": {},
         "text": {
           "anyOf": [
             {
@@ -3236,7 +4166,13 @@
             }
           ]
         },
-        "productPlacement": false,
+        "productPlacement": {
+          "enum": [
+            "before-options",
+            "before-specifications",
+            "after-details"
+          ]
+        },
         "href": {
           "anyOf": [
             {
@@ -3394,6 +4330,96 @@
             "properties": {
               "type": {
                 "enum": [
+                  "heading"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "textAlign": {
+                "enum": [
+                  "left",
+                  "center",
+                  "right"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "textAlign": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "heading"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "textSize": {
+                "enum": [
+                  "small",
+                  "medium",
+                  "large"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "textSize": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "heading"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "textWeight": {
+                "enum": [
+                  "regular",
+                  "semibold",
+                  "bold"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "textWeight": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
                   "collection"
                 ]
               }
@@ -3466,7 +4492,9 @@
             "properties": {
               "type": {
                 "enum": [
-                  "product-attribute"
+                  "product-attribute",
+                  "heading",
+                  "text"
                 ]
               }
             }
@@ -3782,604 +4810,7 @@
       },
       "maxItems": 12
     },
-    "schema29": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "maxLength": 50
-        },
-        "enabled": {
-          "type": "boolean"
-        },
-        "type": {
-          "enum": [
-            "group",
-            "heading",
-            "text",
-            "button",
-            "media",
-            "collection",
-            "brand",
-            "tag",
-            "product",
-            "product-attribute",
-            "product-rating",
-            "availability",
-            "fulfillment",
-            "enquiry",
-            "newsletter",
-            "blog",
-            "page",
-            "gallery"
-          ]
-        },
-        "text": {
-          "anyOf": [
-            {
-              "type": "string",
-              "maxLength": 1500
-            },
-            {
-              "enum": [
-                ""
-              ]
-            }
-          ]
-        },
-        "productPlacement": {
-          "enum": [
-            "before-options",
-            "before-specifications",
-            "after-details"
-          ]
-        },
-        "href": {
-          "anyOf": [
-            {
-              "anyOf": [
-                {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "maxLength": 2000
-                    },
-                    {
-                      "enum": [
-                        "",
-                        null
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "string",
-                  "pattern": "^\\/(?!\\/)",
-                  "maxLength": 500
-                }
-              ]
-            },
-            {
-              "enum": [
-                "",
-                null
-              ]
-            }
-          ]
-        },
-        "url": {
-          "anyOf": [
-            {
-              "anyOf": [
-                {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "maxLength": 2000
-                    },
-                    {
-                      "enum": [
-                        "",
-                        null
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "string",
-                  "pattern": "^\\/(?!\\/)[^\\\\\\s\"']*$",
-                  "maxLength": 2000
-                }
-              ]
-            },
-            {
-              "enum": [
-                "",
-                null
-              ]
-            }
-          ]
-        },
-        "mobileUrl": {
-          "anyOf": [
-            {
-              "anyOf": [
-                {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "maxLength": 2000
-                    },
-                    {
-                      "enum": [
-                        "",
-                        null
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "string",
-                  "pattern": "^\\/(?!\\/)[^\\\\\\s\"']*$",
-                  "maxLength": 2000
-                }
-              ]
-            },
-            {
-              "enum": [
-                "",
-                null
-              ]
-            }
-          ]
-        },
-        "mediaType": {
-          "enum": [
-            "image",
-            "video"
-          ]
-        },
-        "mobileMediaType": {
-          "enum": [
-            "image",
-            "video"
-          ]
-        },
-        "alt": {
-          "anyOf": [
-            {
-              "type": "string",
-              "maxLength": 500
-            },
-            {
-              "enum": [
-                "",
-                null
-              ]
-            }
-          ]
-        },
-        "direction": {
-          "enum": [
-            "row",
-            "column"
-          ]
-        },
-        "categorySlug": {},
-        "brandSlug": {},
-        "attributeName": {},
-        "prefix": {},
-        "suffix": {},
-        "pageSlug": {},
-        "gallerySlug": {},
-        "blogSlug": {},
-        "productSlug": {},
-        "tagSlug": {},
-        "children": {}
-      },
-      "required": [
-        "id",
-        "type"
-      ],
-      "additionalProperties": false,
-      "allOf": [
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "collection"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "categorySlug": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "maxLength": 255
-                  },
-                  {
-                    "enum": [
-                      ""
-                    ]
-                  }
-                ]
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "categorySlug": false
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "brand"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "brandSlug": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "maxLength": 255
-                  },
-                  {
-                    "enum": [
-                      ""
-                    ]
-                  }
-                ]
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "brandSlug": false
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "product-attribute"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "attributeName": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "maxLength": 500
-                  },
-                  {
-                    "enum": [
-                      "",
-                      null
-                    ]
-                  }
-                ]
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "attributeName": false
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "product-attribute"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "prefix": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "maxLength": 100
-                  },
-                  {
-                    "enum": [
-                      ""
-                    ]
-                  }
-                ]
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "prefix": false
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "product-attribute"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "suffix": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "maxLength": 100
-                  },
-                  {
-                    "enum": [
-                      ""
-                    ]
-                  }
-                ]
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "suffix": false
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "page"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "pageSlug": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "maxLength": 255
-                  },
-                  {
-                    "enum": [
-                      ""
-                    ]
-                  }
-                ]
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "pageSlug": false
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "gallery"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "gallerySlug": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "maxLength": 255
-                  },
-                  {
-                    "enum": [
-                      ""
-                    ]
-                  }
-                ]
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "gallerySlug": false
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "blog"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "blogSlug": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "maxLength": 255
-                  },
-                  {
-                    "enum": [
-                      ""
-                    ]
-                  }
-                ]
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "blogSlug": false
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "product"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "productSlug": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "maxLength": 255
-                  },
-                  {
-                    "enum": [
-                      ""
-                    ]
-                  }
-                ]
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "productSlug": false
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "tag"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "tagSlug": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "maxLength": 255
-                  },
-                  {
-                    "enum": [
-                      ""
-                    ]
-                  }
-                ]
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "tagSlug": false
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "group"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "children": {
-                "$ref": "#/definitions/schema30"
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "children": false
-            }
-          }
-        }
-      ]
-    },
-    "schema28": {
-      "type": "array",
-      "items": {
-        "$ref": "#/definitions/schema29"
-      },
-      "maxItems": 12
-    },
-    "schema36": {
+    "schema38": {
       "type": "array",
       "items": {
         "anyOf": [
@@ -4404,7 +4835,7 @@
       "minItems": 1,
       "maxItems": 20
     },
-    "schema38": {
+    "schema40": {
       "type": "array",
       "items": {
         "type": "string",
@@ -4413,7 +4844,7 @@
       },
       "maxItems": 50
     },
-    "schema39": {
+    "schema41": {
       "anyOf": [
         {
           "type": "array",
@@ -4427,7 +4858,7 @@
         }
       ]
     },
-    "schema37": {
+    "schema39": {
       "type": "object",
       "properties": {
         "tags": {
@@ -4446,12 +4877,12 @@
               ]
             },
             {
-              "$ref": "#/definitions/schema38"
+              "$ref": "#/definitions/schema40"
             }
           ]
         },
         "ids": {
-          "$ref": "#/definitions/schema39"
+          "$ref": "#/definitions/schema41"
         },
         "discoveryRow": {
           "type": "boolean"
@@ -4569,7 +5000,7 @@
       },
       "additionalProperties": false
     },
-    "schema40": {
+    "schema42": {
       "type": "array",
       "items": {
         "type": "string",
@@ -4578,7 +5009,7 @@
       },
       "maxItems": 16
     },
-    "schema41": {
+    "schema43": {
       "type": "array",
       "items": {
         "type": "string",
@@ -4587,11 +5018,11 @@
       },
       "maxItems": 24
     },
-    "schema20": {
+    "schema22": {
       "type": "object",
       "properties": {
         "tagSlugs": {
-          "$ref": "#/definitions/schema21"
+          "$ref": "#/definitions/schema23"
         },
         "gallerySlug": {
           "anyOf": [
@@ -4617,22 +5048,22 @@
             "gallery-grid",
             "composed-hero",
             "hero-carousel",
-            "value-props",
-            "category-shortcuts",
-            "promo-banners",
             "product-row",
             "catalog-explorer",
-            "brand-showcase",
+            "category-shortcuts",
+            "featured-collection-grid",
+            "promo-banners",
             "editorial-image-text",
+            "value-props",
+            "trust-badges",
             "testimonials",
             "logo-cloud",
+            "brand-showcase",
+            "gallery",
             "newsletter-signup",
             "countdown-sale",
-            "featured-collection-grid",
             "faq",
-            "trust-badges",
-            "recently-viewed",
-            "gallery"
+            "recently-viewed"
           ]
         },
         "catalogFilters": {},
@@ -4684,7 +5115,7 @@
         },
         "query": {},
         "productIds": {
-          "$ref": "#/definitions/schema22"
+          "$ref": "#/definitions/schema24"
         },
         "pagePosition": {
           "enum": [
@@ -5169,10 +5600,10 @@
           ]
         },
         "slides": {
-          "$ref": "#/definitions/schema23"
+          "$ref": "#/definitions/schema25"
         },
         "items": {
-          "$ref": "#/definitions/schema25"
+          "$ref": "#/definitions/schema27"
         }
       },
       "required": [
@@ -5198,7 +5629,7 @@
           "then": {
             "properties": {
               "catalogFilters": {
-                "$ref": "#/definitions/schema27"
+                "$ref": "#/definitions/schema29"
               }
             }
           },
@@ -5226,7 +5657,7 @@
           "then": {
             "properties": {
               "heroBlocks": {
-                "$ref": "#/definitions/schema28"
+                "$ref": "#/definitions/schema30"
               }
             }
           },
@@ -5252,7 +5683,7 @@
           "then": {
             "properties": {
               "detailsBlockOrder": {
-                "$ref": "#/definitions/schema36"
+                "$ref": "#/definitions/schema38"
               }
             }
           },
@@ -5278,7 +5709,7 @@
           "then": {
             "properties": {
               "query": {
-                "$ref": "#/definitions/schema37"
+                "$ref": "#/definitions/schema39"
               }
             }
           },
@@ -5339,7 +5770,7 @@
           "then": {
             "properties": {
               "selectedCategorySlugs": {
-                "$ref": "#/definitions/schema40"
+                "$ref": "#/definitions/schema42"
               }
             }
           },
@@ -5365,7 +5796,7 @@
           "then": {
             "properties": {
               "selectedBrandSlugs": {
-                "$ref": "#/definitions/schema41"
+                "$ref": "#/definitions/schema43"
               }
             }
           },
@@ -5518,10 +5949,10 @@
         }
       ]
     },
-    "schema19": {
+    "schema21": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/schema20"
+        "$ref": "#/definitions/schema22"
       },
       "maxItems": 20
     },
@@ -5532,25 +5963,25 @@
           "$ref": "#/definitions/schema15"
         },
         "footerStyle": {
-          "$ref": "#/definitions/schema17"
+          "$ref": "#/definitions/schema19"
         },
         "announcementStyle": {
-          "$ref": "#/definitions/schema18"
+          "$ref": "#/definitions/schema20"
         },
         "homepageSections": {
-          "$ref": "#/definitions/schema19"
+          "$ref": "#/definitions/schema21"
         }
       },
       "additionalProperties": false
     },
-    "schema43": {
+    "schema45": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/schema24"
+        "$ref": "#/definitions/schema26"
       },
       "maxItems": 10
     },
-    "schema45": {
+    "schema47": {
       "type": "object",
       "properties": {
         "icon": {
@@ -5597,25 +6028,25 @@
         },
         "requiresFeatureFlag": {
           "enum": [
+            "",
             "pricing",
             "cart",
             "checkout",
             "payments",
-            "shipping",
-            ""
+            "shipping"
           ]
         }
       },
       "additionalProperties": false
     },
-    "schema44": {
+    "schema46": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/schema45"
+        "$ref": "#/definitions/schema47"
       },
       "maxItems": 12
     },
-    "schema47": {
+    "schema49": {
       "type": "object",
       "properties": {
         "id": {
@@ -5777,14 +6208,14 @@
       },
       "additionalProperties": false
     },
-    "schema46": {
+    "schema48": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/schema47"
+        "$ref": "#/definitions/schema49"
       },
       "maxItems": 12
     },
-    "schema42": {
+    "schema44": {
       "type": "object",
       "properties": {
         "announcementText": {
@@ -5802,18 +6233,18 @@
           ]
         },
         "heroSlides": {
-          "$ref": "#/definitions/schema43"
+          "$ref": "#/definitions/schema45"
         },
         "valueProps": {
-          "$ref": "#/definitions/schema44"
+          "$ref": "#/definitions/schema46"
         },
         "promoBanners": {
-          "$ref": "#/definitions/schema46"
+          "$ref": "#/definitions/schema48"
         }
       },
       "additionalProperties": false
     },
-    "schema54": {
+    "schema56": {
       "type": "array",
       "items": {
         "type": "string",
@@ -5821,7 +6252,7 @@
       },
       "maxItems": 100
     },
-    "schema55": {
+    "schema57": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -5868,7 +6299,7 @@
       },
       "additionalProperties": false
     },
-    "schema56": {
+    "schema58": {
       "type": "array",
       "items": {
         "type": "string",
@@ -5876,7 +6307,7 @@
       },
       "maxItems": 30
     },
-    "schema58": {
+    "schema60": {
       "type": "object",
       "properties": {
         "field": {
@@ -5941,19 +6372,19 @@
       ],
       "additionalProperties": false
     },
-    "schema57": {
+    "schema59": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/schema58"
+        "$ref": "#/definitions/schema60"
       },
       "maxItems": 10
     },
-    "schema59": {
+    "schema61": {
       "type": "array",
       "items": {},
       "maxItems": 12
     },
-    "schema53": {
+    "schema55": {
       "type": "object",
       "properties": {
         "id": {
@@ -6020,7 +6451,7 @@
           ]
         },
         "selectedIds": {
-          "$ref": "#/definitions/schema54"
+          "$ref": "#/definitions/schema56"
         },
         "limit": {
           "type": "integer",
@@ -6028,7 +6459,7 @@
           "maximum": 50
         },
         "pagination": {
-          "$ref": "#/definitions/schema55"
+          "$ref": "#/definitions/schema57"
         },
         "depth": {
           "type": "integer",
@@ -6036,13 +6467,13 @@
           "maximum": 2
         },
         "fields": {
-          "$ref": "#/definitions/schema56"
+          "$ref": "#/definitions/schema58"
         },
         "filters": {
-          "$ref": "#/definitions/schema57"
+          "$ref": "#/definitions/schema59"
         },
         "relations": {
-          "$ref": "#/definitions/schema59"
+          "$ref": "#/definitions/schema61"
         },
         "sortBy": {
           "anyOf": [
@@ -6072,15 +6503,15 @@
       ],
       "additionalProperties": false
     },
-    "schema52": {
+    "schema54": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/schema53"
+        "$ref": "#/definitions/schema55"
       },
       "minItems": 1,
       "maxItems": 8
     },
-    "schema51": {
+    "schema53": {
       "type": "object",
       "properties": {
         "responseMode": {
@@ -6093,7 +6524,7 @@
           "type": "boolean"
         },
         "blocks": {
-          "$ref": "#/definitions/schema52"
+          "$ref": "#/definitions/schema54"
         }
       },
       "required": [
@@ -6101,7 +6532,7 @@
       ],
       "additionalProperties": false
     },
-    "schema50": {
+    "schema52": {
       "type": "object",
       "properties": {
         "name": {
@@ -6141,7 +6572,7 @@
           "type": "boolean"
         },
         "config": {
-          "$ref": "#/definitions/schema51"
+          "$ref": "#/definitions/schema53"
         }
       },
       "required": [
@@ -6150,7 +6581,7 @@
       ],
       "additionalProperties": false
     },
-    "schema49": {
+    "schema51": {
       "type": "object",
       "properties": {
         "key": {
@@ -6163,7 +6594,7 @@
           ]
         },
         "definition": {
-          "$ref": "#/definitions/schema50"
+          "$ref": "#/definitions/schema52"
         }
       },
       "required": [
@@ -6173,18 +6604,18 @@
       ],
       "additionalProperties": false
     },
-    "schema48": {
+    "schema50": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/schema49"
+        "$ref": "#/definitions/schema51"
       },
       "maxItems": 12
     },
-    "schema63": {
+    "schema65": {
       "type": "object",
       "properties": {
         "tagSlugs": {
-          "$ref": "#/definitions/schema21"
+          "$ref": "#/definitions/schema23"
         },
         "gallerySlug": {
           "anyOf": [
@@ -6249,7 +6680,7 @@
           ]
         },
         "productIds": {
-          "$ref": "#/definitions/schema22"
+          "$ref": "#/definitions/schema24"
         },
         "pagePosition": {
           "enum": [
@@ -6720,19 +7151,19 @@
           ]
         },
         "slides": {
-          "$ref": "#/definitions/schema23"
+          "$ref": "#/definitions/schema25"
         },
         "items": {
-          "$ref": "#/definitions/schema25"
+          "$ref": "#/definitions/schema27"
         },
         "type": {
           "enum": [
             "product-row",
-            "composed-hero",
+            "catalog-explorer",
             "editorial-image-text",
             "faq",
             "promo-banners",
-            "catalog-explorer"
+            "composed-hero"
           ]
         },
         "catalogFilters": {},
@@ -6778,7 +7209,7 @@
           "then": {
             "properties": {
               "catalogFilters": {
-                "$ref": "#/definitions/schema27"
+                "$ref": "#/definitions/schema29"
               }
             }
           },
@@ -6806,7 +7237,7 @@
           "then": {
             "properties": {
               "heroBlocks": {
-                "$ref": "#/definitions/schema28"
+                "$ref": "#/definitions/schema30"
               }
             }
           },
@@ -6832,7 +7263,7 @@
           "then": {
             "properties": {
               "detailsBlockOrder": {
-                "$ref": "#/definitions/schema36"
+                "$ref": "#/definitions/schema38"
               }
             }
           },
@@ -6858,7 +7289,7 @@
           "then": {
             "properties": {
               "query": {
-                "$ref": "#/definitions/schema37"
+                "$ref": "#/definitions/schema39"
               }
             }
           },
@@ -6919,7 +7350,7 @@
           "then": {
             "properties": {
               "selectedCategorySlugs": {
-                "$ref": "#/definitions/schema40"
+                "$ref": "#/definitions/schema42"
               }
             }
           },
@@ -6945,947 +7376,7 @@
           "then": {
             "properties": {
               "selectedBrandSlugs": {
-                "$ref": "#/definitions/schema41"
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "selectedBrandSlugs": false
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "product-row"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "columnsMobile": {
-                "enum": [
-                  1,
-                  2
-                ]
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "columnsMobile": false
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "product-row"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "columnsTablet": {
-                "enum": [
-                  2,
-                  3,
-                  4
-                ]
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "columnsTablet": false
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "product-row"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "horizontalGap": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 64
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "horizontalGap": false
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "product-row"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "mobileCarousel": {
-                "type": "boolean"
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "mobileCarousel": false
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "product-row"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "verticalGap": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 64
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "verticalGap": false
-            }
-          }
-        }
-      ]
-    },
-    "schema62": {
-      "type": "array",
-      "items": {
-        "$ref": "#/definitions/schema63"
-      },
-      "maxItems": 6
-    },
-    "schema65": {
-      "type": "object",
-      "properties": {
-        "tagSlugs": {
-          "$ref": "#/definitions/schema21"
-        },
-        "gallerySlug": {
-          "anyOf": [
-            {
-              "type": "string",
-              "pattern": "^[a-z0-9-]+$",
-              "maxLength": 140
-            },
-            {
-              "enum": [
-                ""
-              ]
-            }
-          ]
-        },
-        "id": {
-          "type": "string",
-          "maxLength": 50
-        },
-        "enabled": {
-          "type": "boolean"
-        },
-        "title": {
-          "anyOf": [
-            {
-              "type": "string",
-              "maxLength": 500
-            },
-            {
-              "enum": [
-                "",
-                null
-              ]
-            }
-          ]
-        },
-        "subtitle": {
-          "anyOf": [
-            {
-              "type": "string",
-              "maxLength": 500
-            },
-            {
-              "enum": [
-                "",
-                null
-              ]
-            }
-          ]
-        },
-        "source": {
-          "enum": [
-            "featured",
-            "sale",
-            "bestSellers",
-            "staffPicks",
-            "trending",
-            "mostViewed",
-            "newest",
-            "recommended",
-            "combo"
-          ]
-        },
-        "productIds": {
-          "$ref": "#/definitions/schema22"
-        },
-        "pagePosition": {
-          "enum": [
-            "above",
-            "below"
-          ]
-        },
-        "productScope": {
-          "enum": [
-            "category",
-            "store"
-          ]
-        },
-        "saleLabel": {
-          "anyOf": [
-            {
-              "type": "string",
-              "maxLength": 100
-            },
-            {
-              "enum": [
-                "",
-                null
-              ]
-            }
-          ]
-        },
-        "dataSourceKey": {
-          "anyOf": [
-            {
-              "type": "string",
-              "maxLength": 80
-            },
-            {
-              "enum": [
-                "",
-                null
-              ]
-            }
-          ]
-        },
-        "dataSourceBlock": {
-          "anyOf": [
-            {
-              "type": "string",
-              "maxLength": 80
-            },
-            {
-              "enum": [
-                "",
-                null
-              ]
-            }
-          ]
-        },
-        "dataSourceSlug": {
-          "anyOf": [
-            {
-              "type": "string",
-              "maxLength": 140,
-              "pattern": "^[a-z0-9-]+$"
-            },
-            {
-              "enum": [
-                "",
-                null
-              ]
-            }
-          ]
-        },
-        "count": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 50
-        },
-        "layout": {
-          "enum": [
-            "grid",
-            "carousel"
-          ]
-        },
-        "viewAllLabel": {
-          "anyOf": [
-            {
-              "type": "string",
-              "maxLength": 500
-            },
-            {
-              "enum": [
-                "",
-                null
-              ]
-            }
-          ]
-        },
-        "viewAllLink": {
-          "anyOf": [
-            {
-              "anyOf": [
-                {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "maxLength": 2000
-                    },
-                    {
-                      "enum": [
-                        "",
-                        null
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "string",
-                  "pattern": "^\\/(?!\\/)",
-                  "maxLength": 500
-                }
-              ]
-            },
-            {
-              "enum": [
-                "",
-                null
-              ]
-            }
-          ]
-        },
-        "autoPlay": {
-          "type": "boolean"
-        },
-        "interval": {
-          "type": "integer",
-          "minimum": 1000,
-          "maximum": 30000
-        },
-        "dynamic": {
-          "type": "boolean"
-        },
-        "variant": {
-          "type": "string",
-          "maxLength": 50
-        },
-        "image": {
-          "anyOf": [
-            {
-              "anyOf": [
-                {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "maxLength": 2000
-                    },
-                    {
-                      "enum": [
-                        "",
-                        null
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "string",
-                  "pattern": "^\\/(?!\\/)[^\\\\\\s\"']*$",
-                  "maxLength": 2000
-                }
-              ]
-            },
-            {
-              "enum": [
-                "",
-                null
-              ]
-            }
-          ]
-        },
-        "imageFocus": {
-          "enum": [
-            "left",
-            "center",
-            "right",
-            "top",
-            "bottom"
-          ]
-        },
-        "imagePosition": {
-          "enum": [
-            "left",
-            "right",
-            "top",
-            "background"
-          ]
-        },
-        "eyebrow": {
-          "anyOf": [
-            {
-              "type": "string",
-              "maxLength": 500
-            },
-            {
-              "enum": [
-                "",
-                null
-              ]
-            }
-          ]
-        },
-        "ctaText": {
-          "anyOf": [
-            {
-              "type": "string",
-              "maxLength": 500
-            },
-            {
-              "enum": [
-                "",
-                null
-              ]
-            }
-          ]
-        },
-        "ctaLink": {
-          "anyOf": [
-            {
-              "anyOf": [
-                {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "maxLength": 2000
-                    },
-                    {
-                      "enum": [
-                        "",
-                        null
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "string",
-                  "pattern": "^\\/(?!\\/)",
-                  "maxLength": 500
-                }
-              ]
-            },
-            {
-              "enum": [
-                "",
-                null
-              ]
-            }
-          ]
-        },
-        "endDate": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "enum": [
-                "",
-                null
-              ]
-            }
-          ]
-        },
-        "placement": {
-          "enum": [
-            "header",
-            "footer"
-          ]
-        },
-        "textAlign": {
-          "enum": [
-            "left",
-            "center",
-            "right"
-          ]
-        },
-        "verticalAlign": {
-          "enum": [
-            "top",
-            "center",
-            "bottom"
-          ]
-        },
-        "widthMode": {
-          "enum": [
-            "container",
-            "narrow",
-            "full",
-            "custom"
-          ]
-        },
-        "customMaxWidth": {
-          "type": "integer",
-          "minimum": 320,
-          "maximum": 3840
-        },
-        "minHeight": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 1200
-        },
-        "paddingTop": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 240
-        },
-        "paddingBottom": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 240
-        },
-        "paddingLeft": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 240
-        },
-        "paddingRight": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 240
-        },
-        "marginTop": {
-          "type": "integer",
-          "minimum": -240,
-          "maximum": 240
-        },
-        "marginBottom": {
-          "type": "integer",
-          "minimum": -240,
-          "maximum": 240
-        },
-        "marginLeft": {
-          "type": "integer",
-          "minimum": -240,
-          "maximum": 240
-        },
-        "marginRight": {
-          "type": "integer",
-          "minimum": -240,
-          "maximum": 240
-        },
-        "backgroundColor": {
-          "type": "string",
-          "pattern": "^#[0-9a-fA-F]{3,8}$",
-          "maxLength": 9
-        },
-        "backgroundImage": {
-          "anyOf": [
-            {
-              "anyOf": [
-                {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "maxLength": 2000
-                    },
-                    {
-                      "enum": [
-                        "",
-                        null
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "string",
-                  "pattern": "^\\/(?!\\/)[^\\\\\\s\"']*$",
-                  "maxLength": 2000
-                }
-              ]
-            },
-            {
-              "enum": [
-                "",
-                null
-              ]
-            }
-          ]
-        },
-        "backgroundSize": {
-          "enum": [
-            "cover",
-            "contain",
-            "auto",
-            "100% 100%"
-          ]
-        },
-        "backgroundPosition": {
-          "enum": [
-            "center",
-            "top",
-            "bottom",
-            "left",
-            "right",
-            "top left",
-            "top right",
-            "bottom left",
-            "bottom right"
-          ]
-        },
-        "backgroundRepeat": {
-          "enum": [
-            "no-repeat",
-            "repeat",
-            "repeat-x",
-            "repeat-y"
-          ]
-        },
-        "backgroundAttachment": {
-          "enum": [
-            "scroll",
-            "fixed",
-            "local"
-          ]
-        },
-        "borderStyle": {
-          "enum": [
-            "none",
-            "solid",
-            "dashed",
-            "dotted",
-            "double"
-          ]
-        },
-        "borderWidth": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 24
-        },
-        "borderColor": {
-          "type": "string",
-          "pattern": "^#[0-9a-fA-F]{3,8}$",
-          "maxLength": 9
-        },
-        "borderRadius": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 96
-        },
-        "boxShadow": {
-          "enum": [
-            "none",
-            "sm",
-            "md",
-            "lg",
-            "xl",
-            "2xl",
-            "inner"
-          ]
-        },
-        "hideOnMobile": {
-          "type": "boolean"
-        },
-        "hideOnDesktop": {
-          "type": "boolean"
-        },
-        "anchorId": {
-          "type": "string",
-          "maxLength": 100
-        },
-        "customClassName": {
-          "type": "string",
-          "maxLength": 200
-        },
-        "mobileLayout": {
-          "enum": [
-            "stack",
-            "carousel",
-            "compact"
-          ]
-        },
-        "slides": {
-          "$ref": "#/definitions/schema23"
-        },
-        "items": {
-          "$ref": "#/definitions/schema25"
-        },
-        "type": {
-          "enum": [
-            "tag-showcase",
-            "gallery-grid",
-            "composed-hero",
-            "hero-carousel",
-            "value-props",
-            "category-shortcuts",
-            "promo-banners",
-            "product-row",
-            "catalog-explorer",
-            "brand-showcase",
-            "editorial-image-text",
-            "testimonials",
-            "logo-cloud",
-            "newsletter-signup",
-            "countdown-sale",
-            "featured-collection-grid",
-            "faq",
-            "trust-badges",
-            "recently-viewed",
-            "gallery",
-            "product-info",
-            "product-reviews"
-          ]
-        },
-        "catalogFilters": {},
-        "heroBlocks": {},
-        "detailsBlockOrder": {},
-        "query": {},
-        "columnsDesktop": {},
-        "selectedCategorySlugs": {},
-        "selectedBrandSlugs": {},
-        "columnsMobile": {},
-        "columnsTablet": {},
-        "horizontalGap": {},
-        "mobileCarousel": {},
-        "verticalGap": {}
-      },
-      "required": [
-        "id",
-        "enabled",
-        "type"
-      ],
-      "additionalProperties": false,
-      "allOf": [
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "catalog-explorer"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "catalogFilters": {
-                "$ref": "#/definitions/schema27"
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "catalogFilters": false
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "composed-hero",
-                  "product-info",
-                  "editorial-image-text"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "heroBlocks": {
-                "$ref": "#/definitions/schema28"
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "heroBlocks": false
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "product-info"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "detailsBlockOrder": {
-                "$ref": "#/definitions/schema36"
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "detailsBlockOrder": false
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "product-row"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "query": {
-                "$ref": "#/definitions/schema37"
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "query": false
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "product-row",
-                  "category-shortcuts",
-                  "brand-showcase",
-                  "value-props",
-                  "trust-badges"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "columnsDesktop": {
-                "enum": [
-                  2,
-                  3,
-                  4,
-                  6
-                ]
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "columnsDesktop": false
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "category-shortcuts"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "selectedCategorySlugs": {
-                "$ref": "#/definitions/schema40"
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "selectedCategorySlugs": false
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "enum": [
-                  "brand-showcase"
-                ]
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "selectedBrandSlugs": {
-                "$ref": "#/definitions/schema41"
+                "$ref": "#/definitions/schema43"
               }
             }
           },
@@ -8043,158 +7534,13 @@
       "items": {
         "$ref": "#/definitions/schema65"
       },
-      "maxItems": 20
-    },
-    "schema68": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 255
-      }
-    },
-    "schema69": {
-      "type": "object",
-      "properties": {
-        "productRows": {
-          "$ref": "#/definitions/schema62"
-        },
-        "sections": {
-          "$ref": "#/definitions/schema64"
-        },
-        "alternateTemplates": false
-      },
-      "additionalProperties": true
+      "maxItems": 6
     },
     "schema67": {
       "type": "object",
       "properties": {
-        "id": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 60
-        },
-        "productSlugs": {
-          "$ref": "#/definitions/schema68"
-        },
-        "settings": {
-          "$ref": "#/definitions/schema69"
-        }
-      },
-      "required": [
-        "id",
-        "name",
-        "productSlugs",
-        "settings"
-      ],
-      "additionalProperties": false
-    },
-    "schema66": {
-      "type": "array",
-      "items": {
-        "$ref": "#/definitions/schema67"
-      }
-    },
-    "schema61": {
-      "type": "object",
-      "properties": {
-        "productRows": {
-          "$ref": "#/definitions/schema62"
-        },
-        "layout": {
-          "type": "string",
-          "maxLength": 80
-        },
-        "imageAlignment": {
-          "enum": [
-            "horizontal",
-            "vertical"
-          ]
-        },
-        "showSKU": {
-          "type": "boolean"
-        },
-        "showStockBadge": {
-          "type": "boolean"
-        },
-        "showTrustBadges": {
-          "type": "boolean"
-        },
-        "showRelatedProducts": {
-          "type": "boolean"
-        },
-        "showRecentlyViewed": {
-          "type": "boolean"
-        },
-        "showStickyAddToCart": {
-          "type": "boolean"
-        },
-        "showBreadcrumbs": {
-          "type": "boolean"
-        },
-        "addToCartLabel": {
-          "anyOf": [
-            {
-              "type": "string",
-              "maxLength": 500
-            },
-            {
-              "enum": [
-                "",
-                null
-              ]
-            }
-          ]
-        },
-        "showBuyNowButton": {
-          "type": "boolean"
-        },
-        "buyNowLabel": {
-          "anyOf": [
-            {
-              "type": "string",
-              "maxLength": 500
-            },
-            {
-              "enum": [
-                "",
-                null
-              ]
-            }
-          ]
-        },
-        "productsPerRow": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 6
-        },
-        "filterLayout": {
-          "enum": [
-            "sidebar",
-            "drawer",
-            "topbar"
-          ]
-        },
-        "sections": {
-          "$ref": "#/definitions/schema64"
-        },
-        "alternateTemplates": {
-          "$ref": "#/definitions/schema66"
-        }
-      },
-      "required": [
-        "layout"
-      ],
-      "additionalProperties": false
-    },
-    "schema72": {
-      "type": "object",
-      "properties": {
         "tagSlugs": {
-          "$ref": "#/definitions/schema21"
+          "$ref": "#/definitions/schema23"
         },
         "gallerySlug": {
           "anyOf": [
@@ -8259,7 +7605,7 @@
           ]
         },
         "productIds": {
-          "$ref": "#/definitions/schema22"
+          "$ref": "#/definitions/schema24"
         },
         "pagePosition": {
           "enum": [
@@ -8736,10 +8082,10 @@
           ]
         },
         "slides": {
-          "$ref": "#/definitions/schema23"
+          "$ref": "#/definitions/schema25"
         },
         "items": {
-          "$ref": "#/definitions/schema25"
+          "$ref": "#/definitions/schema27"
         },
         "type": {
           "enum": [
@@ -8747,22 +8093,1107 @@
             "gallery-grid",
             "composed-hero",
             "hero-carousel",
-            "value-props",
-            "category-shortcuts",
-            "promo-banners",
             "product-row",
             "catalog-explorer",
-            "brand-showcase",
+            "category-shortcuts",
+            "featured-collection-grid",
+            "promo-banners",
             "editorial-image-text",
+            "value-props",
+            "trust-badges",
             "testimonials",
             "logo-cloud",
+            "brand-showcase",
+            "gallery",
             "newsletter-signup",
             "countdown-sale",
-            "featured-collection-grid",
             "faq",
-            "trust-badges",
             "recently-viewed",
+            "product-info",
+            "product-reviews"
+          ]
+        },
+        "catalogFilters": {},
+        "heroBlocks": {},
+        "detailsBlockOrder": {},
+        "query": {},
+        "columnsDesktop": {},
+        "selectedCategorySlugs": {},
+        "selectedBrandSlugs": {},
+        "columnsMobile": {},
+        "columnsTablet": {},
+        "horizontalGap": {},
+        "mobileCarousel": {},
+        "verticalGap": {}
+      },
+      "required": [
+        "id",
+        "enabled",
+        "type"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "catalog-explorer"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "catalogFilters": {
+                "$ref": "#/definitions/schema29"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "catalogFilters": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "composed-hero",
+                  "product-info",
+                  "editorial-image-text"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "heroBlocks": {
+                "$ref": "#/definitions/schema30"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "heroBlocks": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "product-info"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "detailsBlockOrder": {
+                "$ref": "#/definitions/schema38"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "detailsBlockOrder": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "product-row"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "query": {
+                "$ref": "#/definitions/schema39"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "query": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "product-row",
+                  "category-shortcuts",
+                  "brand-showcase",
+                  "value-props",
+                  "trust-badges"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "columnsDesktop": {
+                "enum": [
+                  2,
+                  3,
+                  4,
+                  6
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "columnsDesktop": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "category-shortcuts"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "selectedCategorySlugs": {
+                "$ref": "#/definitions/schema42"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "selectedCategorySlugs": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "brand-showcase"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "selectedBrandSlugs": {
+                "$ref": "#/definitions/schema43"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "selectedBrandSlugs": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "product-row"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "columnsMobile": {
+                "enum": [
+                  1,
+                  2
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "columnsMobile": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "product-row"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "columnsTablet": {
+                "enum": [
+                  2,
+                  3,
+                  4
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "columnsTablet": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "product-row"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "horizontalGap": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 64
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "horizontalGap": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "product-row"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "mobileCarousel": {
+                "type": "boolean"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "mobileCarousel": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "product-row"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "verticalGap": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 64
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "verticalGap": false
+            }
+          }
+        }
+      ]
+    },
+    "schema66": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/schema67"
+      },
+      "maxItems": 20
+    },
+    "schema70": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255
+      }
+    },
+    "schema71": {
+      "type": "object",
+      "properties": {
+        "productRows": {
+          "$ref": "#/definitions/schema64"
+        },
+        "sections": {
+          "$ref": "#/definitions/schema66"
+        },
+        "alternateTemplates": false
+      },
+      "additionalProperties": true
+    },
+    "schema69": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "productSlugs": {
+          "$ref": "#/definitions/schema70"
+        },
+        "settings": {
+          "$ref": "#/definitions/schema71"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "productSlugs",
+        "settings"
+      ],
+      "additionalProperties": false
+    },
+    "schema68": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/schema69"
+      }
+    },
+    "schema63": {
+      "type": "object",
+      "properties": {
+        "productRows": {
+          "$ref": "#/definitions/schema64"
+        },
+        "layout": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "imageAlignment": {
+          "enum": [
+            "horizontal",
+            "vertical"
+          ]
+        },
+        "showSKU": {
+          "type": "boolean"
+        },
+        "showStockBadge": {
+          "type": "boolean"
+        },
+        "showTrustBadges": {
+          "type": "boolean"
+        },
+        "showRelatedProducts": {
+          "type": "boolean"
+        },
+        "showRecentlyViewed": {
+          "type": "boolean"
+        },
+        "showStickyAddToCart": {
+          "type": "boolean"
+        },
+        "showBreadcrumbs": {
+          "type": "boolean"
+        },
+        "addToCartLabel": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "enum": [
+                "",
+                null
+              ]
+            }
+          ]
+        },
+        "showBuyNowButton": {
+          "type": "boolean"
+        },
+        "buyNowLabel": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "enum": [
+                "",
+                null
+              ]
+            }
+          ]
+        },
+        "productsPerRow": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6
+        },
+        "filterLayout": {
+          "enum": [
+            "sidebar",
+            "drawer",
+            "topbar"
+          ]
+        },
+        "sections": {
+          "$ref": "#/definitions/schema66"
+        },
+        "alternateTemplates": {
+          "$ref": "#/definitions/schema68"
+        }
+      },
+      "required": [
+        "layout"
+      ],
+      "additionalProperties": false
+    },
+    "schema74": {
+      "type": "object",
+      "properties": {
+        "tagSlugs": {
+          "$ref": "#/definitions/schema23"
+        },
+        "gallerySlug": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-z0-9-]+$",
+              "maxLength": 140
+            },
+            {
+              "enum": [
+                ""
+              ]
+            }
+          ]
+        },
+        "id": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "enum": [
+                "",
+                null
+              ]
+            }
+          ]
+        },
+        "subtitle": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "enum": [
+                "",
+                null
+              ]
+            }
+          ]
+        },
+        "source": {
+          "enum": [
+            "featured",
+            "sale",
+            "bestSellers",
+            "staffPicks",
+            "trending",
+            "mostViewed",
+            "newest",
+            "recommended",
+            "combo"
+          ]
+        },
+        "productIds": {
+          "$ref": "#/definitions/schema24"
+        },
+        "pagePosition": {
+          "enum": [
+            "above",
+            "below"
+          ]
+        },
+        "productScope": {
+          "enum": [
+            "category",
+            "store"
+          ]
+        },
+        "saleLabel": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 100
+            },
+            {
+              "enum": [
+                "",
+                null
+              ]
+            }
+          ]
+        },
+        "dataSourceKey": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 80
+            },
+            {
+              "enum": [
+                "",
+                null
+              ]
+            }
+          ]
+        },
+        "dataSourceBlock": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 80
+            },
+            {
+              "enum": [
+                "",
+                null
+              ]
+            }
+          ]
+        },
+        "dataSourceSlug": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 140,
+              "pattern": "^[a-z0-9-]+$"
+            },
+            {
+              "enum": [
+                "",
+                null
+              ]
+            }
+          ]
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "layout": {
+          "enum": [
+            "grid",
+            "carousel"
+          ]
+        },
+        "viewAllLabel": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "enum": [
+                "",
+                null
+              ]
+            }
+          ]
+        },
+        "viewAllLink": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    {
+                      "enum": [
+                        "",
+                        null
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\/(?!\\/)",
+                  "maxLength": 500
+                }
+              ]
+            },
+            {
+              "enum": [
+                "",
+                null
+              ]
+            }
+          ]
+        },
+        "autoPlay": {
+          "type": "boolean"
+        },
+        "interval": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 30000
+        },
+        "dynamic": {
+          "type": "boolean"
+        },
+        "variant": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "image": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    {
+                      "enum": [
+                        "",
+                        null
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\/(?!\\/)[^\\\\\\s\"']*$",
+                  "maxLength": 2000
+                }
+              ]
+            },
+            {
+              "enum": [
+                "",
+                null
+              ]
+            }
+          ]
+        },
+        "imageFocus": {
+          "enum": [
+            "left",
+            "center",
+            "right",
+            "top",
+            "bottom"
+          ]
+        },
+        "imagePosition": {
+          "enum": [
+            "left",
+            "right",
+            "top",
+            "background"
+          ]
+        },
+        "eyebrow": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "enum": [
+                "",
+                null
+              ]
+            }
+          ]
+        },
+        "ctaText": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "enum": [
+                "",
+                null
+              ]
+            }
+          ]
+        },
+        "ctaLink": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    {
+                      "enum": [
+                        "",
+                        null
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\/(?!\\/)",
+                  "maxLength": 500
+                }
+              ]
+            },
+            {
+              "enum": [
+                "",
+                null
+              ]
+            }
+          ]
+        },
+        "endDate": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "enum": [
+                "",
+                null
+              ]
+            }
+          ]
+        },
+        "placement": {
+          "enum": [
+            "header",
+            "footer"
+          ]
+        },
+        "textAlign": {
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "verticalAlign": {
+          "enum": [
+            "top",
+            "center",
+            "bottom"
+          ]
+        },
+        "widthMode": {
+          "enum": [
+            "container",
+            "narrow",
+            "full",
+            "custom"
+          ]
+        },
+        "customMaxWidth": {
+          "type": "integer",
+          "minimum": 320,
+          "maximum": 3840
+        },
+        "minHeight": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1200
+        },
+        "paddingTop": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 240
+        },
+        "paddingBottom": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 240
+        },
+        "paddingLeft": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 240
+        },
+        "paddingRight": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 240
+        },
+        "marginTop": {
+          "type": "integer",
+          "minimum": -240,
+          "maximum": 240
+        },
+        "marginBottom": {
+          "type": "integer",
+          "minimum": -240,
+          "maximum": 240
+        },
+        "marginLeft": {
+          "type": "integer",
+          "minimum": -240,
+          "maximum": 240
+        },
+        "marginRight": {
+          "type": "integer",
+          "minimum": -240,
+          "maximum": 240
+        },
+        "backgroundColor": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{3,8}$",
+          "maxLength": 9
+        },
+        "backgroundImage": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    {
+                      "enum": [
+                        "",
+                        null
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\/(?!\\/)[^\\\\\\s\"']*$",
+                  "maxLength": 2000
+                }
+              ]
+            },
+            {
+              "enum": [
+                "",
+                null
+              ]
+            }
+          ]
+        },
+        "backgroundSize": {
+          "enum": [
+            "cover",
+            "contain",
+            "auto",
+            "100% 100%"
+          ]
+        },
+        "backgroundPosition": {
+          "enum": [
+            "center",
+            "top",
+            "bottom",
+            "left",
+            "right",
+            "top left",
+            "top right",
+            "bottom left",
+            "bottom right"
+          ]
+        },
+        "backgroundRepeat": {
+          "enum": [
+            "no-repeat",
+            "repeat",
+            "repeat-x",
+            "repeat-y"
+          ]
+        },
+        "backgroundAttachment": {
+          "enum": [
+            "scroll",
+            "fixed",
+            "local"
+          ]
+        },
+        "borderStyle": {
+          "enum": [
+            "none",
+            "solid",
+            "dashed",
+            "dotted",
+            "double"
+          ]
+        },
+        "borderWidth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 24
+        },
+        "borderColor": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{3,8}$",
+          "maxLength": 9
+        },
+        "borderRadius": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 96
+        },
+        "boxShadow": {
+          "enum": [
+            "none",
+            "sm",
+            "md",
+            "lg",
+            "xl",
+            "2xl",
+            "inner"
+          ]
+        },
+        "hideOnMobile": {
+          "type": "boolean"
+        },
+        "hideOnDesktop": {
+          "type": "boolean"
+        },
+        "anchorId": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "customClassName": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "mobileLayout": {
+          "enum": [
+            "stack",
+            "carousel",
+            "compact"
+          ]
+        },
+        "slides": {
+          "$ref": "#/definitions/schema25"
+        },
+        "items": {
+          "$ref": "#/definitions/schema27"
+        },
+        "type": {
+          "enum": [
+            "tag-showcase",
+            "gallery-grid",
+            "composed-hero",
+            "hero-carousel",
+            "product-row",
+            "catalog-explorer",
+            "category-shortcuts",
+            "featured-collection-grid",
+            "promo-banners",
+            "editorial-image-text",
+            "value-props",
+            "trust-badges",
+            "testimonials",
+            "logo-cloud",
+            "brand-showcase",
             "gallery",
+            "newsletter-signup",
+            "countdown-sale",
+            "faq",
+            "recently-viewed",
             "category-header",
             "category-products"
           ]
@@ -8803,7 +9234,7 @@
           "then": {
             "properties": {
               "catalogFilters": {
-                "$ref": "#/definitions/schema27"
+                "$ref": "#/definitions/schema29"
               }
             }
           },
@@ -8831,7 +9262,7 @@
           "then": {
             "properties": {
               "heroBlocks": {
-                "$ref": "#/definitions/schema28"
+                "$ref": "#/definitions/schema30"
               }
             }
           },
@@ -8857,7 +9288,7 @@
           "then": {
             "properties": {
               "detailsBlockOrder": {
-                "$ref": "#/definitions/schema36"
+                "$ref": "#/definitions/schema38"
               }
             }
           },
@@ -8883,7 +9314,7 @@
           "then": {
             "properties": {
               "query": {
-                "$ref": "#/definitions/schema37"
+                "$ref": "#/definitions/schema39"
               }
             }
           },
@@ -8944,7 +9375,7 @@
           "then": {
             "properties": {
               "selectedCategorySlugs": {
-                "$ref": "#/definitions/schema40"
+                "$ref": "#/definitions/schema42"
               }
             }
           },
@@ -8970,7 +9401,7 @@
           "then": {
             "properties": {
               "selectedBrandSlugs": {
-                "$ref": "#/definitions/schema41"
+                "$ref": "#/definitions/schema43"
               }
             }
           },
@@ -9123,27 +9554,27 @@
         }
       ]
     },
-    "schema71": {
+    "schema73": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/schema72"
+        "$ref": "#/definitions/schema74"
       },
       "maxItems": 20
     },
-    "schema75": {
+    "schema77": {
       "type": "object",
       "properties": {
         "productRows": {
-          "$ref": "#/definitions/schema62"
+          "$ref": "#/definitions/schema64"
         },
         "sections": {
-          "$ref": "#/definitions/schema71"
+          "$ref": "#/definitions/schema73"
         },
         "alternateTemplates": false
       },
       "additionalProperties": true
     },
-    "schema74": {
+    "schema76": {
       "type": "object",
       "properties": {
         "id": {
@@ -9155,10 +9586,10 @@
           "maxLength": 60
         },
         "categorySlugs": {
-          "$ref": "#/definitions/schema68"
+          "$ref": "#/definitions/schema70"
         },
         "settings": {
-          "$ref": "#/definitions/schema75"
+          "$ref": "#/definitions/schema77"
         }
       },
       "required": [
@@ -9169,23 +9600,23 @@
       ],
       "additionalProperties": false
     },
-    "schema73": {
+    "schema75": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/schema74"
+        "$ref": "#/definitions/schema76"
       }
     },
-    "schema70": {
+    "schema72": {
       "type": "object",
       "properties": {
         "productRows": {
-          "$ref": "#/definitions/schema62"
+          "$ref": "#/definitions/schema64"
         },
         "sections": {
-          "$ref": "#/definitions/schema71"
+          "$ref": "#/definitions/schema73"
         },
         "alternateTemplates": {
-          "$ref": "#/definitions/schema73"
+          "$ref": "#/definitions/schema75"
         },
         "heroTitle": {
           "anyOf": [
@@ -9214,11 +9645,11 @@
       },
       "additionalProperties": false
     },
-    "schema78": {
+    "schema80": {
       "type": "object",
       "properties": {
         "tagSlugs": {
-          "$ref": "#/definitions/schema21"
+          "$ref": "#/definitions/schema23"
         },
         "gallerySlug": {
           "anyOf": [
@@ -9283,7 +9714,7 @@
           ]
         },
         "productIds": {
-          "$ref": "#/definitions/schema22"
+          "$ref": "#/definitions/schema24"
         },
         "pagePosition": {
           "enum": [
@@ -9760,10 +10191,10 @@
           ]
         },
         "slides": {
-          "$ref": "#/definitions/schema23"
+          "$ref": "#/definitions/schema25"
         },
         "items": {
-          "$ref": "#/definitions/schema25"
+          "$ref": "#/definitions/schema27"
         },
         "type": {
           "enum": [
@@ -9771,22 +10202,22 @@
             "gallery-grid",
             "composed-hero",
             "hero-carousel",
-            "value-props",
-            "category-shortcuts",
-            "promo-banners",
             "product-row",
             "catalog-explorer",
-            "brand-showcase",
+            "category-shortcuts",
+            "featured-collection-grid",
+            "promo-banners",
             "editorial-image-text",
+            "value-props",
+            "trust-badges",
             "testimonials",
             "logo-cloud",
+            "brand-showcase",
+            "gallery",
             "newsletter-signup",
             "countdown-sale",
-            "featured-collection-grid",
             "faq",
-            "trust-badges",
             "recently-viewed",
-            "gallery",
             "catalog-header",
             "catalog-products"
           ]
@@ -9827,7 +10258,7 @@
           "then": {
             "properties": {
               "catalogFilters": {
-                "$ref": "#/definitions/schema27"
+                "$ref": "#/definitions/schema29"
               }
             }
           },
@@ -9855,7 +10286,7 @@
           "then": {
             "properties": {
               "heroBlocks": {
-                "$ref": "#/definitions/schema28"
+                "$ref": "#/definitions/schema30"
               }
             }
           },
@@ -9881,7 +10312,7 @@
           "then": {
             "properties": {
               "detailsBlockOrder": {
-                "$ref": "#/definitions/schema36"
+                "$ref": "#/definitions/schema38"
               }
             }
           },
@@ -9907,7 +10338,7 @@
           "then": {
             "properties": {
               "query": {
-                "$ref": "#/definitions/schema37"
+                "$ref": "#/definitions/schema39"
               }
             }
           },
@@ -9968,7 +10399,7 @@
           "then": {
             "properties": {
               "selectedCategorySlugs": {
-                "$ref": "#/definitions/schema40"
+                "$ref": "#/definitions/schema42"
               }
             }
           },
@@ -9994,7 +10425,7 @@
           "then": {
             "properties": {
               "selectedBrandSlugs": {
-                "$ref": "#/definitions/schema41"
+                "$ref": "#/definitions/schema43"
               }
             }
           },
@@ -10147,18 +10578,18 @@
         }
       ]
     },
-    "schema77": {
+    "schema79": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/schema78"
+        "$ref": "#/definitions/schema80"
       },
       "maxItems": 20
     },
-    "schema76": {
+    "schema78": {
       "type": "object",
       "properties": {
         "productRows": {
-          "$ref": "#/definitions/schema62"
+          "$ref": "#/definitions/schema64"
         },
         "layout": {
           "type": "string",
@@ -10235,7 +10666,7 @@
           ]
         },
         "sections": {
-          "$ref": "#/definitions/schema77"
+          "$ref": "#/definitions/schema79"
         },
         "showFilters": {
           "type": "boolean"
@@ -10254,11 +10685,11 @@
       ],
       "additionalProperties": false
     },
-    "schema81": {
+    "schema83": {
       "type": "object",
       "properties": {
         "tagSlugs": {
-          "$ref": "#/definitions/schema21"
+          "$ref": "#/definitions/schema23"
         },
         "gallerySlug": {
           "anyOf": [
@@ -10323,7 +10754,7 @@
           ]
         },
         "productIds": {
-          "$ref": "#/definitions/schema22"
+          "$ref": "#/definitions/schema24"
         },
         "pagePosition": {
           "enum": [
@@ -10800,10 +11231,10 @@
           ]
         },
         "slides": {
-          "$ref": "#/definitions/schema23"
+          "$ref": "#/definitions/schema25"
         },
         "items": {
-          "$ref": "#/definitions/schema25"
+          "$ref": "#/definitions/schema27"
         },
         "type": {
           "enum": [
@@ -10811,22 +11242,22 @@
             "gallery-grid",
             "composed-hero",
             "hero-carousel",
-            "value-props",
-            "category-shortcuts",
-            "promo-banners",
             "product-row",
             "catalog-explorer",
-            "brand-showcase",
+            "category-shortcuts",
+            "featured-collection-grid",
+            "promo-banners",
             "editorial-image-text",
+            "value-props",
+            "trust-badges",
             "testimonials",
             "logo-cloud",
+            "brand-showcase",
+            "gallery",
             "newsletter-signup",
             "countdown-sale",
-            "featured-collection-grid",
             "faq",
-            "trust-badges",
             "recently-viewed",
-            "gallery",
             "brands-header",
             "brands-list"
           ]
@@ -10867,7 +11298,7 @@
           "then": {
             "properties": {
               "catalogFilters": {
-                "$ref": "#/definitions/schema27"
+                "$ref": "#/definitions/schema29"
               }
             }
           },
@@ -10895,7 +11326,7 @@
           "then": {
             "properties": {
               "heroBlocks": {
-                "$ref": "#/definitions/schema28"
+                "$ref": "#/definitions/schema30"
               }
             }
           },
@@ -10921,7 +11352,7 @@
           "then": {
             "properties": {
               "detailsBlockOrder": {
-                "$ref": "#/definitions/schema36"
+                "$ref": "#/definitions/schema38"
               }
             }
           },
@@ -10947,7 +11378,7 @@
           "then": {
             "properties": {
               "query": {
-                "$ref": "#/definitions/schema37"
+                "$ref": "#/definitions/schema39"
               }
             }
           },
@@ -11008,7 +11439,7 @@
           "then": {
             "properties": {
               "selectedCategorySlugs": {
-                "$ref": "#/definitions/schema40"
+                "$ref": "#/definitions/schema42"
               }
             }
           },
@@ -11034,7 +11465,7 @@
           "then": {
             "properties": {
               "selectedBrandSlugs": {
-                "$ref": "#/definitions/schema41"
+                "$ref": "#/definitions/schema43"
               }
             }
           },
@@ -11187,21 +11618,21 @@
         }
       ]
     },
-    "schema80": {
+    "schema82": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/schema81"
+        "$ref": "#/definitions/schema83"
       },
       "maxItems": 20
     },
-    "schema79": {
+    "schema81": {
       "type": "object",
       "properties": {
         "productRows": {
-          "$ref": "#/definitions/schema62"
+          "$ref": "#/definitions/schema64"
         },
         "sections": {
-          "$ref": "#/definitions/schema80"
+          "$ref": "#/definitions/schema82"
         },
         "layout": {
           "enum": [
@@ -11293,11 +11724,11 @@
       ],
       "additionalProperties": false
     },
-    "schema84": {
+    "schema86": {
       "type": "object",
       "properties": {
         "tagSlugs": {
-          "$ref": "#/definitions/schema21"
+          "$ref": "#/definitions/schema23"
         },
         "gallerySlug": {
           "anyOf": [
@@ -11362,7 +11793,7 @@
           ]
         },
         "productIds": {
-          "$ref": "#/definitions/schema22"
+          "$ref": "#/definitions/schema24"
         },
         "pagePosition": {
           "enum": [
@@ -11839,10 +12270,10 @@
           ]
         },
         "slides": {
-          "$ref": "#/definitions/schema23"
+          "$ref": "#/definitions/schema25"
         },
         "items": {
-          "$ref": "#/definitions/schema25"
+          "$ref": "#/definitions/schema27"
         },
         "type": {
           "enum": [
@@ -11850,22 +12281,22 @@
             "gallery-grid",
             "composed-hero",
             "hero-carousel",
-            "value-props",
-            "category-shortcuts",
-            "promo-banners",
             "product-row",
             "catalog-explorer",
-            "brand-showcase",
+            "category-shortcuts",
+            "featured-collection-grid",
+            "promo-banners",
             "editorial-image-text",
+            "value-props",
+            "trust-badges",
             "testimonials",
             "logo-cloud",
+            "brand-showcase",
+            "gallery",
             "newsletter-signup",
             "countdown-sale",
-            "featured-collection-grid",
             "faq",
-            "trust-badges",
             "recently-viewed",
-            "gallery",
             "cart-main"
           ]
         },
@@ -11905,7 +12336,7 @@
           "then": {
             "properties": {
               "catalogFilters": {
-                "$ref": "#/definitions/schema27"
+                "$ref": "#/definitions/schema29"
               }
             }
           },
@@ -11933,7 +12364,7 @@
           "then": {
             "properties": {
               "heroBlocks": {
-                "$ref": "#/definitions/schema28"
+                "$ref": "#/definitions/schema30"
               }
             }
           },
@@ -11959,7 +12390,7 @@
           "then": {
             "properties": {
               "detailsBlockOrder": {
-                "$ref": "#/definitions/schema36"
+                "$ref": "#/definitions/schema38"
               }
             }
           },
@@ -11985,7 +12416,7 @@
           "then": {
             "properties": {
               "query": {
-                "$ref": "#/definitions/schema37"
+                "$ref": "#/definitions/schema39"
               }
             }
           },
@@ -12046,7 +12477,7 @@
           "then": {
             "properties": {
               "selectedCategorySlugs": {
-                "$ref": "#/definitions/schema40"
+                "$ref": "#/definitions/schema42"
               }
             }
           },
@@ -12072,7 +12503,7 @@
           "then": {
             "properties": {
               "selectedBrandSlugs": {
-                "$ref": "#/definitions/schema41"
+                "$ref": "#/definitions/schema43"
               }
             }
           },
@@ -12225,14 +12656,14 @@
         }
       ]
     },
-    "schema83": {
+    "schema85": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/schema84"
+        "$ref": "#/definitions/schema86"
       },
       "maxItems": 20
     },
-    "schema82": {
+    "schema84": {
       "type": "object",
       "properties": {
         "showCartTitle": {
@@ -12245,10 +12676,10 @@
           "type": "boolean"
         },
         "productRows": {
-          "$ref": "#/definitions/schema62"
+          "$ref": "#/definitions/schema64"
         },
         "sections": {
-          "$ref": "#/definitions/schema83"
+          "$ref": "#/definitions/schema85"
         },
         "layout": {
           "enum": [
@@ -12282,11 +12713,11 @@
       ],
       "additionalProperties": false
     },
-    "schema87": {
+    "schema89": {
       "type": "object",
       "properties": {
         "tagSlugs": {
-          "$ref": "#/definitions/schema21"
+          "$ref": "#/definitions/schema23"
         },
         "gallerySlug": {
           "anyOf": [
@@ -12351,7 +12782,7 @@
           ]
         },
         "productIds": {
-          "$ref": "#/definitions/schema22"
+          "$ref": "#/definitions/schema24"
         },
         "pagePosition": {
           "enum": [
@@ -12828,10 +13259,10 @@
           ]
         },
         "slides": {
-          "$ref": "#/definitions/schema23"
+          "$ref": "#/definitions/schema25"
         },
         "items": {
-          "$ref": "#/definitions/schema25"
+          "$ref": "#/definitions/schema27"
         },
         "type": {
           "enum": [
@@ -12839,22 +13270,22 @@
             "gallery-grid",
             "composed-hero",
             "hero-carousel",
-            "value-props",
-            "category-shortcuts",
-            "promo-banners",
             "product-row",
             "catalog-explorer",
-            "brand-showcase",
+            "category-shortcuts",
+            "featured-collection-grid",
+            "promo-banners",
             "editorial-image-text",
+            "value-props",
+            "trust-badges",
             "testimonials",
             "logo-cloud",
+            "brand-showcase",
+            "gallery",
             "newsletter-signup",
             "countdown-sale",
-            "featured-collection-grid",
             "faq",
-            "trust-badges",
             "recently-viewed",
-            "gallery",
             "account-main"
           ]
         },
@@ -12894,7 +13325,7 @@
           "then": {
             "properties": {
               "catalogFilters": {
-                "$ref": "#/definitions/schema27"
+                "$ref": "#/definitions/schema29"
               }
             }
           },
@@ -12922,7 +13353,7 @@
           "then": {
             "properties": {
               "heroBlocks": {
-                "$ref": "#/definitions/schema28"
+                "$ref": "#/definitions/schema30"
               }
             }
           },
@@ -12948,7 +13379,7 @@
           "then": {
             "properties": {
               "detailsBlockOrder": {
-                "$ref": "#/definitions/schema36"
+                "$ref": "#/definitions/schema38"
               }
             }
           },
@@ -12974,7 +13405,7 @@
           "then": {
             "properties": {
               "query": {
-                "$ref": "#/definitions/schema37"
+                "$ref": "#/definitions/schema39"
               }
             }
           },
@@ -13035,7 +13466,7 @@
           "then": {
             "properties": {
               "selectedCategorySlugs": {
-                "$ref": "#/definitions/schema40"
+                "$ref": "#/definitions/schema42"
               }
             }
           },
@@ -13061,7 +13492,7 @@
           "then": {
             "properties": {
               "selectedBrandSlugs": {
-                "$ref": "#/definitions/schema41"
+                "$ref": "#/definitions/schema43"
               }
             }
           },
@@ -13214,21 +13645,21 @@
         }
       ]
     },
-    "schema86": {
+    "schema88": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/schema87"
+        "$ref": "#/definitions/schema89"
       },
       "maxItems": 20
     },
-    "schema85": {
+    "schema87": {
       "type": "object",
       "properties": {
         "productRows": {
-          "$ref": "#/definitions/schema62"
+          "$ref": "#/definitions/schema64"
         },
         "sections": {
-          "$ref": "#/definitions/schema86"
+          "$ref": "#/definitions/schema88"
         },
         "layout": {
           "enum": [
@@ -13251,11 +13682,11 @@
       ],
       "additionalProperties": false
     },
-    "schema90": {
+    "schema92": {
       "type": "object",
       "properties": {
         "tagSlugs": {
-          "$ref": "#/definitions/schema21"
+          "$ref": "#/definitions/schema23"
         },
         "gallerySlug": {
           "anyOf": [
@@ -13320,7 +13751,7 @@
           ]
         },
         "productIds": {
-          "$ref": "#/definitions/schema22"
+          "$ref": "#/definitions/schema24"
         },
         "pagePosition": {
           "enum": [
@@ -13797,10 +14228,10 @@
           ]
         },
         "slides": {
-          "$ref": "#/definitions/schema23"
+          "$ref": "#/definitions/schema25"
         },
         "items": {
-          "$ref": "#/definitions/schema25"
+          "$ref": "#/definitions/schema27"
         },
         "type": {
           "enum": [
@@ -13808,22 +14239,22 @@
             "gallery-grid",
             "composed-hero",
             "hero-carousel",
-            "value-props",
-            "category-shortcuts",
-            "promo-banners",
             "product-row",
             "catalog-explorer",
-            "brand-showcase",
+            "category-shortcuts",
+            "featured-collection-grid",
+            "promo-banners",
             "editorial-image-text",
+            "value-props",
+            "trust-badges",
             "testimonials",
             "logo-cloud",
+            "brand-showcase",
+            "gallery",
             "newsletter-signup",
             "countdown-sale",
-            "featured-collection-grid",
             "faq",
-            "trust-badges",
             "recently-viewed",
-            "gallery",
             "blog-header",
             "blog-posts"
           ]
@@ -13864,7 +14295,7 @@
           "then": {
             "properties": {
               "catalogFilters": {
-                "$ref": "#/definitions/schema27"
+                "$ref": "#/definitions/schema29"
               }
             }
           },
@@ -13892,7 +14323,7 @@
           "then": {
             "properties": {
               "heroBlocks": {
-                "$ref": "#/definitions/schema28"
+                "$ref": "#/definitions/schema30"
               }
             }
           },
@@ -13918,7 +14349,7 @@
           "then": {
             "properties": {
               "detailsBlockOrder": {
-                "$ref": "#/definitions/schema36"
+                "$ref": "#/definitions/schema38"
               }
             }
           },
@@ -13944,7 +14375,7 @@
           "then": {
             "properties": {
               "query": {
-                "$ref": "#/definitions/schema37"
+                "$ref": "#/definitions/schema39"
               }
             }
           },
@@ -14005,7 +14436,7 @@
           "then": {
             "properties": {
               "selectedCategorySlugs": {
-                "$ref": "#/definitions/schema40"
+                "$ref": "#/definitions/schema42"
               }
             }
           },
@@ -14031,7 +14462,7 @@
           "then": {
             "properties": {
               "selectedBrandSlugs": {
-                "$ref": "#/definitions/schema41"
+                "$ref": "#/definitions/schema43"
               }
             }
           },
@@ -14184,21 +14615,21 @@
         }
       ]
     },
-    "schema89": {
+    "schema91": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/schema90"
+        "$ref": "#/definitions/schema92"
       },
       "maxItems": 20
     },
-    "schema88": {
+    "schema90": {
       "type": "object",
       "properties": {
         "productRows": {
-          "$ref": "#/definitions/schema62"
+          "$ref": "#/definitions/schema64"
         },
         "sections": {
-          "$ref": "#/definitions/schema89"
+          "$ref": "#/definitions/schema91"
         },
         "listLayout": {
           "enum": [
@@ -14225,11 +14656,11 @@
       ],
       "additionalProperties": false
     },
-    "schema93": {
+    "schema95": {
       "type": "object",
       "properties": {
         "tagSlugs": {
-          "$ref": "#/definitions/schema21"
+          "$ref": "#/definitions/schema23"
         },
         "gallerySlug": {
           "anyOf": [
@@ -14294,7 +14725,7 @@
           ]
         },
         "productIds": {
-          "$ref": "#/definitions/schema22"
+          "$ref": "#/definitions/schema24"
         },
         "pagePosition": {
           "enum": [
@@ -14765,10 +15196,10 @@
           ]
         },
         "slides": {
-          "$ref": "#/definitions/schema23"
+          "$ref": "#/definitions/schema25"
         },
         "items": {
-          "$ref": "#/definitions/schema25"
+          "$ref": "#/definitions/schema27"
         },
         "type": {
           "enum": [
@@ -14818,7 +15249,7 @@
           "then": {
             "properties": {
               "catalogFilters": {
-                "$ref": "#/definitions/schema27"
+                "$ref": "#/definitions/schema29"
               }
             }
           },
@@ -14846,7 +15277,7 @@
           "then": {
             "properties": {
               "heroBlocks": {
-                "$ref": "#/definitions/schema28"
+                "$ref": "#/definitions/schema30"
               }
             }
           },
@@ -14872,7 +15303,7 @@
           "then": {
             "properties": {
               "detailsBlockOrder": {
-                "$ref": "#/definitions/schema36"
+                "$ref": "#/definitions/schema38"
               }
             }
           },
@@ -14898,7 +15329,7 @@
           "then": {
             "properties": {
               "query": {
-                "$ref": "#/definitions/schema37"
+                "$ref": "#/definitions/schema39"
               }
             }
           },
@@ -14959,7 +15390,7 @@
           "then": {
             "properties": {
               "selectedCategorySlugs": {
-                "$ref": "#/definitions/schema40"
+                "$ref": "#/definitions/schema42"
               }
             }
           },
@@ -14985,7 +15416,7 @@
           "then": {
             "properties": {
               "selectedBrandSlugs": {
-                "$ref": "#/definitions/schema41"
+                "$ref": "#/definitions/schema43"
               }
             }
           },
@@ -15138,36 +15569,36 @@
         }
       ]
     },
-    "schema92": {
+    "schema94": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/schema93"
+        "$ref": "#/definitions/schema95"
       },
       "maxItems": 6
     },
-    "schema91": {
+    "schema93": {
       "type": "object",
       "properties": {
         "productRows": {
-          "$ref": "#/definitions/schema92"
+          "$ref": "#/definitions/schema94"
         }
       },
       "additionalProperties": false
     },
-    "schema94": {
+    "schema96": {
       "type": "object",
       "properties": {
         "productRows": {
-          "$ref": "#/definitions/schema62"
+          "$ref": "#/definitions/schema64"
         }
       },
       "additionalProperties": false
     },
-    "schema95": {
+    "schema97": {
       "type": "object",
       "properties": {
         "productRows": {
-          "$ref": "#/definitions/schema62"
+          "$ref": "#/definitions/schema64"
         },
         "layout": {
           "type": "string",
@@ -15249,52 +15680,52 @@
       ],
       "additionalProperties": false
     },
-    "schema60": {
+    "schema62": {
       "type": "object",
       "properties": {
         "product": {
-          "$ref": "#/definitions/schema61"
+          "$ref": "#/definitions/schema63"
         },
         "category": {
-          "$ref": "#/definitions/schema70"
+          "$ref": "#/definitions/schema72"
         },
         "collection": {
-          "$ref": "#/definitions/schema76"
+          "$ref": "#/definitions/schema78"
         },
         "brand": {
-          "$ref": "#/definitions/schema79"
+          "$ref": "#/definitions/schema81"
         },
         "cart": {
-          "$ref": "#/definitions/schema82"
+          "$ref": "#/definitions/schema84"
         },
         "account": {
-          "$ref": "#/definitions/schema85"
+          "$ref": "#/definitions/schema87"
         },
         "blog": {
-          "$ref": "#/definitions/schema88"
+          "$ref": "#/definitions/schema90"
         },
         "checkout": {
-          "$ref": "#/definitions/schema91"
+          "$ref": "#/definitions/schema93"
         },
         "wishlist": {
-          "$ref": "#/definitions/schema94"
+          "$ref": "#/definitions/schema96"
         },
         "search": {
-          "$ref": "#/definitions/schema94"
+          "$ref": "#/definitions/schema96"
         },
         "not-found": {
-          "$ref": "#/definitions/schema94"
+          "$ref": "#/definitions/schema96"
         },
         "orders": {
-          "$ref": "#/definitions/schema94"
+          "$ref": "#/definitions/schema96"
         },
         "page": {
-          "$ref": "#/definitions/schema95"
+          "$ref": "#/definitions/schema97"
         }
       },
       "additionalProperties": false
     },
-    "schema97": {
+    "schema99": {
       "type": "object",
       "properties": {
         "variant": {
@@ -15590,7 +16021,7 @@
       },
       "additionalProperties": false
     },
-    "schema98": {
+    "schema100": {
       "type": "object",
       "properties": {
         "variant": {
@@ -15858,50 +16289,50 @@
       },
       "additionalProperties": false
     },
-    "schema96": {
+    "schema98": {
       "type": "object",
       "properties": {
         "productCard": {
-          "$ref": "#/definitions/schema97"
+          "$ref": "#/definitions/schema99"
         },
         "categoryCard": {
-          "$ref": "#/definitions/schema98"
+          "$ref": "#/definitions/schema100"
         },
         "promoCard": {
-          "$ref": "#/definitions/schema98"
+          "$ref": "#/definitions/schema100"
         },
         "brandCard": {
-          "$ref": "#/definitions/schema98"
+          "$ref": "#/definitions/schema100"
         },
         "trustCard": {
-          "$ref": "#/definitions/schema98"
+          "$ref": "#/definitions/schema100"
         },
         "reviewCard": {
-          "$ref": "#/definitions/schema98"
+          "$ref": "#/definitions/schema100"
         },
         "contentCard": {
-          "$ref": "#/definitions/schema98"
+          "$ref": "#/definitions/schema100"
         },
         "cartItem": {
-          "$ref": "#/definitions/schema98"
+          "$ref": "#/definitions/schema100"
         },
         "checkoutBlock": {
-          "$ref": "#/definitions/schema98"
+          "$ref": "#/definitions/schema100"
         },
         "formControl": {
-          "$ref": "#/definitions/schema98"
+          "$ref": "#/definitions/schema100"
         },
         "badgeChip": {
-          "$ref": "#/definitions/schema98"
+          "$ref": "#/definitions/schema100"
         }
       },
       "additionalProperties": false
     },
-    "schema100": {
+    "schema102": {
       "type": "object",
       "properties": {
         "tagSlugs": {
-          "$ref": "#/definitions/schema21"
+          "$ref": "#/definitions/schema23"
         },
         "gallerySlug": {
           "anyOf": [
@@ -15927,22 +16358,22 @@
             "gallery-grid",
             "composed-hero",
             "hero-carousel",
-            "value-props",
-            "category-shortcuts",
-            "promo-banners",
             "product-row",
             "catalog-explorer",
-            "brand-showcase",
+            "category-shortcuts",
+            "featured-collection-grid",
+            "promo-banners",
             "editorial-image-text",
+            "value-props",
+            "trust-badges",
             "testimonials",
             "logo-cloud",
+            "brand-showcase",
+            "gallery",
             "newsletter-signup",
             "countdown-sale",
-            "featured-collection-grid",
             "faq",
-            "trust-badges",
-            "recently-viewed",
-            "gallery"
+            "recently-viewed"
           ]
         },
         "catalogFilters": {},
@@ -15994,7 +16425,7 @@
         },
         "query": {},
         "productIds": {
-          "$ref": "#/definitions/schema22"
+          "$ref": "#/definitions/schema24"
         },
         "pagePosition": {
           "enum": [
@@ -16479,10 +16910,10 @@
           ]
         },
         "slides": {
-          "$ref": "#/definitions/schema23"
+          "$ref": "#/definitions/schema25"
         },
         "items": {
-          "$ref": "#/definitions/schema25"
+          "$ref": "#/definitions/schema27"
         }
       },
       "required": [
@@ -16506,7 +16937,7 @@
           "then": {
             "properties": {
               "catalogFilters": {
-                "$ref": "#/definitions/schema27"
+                "$ref": "#/definitions/schema29"
               }
             }
           },
@@ -16534,7 +16965,7 @@
           "then": {
             "properties": {
               "heroBlocks": {
-                "$ref": "#/definitions/schema28"
+                "$ref": "#/definitions/schema30"
               }
             }
           },
@@ -16560,7 +16991,7 @@
           "then": {
             "properties": {
               "detailsBlockOrder": {
-                "$ref": "#/definitions/schema36"
+                "$ref": "#/definitions/schema38"
               }
             }
           },
@@ -16586,7 +17017,7 @@
           "then": {
             "properties": {
               "query": {
-                "$ref": "#/definitions/schema37"
+                "$ref": "#/definitions/schema39"
               }
             }
           },
@@ -16647,7 +17078,7 @@
           "then": {
             "properties": {
               "selectedCategorySlugs": {
-                "$ref": "#/definitions/schema40"
+                "$ref": "#/definitions/schema42"
               }
             }
           },
@@ -16673,7 +17104,7 @@
           "then": {
             "properties": {
               "selectedBrandSlugs": {
-                "$ref": "#/definitions/schema41"
+                "$ref": "#/definitions/schema43"
               }
             }
           },
@@ -16826,13 +17257,13 @@
         }
       ]
     },
-    "schema99": {
+    "schema101": {
       "type": "object",
       "properties": {},
       "additionalProperties": {
         "anyOf": [
           {
-            "$ref": "#/definitions/schema100"
+            "$ref": "#/definitions/schema102"
           }
         ]
       },

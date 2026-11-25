@@ -70,6 +70,13 @@ describe('StoreLayout responsive header settings', () => {
     expect(container.querySelector('nav[aria-label="Main navigation"]')).toBeInTheDocument();
   });
 
+  it('renders theme-specific header links in place of the shared menu', async () => {
+    state.settings.nav.headerLinks = [{ label: 'Seasonal menu', url: '/category/seasonal' }];
+    renderStoreLayout();
+    expect(await screen.findByRole('link', { name: 'Seasonal menu' })).toHaveAttribute('href', '/category/seasonal');
+    expect(screen.queryByRole('link', { name: 'Shop' })).not.toBeInTheDocument();
+  });
+
   it('allows the mobile logo and image to shrink around the header actions', async () => {
     state.settings.nav.logoText = 'A very long designer store name';
     const { container } = renderStoreLayout();
