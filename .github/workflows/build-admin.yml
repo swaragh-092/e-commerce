@@ -1,0 +1,44 @@
+name: Build Production Admin UI
+
+on:
+  push:
+    branches:
+      - build-production-admin
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Build React
+        working-directory: client
+        env:
+          VITE_API_URL: /api
+          VITE_ADMIN_ROUTE_PREFIX: admin
+          VITE_APP_URL: https://ad.orbiseeds.com
+        run: npm run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: orbis-admin-dist
+          path: client/dist/
+          if-no-files-found: error
+          retention-days: 3
