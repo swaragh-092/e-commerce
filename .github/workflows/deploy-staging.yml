@@ -1,0 +1,16 @@
+name: Deploy Staging
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/develop'
+    uses: ./.github/workflows/deploy-ec2.yml
+    with:
+      target: staging
