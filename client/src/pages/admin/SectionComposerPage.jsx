@@ -491,6 +491,7 @@ const SectionComposerWorkspace = ({ searchParams, draftKey }) => {
       setDesignSources(designState?.sources || {});
       setDesignDefaults(designState?.defaults || {});
       const existingDraft = draftState?.draft || null;
+      setDraftConflicts(draftState?.conflicts || []);
       if (draftKey && !existingDraft) throw new Error('This named draft is no longer available.');
       const baseGroups = { ...liveSettingsRef.current, ...designState?.groups, homepage };
       const draftResult = applyDraftPayload(existingDraft?.payload || [], baseGroups, designState?.defaults || {});
@@ -524,6 +525,7 @@ const SectionComposerWorkspace = ({ searchParams, draftKey }) => {
     setUsingLive(true);
     try {
       await discardDesignDraft(draft.revision, ...(draftKey ? [draftKey] : []));
+      draftHydratedRef.current = false;
       setDirty(false);
       setUseLiveOpen(false);
       setPanelView({ mode: 'tree', sectionId: null, componentKey: null, blockKey: null, blockIndex: null });
@@ -723,6 +725,7 @@ const SectionComposerWorkspace = ({ searchParams, draftKey }) => {
       await publishDesignDraft(draft.revision, publishConflict?.conflictToken, ...(draftKey ? [draftKey] : []));
       draftHydratedRef.current = false;
       setDraft(null);
+      setDraftConflicts([]);
       setDraftDeletes([]);
       if (refreshSettings) await refreshSettings();
       const state = await getDesignState();
@@ -735,6 +738,11 @@ const SectionComposerWorkspace = ({ searchParams, draftKey }) => {
       const apiError = error.response?.data?.error;
       if (apiError?.code === 'DRAFT_CONFLICT' && apiError.details?.conflictToken) {
         setPublishConflict(apiError.details);
+        return;
+      }
+      if (apiError?.details?.conflicts?.length) {
+        setDraftConflicts(apiError.details.conflicts);
+        setPublishOpen(false);
         return;
       }
       notify(error.response?.data?.error?.message || error?.message || 'Publish failed. Review the latest design changes and try again.', 'error');
@@ -1621,8 +1629,9 @@ const SectionComposerWorkspace = ({ searchParams, draftKey }) => {
             </Button>
             <Tooltip title={dirty ? 'Save your draft before publishing' : !draft ? 'Save a draft to publish changes' : 'Publish your saved draft to the store'}>
               <span><Button size="small" variant="contained" sx={{ '&:not(.Mui-disabled)': { bgcolor: '#713654', color: '#fff', '&:hover': { bgcolor: '#572840' } } }}
-                onClick={() => { setPublishConflict(null); setPublishOpen(true); }} disabled={Boolean(loadError) || !draft || dirty || saving || publishing}>Publish</Button></span>
+                onClick={() => { setPublishConflict(null); setPublishOpen(true); }} disabled={Boolean(publishDisabledReason) || saving || publishing}>Publish</Button></span>
             </Tooltip>
+            {publishDisabledReason && <Typography variant="caption" role="status">{publishDisabledReason}</Typography>}
           </Stack>
         </Box>
       </Paper>
@@ -1865,7 +1874,7 @@ const SectionComposerWorkspace = ({ searchParams, draftKey }) => {
 
           {draftConflicts.length > 0 && (
             <Alert severity="warning" action={<Stack direction="row"><Button color="inherit" onClick={() => setReviewDraftOpen(true)}>Review differences</Button><Button color="inherit" onClick={() => setUseLiveOpen(true)} disabled={dirty || saving || publishing || usingLive}>Use live storefront</Button></Stack>}>
-              This saved draft differs from changes made to the live storefront, possibly by installing another template. The editor is showing your draft, not the live design. Publishing is blocked to protect those changes.
+              This saved draft differs from changes made to the live storefront, possibly by installing another template. The editor is showing your draft, not the live design. Review the changes before publishing.
             </Alert>
           )}
 
@@ -2071,6 +2080,29 @@ const SectionComposerWorkspace = ({ searchParams, draftKey }) => {
         <DialogActions>
           <Button onClick={() => setDiscardOpen(false)} disabled={discarding}>Cancel</Button>
           <Button color="error" onClick={handleDiscard} disabled={discarding}>{discarding ? 'Discarding…' : 'Discard draft'}</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={useLiveOpen} onClose={() => !usingLive && setUseLiveOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Replace draft with live storefront?</DialogTitle>
+        <DialogContent>Archive the saved draft and load the currently published design.</DialogContent>
+        <DialogActions>
+          <Button onClick={() => setUseLiveOpen(false)} disabled={usingLive}>Cancel</Button>
+          <Button onClick={handleUseLive} disabled={dirty || usingLive}>Archive draft and load live</Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={reviewDraftOpen} onClose={() => setReviewDraftOpen(false)}>
+        <DialogTitle>Review design conflicts</DialogTitle>
+        <DialogContent>
+          <ul>{draftConflicts.map(({ group, key }) => <li key={group + '.' + key}>{group} / {key}</li>)}</ul>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setReviewDraftOpen(false)}>Close</Button>
+          <Button disabled={Boolean(loadError) || !draft || dirty || saving || publishing} onClick={() => {
+            setReviewDraftOpen(false);
+            setPublishConflict(null);
+            setPublishOpen(true);
+          }}>Review publication</Button>
         </DialogActions>
       </Dialog>
 

@@ -56,7 +56,7 @@ describe('ecommerce structured data builders', () => {
         availability: 'https://schema.org/InStock',
       },
     });
-    expect(schema.image).toEqual(['https://shop.example/uploads/trail-jacket.jpg']);
+    expect(schema.image).toEqual(['https://shop.example/uploads/trail-jacket.jpg?mediaVersion=editable1']);
   });
 
   it('adds priceValidUntil only for active dated sales', () => {

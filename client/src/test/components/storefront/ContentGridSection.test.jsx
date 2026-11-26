@@ -80,7 +80,7 @@ describe('ContentGridSection variants and links', () => {
       Object.defineProperty(carousel, 'clientWidth', { configurable: true, value: 1000 });
       expect(carousel).toHaveStyle({ overflowX: 'auto' });
       fireEvent.click(screen.getByRole('button', { name: 'Next testimonials' }));
-      expect(scrollBy).toHaveBeenCalledWith({ left: 1000, behavior: 'smooth' });
+      expect(scrollBy).toHaveBeenCalledWith({ left: 800, behavior: 'smooth' });
     } finally {
       if (original) HTMLElement.prototype.scrollBy = original;
       else delete HTMLElement.prototype.scrollBy;

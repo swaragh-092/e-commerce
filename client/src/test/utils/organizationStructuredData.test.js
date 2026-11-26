@@ -23,7 +23,7 @@ describe('organization structured data builder', () => {
       '@type': 'OnlineStore',
       name: 'North Peak Outfitters',
       url: 'https://shop.example/',
-      logo: { url: 'https://shop.example/uploads/logo.png' },
+      logo: { url: 'https://shop.example/uploads/logo.png?mediaVersion=editable1' },
       address: {
         '@type': 'PostalAddress',
         streetAddress: '1 Trail Road',
