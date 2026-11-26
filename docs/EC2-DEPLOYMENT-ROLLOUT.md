@@ -12,7 +12,9 @@ before the corresponding deployment job starts.
 Each GitHub Environment owns its five deployment secrets (`EC2_HOST`,
 `EC2_USER`, `EC2_SSH_KEY`, `EC2_HOST_FINGERPRINT`, `APP_DIR`) and six variables
 (`SITE_URL`, `VITE_APP_URL`, `VITE_API_URL`, `WEB_ROOT`, `PM2_APP_NAME`,
-`DEPLOY_ENABLED`). Use `/api` for `VITE_API_URL`. The preflight reads the
+`DEPLOY_ENABLED`). Set `VITE_APP_URL` to the customer storefront
+(`https://orbiseeds.com` in production) and `SITE_URL` to the admin host.
+Use `/api` for `VITE_API_URL`. The preflight reads the
 backend's effective `ADMIN_ROUTE_PREFIX` and supplies its final segment to
 Vite. Production keeps its environment reviewer gate. Keep the old
 `deploy.yml` workflow disabled until its removal reaches `main`.

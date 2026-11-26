@@ -241,6 +241,8 @@ backend_stopped=true
 pm2 stop "$pm2_name"
 phase=backup
 install -d -m 700 "$backup_dir"
+# The deployment user opens and owns the private backup file.
+# shellcheck disable=SC2024
 sudo -n -u postgres pg_dump -Fc -d ecommerce > "$backup.partial"
 pg_restore --list "$backup.partial" >/dev/null
 pg_restore --file=/dev/null "$backup.partial"
@@ -265,6 +267,7 @@ for attempt in {1..12}; do
     healthy=true
     break
   fi
+  echo "Backend readiness check $attempt/12 has not passed yet."
   sleep 5
 done
 [[ "$healthy" == true ]] || fail "The updated backend failed its readiness check."

@@ -60,7 +60,8 @@ jobs:
       - name: Build frontend
         working-directory: client
         run: |
-          export VITE_ADMIN_ROUTE_PREFIX="$(cat "$RUNNER_TEMP/ec2-ssh/admin_prefix")"
+          read -r VITE_ADMIN_ROUTE_PREFIX < "$RUNNER_TEMP/ec2-ssh/admin_prefix"
+          export VITE_ADMIN_ROUTE_PREFIX
           npm run build
 
       - name: Package frontend
