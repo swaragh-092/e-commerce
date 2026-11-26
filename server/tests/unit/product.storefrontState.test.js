@@ -126,13 +126,13 @@ describe('product storefront summary counts', () => {
 });
 
 describe('admin product status counts query execution', () => {
-  it('groups by canonical status and physical is_enabled column', async () => {
+  it('keeps status counts independent of the low-stock quick filter', async () => {
     const { vi } = await import('vitest');
     const { Product } = require('../../src/modules');
     const productService = require('../../src/modules/product/product.service');
     const SettingsService = require('../../src/modules/settings/settings.service');
 
-    vi.spyOn(Product, 'findAndCountAll').mockResolvedValue({ count: 0, rows: [] });
+    const listingSpy = vi.spyOn(Product, 'findAndCountAll').mockResolvedValue({ count: 0, rows: [] });
     vi.spyOn(Product, 'findOne').mockResolvedValue({ min: 0, max: 0 });
     vi.spyOn(Product, 'count').mockResolvedValue(0);
     vi.spyOn(SettingsService, 'getByGroup').mockResolvedValue({ lowStockThreshold: 10 });
@@ -142,11 +142,16 @@ describe('admin product status counts query execution', () => {
       { status: 'published', isEnabled: true, count: '5' },
     ]);
 
-    const result = await productService.getProducts({}, 1, 20, true);
+    const result = await productService.getProducts({ maxQty: 10 }, 1, 20, true);
+
+    expect(listingSpy).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ status: 'published', isEnabled: true }),
+    }));
 
     expect(findAllSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         group: ['Product.status', 'Product.is_enabled'],
+        where: {},
       }),
     );
     expect(result.counts).toEqual({

@@ -18,6 +18,7 @@ import {
 import { Add as AddIcon, Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
 import { DataGrid } from '@mui/x-data-grid';
 import { useNavigate } from 'react-router-dom';
+import useAdminListQuery from '../../hooks/useAdminListQuery';
 import BlogService from '../../services/blogService';
 import { useNotification } from '../../context/NotificationContext';
 import { getApiErrorMessage } from '../../utils/apiErrors';
@@ -27,8 +28,8 @@ import { PERMISSIONS } from '../../utils/permissions';
 const BlogsManagePage = () => {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 });
-  const [rowCount, setRowCount] = useState(0);
+  const { paginationModel, setPaginationModel, returnTo } = useAdminListQuery(10);
+  const [rowCount, setRowCount] = useState(-1);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selected, setSelected] = useState(null);
   const [savingStatuses, setSavingStatuses] = useState(() => new Set());
@@ -109,7 +110,7 @@ const BlogsManagePage = () => {
         <Typography
           component="button"
           type="button"
-          onClick={() => navigate(`/admin/blogs/${params.row.id}/edit`)}
+          onClick={() => navigate(`/admin/blogs/${params.row.id}/edit`, { state: { returnTo } })}
           disabled={!canManageBlogs}
           aria-label={`Edit blog ${params.row.title}`}
           sx={{ p: 0, border: 0, background: 'none', color: canManageBlogs ? 'primary.main' : 'text.primary', font: 'inherit', textAlign: 'left', cursor: canManageBlogs ? 'pointer' : 'default', '&:hover': canManageBlogs ? { textDecoration: 'underline' } : {}, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
@@ -168,7 +169,7 @@ const BlogsManagePage = () => {
         <Box>
           <Tooltip title="Edit">
             <span>
-              <IconButton disabled={!canManageBlogs} onClick={() => navigate(`/admin/blogs/${params.row.id}/edit`)}>
+              <IconButton disabled={!canManageBlogs} onClick={() => navigate(`/admin/blogs/${params.row.id}/edit`, { state: { returnTo } })}>
                 <EditIcon />
               </IconButton>
             </span>
@@ -190,7 +191,7 @@ const BlogsManagePage = () => {
         </Box>
       ),
     },
-  ]), [canManageBlogs, navigate, savingStatuses]);
+  ]), [canManageBlogs, navigate, returnTo, savingStatuses]);
 
   return (
     <Box p={3}>
@@ -199,7 +200,7 @@ const BlogsManagePage = () => {
         <Box display="flex" gap={1}>
           <Button variant="outlined" onClick={() => navigate('/admin/blogs/categories')}>Manage Categories</Button>
           {canManageBlogs && (
-            <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/admin/blogs/new')}>
+            <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/admin/blogs/new', { state: { returnTo } })}>
               New Blog Post
             </Button>
           )}

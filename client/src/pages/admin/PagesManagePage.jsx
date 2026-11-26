@@ -21,6 +21,7 @@ import {
 import { DataGrid } from '@mui/x-data-grid';
 import PageService from '../../services/pageService';
 import { useNavigate } from 'react-router-dom';
+import useAdminListQuery from '../../hooks/useAdminListQuery';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
@@ -31,8 +32,8 @@ const PagesManagePage = () => {
   const [loading, setLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedPage, setSelectedPage] = useState(null);
-  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 });
-  const [rowCount, setRowCount] = useState(0);
+  const { paginationModel, setPaginationModel, returnTo } = useAdminListQuery(10);
+  const [rowCount, setRowCount] = useState(-1);
   const navigate = useNavigate();
   const { notify } = useNotification();
   const { hasPermission } = useAuth();
@@ -90,7 +91,7 @@ const PagesManagePage = () => {
         <Typography
           component="button"
           type="button"
-          onClick={() => navigate(`/admin/pages/${params.row.id}/edit`)}
+          onClick={() => navigate(`/admin/pages/${params.row.id}/edit`, { state: { returnTo } })}
           disabled={!canManagePages}
           aria-label={`Edit page ${params.row.title}`}
           sx={{ p: 0, border: 0, background: 'none', color: canManagePages ? 'primary.main' : 'text.primary', font: 'inherit', textAlign: 'left', cursor: canManagePages ? 'pointer' : 'default', '&:hover': canManagePages ? { textDecoration: 'underline' } : {}, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
@@ -139,7 +140,7 @@ const PagesManagePage = () => {
           </Tooltip>
           <Tooltip title="Edit">
             <span>
-            <IconButton onClick={() => navigate(`/admin/pages/${params.row.id}/edit`)} disabled={!canManagePages}>
+            <IconButton onClick={() => navigate(`/admin/pages/${params.row.id}/edit`, { state: { returnTo } })} disabled={!canManagePages}>
               <EditIcon />
             </IconButton>
             </span>
@@ -168,7 +169,7 @@ const PagesManagePage = () => {
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={() => navigate('/admin/pages/new')}
+            onClick={() => navigate('/admin/pages/new', { state: { returnTo } })}
           >
             Add New Page
           </Button>

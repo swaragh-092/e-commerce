@@ -132,6 +132,12 @@ const setDefaultAddress = async (req, res, next) => {
   }
 };
 
+const requestDeletionCode = async (req, res, next) => {
+  try {
+    return success(res, await UserService.requestDeletionCode(req.user.id, req.ip));
+  } catch (err) { next(err); }
+};
+
 const deleteAccount = async (req, res, next) => {
   try {
     const result = await UserService.deleteAccount(req.user.id, req.validated);
@@ -208,6 +214,7 @@ module.exports = {
   updateAvatar,
   changePassword,
   deleteAccount,
+  requestDeletionCode,
   cancelAccountDeletion,
   getSessions,
   revokeSession,

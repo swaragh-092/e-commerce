@@ -68,7 +68,7 @@ const authenticate = async (req, res, next) => {
 
     // Check if user still exists (could be deleted)
     const user = await User.findByPk(decoded.id, {
-      attributes: ['id', 'email', 'role', 'status', 'twoFactorEnabled', 'emailVerified', 'emailMfaPasswordBinding'],
+      attributes: ['id', 'email', 'role', 'status', 'twoFactorEnabled', 'emailVerified', 'emailMfaPasswordBinding', 'scheduledDeletionAt'],
       include: authUserInclude,
     });
 
@@ -78,6 +78,9 @@ const authenticate = async (req, res, next) => {
 
     if (user.status !== 'active') {
       throw new AppError('FORBIDDEN', 403, 'Your account is inactive');
+    }
+    if (user.scheduledDeletionAt && new Date(user.scheduledDeletionAt) <= new Date()) {
+      throw new AppError('FORBIDDEN', 403, 'Account deletion period has expired');
     }
 
     assertMfaSession(user, decoded, await loadMfaPolicy(user));
@@ -128,11 +131,12 @@ const optionalAuth = async (req, res, next) => {
     }
 
     const user = await User.findByPk(decoded.id, {
-      attributes: ['id', 'email', 'role', 'status', 'twoFactorEnabled', 'emailVerified', 'emailMfaPasswordBinding'],
+      attributes: ['id', 'email', 'role', 'status', 'twoFactorEnabled', 'emailVerified', 'emailMfaPasswordBinding', 'scheduledDeletionAt'],
       include: authUserInclude,
     });
 
     if (user && user.status === 'active') {
+      if (user.scheduledDeletionAt && new Date(user.scheduledDeletionAt) <= new Date()) return next();
       try { assertMfaSession(user, decoded, await loadMfaPolicy(user)); } catch { return next(); }
       if (isAdminUser(user)) {
         try { enforceAdminSession(user, decoded, decoded.sid ? await RefreshToken.findByPk(decoded.sid) : null); } catch { return next(); }

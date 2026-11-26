@@ -1,27 +1,49 @@
 import { useState } from 'react';
 import { Box, Typography, TextField, Button, Alert, Paper, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
 import { userService } from '../../services/userService';
-import authService from '../../services/authService';
+import { Link } from 'react-router-dom';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 
 const DeleteAccount = ({ user, onUpdate }) => {
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState('');
+  const [otp, setOtp] = useState('');
+  const [codeSent, setCodeSent] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const isOAuthUser = user?.email?.endsWith('@phone.local') || !user?.email;
+  const isPhoneUser = user?.email?.endsWith('@phone.local');
   const isPendingDeletion = !!user?.scheduledDeletionAt;
+
+  const closeDialog = () => {
+    setOpen(false);
+    setPassword('');
+    setOtp('');
+    setCodeSent(false);
+    setError('');
+  };
+
+  const handleSendCode = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      await userService.requestDeletionCode();
+      setCodeSent(true);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Failed to send a verification code'));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleDelete = async () => {
     setLoading(true);
     setError('');
     try {
-      const payload = isOAuthUser ? { oauthProvider: user?.oauthProvider || 'google' } : { password };
+      const payload = isPhoneUser ? { otp } : { password };
       const result = await userService.deleteAccount(payload);
-      setOpen(false);
-      setPassword('');
+      closeDialog();
       setSuccess(`Account scheduled for deletion. You can cancel before ${new Date(result.data.scheduledDeletionAt).toLocaleDateString()}.`);
       if (onUpdate) onUpdate();
     } catch (err) {
@@ -64,7 +86,8 @@ const DeleteAccount = ({ user, onUpdate }) => {
       ) : (
         <Box>
           <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-            Your account will be scheduled for deletion after a 30-day grace period. You can cancel anytime during this period.
+            You can cancel your request during the 30-day grace period. Active orders must be completed or cancelled first.
+            If you have past orders, contact support for help with removing your account data after access ends.
           </Typography>
           <Button variant="outlined" color="error" onClick={() => setOpen(true)}>
             Delete My Account
@@ -72,25 +95,41 @@ const DeleteAccount = ({ user, onUpdate }) => {
         </Box>
       )}
 
-      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog open={open} onClose={loading ? undefined : closeDialog} maxWidth="xs" fullWidth>
         <DialogTitle>Confirm Account Deletion</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 2 }}>
-            {isOAuthUser
-              ? 'Confirm to schedule your account for deletion in 30 days.'
-              : 'Enter your password to confirm. Your account will be deleted after 30 days.'}
+            {isPhoneUser
+              ? 'Verify your phone number to schedule account deletion in 30 days.'
+              : 'Enter your password to schedule account deletion in 30 days.'}
           </Typography>
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-          {!isOAuthUser && (
-            <TextField
-              fullWidth type="password" label="Password"
-              value={password} onChange={(e) => setPassword(e.target.value)} autoFocus
-            />
+          {isPhoneUser ? (
+            <>
+              <Button onClick={handleSendCode} disabled={loading}>
+                {codeSent ? 'Resend verification code' : 'Send verification code'}
+              </Button>
+              {codeSent && (
+                <TextField
+                  fullWidth label="Verification code" value={otp} onChange={(e) => setOtp(e.target.value)}
+                  autoComplete="one-time-code" slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 6 } }}
+                />
+              )}
+            </>
+          ) : (
+            <>
+              <TextField
+                fullWidth type="password" label="Password" autoComplete="current-password"
+                value={password} onChange={(e) => setPassword(e.target.value)} autoFocus
+              />
+              <Button component={Link} to="/forgot-password">Set or reset password</Button>
+            </>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setOpen(false); setPassword(''); setError(''); }}>Cancel</Button>
-          <Button color="error" variant="contained" onClick={handleDelete} disabled={loading || (!isOAuthUser && !password)}>
+          <Button onClick={closeDialog} disabled={loading}>Cancel</Button>
+          <Button color="error" variant="contained" onClick={handleDelete}
+            disabled={loading || (isPhoneUser ? !/^\d{6}$/.test(otp) : !password)}>
             {loading ? 'Processing...' : 'Schedule Deletion'}
           </Button>
         </DialogActions>

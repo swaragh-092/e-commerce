@@ -89,9 +89,8 @@ const updateAddressSchema = Joi.object({
 
 const deleteAccountSchema = Joi.object({
   password: Joi.string().optional(),
-  oauthProvider: Joi.string().optional(),
-  otp: Joi.string().optional(),
-}).or('password', 'oauthProvider', 'otp');
+  otp: Joi.string().pattern(/^\d{6}$/).optional(),
+}).xor('password', 'otp');
 
 const phoneChangeRequestSchema = Joi.object({
   phone: Joi.string().pattern(/^\d{10,15}$/).required(),

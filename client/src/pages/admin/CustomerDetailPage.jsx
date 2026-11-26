@@ -13,7 +13,7 @@ import {
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { getUserById } from '../../services/adminService';
 import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
@@ -47,6 +47,7 @@ const formatCustomerDateTime = (value) => formatDateTime(value) || '-';
 const CustomerDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const returnTo = useLocation().state?.returnTo || '/admin/customers';
   const { formatPrice } = useCurrency();
   const { hasPermission } = useAuth();
   const canReadOrders = hasPermission(PERMISSIONS.ORDERS_READ);
@@ -123,12 +124,17 @@ const CustomerDetailPage = () => {
         size="small"
         startIcon={<ArrowBackIcon />}
         sx={{ mb: 2 }}
-        onClick={() => navigate('/admin/customers')}
+        onClick={() => navigate(returnTo)}
       >
         Back to Customers
       </Button>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {customer.scheduledDeletionAt && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Account deletion date: {formatCustomerDateTime(customer.scheduledDeletionAt)}
+        </Alert>
+      )}
 
       <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, alignItems: 'flex-start', mb: 3, flexWrap: 'wrap' }}>
         <Box>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useLocation, useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -131,6 +131,7 @@ const ContentPreview = ({ content, bannerUrl }) => {
 const PageEditPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const returnTo = useLocation().state?.returnTo || '/admin/pages';
   const { notify } = useNotification();
   const { hasPermission } = useAuth();
   const isNew = !id || id === 'new';
@@ -244,9 +245,9 @@ const PageEditPage = () => {
         // Navigate to edit view so slug and ID are available
         const newId = res.data?.id;
         if (newId) {
-          navigate(`/admin/pages/${newId}/edit`, { replace: true });
+          navigate(`/admin/pages/${newId}/edit`, { replace: true, state: { returnTo } });
         } else {
-          navigate('/admin/pages');
+          navigate(returnTo);
         }
       } else {
         const res = await PageService.adminUpdatePage(id, payload);
@@ -274,7 +275,7 @@ const PageEditPage = () => {
   return (
     <Box sx={{ p: 3 }}>
       <Breadcrumbs sx={{ mb: 2 }}>
-        <Link to="/admin/pages" style={{ textDecoration: 'none', color: 'inherit' }}>
+        <Link to={returnTo} style={{ textDecoration: 'none', color: 'inherit' }}>
           Pages
         </Link>
         <Typography color="text.primary">{isNew ? 'New Page' : 'Edit Page'}</Typography>
@@ -283,7 +284,7 @@ const PageEditPage = () => {
       {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3} flexWrap="wrap" gap={2}>
         <Box display="flex" alignItems="center" gap={1}>
-          <IconButton onClick={() => navigate('/admin/pages')}>
+          <IconButton onClick={() => navigate(returnTo)}>
             <ArrowBackIcon />
           </IconButton>
           <Box>

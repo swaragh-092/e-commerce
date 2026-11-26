@@ -28,7 +28,9 @@ import DownloadIcon from '@mui/icons-material/Download';
 
 import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined';
 
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import useAdminListQuery from '../../hooks/useAdminListQuery';
+import useAdminListSearch from '../../hooks/useAdminListSearch';
 
 import { useCurrency } from '../../hooks/useSettings';
 import { confirmCodPayment, getAllOrders, updateOrderStatus } from '../../services/adminService';
@@ -113,7 +115,7 @@ const OrdersManagePage = () => {
   const isTabletScreen = useMediaQuery('(max-width: 1024px)');
   const hideCustomerColumn = useMediaQuery((theme) => theme.breakpoints.down(760));
   const isSmallScreen = useMediaQuery((theme) => theme.breakpoints.down('sm'));
-  const [searchParams] = useSearchParams();
+  const { params, updateQuery, paginationModel, setPaginationModel, returnTo } = useAdminListQuery(20);
   const { formatPrice } = useCurrency();
   const { notify, confirm } = useNotification();
   const { hasPermission } = useAuth();
@@ -122,23 +124,18 @@ const OrdersManagePage = () => {
   const [loading, setLoading] = useState(true);
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [error, setError] = useState('');
-  const [total, setTotal] = useState(0);
-  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
-  // Initialise status from URL query param so dashboard card links pre-apply the filter
-  const [status, setStatus] = useState(() => searchParams.get('status') || '');
-  const [shippingStatus, setShippingStatus] = useState(() => searchParams.get('orderShippingStatus') || '');
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
+  const [total, setTotal] = useState(-1);
+  const status = params.get('status') || '';
+  const shippingStatus = params.get('orderShippingStatus') || '';
+  const search = params.get('search') || '';
+  const { searchInput, setSearchInput, applySearch } = useAdminListSearch(search, updateQuery, 350);
   const [counts, setCounts] = useState({});
   const [pageRevenue, setPageRevenue] = useState(0);
   const [codCollectionOrder, setCodCollectionOrder] = useState(null);
   const [codCollectionAmount, setCodCollectionAmount] = useState('');
   const hasActiveFilters = Boolean(search || status || shippingStatus);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => setSearch(searchInput.trim()), 350);
-    return () => window.clearTimeout(timer);
-  }, [searchInput]);
+  const clearFilters = () => applySearch('', { status: null, orderShippingStatus: null });
 
   const fetchOrders = () => {
     setLoading(true);
@@ -416,7 +413,7 @@ const OrdersManagePage = () => {
               sx={{ width: '100%' }}
             >
               <Tooltip title="Open order">
-                <IconButton size="small" aria-label="Open order" onClick={() => navigate(`/admin/orders/${row.id}`)}>
+                <IconButton size="small" aria-label="Open order" onClick={() => navigate(`/admin/orders/${row.id}`, { state: { returnTo } })}>
                   <VisibilityIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
@@ -437,7 +434,7 @@ const OrdersManagePage = () => {
         },
       },
     ],
-    [actionLoadingId, canUpdateStatus, formatPrice, isSmallScreen, isTabletScreen, navigate]
+    [actionLoadingId, canUpdateStatus, formatPrice, isSmallScreen, isTabletScreen, navigate, returnTo]
   );
 
   const EmptyOrdersOverlay = () => (
@@ -458,12 +455,7 @@ const OrdersManagePage = () => {
       {hasActiveFilters ? (
         <Button
           variant="outlined"
-          onClick={() => {
-            setSearchInput('');
-            setSearch('');
-            setStatus('');
-            setPaginationModel((current) => ({ ...current, page: 0 }));
-          }}
+          onClick={clearFilters}
         >
           Clear filters
         </Button>
@@ -484,9 +476,9 @@ const OrdersManagePage = () => {
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} useFlexGap flexWrap="wrap" mb={3}>
         <ClickableSummaryCard 
           label="Total Orders" 
-          value={total} 
+          value={Math.max(0, total)}
           active={status === ''}
-          onClick={() => setStatus('')}
+          onClick={() => updateQuery({ status: null, page: null })}
         />
         {summaryGroups.map((group) => (
           <ClickableSummaryCard 
@@ -495,7 +487,7 @@ const OrdersManagePage = () => {
             value={group.count} 
             tone={group.tone} 
             active={status && group.statuses && group.statuses.slice().sort().join(',') === status.split(',').sort().join(',')}
-            onClick={() => setStatus(group.statuses?.join(',') || '')}
+            onClick={() => updateQuery({ status: group.statuses?.join(','), page: null })}
           />
         ))}
         <SummaryCard label="Page Revenue" value={formatPrice(pageRevenue)} />
@@ -521,7 +513,7 @@ const OrdersManagePage = () => {
             />
             <FormControl size="small" sx={{ minWidth: { xs: 0, sm: 160 } }}>
               <InputLabel>Status</InputLabel>
-              <Select value={status} label="Status" onChange={(e) => setStatus(e.target.value)}>
+              <Select value={status} label="Status" onChange={(e) => updateQuery({ status: e.target.value, page: null })}>
                 <MenuItem value="">All</MenuItem>
                 {ORDER_STATUS_OPTIONS.map((statusOption) => (
                   <MenuItem key={statusOption} value={statusOption}>
@@ -532,7 +524,7 @@ const OrdersManagePage = () => {
             </FormControl>
             <FormControl size="small" sx={{ minWidth: { xs: 0, sm: 190 } }}>
               <InputLabel>Delivery status</InputLabel>
-              <Select value={shippingStatus} label="Delivery status" onChange={(e) => setShippingStatus(e.target.value)}>
+              <Select value={shippingStatus} label="Delivery status" onChange={(e) => updateQuery({ orderShippingStatus: e.target.value, page: null })}>
                 <MenuItem value="">All delivery statuses</MenuItem>
                 {['not_shipped', 'partially_shipped', 'shipped', 'out_for_delivery', 'partially_out_for_delivery', 'delivery_failed', 'partially_delivered', 'delivered', 'rto_initiated', 'partially_rto', 'rto'].map((value) => (
                   <MenuItem key={value} value={value}>{getShipmentStatusLabel(value)}</MenuItem>
@@ -543,12 +535,7 @@ const OrdersManagePage = () => {
           <Stack direction="row" spacing={1}>
             <Button
               variant="text"
-              onClick={() => {
-                setSearchInput('');
-                setStatus('');
-                setShippingStatus('');
-                setPaginationModel((current) => ({ ...current, page: 0 }));
-              }}
+              onClick={clearFilters}
               disabled={!searchInput && !status && !shippingStatus}
             >
               Clear filters
@@ -600,7 +587,7 @@ const OrdersManagePage = () => {
           autoHeight
           slots={{ noRowsOverlay: EmptyOrdersOverlay }}
           slotProps={{ loadingOverlay: { variant: orders.length ? 'linear-progress' : 'circular-progress', noRowsVariant: 'circular-progress' } }}
-          onRowClick={(params) => navigate(`/admin/orders/${params.id}`)}
+          onRowClick={(params) => navigate(`/admin/orders/${params.id}`, { state: { returnTo } })}
           sx={{
             border: 0,
             '& .MuiDataGrid-columnHeaders': {
