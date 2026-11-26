@@ -18,6 +18,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import BlockIcon from '@mui/icons-material/Block';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { useNavigate } from 'react-router-dom';
+import useAdminListQuery from '../../hooks/useAdminListQuery';
 import { getUsers, updateUserStatus } from '../../services/adminService';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../hooks/useAuth';
@@ -29,10 +30,10 @@ const CustomersPage = () => {
   const narrow = useMediaQuery('(max-width: 850px)');
   const phone = useMediaQuery('(max-width: 600px)');
   const [rows, setRows] = useState([]);
-  const [total, setTotal] = useState(0);
+  const [total, setTotal] = useState(-1);
   const [loading, setLoading] = useState(true);
-  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
-  const [search, setSearch] = useState('');
+  const { params, updateQuery, paginationModel, setPaginationModel, returnTo } = useAdminListQuery(20, 100);
+  const search = params.get('search') || '';
   const navigate = useNavigate();
   const { notify } = useNotification();
   const { hasPermission } = useAuth();
@@ -85,7 +86,7 @@ const CustomersPage = () => {
         <Typography
           component="button"
           type="button"
-          onClick={() => navigate(`/admin/customers/${row.id}`)}
+          onClick={() => navigate(`/admin/customers/${row.id}`, { state: { returnTo } })}
           aria-label={`View customer ${[row.firstName, row.lastName].filter(Boolean).join(' ') || row.email}`}
           sx={{ p: 0, border: 0, background: 'none', color: 'primary.main', font: 'inherit', textAlign: 'left', cursor: 'pointer', '&:hover': { textDecoration: 'underline' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
         >
@@ -132,7 +133,7 @@ const CustomersPage = () => {
       renderCell: ({ row }) => (
         <Stack direction="row" spacing={0.5}>
           <Tooltip title="View customer">
-            <IconButton size="small" color="primary" onClick={() => navigate(`/admin/customers/${row.id}`)}>
+            <IconButton size="small" color="primary" onClick={() => navigate(`/admin/customers/${row.id}`, { state: { returnTo } })}>
               <VisibilityIcon fontSize="small" />
             </IconButton>
           </Tooltip>
@@ -166,7 +167,7 @@ const CustomersPage = () => {
           size="small"
           label="Search"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => updateQuery({ search: e.target.value, page: null })}
           sx={{ width: 240 }}
         />
       </Stack>
@@ -189,9 +190,10 @@ const CustomersPage = () => {
           rowCount={total}
           loading={loading}
           paginationMode="server"
+          pageSizeOptions={[10, 20, 50, 100]}
           paginationModel={paginationModel}
           onPaginationModelChange={setPaginationModel}
-          onRowDoubleClick={(params) => navigate(`/admin/customers/${params.row.id}`)}
+          onRowDoubleClick={(params) => navigate(`/admin/customers/${params.row.id}`, { state: { returnTo } })}
           disableRowSelectionOnClick
         />
       </Box>

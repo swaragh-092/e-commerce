@@ -23,7 +23,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import PrintIcon from '@mui/icons-material/Print';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
@@ -1129,6 +1129,7 @@ const ShipmentExpectedDeliveryControl = ({ shipment }) => {
 const OrderDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const returnTo = useLocation().state?.returnTo || '/admin/orders';
   const { formatPrice } = useCurrency();
   const { hasPermission } = useAuth();
   const canViewCustomers = useFeature('customers') && hasPermission(PERMISSIONS.CUSTOMERS_READ);
@@ -1576,7 +1577,7 @@ const OrderDetailPage = () => {
         }}
       >
         <Box>
-          <Button variant="outlined" size="small" sx={{ mb: 1.5 }} onClick={() => navigate('/admin/orders')}>
+          <Button variant="outlined" size="small" sx={{ mb: 1.5 }} onClick={() => navigate(returnTo)}>
             ← Back
           </Button>
           <Stack direction="row" spacing={1.5} alignItems="center" useFlexGap flexWrap="wrap">

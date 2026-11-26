@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Box, Typography, Button, Chip, IconButton, TextField,
   FormControl, InputLabel, Select, MenuItem, Stack, Tooltip,
@@ -15,7 +15,7 @@ import {
   Inventory as InventoryIcon, History as HistoryIcon,
   LocalOffer as LocalOfferIcon,
 } from '@mui/icons-material';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { getProducts, getProductById, deleteProduct, updateProduct, bulkUpdateSale, bulkDeleteProducts, bulkUpdateProducts, getStockHistory } from '../../services/productService';
 import attributeService from '../../services/attributeService';
 import BulkProductTagsDialog from '../../components/admin/BulkProductTagsDialog';
@@ -29,9 +29,11 @@ import { useCurrency, useSettings, useFeature, useFeatureVisible } from '../../h
 import { useNotification } from '../../context/NotificationContext';
 import { formatSaleDateTime, isEndingSoon } from '../../utils/pricing';
 import { useAuth } from '../../hooks/useAuth';
+import useAdminListQuery from '../../hooks/useAdminListQuery';
+import useAdminListSearch from '../../hooks/useAdminListSearch';
 import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
-import { formatOpenEndedDateRange, toDateTimeLocal } from '../../utils/dates';
+import { formatOpenEndedDateRange, toDateTimeLocal, formatDateOnly } from '../../utils/dates';
 import {
   PRODUCT_STOREFRONT_STATES,
   PRODUCT_STOREFRONT_STATE_LABELS,
@@ -48,71 +50,9 @@ const normalizeInventoryThreshold = (threshold) => {
 };
 const toIsoOrNull = (value) => (value ? new Date(value).toISOString() : null);
 
-const SummaryCard = ({ label, value, tone = 'default' }) => (
-  <Paper
-    elevation={0}
-    sx={{
-      p: 2,
-      minWidth: 170,
-      flex: '1 1 0',
-      borderRadius: 3,
-      border: '1px solid',
-      borderColor: tone === 'warning' ? 'warning.light' : tone === 'error' ? 'error.light' : 'divider',
-      bgcolor: 'background.paper',
-    }}
-  >
-    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-      {label}
-    </Typography>
-    <Typography variant="h6" fontWeight={700}>
-      {value}
-    </Typography>
-  </Paper>
-);
-
-const ClickableSummaryCard = ({ label, value, tone = 'default', onClick, active }) => (
-  <Paper
-    elevation={0}
-    onClick={onClick}
-    onKeyDown={(e) => {
-      if (onClick && (e.key === 'Enter' || e.key === ' ')) {
-        e.preventDefault();
-        onClick(e);
-      }
-    }}
-    role={onClick ? "button" : undefined}
-    tabIndex={onClick ? 0 : undefined}
-    aria-pressed={onClick ? active : undefined}
-    sx={{
-      p: 2,
-      minWidth: 170,
-      flex: '1 1 0',
-      borderRadius: 3,
-      border: '1px solid',
-      borderColor: active ? 'primary.main' : 'divider',
-      bgcolor: active ? 'action.hover' : 'background.paper',
-      cursor: onClick ? 'pointer' : 'default',
-      transition: 'all 0.2s',
-      '&:hover': onClick ? {
-        borderColor: 'primary.main',
-        bgcolor: 'action.hover',
-      } : {},
-    }}
-  >
-    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-      {label}
-    </Typography>
-    <Typography variant="h6" fontWeight={700} color={tone === 'error' ? 'error.main' : tone === 'warning' ? 'warning.main' : 'text.primary'}>
-      {value}
-    </Typography>
-  </Paper>
-);
-
 const ProductsManagePage = () => {
   const navigate = useNavigate();
-  const location = useLocation();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const returnTo = `${location.pathname}${location.search}`;
+  const { params: searchParams, updateQuery, paginationModel, setPaginationModel, returnTo } = useAdminListQuery(20, 100);
   const { symbol, formatPrice } = useCurrency();
   const { settings } = useSettings();
   const { notify } = useNotification();
@@ -132,55 +72,25 @@ const ProductsManagePage = () => {
   const canUpdateProducts = hasPermission(PERMISSIONS.PRODUCTS_UPDATE);
   const canDeleteProducts = hasPermission(PERMISSIONS.PRODUCTS_DELETE);
   const canBulkSaleProducts = hasPermission(PERMISSIONS.PRODUCTS_BULK_SALE);
-  const canBulkModify = canUpdateProducts || canDeleteProducts || canBulkSaleProducts;
 
   const [rows, setRows] = useState([]);
-  const [total, setTotal] = useState(0);
+  const [total, setTotal] = useState(-1);
   const [loading, setLoading] = useState(true);
-  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
 
-  // Filters – initialise from URL query params so dashboard cards can pre-apply filters
-  const urlSearch = searchParams.get('search') || '';
-  const urlStatus = searchParams.get('status') || '';
-  const urlCategory = searchParams.get('category') || '';
-  const urlLowStockOnly = searchParams.get('stock') === 'low';
-  const lastUrlSearch = useRef(urlSearch);
+  const search = searchParams.get('search') || '';
   const requestVersion = useRef(0);
-  const [search, setSearch] = useState(() => searchParams.get('search') || '');
-  const [searchInput, setSearchInput] = useState(() => searchParams.get('search') || '');
-  const [status, setStatus] = useState(() => searchParams.get('status') || '');
-  const [saleFilter, setSaleFilter] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState(() => searchParams.get('category') || '');
-  const [selectedBrand, setSelectedBrand] = useState('');
-  const [brands, setBrands] = useState([]);
-  const brandFilter = brandsEnabled ? selectedBrand : '';
+  const { searchInput, setSearchInput, applySearch } = useAdminListSearch(search, updateQuery, 400);
+  const status = searchParams.get('status') || '';
+  const saleFilter = pricingEnabled ? searchParams.get('saleStatus') || '' : '';
+  const categoryFilter = searchParams.get('category') || '';
+  const brandFilter = brandsEnabled ? searchParams.get('brand') || '' : '';
   const tagFilter = searchParams.get('tags') || '';
+  const lowStockOnly = searchParams.get('stock') === 'low';
+  const [brands, setBrands] = useState([]);
   const [flatCategories, setFlatCategories] = useState([]);
   const [saleLabels, setSaleLabels] = useState([]);
-  // ?stock=low from dashboard → show only items with qty ≤ lowStockThreshold
-  const [lowStockOnly, setLowStockOnly] = useState(() => searchParams.get('stock') === 'low');
-
-  // Sync each URL field independently: unrelated filter changes must not
-  // restore the previous URL query over a draft the user is still editing.
-  useEffect(() => {
-    setStatus((current) => current === urlStatus ? current : urlStatus);
-    setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
-  }, [urlStatus]);
-  useEffect(() => {
-    setCategoryFilter((current) => current === urlCategory ? current : urlCategory);
-    setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
-  }, [urlCategory]);
-  useEffect(() => {
-    setLowStockOnly((current) => current === urlLowStockOnly ? current : urlLowStockOnly);
-    setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
-  }, [urlLowStockOnly]);
-  useEffect(() => {
-    if (lastUrlSearch.current === urlSearch) return;
-    lastUrlSearch.current = urlSearch;
-    setSearch(urlSearch);
-    setSearchInput(urlSearch);
-    setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
-  }, [urlSearch]);
+  const selectedCategory = flatCategories.find((category) => category.id === categoryFilter);
+  const selectedBrand = brands.find((brand) => brand.id === brandFilter);
 
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState([]);
@@ -190,7 +100,13 @@ const ProductsManagePage = () => {
   const [deleteDialog, setDeleteDialog] = useState({ open: false, id: null, name: '', bulk: false });
 
   // Server-side sorting
-  const [sortModel, setSortModel] = useState([]);
+  const sortBy = searchParams.get('sortBy');
+  const sortOrder = searchParams.get('sortOrder');
+  const sortModel = useMemo(() => (
+    ['name', 'price', 'quantity', 'updatedAt'].includes(sortBy) && ['asc', 'desc'].includes(sortOrder)
+      ? [{ field: sortBy, sort: sortOrder }]
+      : []
+  ), [sortBy, sortOrder]);
 
   // Quick-edit dialog (stock + MRP + sale + storefront state)
   const [editDialog, setEditDialog] = useState({
@@ -222,7 +138,7 @@ const ProductsManagePage = () => {
     saving: false,
   });
   const [counts, setCounts] = useState({ published: 0, paused: 0, draft: 0, archived: 0 });
-  const hasActiveFilters = Boolean(search || status || saleFilter || categoryFilter || brandFilter || tagFilter || lowStockOnly);
+  const hasActiveFilters = Boolean(searchInput || search || status || saleFilter || categoryFilter || brandFilter || tagFilter || lowStockOnly);
 
   // Step amount for the stock stepper — persists between quick-edit opens
   // Stock history dialog
@@ -419,20 +335,23 @@ const ProductsManagePage = () => {
     }
   };
 
-  // CSV export — exports the current page's visible rows
-  const handleExportCSV = () => {
-    const headers = ['Name', 'SKU', 'MRP', 'Sale Price', 'Stock', 'Storefront state'];
+  const handleExportCSV = (products) => {
+    const headers = ['Name', 'SKU', ...(pricingEnabled ? ['MRP', 'Sale Price'] : []), ...(cartEnabled ? ['Stock'] : []), 'Status'];
+    const csvCell = (value) => {
+      const text = String(value ?? '');
+      const safe = /^\s*[=+@-]|^[\t\r\n]/.test(text) ? `'${text}` : text;
+      return '"' + safe.replace(/"/g, '""') + '"';
+    };
     const csvRows = [headers.join(',')];
-    rows.forEach((r) => {
+    products.forEach((r) => {
       const total = Number(r?.quantity || 0);
       const reserved = Number(r?.reservedQty || 0);
       const available = Math.max(0, total - reserved);
       csvRows.push([
-        `"${(r.name || '').replace(/"/g, '""')}"`,
-        `"${r.sku || ''}"`,
-        r.price,
-        r.salePrice ?? '',
-        available,
+        csvCell(r.name),
+        csvCell(r.sku),
+        ...(pricingEnabled ? [r.price, r.salePrice ?? ''] : []),
+        ...(cartEnabled ? [available] : []),
         PRODUCT_STOREFRONT_STATE_LABELS[getProductStorefrontState(r)],
       ].join(','));
     });
@@ -525,46 +444,21 @@ const ProductsManagePage = () => {
   }, [paginationModel, search, status, saleFilter, categoryFilter, brandFilter, tagFilter, sortModel, lowStockOnly, lowStockThreshold]);
 
   useEffect(() => {
+    setSelectedIds([]);
     fetchProducts();
     return () => { requestVersion.current += 1; };
   }, [fetchProducts]);
 
-  const applySearch = useCallback((value) => {
-    const query = value.trim();
-    const nextParams = new URLSearchParams(searchParams);
-    if (query) nextParams.set('search', query);
-    else nextParams.delete('search');
-    // Mark our own navigation so URL synchronization cannot restore stale text.
-    lastUrlSearch.current = query;
-    setSearchInput(value);
-    setSearch(query);
-    setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
-    if (nextParams.toString() !== searchParams.toString()) {
-      setSearchParams(nextParams, { replace: true });
-    }
-  }, [searchParams, setSearchParams]);
-
-  useEffect(() => {
-    if (searchInput.trim() === search) return;
-    const timer = setTimeout(() => applySearch(searchInput), 400);
-    return () => clearTimeout(timer);
-  }, [searchInput, search, applySearch]);
-
-  const handleStatusChange = (val) => {
-    setStatus(val);
-    setPaginationModel((prev) => ({ ...prev, page: 0 }));
+  const handleStatusChange = (status, lowStock = false) => {
+    updateQuery({ status, stock: lowStock ? 'low' : null, page: null });
   };
 
-  const handleCategoryChange = (value) => {
-    const nextParams = new URLSearchParams(searchParams);
-    if (value) nextParams.set('category', value);
-    else nextParams.delete('category');
-    setCategoryFilter(value);
-    setPaginationModel((current) => current.page === 0 ? current : { ...current, page: 0 });
-    if (nextParams.toString() !== searchParams.toString()) {
-      setSearchParams(nextParams, { replace: true });
-    }
-  };
+  const clearFilters = () => applySearch('', { status: null, category: null, tags: null, stock: null, saleStatus: null, brand: null });
+
+  const handleCategoryChange = (category) => updateQuery({ category, page: null });
+  const handleTagChange = (tags) => updateQuery({ tags, page: null });
+  const handleSaleFilterChange = (saleStatus) => updateQuery({ saleStatus, page: null });
+  const handleBrandChange = (brand) => updateQuery({ brand, page: null });
 
   // ── Actions ─────────────────────────────────────────────────
   const confirmDelete = (id, name, bulk = false) => {
@@ -764,7 +658,8 @@ const ProductsManagePage = () => {
       field: 'name',
       headerName: 'Product',
       flex: 1,
-      minWidth: isSmallScreen ? 112 : isTabletScreen ? 180 : 200,
+      minWidth: isSmallScreen ? 150 : 220,
+      maxWidth: 420,
       sortable: true,
       renderCell: ({ row }) => (
         <Box
@@ -796,6 +691,60 @@ const ProductsManagePage = () => {
           </Typography>
         </Box>
       ),
+    },
+    {
+      field: 'storefrontState',
+      headerName: 'Status',
+      width: 130,
+      sortable: false,
+      renderCell: ({ row }) => {
+        const state = getProductStorefrontState(row);
+        const badge = (
+          <Chip
+            size="small"
+            label={PRODUCT_STOREFRONT_STATE_LABELS[state]}
+            color={{ published: 'success', paused: 'warning', draft: 'info', archived: 'default' }[state]}
+            variant={state === 'archived' ? 'outlined' : 'filled'}
+          />
+        );
+        if (!canUpdateProducts) return badge;
+        return (
+          <Select
+            size="small"
+            variant="standard"
+            disableUnderline
+            value={state}
+            onChange={(event) => handleChangeStorefrontState(row, event.target.value)}
+            renderValue={() => badge}
+            SelectDisplayProps={{
+              'aria-label': 'Status for ' + row.name,
+              'aria-description': getProductStorefrontStateHelp(state),
+            }}
+            sx={{ '& .MuiSelect-select': { py: 0.5 } }}
+          >
+            {Object.values(PRODUCT_STOREFRONT_STATES).map((option) => (
+              <MenuItem key={option} value={option}>{PRODUCT_STOREFRONT_STATE_LABELS[option]}</MenuItem>
+            ))}
+          </Select>
+        );
+      },
+    },
+    {
+      field: 'categories',
+      headerName: 'Category',
+      flex: 1,
+      minWidth: 145,
+      sortable: false,
+      renderCell: ({ row }) => {
+        const names = (row.categories || []).map((category) => category.name).filter(Boolean).join(', ');
+        return <Typography variant="body2" noWrap title={names || undefined}>{names || '—'}</Typography>;
+      },
+    },
+    {
+      field: 'updatedAt',
+      headerName: 'Last updated',
+      width: 145,
+      renderCell: ({ row }) => formatDateOnly(row.updatedAt) || '—',
     },
     // 3. Merged price: sale price prominent + original struck-through
     {
@@ -922,30 +871,6 @@ const ProductsManagePage = () => {
         );
       },
     },
-    // 5. One control for the product's effective storefront state.
-    {
-      field: 'storefrontState',
-      headerName: 'Storefront state',
-      width: 170,
-      sortable: false,
-      renderCell: ({ row }) => (
-        <FormControl size="small" fullWidth>
-          <Select
-            value={getProductStorefrontState(row)}
-            onChange={(event) => handleChangeStorefrontState(row, event.target.value)}
-            disabled={!canUpdateProducts}
-            SelectDisplayProps={{
-              'aria-label': `Storefront state for ${row.name}`,
-              'aria-description': getProductStorefrontStateHelp(getProductStorefrontState(row)),
-            }}
-          >
-            {Object.values(PRODUCT_STOREFRONT_STATES).map((state) => (
-              <MenuItem key={state} value={state}>{PRODUCT_STOREFRONT_STATE_LABELS[state]}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      ),
-    },
     // 6. Actions: quick-edit | edit | view on storefront | delete
     {
       field: 'actions',
@@ -1015,22 +940,12 @@ const ProductsManagePage = () => {
       {hasActiveFilters ? (
         <Button
           variant="outlined"
-          onClick={() => {
-            setSearchInput('');
-            setSearch('');
-            setStatus('');
-            setSaleFilter('');
-            setCategoryFilter('');
-            setSelectedBrand('');
-            setSearchParams({});
-            setLowStockOnly(false);
-            setPaginationModel((p) => ({ ...p, page: 0 }));
-          }}
+          onClick={clearFilters}
         >
           Clear filters
         </Button>
       ) : canCreateProducts ? (
-        <Button variant="contained" startIcon={<AddIcon />} component={Link} to="/admin/products/new">
+        <Button variant="contained" startIcon={<AddIcon />} component={Link} to="/admin/products/new" state={{ returnTo }}>
           Add first product
         </Button>
       ) : null}
@@ -1039,61 +954,6 @@ const ProductsManagePage = () => {
 
   return (
     <Box>
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} mb={3}>
-        <ClickableSummaryCard 
-          label="Total Products" 
-          value={total} 
-          active={status === '' && !lowStockOnly}
-          onClick={() => {
-            setStatus('');
-            setLowStockOnly(false);
-            setPaginationModel(p => ({ ...p, page: 0 }));
-          }}
-        />
-        <ClickableSummaryCard 
-          label="Published"
-          value={counts.published || 0} 
-          tone="success"
-          active={status === 'published' && !lowStockOnly}
-          onClick={() => {
-            setStatus('published');
-            setLowStockOnly(false);
-            setPaginationModel(p => ({ ...p, page: 0 }));
-          }}
-        />
-        <ClickableSummaryCard
-          label="Paused"
-          value={counts.paused || 0}
-          tone="warning"
-          active={status === 'paused' && !lowStockOnly}
-          onClick={() => {
-            setStatus('paused');
-            setLowStockOnly(false);
-            setPaginationModel(p => ({ ...p, page: 0 }));
-          }}
-        />
-        <ClickableSummaryCard 
-          label="Drafts" 
-          value={counts.draft || 0} 
-          active={status === 'draft' && !lowStockOnly}
-          onClick={() => {
-            setStatus('draft');
-            setLowStockOnly(false);
-            setPaginationModel(p => ({ ...p, page: 0 }));
-          }}
-        />
-        <ClickableSummaryCard 
-          label="Low Stock" 
-          value={counts.lowStock ?? `≤ ${lowStockThreshold}`} 
-          tone="warning"
-          active={lowStockOnly}
-          onClick={() => {
-            setStatus('');
-            setLowStockOnly(true);
-            setPaginationModel(p => ({ ...p, page: 0 }));
-          }}
-        />
-      </Stack>
       <Box
         sx={{
           display: 'flex',
@@ -1101,12 +961,14 @@ const ProductsManagePage = () => {
           justifyContent: 'space-between',
           alignItems: { xs: 'flex-start', sm: 'center' },
           gap: { xs: 1.5, sm: 2 },
-          mb: 3,
+          mb: 2,
         }}
       >
         <Box>
-          <Typography variant="h5" component="h1" fontWeight={700}>Manage Products</Typography>
-          <Typography variant="body2" color="text.secondary">{total} {total === 1 ? 'product' : 'products'} total</Typography>
+          <Typography variant="h5" component="h1" fontWeight={700}>Products</Typography>
+          <Typography role="status" variant="body2" color="text.secondary">
+            {loading ? 'Loading products…' : `${total} ${total === 1 ? 'product' : 'products'} ${hasActiveFilters ? 'found' : 'total'}`}
+          </Typography>
         </Box>
         <Stack
           direction="row"
@@ -1118,51 +980,52 @@ const ProductsManagePage = () => {
             rowGap: 1,
           }}
         >
-          <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleExportCSV} disabled={rows.length === 0}>
-            Export CSV
+          <Button variant="outlined" startIcon={<DownloadIcon />} onClick={() => handleExportCSV(rows)} disabled={loading || rows.length === 0}>
+            Export current page CSV
           </Button>
           {canCreateProducts && (
-            <Button variant="contained" startIcon={<AddIcon />} component={Link} to="/admin/products/new">
+            <Button variant="contained" startIcon={<AddIcon />} component={Link} to="/admin/products/new" state={{ returnTo }}>
               Add Product
             </Button>
           )}
         </Stack>
       </Box>
 
-      {/* ── Low-stock filter banner (from dashboard card click) ── */}
-      {lowStockOnly && (
-        <Paper
-          elevation={0}
-          sx={{
-            mb: 2, px: 2, py: 1,
-            display: 'flex', alignItems: 'center', gap: 2,
-            border: '1px solid', borderColor: 'warning.light',
-            borderRadius: 2, bgcolor: 'warning.50',
-          }}
-        >
-          <InventoryIcon color="warning" fontSize="small" />
-          <Typography variant="body2" fontWeight={600} color="warning.dark" sx={{ flexGrow: 1 }}>
-            Showing low-stock products (qty ≤ {lowStockThreshold})
-          </Typography>
-          <Button
-            size="small"
-            variant="outlined"
-            color="warning"
-            onClick={() => setLowStockOnly(false)}
-          >
-            Clear filter
-          </Button>
-        </Paper>
-      )}
+      <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" mb={2} role="group" aria-label="Quick filters">
+        {[
+          { label: 'All', value: '', count: Object.values(PRODUCT_STOREFRONT_STATES).reduce((sum, state) => sum + (counts[state] || 0), 0) },
+          { label: 'Published', value: 'published', count: counts.published },
+          { label: 'Paused', value: 'paused', count: counts.paused },
+          { label: 'Drafts', value: 'draft', count: counts.draft },
+          ...(cartEnabled || lowStockOnly ? [{
+            label: 'Low Stock',
+            value: '',
+            lowStock: true,
+            count: lowStockOnly ? total : counts.lowStock,
+          }] : []),
+        ].map(({ label, value, lowStock = false, count }) => {
+          const active = status === value && lowStockOnly === lowStock;
+          return (
+            <Button
+              key={label} size="small" aria-pressed={active}
+              variant={active ? 'contained' : 'outlined'} color={active ? 'primary' : 'inherit'}
+              onClick={() => handleStatusChange(value, lowStock)}
+            >
+              {label}{!loading && count != null ? ` (${count})` : ''}
+            </Button>
+          );
+        })}
+      </Stack>
 
       {/* ── Filters ── */}
       <Stack direction="row" spacing={2} mb={2} flexWrap="wrap" alignItems="center" useFlexGap sx={{ rowGap: 1.5 }}>
         <TextField
           size="small"
-          label="Search name / description"
+          label="Search products by name or SKU"
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          sx={{ minWidth: 260 }}
+          sx={{ width: { xs: '100%', sm: 285 } }}
+          InputLabelProps={{ shrink: true }}
           InputProps={{
             endAdornment: searchInput ? (
               <InputAdornment position="end">
@@ -1173,13 +1036,14 @@ const ProductsManagePage = () => {
             ) : null,
           }}
         />
-        <FormControl size="small" sx={{ minWidth: 210, flexShrink: 0 }}>
-          <InputLabel id="storefront-state-filter-label">Storefront state</InputLabel>
+        <FormControl size="small" sx={{ minWidth: 140, flexShrink: 0 }}>
+          <InputLabel id="storefront-state-filter-label" shrink>Status</InputLabel>
           <Select
             value={status}
             labelId="storefront-state-filter-label"
-            label="Storefront state"
-            onChange={(e) => { setStatus(e.target.value); setPaginationModel((p) => ({ ...p, page: 0 })); }}
+            label="Status"
+            displayEmpty
+            onChange={(e) => handleStatusChange(e.target.value)}
           >
             <MenuItem value="">All</MenuItem>
             <MenuItem value="published">Published</MenuItem>
@@ -1190,11 +1054,13 @@ const ProductsManagePage = () => {
         </FormControl>
         {pricingEnabled && (
           <FormControl size="small" sx={{ minWidth: 160 }}>
-            <InputLabel>Sale</InputLabel>
+            <InputLabel id="product-sale-filter-label" shrink>Sale</InputLabel>
             <Select
               value={saleFilter}
               label="Sale"
-              onChange={(e) => { setSaleFilter(e.target.value); setPaginationModel((p) => ({ ...p, page: 0 })); }}
+              labelId="product-sale-filter-label"
+              displayEmpty
+              onChange={(e) => handleSaleFilterChange(e.target.value)}
             >
               <MenuItem value="">All Sales</MenuItem>
               <MenuItem value="active">Active</MenuItem>
@@ -1204,15 +1070,17 @@ const ProductsManagePage = () => {
             </Select>
           </FormControl>
         )}
-        <FormControl size="small" sx={{ minWidth: 220 }}>
-          <InputLabel id="category-filter-label">Category</InputLabel>
+        <FormControl size="small" sx={{ minWidth: 170 }}>
+          <InputLabel id="category-filter-label" shrink>Category</InputLabel>
           <Select
             value={categoryFilter}
             labelId="category-filter-label"
             label="Category"
+            displayEmpty
             onChange={(e) => handleCategoryChange(e.target.value)}
           >
             <MenuItem value="">All Categories</MenuItem>
+            {categoryFilter && !selectedCategory && <MenuItem value={categoryFilter}>Selected category</MenuItem>}
             {flatCategories.map((c) => (
               <MenuItem key={c.id} value={c.id}>{c.label}</MenuItem>
             ))}
@@ -1226,30 +1094,37 @@ const ProductsManagePage = () => {
               label="Brand"
               value={brandFilter}
               displayEmpty
-              onChange={(event) => {
-                setSelectedBrand(event.target.value);
-                setPaginationModel((current) => ({ ...current, page: 0 }));
-              }}
+              onChange={(event) => handleBrandChange(event.target.value)}
             >
               <MenuItem value="">All Brands</MenuItem>
+              {brandFilter && !selectedBrand && <MenuItem value={brandFilter}>Selected brand</MenuItem>}
               {brands.map((brand) => (
                 <MenuItem key={brand.id} value={brand.id}>{brand.name}</MenuItem>
               ))}
             </Select>
           </FormControl>
         )}
-        <ProductTagFilter value={tagFilter} onChange={(value) => {
-          const next = new URLSearchParams(searchParams);
-          if (value) next.set('tags', value); else next.delete('tags');
-          setSearchParams(next);
-          setPaginationModel((current) => ({ ...current, page: 0 }));
-        }} />
+        <ProductTagFilter value={tagFilter} onChange={handleTagChange} />
       </Stack>
+      {hasActiveFilters && (
+        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center" mb={2} role="group" aria-label="Active filters">
+          {search && <Chip size="small" label={`Search: ${search}`} onDelete={() => applySearch('')} />}
+          {status && <Chip size="small" label={PRODUCT_STOREFRONT_STATE_LABELS[status] || status} onDelete={() => handleStatusChange('')} />}
+          {lowStockOnly && <Chip size="small" label={`Stock ≤ ${lowStockThreshold}`} onDelete={() => handleStatusChange('')} />}
+          {saleFilter && <Chip size="small" label={`Sale: ${saleFilter}`} onDelete={() => handleSaleFilterChange('')} />}
+          {categoryFilter && <Chip size="small" label={selectedCategory?.label || 'Selected category'} onDelete={() => handleCategoryChange('')} />}
+          {brandFilter && <Chip size="small" label={selectedBrand?.name || 'Selected brand'} onDelete={() => handleBrandChange('')} />}
+          {tagFilter && <Chip size="small" label={`Tag: ${tagFilter}`} onDelete={() => handleTagChange('')} />}
+          <Button size="small" onClick={clearFilters}>Clear all</Button>
+        </Stack>
+      )}
 
       {/* ── Bulk actions bar (only shown when rows are selected) ── */}
-      {selectedIds.length > 0 && canBulkModify && (
+      {selectedIds.length > 0 && (
         <Paper
           elevation={0}
+          role="group"
+          aria-label="Selected product actions"
           sx={{
             mb: 1.5, px: 2, py: 1,
             display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap',
@@ -1260,12 +1135,14 @@ const ProductsManagePage = () => {
           <Typography variant="body2" fontWeight={600} color="primary.main">
             {selectedIds.length} selected
           </Typography>
+          {canUpdateProducts && <Button size="small" onClick={() => handleBulkStorefrontState(PRODUCT_STOREFRONT_STATES.PUBLISHED)}>Publish</Button>}
+          {canUpdateProducts && <Button size="small" onClick={() => handleBulkStorefrontState(PRODUCT_STOREFRONT_STATES.PAUSED)}>Pause</Button>}
           {canUpdateProducts && (
-            <FormControl size="small" sx={{ minWidth: 190 }}>
-              <InputLabel id="bulk-storefront-state-label">Set storefront state</InputLabel>
+            <FormControl size="small" sx={{ minWidth: 135 }}>
+              <InputLabel id="bulk-storefront-state-label">Set status</InputLabel>
               <Select
                 labelId="bulk-storefront-state-label"
-                label="Set storefront state"
+                label="Set status"
                 value=""
                 onChange={(event) => handleBulkStorefrontState(event.target.value)}
               >
@@ -1296,8 +1173,12 @@ const ProductsManagePage = () => {
               </Button>
             </>
           )}
+          <Button size="small" startIcon={<DownloadIcon />} disabled={loading || !rows.some((row) => selectedIds.includes(row.id))}
+            onClick={() => handleExportCSV(rows.filter((row) => selectedIds.includes(row.id)))}>
+            Export selected CSV
+          </Button>
           <Button size="small" color="inherit" onClick={() => setSelectedIds([])}>
-            Cancel
+            Clear selection
           </Button>
         </Paper>
       )}
@@ -1321,21 +1202,20 @@ const ProductsManagePage = () => {
             price: pricingEnabled && !isTabletScreen,
             saleMeta: pricingEnabled && !isCompactScreen,
             quantity: cartEnabled && !isCompactScreen,
-            storefrontState: !isTabletScreen,
+            storefrontState: !isSmallScreen,
+            categories: !isTabletScreen,
+            updatedAt: !isCompactScreen,
           }}
           rowCount={total}
           loading={loading}
           paginationMode="server"
           paginationModel={paginationModel}
-          onPaginationModelChange={(newModel) => setPaginationModel(newModel)}
+          onPaginationModelChange={setPaginationModel}
           pageSizeOptions={[10, 20, 50, 100]}
           sortingMode="server"
           sortModel={sortModel}
-          onSortModelChange={(m) => { 
-            setSortModel(m); 
-            setPaginationModel((p) => ({ ...p, page: 0 })); 
-          }}
-          checkboxSelection={canBulkModify && !isSmallScreen}
+          onSortModelChange={([sort]) => updateQuery({ sortBy: sort?.field, sortOrder: sort?.sort, page: null })}
+          checkboxSelection
           rowSelectionModel={selectedIds}
           onRowSelectionModelChange={(ids) => setSelectedIds(ids)}
           disableRowSelectionOnClick

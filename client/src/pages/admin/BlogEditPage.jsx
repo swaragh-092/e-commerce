@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useLocation, Link, useNavigate, useParams } from 'react-router-dom';
 import {
   Alert,
   Box,
@@ -142,6 +142,7 @@ const BlogEditPage = () => {
   const { id } = useParams();
   const isNew = !id || id === 'new';
   const navigate = useNavigate();
+  const returnTo = useLocation().state?.returnTo || '/admin/blogs';
   const { notify } = useNotification();
   const { hasPermission } = useAuth();
   const canManageBlogs = hasPermission(PERMISSIONS.BLOGS_MANAGE);
@@ -263,8 +264,8 @@ const BlogEditPage = () => {
         const res = await BlogService.adminCreatePost(toPayload());
         const newId = res.data?.id;
         notify('Blog post created.', 'success');
-        if (newId) navigate(`/admin/blogs/${newId}/edit`, { replace: true });
-        else navigate('/admin/blogs');
+        if (newId) navigate(`/admin/blogs/${newId}/edit`, { replace: true, state: { returnTo } });
+        else navigate(returnTo);
       } else {
         const res = await BlogService.adminUpdatePost(id, toPayload());
         setSlug(res.data?.slug || slug);
@@ -290,13 +291,13 @@ const BlogEditPage = () => {
   return (
     <Box sx={{ p: 3 }}>
       <Breadcrumbs sx={{ mb: 2 }}>
-        <Link to="/admin/blogs" style={{ textDecoration: 'none', color: 'inherit' }}>Blogs</Link>
+        <Link to={returnTo} style={{ textDecoration: 'none', color: 'inherit' }}>Blogs</Link>
         <Typography color="text.primary">{isNew ? 'New Post' : 'Edit Post'}</Typography>
       </Breadcrumbs>
 
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3} flexWrap="wrap" gap={2}>
         <Box display="flex" alignItems="center" gap={1}>
-          <IconButton onClick={() => navigate('/admin/blogs')}>
+          <IconButton onClick={() => navigate(returnTo)}>
             <ArrowBackIcon />
           </IconButton>
           <Typography variant="h5" component="h1" fontWeight={700}>{isNew ? 'Create Blog Post' : `Edit: ${form.title}`}</Typography>

@@ -10,9 +10,8 @@ describe('Account deletion validation & grace handling', () => {
     expect(valid.error).toBeUndefined();
   });
 
-  it('validates deleteAccountSchema with oauthProvider for passwordless accounts', () => {
-    const valid = deleteAccountSchema.validate({ oauthProvider: 'google' });
-    expect(valid.error).toBeUndefined();
+  it('rejects a provider name as proof of identity', () => {
+    expect(deleteAccountSchema.validate({ oauthProvider: 'google' }).error).toBeDefined();
   });
 
   it('validates deleteAccountSchema with otp for phone accounts', () => {

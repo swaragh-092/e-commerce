@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import StaffAssignment from '../../components/admin/StaffAssignment';
 import {
   Box,
@@ -36,20 +36,11 @@ import PageSEO from '../../components/common/PageSEO';
 import { useNotification } from '../../context/NotificationContext';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
+import useAdminListQuery from '../../hooks/useAdminListQuery';
+import useAdminListSearch from '../../hooks/useAdminListSearch';
 
 const STATUS_LABELS = { pending: 'Pending', responded: 'Responded', closed: 'Closed (legacy)', closed_converted: 'Closed – Converted', closed_lost: 'Closed – Lost' };
 const ADMIN_PREFIX = import.meta.env.VITE_ADMIN_ROUTE_PREFIX || 'admin';
-
-const useDebounceValue = (value, delay) => {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedValue(value), delay);
-    return () => clearTimeout(timer);
-  }, [value, delay]);
-
-  return debouncedValue;
-};
 
 const EnquiriesPage = () => {
   const compact = useMediaQuery('(max-width: 1200px)');
@@ -57,21 +48,22 @@ const EnquiriesPage = () => {
   const phone = useMediaQuery('(max-width: 600px)');
   const { notify } = useNotification();
   const [rows, setRows] = useState([]);
-  const [rowCount, setRowCount] = useState(0);
+  const [rowCount, setRowCount] = useState(-1);
   const [loading, setLoading] = useState(true);
   const [selectedEnquiry, setSelectedEnquiry] = useState(null);
-  const [statusFilter, setStatusFilter] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const { params, updateQuery, paginationModel, setPaginationModel } = useAdminListQuery(20);
+  const statusFilter = params.get('status') || '';
+  const search = params.get('search') || '';
+  const { searchInput, setSearchInput, applySearch } = useAdminListSearch(search, updateQuery, 300);
   const [replyMode, setReplyMode] = useState(false);
   const [replyMessage, setReplyMessage] = useState('');
   const [statusLoading, setStatusLoading] = useState(false);
   const [replyLoading, setReplyLoading] = useState(false);
   const [replyFeedback, setReplyFeedback] = useState(null);
   const [copiedField, setCopiedField] = useState('');
-  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 });
-  const [sortModel, setSortModel] = useState([{ field: 'createdAt', sort: 'desc' }]);
-
-  const debouncedSearchQuery = useDebounceValue(searchQuery, 300);
+  const sortBy = params.get('sortBy') || 'createdAt';
+  const sortDir = params.get('sortDir') === 'asc' ? 'asc' : 'desc';
+  const sortModel = useMemo(() => [{ field: sortBy, sort: sortDir }], [sortBy, sortDir]);
 
   const fetchEnquiries = useCallback(async () => {
     setLoading(true);
@@ -82,7 +74,7 @@ const EnquiriesPage = () => {
           page: paginationModel.page + 1,
           limit: paginationModel.pageSize,
           status: statusFilter || undefined,
-          search: debouncedSearchQuery || undefined,
+          search: search || undefined,
           sortBy: activeSort.field || 'createdAt',
           sortDir: activeSort.sort || 'desc',
         },
@@ -94,15 +86,11 @@ const EnquiriesPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, debouncedSearchQuery, paginationModel, sortModel, notify]);
+  }, [statusFilter, search, paginationModel, sortModel, notify]);
 
   useEffect(() => {
     fetchEnquiries();
   }, [fetchEnquiries]);
-
-  useEffect(() => {
-    setPaginationModel((prev) => ({ ...prev, page: 0 }));
-  }, [statusFilter, debouncedSearchQuery]);
 
   const handleStatusChange = async (id, newStatus) => {
     if (statusLoading) return;
@@ -247,8 +235,8 @@ const EnquiriesPage = () => {
             <TextField
               size="small"
               placeholder="Search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               sx={{ minWidth: { xs: 0, sm: 240 } }}
               InputProps={{
                 startAdornment: (
@@ -263,7 +251,7 @@ const EnquiriesPage = () => {
               <Select
                 value={statusFilter}
                 label="Status"
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => updateQuery({ status: e.target.value, page: null })}
               >
                 <MenuItem value="">All</MenuItem>
                 <MenuItem value="pending">Pending</MenuItem>
@@ -277,12 +265,8 @@ const EnquiriesPage = () => {
           <Button
             variant="text"
             size="small"
-            onClick={() => {
-              setSearchQuery('');
-              setStatusFilter('');
-              setSortModel([{ field: 'createdAt', sort: 'desc' }]);
-            }}
-            sx={{ display: (searchQuery || statusFilter || sortModel[0]?.field !== 'createdAt' || sortModel[0]?.sort !== 'desc') ? 'inline-flex' : 'none' }}
+            onClick={() => applySearch('', { status: null, sortBy: null, sortDir: null })}
+            sx={{ display: (searchInput || statusFilter || sortModel[0]?.field !== 'createdAt' || sortModel[0]?.sort !== 'desc') ? 'inline-flex' : 'none' }}
           >
             Clear Filter
           </Button>
@@ -312,7 +296,7 @@ const EnquiriesPage = () => {
           paginationModel={paginationModel}
           onPaginationModelChange={setPaginationModel}
           sortModel={sortModel}
-          onSortModelChange={setSortModel}
+          onSortModelChange={([sort]) => updateQuery({ sortBy: sort?.field, sortDir: sort?.sort, page: null })}
           pageSizeOptions={[10, 20, 50]}
           disableRowSelectionOnClick
         />

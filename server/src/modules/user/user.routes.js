@@ -4,6 +4,7 @@ const router = require('express').Router();
 const { authenticate, optionalAuth } = require('../../middleware/auth.middleware');
 const { authorizePermissions } = require('../../middleware/role.middleware');
 const { validate } = require('../../middleware/validate.middleware');
+const { featureGate } = require('../../middleware/featureGate.middleware');
 const { loginLimiter, otpSendLimiter, otpVerifyLimiter, verifyEmailLimiter } = require('../../middleware/rateLimiter.middleware');
 const { 
   updateProfileSchema, 
@@ -13,6 +14,7 @@ const {
   createAddressSchema,
   updateAddressSchema,
   listUsersQuerySchema,
+  deleteAccountSchema,
 } = require('./user.validation');
 const { PERMISSIONS } = require('../../config/permissions');
 const { idParamSchema } = require('../../utils/common.validation');
@@ -31,7 +33,8 @@ router.post('/me/avatar', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT
 router.put('/me/password', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), loginLimiter, validate(changePasswordSchema), userController.changePassword);
 
 // Delete Account (destructive — rate limited)
-router.delete('/me', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), loginLimiter, validate(require('./user.validation').deleteAccountSchema), userController.deleteAccount);
+router.delete('/me', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), featureGate('accountDeletion'), loginLimiter, validate(deleteAccountSchema), userController.deleteAccount);
+router.post('/me/deletion-code', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), featureGate('accountDeletion'), otpSendLimiter, userController.requestDeletionCode);
 router.post('/me/cancel-deletion', authenticate, authorizePermissions(PERMISSIONS.ACCOUNT_SELF), userController.cancelAccountDeletion);
 
 // Session Management

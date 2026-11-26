@@ -542,15 +542,6 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     }
     where[Op.and] = [...(where[Op.and] || []), ...priceFilterConditions];
   }
-  if (filters.maxQty !== undefined && filters.maxQty !== null) {
-    const maxQty = normalizeInventoryThreshold(filters.maxQty);
-    where.status = 'published';
-    where.isEnabled = true;
-    where[Op.and] = [
-      ...(where[Op.and] || []),
-      lowStockProductCondition(maxQty),
-    ];
-  }
   if (brandsVisible && filters.brand) {
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(filters.brand);
     if (isUUID) {
@@ -595,7 +586,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     ];
   }
 
-  const SORTABLE_FIELDS = { price: 'price', quantity: 'quantity', name: 'name', createdAt: 'createdAt' };
+  const SORTABLE_FIELDS = { price: 'price', quantity: 'quantity', name: 'name', createdAt: 'createdAt', updatedAt: 'updatedAt' };
   const ranking = filters.sort === 'best-selling' ? discovery.bestSellers
     : filters.sort === 'most-viewed' ? discovery.mostViewed
     : filters.sort === 'trending' ? discovery.trending : null;
@@ -694,8 +685,18 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     include.push({ model: Category, as: 'categories' });
   }
 
+  const lowStockWhere = (baseWhere, threshold) => ({
+    ...baseWhere,
+    status: 'published',
+    isEnabled: true,
+    [Op.and]: [...(baseWhere[Op.and] || []), lowStockProductCondition(threshold)],
+  });
+  const listingWhere = filters.maxQty == null
+    ? where
+    : lowStockWhere(where, normalizeInventoryThreshold(filters.maxQty));
+
   const { rows, count } = await Product.findAndCountAll({
-    where,
+    where: listingWhere,
     limit: queryLimit,
     offset,
     order,
@@ -704,7 +705,7 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
   });
 
   // Compute actual price range for the current filter context (excluding minPrice/maxPrice)
-  const priceRangeWhere = { ...where };
+  const priceRangeWhere = { ...listingWhere };
   delete priceRangeWhere.price;
   if (priceFilterConditions.length > 0 && Array.isArray(priceRangeWhere[Op.and])) {
     priceRangeWhere[Op.and] = priceRangeWhere[Op.and].filter(
@@ -775,11 +776,9 @@ exports.getProducts = async (filters, page, limit, isAdmin = false) => {
     const catalogSettings = await SettingsService.getByGroup('catalog', { maskSensitive: false });
     const lowStockThreshold = normalizeInventoryThreshold(catalogSettings.lowStockThreshold);
     counts.lowStock = await Product.count({
-      where: {
-        status: 'published',
-        isEnabled: true,
-        [Op.and]: [lowStockProductCondition(lowStockThreshold)],
-      },
+      where: lowStockWhere(countWhere, lowStockThreshold),
+      include: countInclude,
+      distinct: true,
     });
   }
 
