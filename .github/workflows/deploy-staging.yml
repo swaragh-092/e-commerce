@@ -8,9 +8,141 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ec2-staging
+  cancel-in-progress: false
+
 jobs:
   deploy:
     if: github.ref == 'refs/heads/develop'
-    uses: ./.github/workflows/deploy-ec2.yml
-    with:
-      target: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    env:
+      TARGET: staging
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_USER: ${{ secrets.EC2_USER }}
+      APP_DIR: ${{ secrets.APP_DIR }}
+      SITE_URL: ${{ vars.SITE_URL }}
+      VITE_APP_URL: ${{ vars.VITE_APP_URL }}
+      VITE_API_URL: ${{ vars.VITE_API_URL }}
+      WEB_ROOT: ${{ vars.WEB_ROOT }}
+      PM2_APP_NAME: ${{ vars.PM2_APP_NAME }}
+      DEPLOY_ENABLED: ${{ vars.DEPLOY_ENABLED }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Configure and verify SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EXPECTED_FINGERPRINT: ${{ secrets.EC2_HOST_FINGERPRINT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in EC2_HOST EC2_USER APP_DIR DEPLOY_KEY EXPECTED_FINGERPRINT; do
+            if [[ -z "${!key:-}" ]]; then
+              echo "::error::Missing environment secret for $key in $TARGET"
+              exit 1
+            fi
+          done
+          test "$EC2_USER" = ec2-user
+          [[ "$EC2_HOST" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]]
+          test "$PM2_APP_NAME" = ecommerce-api
+          test "$VITE_API_URL" = /api
+          case "$TARGET" in
+            staging)
+              test "$APP_DIR" = /home/ec2-user/e-commerce
+              test "$WEB_ROOT" = /home/ec2-user/e-commerce/client/dist
+              test "$SITE_URL" = https://eshopadmin.swaragh.org.in
+              test "$VITE_APP_URL" = "$SITE_URL"
+              ;;
+            production)
+              test "$APP_DIR" = /home/ec2-user/projects/e-commerce
+              test "$WEB_ROOT" = /var/www/orbis-admin
+              test "$SITE_URL" = https://ad.orbiseeds.com
+              test "$VITE_APP_URL" = https://orbiseeds.com
+              test "$EC2_HOST" = 65.0.174.174
+              ;;
+            *) exit 1 ;;
+          esac
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/ec2_deploy_key
+          ssh-keygen -y -f ~/.ssh/ec2_deploy_key >/dev/null
+          ssh-keyscan -T 10 -t ed25519 "$EC2_HOST" 2>/dev/null > ~/.ssh/ec2_known_hosts
+          actual=$(ssh-keygen -lf ~/.ssh/ec2_known_hosts -E sha256 | awk '{print $2}' | sort -u)
+          test -n "$EXPECTED_FINGERPRINT"
+          test "$actual" = "$EXPECTED_FINGERPRINT" || { echo "SSH host fingerprint mismatch"; exit 1; }
+          cat > ~/.ssh/ec2_deploy_config <<EOF
+          Host ec2-deploy
+            HostName $EC2_HOST
+            User $EC2_USER
+            IdentityFile ~/.ssh/ec2_deploy_key
+            IdentitiesOnly yes
+            BatchMode yes
+            StrictHostKeyChecking yes
+            UserKnownHostsFile ~/.ssh/ec2_known_hosts
+            HostKeyAlgorithms ssh-ed25519
+            ConnectTimeout 15
+            ServerAliveInterval 15
+            ServerAliveCountMax 3
+          EOF
+
+      - name: Read-only server preflight
+        id: preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          prefix=$(ssh -F ~/.ssh/ec2_deploy_config ec2-deploy bash -s -- check "$TARGET" "$GITHUB_REF_NAME" "$APP_DIR" "$WEB_ROOT" "$PM2_APP_NAME" "$GITHUB_SHA" < ops/deploy-ec2.sh)
+          [[ "$prefix" =~ ^[A-Za-z0-9_-]+$ ]]
+          printf 'admin_prefix=%s\n' "$prefix" >> "$GITHUB_OUTPUT"
+          echo "Server identity, branch, configuration, PM2, PostgreSQL and SSH verified."
+
+      - name: Install frontend dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: client
+        env:
+          VITE_ADMIN_ROUTE_PREFIX: ${{ steps.preflight.outputs.admin_prefix }}
+        run: npm run build
+
+      - name: Package frontend
+        run: |
+          test -s client/dist/index.html
+          tar -czf "$RUNNER_TEMP/frontend.tar.gz" -C client/dist .
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-staging-${{ github.sha }}
+          path: ${{ runner.temp }}/frontend.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Preflight only
+        if: env.DEPLOY_ENABLED != 'true'
+        run: echo "Build and read-only preflight passed. Deployment remains disabled."
+
+      - name: Transfer and deploy
+        if: env.DEPLOY_ENABLED == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_dir=$(ssh -F ~/.ssh/ec2_deploy_config ec2-deploy 'umask 077; mktemp -d "$HOME/.ec2-deploy.XXXXXXXX"')
+          [[ "$remote_dir" =~ ^/home/ec2-user/\.ec2-deploy\.[A-Za-z0-9]+$ ]]
+          ssh -F ~/.ssh/ec2_deploy_config ec2-deploy "cat > '$remote_dir/frontend.tar.gz'" < "$RUNNER_TEMP/frontend.tar.gz"
+          digest=$(sha256sum "$RUNNER_TEMP/frontend.tar.gz" | awk '{print $1}')
+          ssh -F ~/.ssh/ec2_deploy_config ec2-deploy bash -s -- deploy "$TARGET" "$GITHUB_REF_NAME" "$APP_DIR" "$WEB_ROOT" "$PM2_APP_NAME" "$GITHUB_SHA" "$remote_dir" "$digest" < ops/deploy-ec2.sh
+
+      - name: Cleanup runner SSH key
+        if: always()
+        run: rm -f ~/.ssh/ec2_deploy_key ~/.ssh/ec2_known_hosts ~/.ssh/ec2_deploy_config
