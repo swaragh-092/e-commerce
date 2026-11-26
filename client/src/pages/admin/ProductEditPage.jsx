@@ -636,13 +636,13 @@ const ProductEditPage = () => {
 
         if (!newId) {
           notify('Product created but ID not returned. Please refresh the product list.', 'warning');
-          navigate('/admin/products');
+          navigate(returnTo);
           return;
         }
 
         notify(payload.type === 'variable' ? 'Product saved. Add attributes and create variants below.' : 'Product created successfully.', 'success');
         initialFormRef.current = JSON.stringify(formData);
-        navigate(`/admin/products/${newId}/edit`, { replace: true });
+        navigate(`/admin/products/${newId}/edit`, { replace: true, state: { returnTo } });
       } else {
         const res = await updateProduct(id, payload);
         if (res?.data) {
@@ -806,7 +806,7 @@ const ProductEditPage = () => {
                 sx={{ fontSize: '0.75rem', mb: 0.25 }}
               >
                 <Link
-                  to="/admin/products"
+                  to={returnTo}
                   style={{ textDecoration: 'none', color: 'inherit' }}
                 >
                   Products

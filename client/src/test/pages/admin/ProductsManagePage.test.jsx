@@ -1,7 +1,7 @@
 import React from 'react';
 import { getTags, bulkUpdateProductTags } from '../../../services/tagService';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ProductsManagePage from '../../../pages/admin/ProductsManagePage';
@@ -19,7 +19,7 @@ const { notifyMock, settingsMock, disabledFeatures, hiddenPresentation } = vi.ho
 
 vi.mock('../../../services/tagService', () => ({ getTags: vi.fn().mockResolvedValue({ data: [] }), bulkUpdateProductTags: vi.fn() }));
 vi.mock('@mui/x-data-grid', () => ({
-  DataGrid: ({ rows, columns, onRowSelectionModelChange }) => (
+  DataGrid: ({ rows, columns, onRowSelectionModelChange, paginationModel, onPaginationModelChange }) => (
     <div>
       {rows.map((row) => (
         <div key={row.id} role="row">
@@ -33,6 +33,10 @@ vi.mock('@mui/x-data-grid', () => ({
       <button onClick={() => onRowSelectionModelChange(rows.map((row) => row.id))}>
         Select visible products
       </button>
+      {rows.length > 1 && (
+        <button onClick={() => onRowSelectionModelChange([rows[0].id])}>Select first product</button>
+      )}
+      <button onClick={() => onPaginationModelChange({ ...paginationModel, page: paginationModel.page + 1 })}>Next page</button>
     </div>
   ),
 }));
@@ -93,6 +97,11 @@ const openSelect = async (select) => {
   fireEvent.mouseDown(select);
 };
 
+const EditorReturnLink = () => {
+  const { state } = useLocation();
+  return <Link to={state.returnTo}>Back to products</Link>;
+};
+
 describe('ProductsManagePage storefront state controls', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -143,7 +152,7 @@ describe('ProductsManagePage storefront state controls', () => {
     renderProductsPage();
 
     const productRow = await screen.findByRole('row');
-    const stateSelect = within(productRow).getByRole('combobox', { name: 'Storefront state for Test product' });
+    const stateSelect = within(productRow).getByRole('combobox', { name: 'Status for Test product' });
     expect(within(productRow).getAllByRole('combobox')).toHaveLength(1);
     expect(within(productRow).queryByRole('switch')).not.toBeInTheDocument();
 
@@ -208,7 +217,7 @@ describe('ProductsManagePage storefront state controls', () => {
 
     await screen.findByText('Test product');
     fireEvent.click(screen.getByRole('button', { name: 'Select visible products' }));
-    const bulkStateSelect = await screen.findByRole('combobox', { name: 'Set storefront state' });
+    const bulkStateSelect = await screen.findByRole('combobox', { name: 'Set status' });
     await openSelect(bulkStateSelect);
     fireEvent.click(await screen.findByRole('option', { name: 'Draft' }));
 
@@ -254,7 +263,7 @@ describe('ProductsManagePage storefront state controls', () => {
     await screen.findByText('Test product');
 
     await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'published' })));
-    expect(screen.getByRole('button', { name: /Published/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(screen.getByRole('group', { name: 'Quick filters' })).getByRole('button', { name: /Published/ })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('applies the dashboard Low Stock filter from the URL on page load', async () => {
@@ -263,7 +272,7 @@ describe('ProductsManagePage storefront state controls', () => {
     await screen.findByText('Test product');
 
     await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({ maxQty: 10 })));
-    expect(screen.getByText('Showing low-stock products (qty ≤ 10)')).toBeInTheDocument();
+    expect(screen.getByText('Stock ≤ 10')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Low Stock/ })).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -287,14 +296,14 @@ describe('ProductsManagePage storefront state controls', () => {
     fireEvent.click(screen.getByRole('button', { name: /Low Stock/ }));
 
     await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({ maxQty: 0 })));
-    expect(screen.getByText('Showing low-stock products (qty ≤ 0)')).toBeInTheDocument();
+    expect(screen.getByText('Stock ≤ 0')).toBeInTheDocument();
   });
 
   it('shows a recoverable error when a row state update fails', async () => {
     updateProduct.mockRejectedValueOnce(new Error('offline'));
     renderProductsPage();
 
-    const stateSelect = await screen.findByRole('combobox', { name: 'Storefront state for Test product' });
+    const stateSelect = await screen.findByRole('combobox', { name: 'Status for Test product' });
     await openSelect(stateSelect);
     fireEvent.click(await screen.findByRole('option', { name: 'Paused' }));
 
@@ -323,7 +332,7 @@ describe('ProductsManagePage storefront state controls', () => {
 
     await screen.findByText('Test product');
     fireEvent.click(screen.getByRole('button', { name: 'Select visible products' }));
-    const bulkStateSelect = await screen.findByRole('combobox', { name: 'Set storefront state' });
+    const bulkStateSelect = await screen.findByRole('combobox', { name: 'Set status' });
     await openSelect(bulkStateSelect);
     fireEvent.click(await screen.findByRole('option', { name: 'Draft' }));
 
@@ -334,7 +343,7 @@ describe('ProductsManagePage storefront state controls', () => {
   it('filters archived products from the storefront state dropdown', async () => {
     renderProductsPage();
 
-    const statusFilter = await screen.findByRole('combobox', { name: 'Storefront state' });
+    const statusFilter = await screen.findByRole('combobox', { name: 'Status', exact: true });
     await openSelect(statusFilter);
     fireEvent.click(await screen.findByRole('option', { name: 'Archived' }));
 
@@ -354,19 +363,70 @@ describe('ProductsManagePage storefront state controls', () => {
     renderProductsPage();
 
     await screen.findByText('Paused product');
-    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export current page CSV' }));
 
     expect(createObjectURL).toHaveBeenCalledOnce();
     const blob = createObjectURL.mock.calls[0][0];
-    const csvText = await new Promise((resolve) => {
+    const readCsv = (file) => new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result);
-      reader.readAsText(blob);
+      reader.readAsText(file);
     });
-    expect(csvText).toContain('Storefront state');
+    const csvText = await readCsv(blob);
+    expect(csvText).toContain('Status');
     expect(csvText).toContain('Paused');
     expect(csvText).toContain('Archived');
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:products');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select first product' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export selected CSV' }));
+    const selectedCsv = await readCsv(createObjectURL.mock.calls[1][0]);
+    expect(selectedCsv).toContain('Paused product');
+    expect(selectedCsv).not.toContain('Archived product');
+  });
+
+  it('clears all active filters while preserving unrelated URL parameters', async () => {
+    renderProductsPage(['/admin/products?search=SKU-123&status=draft&tags=seeds&source=dashboard']);
+
+    await screen.findByText('Test product');
+    expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'SKU-123', status: 'draft', tags: 'seeds' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
+
+    await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.not.objectContaining({ search: expect.anything() })));
+    const lastRequest = getProducts.mock.lastCall[0];
+    expect(lastRequest).not.toHaveProperty('status');
+    expect(lastRequest).not.toHaveProperty('tags');
+    expect(screen.getByTestId('search-url')).toHaveTextContent('?source=dashboard');
+  });
+
+  it('restores the product filters, sort and page after visiting the editor', async () => {
+    getProducts.mockResolvedValue({ data: [product], meta: { total: 200 } });
+    const brandResponse = { data: { data: [{ id: 'brand-1', name: 'Seed Brands' }] } };
+    getBrands.mockResolvedValueOnce(brandResponse).mockResolvedValueOnce(brandResponse);
+    getCategoryTree.mockResolvedValue({ data: [{ id: 'vegetables', name: 'Vegetables' }] });
+    render(
+      <ThemeProvider theme={createTheme()}>
+        <MemoryRouter initialEntries={['/admin/products?search=SKU-1&status=published&brand=brand-1&category=vegetables&tags=summer&saleStatus=active&sortBy=updatedAt&sortOrder=desc&page=2&pageSize=50']}>
+          <Routes>
+            <Route path="/admin/products" element={<ProductsManagePage />} />
+            <Route path="/admin/products/:id/edit" element={<EditorReturnLink />} />
+          </Routes>
+        </MemoryRouter>
+      </ThemeProvider>
+    );
+
+    await screen.findByRole('link', { name: 'Edit Test product' });
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+    await waitFor(() => expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({ page: 3, limit: 50 })));
+    fireEvent.click(screen.getByRole('link', { name: 'Edit Test product' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Back to products' }));
+
+    await screen.findByRole('link', { name: 'Edit Test product' });
+    expect(getProducts).toHaveBeenCalledTimes(3);
+    expect(getProducts).toHaveBeenLastCalledWith(expect.objectContaining({
+      page: 3, limit: 50, search: 'SKU-1', status: 'published', brand: 'brand-1',
+      categoryId: 'vegetables', tags: 'summer', saleStatus: 'active', sortBy: 'updatedAt', sortOrder: 'desc',
+    }));
   });
 
   it('applies tag deep links to the admin product query', async () => {
@@ -400,7 +460,7 @@ describe('ProductsManagePage storefront state controls', () => {
     vi.useFakeTimers();
     await act(async () => { renderProductsPage(); });
     getProducts.mockClear();
-    fireEvent.change(screen.getByLabelText('Search name / description'), { target: { value: 'opal' } });
+    fireEvent.change(screen.getByLabelText('Search products by name or SKU'), { target: { value: 'opal' } });
     await act(async () => { await vi.advanceTimersByTimeAsync(1200); });
     expect(getProducts).toHaveBeenCalledTimes(1);
     expect(getProducts.mock.calls[0][0]).toMatchObject({ search: 'opal', page: 1 });
@@ -411,7 +471,7 @@ describe('ProductsManagePage storefront state controls', () => {
     getProducts.mockClear();
     fireEvent.click(screen.getByTestId('ClearIcon').closest('button'));
     await act(async () => { await vi.advanceTimersByTimeAsync(1600); });
-    expect(screen.getByLabelText('Search name / description')).toHaveValue('');
+    expect(screen.getByLabelText('Search products by name or SKU')).toHaveValue('');
     expect(getProducts).toHaveBeenCalledTimes(1);
     expect(getProducts.mock.calls[0][0]).not.toHaveProperty('search');
   });
@@ -420,7 +480,7 @@ describe('ProductsManagePage storefront state controls', () => {
     let resolveOld;
     getProducts.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
     await act(async () => { renderProductsPage(); });
-    fireEvent.change(screen.getByLabelText('Search name / description'), { target: { value: 'opal' } });
+    fireEvent.change(screen.getByLabelText('Search products by name or SKU'), { target: { value: 'opal' } });
     getProducts.mockResolvedValue({ data: [{ ...product, id: 'new', name: 'New matching product' }], meta: { total: 1 } });
     await act(async () => { await vi.advanceTimersByTimeAsync(450); });
     expect(screen.getByText('New matching product')).toBeInTheDocument();
@@ -433,7 +493,7 @@ describe('ProductsManagePage storefront state controls', () => {
     vi.useFakeTimers();
     await act(async () => { renderProductsPage(); });
     getProducts.mockClear();
-    const input = screen.getByLabelText('Search name / description');
+    const input = screen.getByLabelText('Search products by name or SKU');
     for (const value of ['o', 'op', 'opal ']) {
       fireEvent.change(input, { target: { value } });
       await act(async () => { await vi.advanceTimersByTimeAsync(100); });
@@ -447,21 +507,21 @@ describe('ProductsManagePage storefront state controls', () => {
   it('does not restore a draft when an unrelated URL filter changes', async () => {
     vi.useFakeTimers();
     await act(async () => { renderProductsPage(['/admin/products?search=opal']); });
-    fireEvent.change(screen.getByLabelText('Search name / description'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Search products by name or SKU'), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: 'Navigate tag filter' }));
-    expect(screen.getByLabelText('Search name / description')).toHaveValue('');
+    expect(screen.getByLabelText('Search products by name or SKU')).toHaveValue('');
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
-    expect(screen.getByLabelText('Search name / description')).toHaveValue('');
+    expect(screen.getByLabelText('Search products by name or SKU')).toHaveValue('');
     expect(screen.getByTestId('search-url')).toHaveTextContent('?tags=summer');
     expect(getProducts.mock.calls.at(-1)[0]).not.toHaveProperty('search');
   });
   it('restores search from actual browser history changes', async () => {
     vi.useFakeTimers();
     await act(async () => { renderProductsPage(['/admin/products?search=check', '/admin/products?search=opal']); });
-    expect(screen.getByLabelText('Search name / description')).toHaveValue('opal');
+    expect(screen.getByLabelText('Search products by name or SKU')).toHaveValue('opal');
     fireEvent.click(screen.getByRole('button', { name: 'Back in history' }));
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
-    expect(screen.getByLabelText('Search name / description')).toHaveValue('check');
+    expect(screen.getByLabelText('Search products by name or SKU')).toHaveValue('check');
     expect(getProducts.mock.calls.at(-1)[0]).toMatchObject({ search: 'check' });
   });
 

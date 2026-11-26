@@ -56,6 +56,11 @@ export const userService = {
     return response.data.data;
   },
 
+  requestDeletionCode: async () => {
+    const response = await api.post('/users/me/deletion-code');
+    return response.data.data;
+  },
+
   deleteAccount: async (payload) => {
     const response = await api.delete('/users/me', { data: payload });
     return response.data;

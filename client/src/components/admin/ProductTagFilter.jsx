@@ -31,12 +31,14 @@ export default function ProductTagFilter({ value, onChange }) {
   const fallback = useMemo(() => value ? { slug: value, name: value } : null, [value]);
   const selected = options.find((tag) => tag.slug === value) || fallback;
   return <Autocomplete
-    sx={{ minWidth: 220 }} size="small" options={options} value={selected}
+    sx={{ minWidth: 170 }} size="small" options={options} value={selected}
     loading={loading} getOptionLabel={(tag) => tag.name}
     isOptionEqualToValue={(option, current) => option.slug === current.slug}
     onInputChange={(_, next, reason) => { if (reason === 'input' || reason === 'clear') setInput(next); }}
     onChange={(_, tag) => { setInput(''); onChange(tag?.slug || ''); }}
     noOptionsText={error ? 'Could not load tags. Type to retry.' : 'No matching tags'}
-    renderInput={(params) => <TextField {...params} label="Tag" placeholder="Search tags" />}
+    renderInput={(params) => (
+      <TextField {...params} label="Tag" placeholder="All tags" InputLabelProps={{ ...params.InputLabelProps, shrink: true }} />
+    )}
   />;
 }

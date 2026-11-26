@@ -31,7 +31,7 @@ import newsletterService from '../../services/newsletterService';
 const AccountPage = () => {
     const { user, updateProfile, refreshUser } = useContext(AuthContext);
     const { confirm } = useNotification();
-    const { settings } = useSettings();
+    const { settings, features } = useSettings();
     const [tab, setTab] = useState(0);
     const accountPage = settings?.accountPage || {};
     const layout = accountPage.layout || 'tabs';
@@ -39,6 +39,10 @@ const AccountPage = () => {
     const showSupportInfo = accountPage.showSupportInfo === true;
 
     if (!user) return null;
+    const isCustomer = user.role === 'customer' && !(user.roles || []).some((role) => {
+        const slug = typeof role === 'string' ? role : role?.slug || role?.name || role?.role;
+        return slug && slug !== 'customer';
+    });
 
     return (
         <Container maxWidth="md" sx={{ py: 4 }}>
@@ -74,7 +78,9 @@ const AccountPage = () => {
                     <TabPanel value={tab} index={3} sx={{ p: 3 }}>
                         <TwoFactorSetup user={user} onUpdate={refreshUser} />
                         <ActiveSessions />
-                        <DeleteAccount user={user} onUpdate={refreshUser} />
+                        {(user.scheduledDeletionAt || (isCustomer && features?.accountDeletion === true)) && (
+                            <DeleteAccount user={user} onUpdate={refreshUser} />
+                        )}
                     </TabPanel>
                     <TabPanel value={tab} index={4} sx={{ p: 3 }}>
                         <EmailPreferencesTab />

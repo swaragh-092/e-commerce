@@ -16,21 +16,21 @@ describe('Platform optional feature catalog', () => {
   it('renders and saves independent content and Customers switches', async () => {
     view();
     await waitFor(() => expect(getAllSettings).toHaveBeenCalled());
-    for (const label of ['Newsletter', 'Gallery', 'Blogs', 'Pages', 'Customers']) {
+    for (const label of ['Newsletter', 'Gallery', 'Blogs', 'Pages', 'Customers', 'Customer Account Deletion']) {
       const control = screen.getByRole('checkbox', { name: label, exact: true });
       await waitFor(() => expect(control).toBeChecked()); fireEvent.click(control);
     }
     fireEvent.click(screen.getByRole('button', { name: 'Save Platform Features' }));
     fireEvent.click(screen.getByRole('button', { name: 'Yes, Save Features' }));
     await waitFor(() => expect(updateSettings).toHaveBeenCalledWith(expect.arrayContaining(
-      ['newsletter', 'gallery', 'blogs', 'pages', 'customers'].map((key) => ({ group: 'features', key, value: false }))
+      ['newsletter', 'gallery', 'blogs', 'pages', 'customers', 'accountDeletion'].map((key) => ({ group: 'features', key, value: false }))
     )));
     expect(refreshSettings).toHaveBeenCalled();
   });
   it('keeps feature changes restricted to Super Admin', async () => {
     actor.superAdmin = false; view();
     await waitFor(() => expect(getAllSettings).toHaveBeenCalled());
-    for (const name of ['Newsletter', 'Gallery', 'Blogs', 'Pages', 'Customers']) expect(screen.getByRole('checkbox', { name, exact: true })).toBeDisabled();
+    for (const name of ['Newsletter', 'Gallery', 'Blogs', 'Pages', 'Customers', 'Customer Account Deletion']) expect(screen.getByRole('checkbox', { name, exact: true })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Save Platform Features' })).toBeDisabled();
   });
 });

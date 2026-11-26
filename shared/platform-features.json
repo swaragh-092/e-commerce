@@ -22,6 +22,12 @@
       }
     },
     {
+      "key": "accountDeletion",
+      "label": "Customer Account Deletion",
+      "description": "Let customers request account deletion from My Account. Customers can cancel scheduled requests during the 30-day grace period, even when this switch is off.",
+      "defaults": { "ecommerce": true, "catalog": true }
+    },
+    {
       "key": "wishlist",
       "label": "Wishlist",
       "description": "Allow users to save products to a wishlist.",
