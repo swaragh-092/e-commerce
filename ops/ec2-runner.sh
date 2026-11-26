@@ -32,7 +32,7 @@ case "${1:?}" in
            "$APP_DIR" == /home/ec2-user/projects/e-commerce &&
            "$WEB_ROOT" == /var/www/orbis-admin &&
            "$SITE_URL" == https://ad.orbiseeds.com &&
-           "$VITE_APP_URL" == https://orbiseeds.com ]] || fail "Incorrect production host, paths or URLs."
+           "$VITE_APP_URL" == "$SITE_URL" ]] || fail "Incorrect production host, paths or URLs."
         ;;
       *) fail "Unknown deployment environment." ;;
     esac
