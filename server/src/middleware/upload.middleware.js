@@ -3,6 +3,38 @@
 const multer = require('multer');
 const AppError = require('../utils/AppError');
 
+// ---------------------------------------------------------------------------
+// Multipart hard limits (all passed to busboy via multer)
+//
+// These defend against resource-exhaustion attacks that bypass fileSize alone:
+//
+//  fieldNestingDepth      (multer >=2.3.0 / busboy >=1.6.0)
+//    Caps deeply-nested JSON-path keys like a[b][c][d]… which would otherwise
+//    trigger quadratic memory growth while building the nested object in busboy.
+//
+//  fieldArrayIndexLimit   (multer >=2.3.0 / busboy >=1.6.0)
+//    Rejects suspiciously large numeric array indices in field names.
+//
+//  fields     Max number of non-file text fields per multipart request.
+//  parts      Total parts (fields + files) per request.
+//  headerPairs  Max HTTP header key/value pairs forwarded to busboy.
+//
+// Per-upload fileSize limits are set individually on each multer instance below
+// so image, document, and font uploads each enforce the right cap independently.
+// ---------------------------------------------------------------------------
+const SHARED_LIMITS = {
+  fieldNestingDepth: 3,       // a[b][c] is depth 2; 3 covers reasonable form nesting
+  fieldArrayIndexLimit: 100,  // reject huge indices before any allocation
+  fields: 20,                 // generous for multi-field forms; blocks field-flood attacks
+  parts: 22,                  // fields + files combined (allows 1–2 files alongside text fields)
+  headerPairs: 200,           // busboy default is 2000; tighter for upload routes
+};
+
+// ---------------------------------------------------------------------------
+// Font file filter — declared MIME-type + extension early-reject.
+// Authoritative binary validation (magic bytes) is performed in
+// media.service.js via file-type; this filter is just a fast first gate.
+// ---------------------------------------------------------------------------
 const fontFileFilter = (req, file, cb) => {
   const allowedMimeTypes = [
     'font/woff2',
@@ -39,6 +71,10 @@ const fontFileFilter = (req, file, cb) => {
   }
 };
 
+// ---------------------------------------------------------------------------
+// Factory — creates a multer instance with all shared multipart limits plus a
+// per-type fileSize cap and MIME-type allow-list.
+// ---------------------------------------------------------------------------
 const createMemoryUpload = ({
   allowedMimeTypes,
   maxFileSizeMb,
@@ -47,6 +83,9 @@ const createMemoryUpload = ({
   multer({
     storage: multer.memoryStorage(),
     limits: {
+      ...SHARED_LIMITS,
+      // Single-file endpoints: block more than one file field per request.
+      files: 1,
       fileSize: maxFileSizeMb * 1024 * 1024,
     },
     fileFilter: (req, file, cb) => {
@@ -66,6 +105,9 @@ const createMemoryUpload = ({
     },
   });
 
+// ---------------------------------------------------------------------------
+// Image upload — JPEG / PNG / WebP / GIF; SVG explicitly rejected.
+// ---------------------------------------------------------------------------
 const memoryUpload = createMemoryUpload({
   allowedMimeTypes: [
     'image/jpeg',
@@ -78,6 +120,9 @@ const memoryUpload = createMemoryUpload({
     'Only JPEG, PNG, WebP, and GIF images are allowed. SVGs are rejected.',
 });
 
+// ---------------------------------------------------------------------------
+// Document upload — PDF only.
+// ---------------------------------------------------------------------------
 const documentMemoryUpload = createMemoryUpload({
   allowedMimeTypes: ['application/pdf'],
   maxFileSizeMb:
@@ -85,9 +130,14 @@ const documentMemoryUpload = createMemoryUpload({
   errorMessage: 'Only PDF documents are allowed.',
 });
 
+// ---------------------------------------------------------------------------
+// Font upload — uses dedicated font filter; binary validation in service.
+// ---------------------------------------------------------------------------
 const fontUpload = multer({
   storage: multer.memoryStorage(),
   limits: {
+    ...SHARED_LIMITS,
+    files: 1,
     fileSize:
       (parseInt(process.env.MAX_FONT_SIZE_MB, 10) || 10) *
       1024 *
