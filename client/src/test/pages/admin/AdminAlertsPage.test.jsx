@@ -1,0 +1,46 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, expect, it, vi } from 'vitest';
+import AdminAlertsPage from '../../../pages/admin/AdminAlertsPage';
+import AdminAlertBell from '../../../components/admin/AdminAlertBell';
+import { adminAlerts } from '../../../services/adminAlerts';
+
+vi.mock('../../../services/adminAlerts', () => ({
+  adminAlerts: { inbox: vi.fn(), mark: vi.fn(), markAll: vi.fn(), preferences: vi.fn(), savePreferences: vi.fn() },
+  refreshAdminAlerts: () => window.dispatchEvent(new Event('admin-alerts-changed')),
+}));
+
+beforeEach(() => vi.resetAllMocks());
+
+it('updates the inbox and navigation badge when an alert is read', async () => {
+  let read = false;
+  adminAlerts.inbox.mockImplementation(async () => ({
+    enabled: true, unread: read ? 0 : 1, total: 1,
+    items: [{ id: '1', read_at: read ? '2026-11-27T00:00:00Z' : null, created_at: '2026-11-27T00:00:00Z',
+      message: { title: 'Order assigned', body: 'A new order is ready.', link: '/admin/orders/1', linkLabel: 'Open order' } }],
+  }));
+  adminAlerts.mark.mockImplementation(async () => { read = true; });
+
+  render(<MemoryRouter initialEntries={['/admin/notifications']}><AdminAlertBell /><AdminAlertsPage /></MemoryRouter>);
+  expect(await screen.findByRole('button', { name: 'Notifications, 1 unread' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Open order' })).toHaveAttribute('href', '/admin/orders/1');
+  fireEvent.click(screen.getByRole('button', { name: 'Mark as read' }));
+  await waitFor(() => expect(adminAlerts.mark).toHaveBeenCalledWith('1', true));
+  expect(await screen.findByRole('button', { name: 'Notifications, 0 unread' })).toBeInTheDocument();
+});
+
+it('shows required inbox alerts as locked and saves personal email quiet hours', async () => {
+  adminAlerts.preferences.mockResolvedValue({
+    canEmail: true, emailPaused: false, preferences: { events: {}, quiet: null },
+    events: [{ key: 'staff_access', label: 'Staff access changed', required: true, in_app: true, email: false }],
+  });
+  adminAlerts.savePreferences.mockResolvedValue({});
+  render(<MemoryRouter initialEntries={['/admin/notifications/preferences']}><AdminAlertsPage /></MemoryRouter>);
+  expect(await screen.findByText('Required by a notification rule')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Email quiet hours' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'IANA time zone' }), { target: { value: 'Asia/Kolkata' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save preferences' }));
+  await waitFor(() => expect(adminAlerts.savePreferences).toHaveBeenCalledWith({
+    events: {}, quiet: { start: '22:00', end: '07:00', zone: 'Asia/Kolkata' },
+  }));
+});

@@ -752,6 +752,13 @@ const deleteAccessRole = async (roleId, actingUser, replacementRoleId = null) =>
     }
 
     await revokeUserSessions(assignedUsers.map(user => user.id), transaction);
+    if (replacementRole) {
+      for (const user of assignedUsers) {
+        await require('../notification/adminAlerts.service').capture('staff_access', {
+          userId: user.id, change: 'role', before: role.slug, after: replacementRole.slug,
+        }, transaction);
+      }
+    }
     await role.setPermissions([], { transaction });
     await role.destroy({ transaction });
 
@@ -925,7 +932,12 @@ const updateUserRole = async (userId, roleId, actingUser) => {
       || user.roles?.length !== 1 || user.roles[0].id !== role.id;
     await user.update({ role: role.baseRole }, { transaction });
     await user.setRoles([role], { transaction });
-    if (assignmentChanged) await revokeUserSessions([user.id], transaction);
+    if (assignmentChanged) {
+      await revokeUserSessions([user.id], transaction);
+      await require('../notification/adminAlerts.service').capture('staff_access', {
+        userId: user.id, change: 'role', before: previousAssignedRole?.slug || previousRole, after: role.slug,
+      }, transaction);
+    }
 
     const updatedUser = await User.findByPk(user.id, { include: userRoleInclude, transaction });
 
@@ -1005,6 +1017,9 @@ const updateStaffStatus = async (userId, status, reason, actingUser) => {
 
     const previousStatus = user.status;
     await user.update({ status }, { transaction });
+    await require('../notification/adminAlerts.service').capture('staff_access', {
+      userId, change: 'status', before: previousStatus, after: status,
+    }, transaction);
 
     if (status !== 'active' && db.RefreshToken) {
       const activeSessions = await db.RefreshToken.findAll({

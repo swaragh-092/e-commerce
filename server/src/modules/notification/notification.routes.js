@@ -16,6 +16,7 @@ const {
 
 // All notification endpoints require authentication
 router.use(authenticate);
+router.use(require('./adminAlerts.routes'));
 
 const rulesController = require('./notificationRules.controller');
 const readNotifications = authorizeAnyPermission(PERMISSIONS.SETTINGS_READ, PERMISSIONS.NOTIFICATIONS_MANAGE);

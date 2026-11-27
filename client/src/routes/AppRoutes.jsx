@@ -113,6 +113,7 @@ const SettingsPage = lazy(() => import('../pages/admin/SettingsPage'));
 const FeaturesPage = lazy(() => import('../pages/admin/FeaturesPage'));
 const PaymentGatewaysPage = lazy(() => import('../pages/admin/PaymentGatewaysPage'));
 const ShippingPage = lazy(() => import('../pages/admin/ShippingPage'));
+const AdminAlertsPage = lazy(() => import('../pages/admin/AdminAlertsPage'));
 const SaleLabelsPage = lazy(() => import('../pages/admin/SaleLabelsPage'));
 const EnquiriesPage = lazy(() => import('../pages/admin/EnquiriesPage'));
 const AuditLogPage = lazy(() => import('../pages/admin/AuditLogPage'));
@@ -237,6 +238,9 @@ const AppRoutes = () => (
         </Route>
 
         <Route element={<AdminLayout />}>
+          <Route path="notifications" element={<AdminAlertsPage />} />
+          <Route path="notifications/preferences" element={<AdminAlertsPage />} />
+          <Route path="notifications/assigned" element={<AdminAlertsPage />} />
           <Route index element={<AdminIndex />} />
           <Route path="profile" element={<AdminProfilePage />} />
           <Route element={<FeatureRoute feature="analytics" surface="admin" redirectTo="/admin" />}>

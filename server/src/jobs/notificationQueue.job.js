@@ -16,6 +16,11 @@ const processQueue = async () => {
     }
   } catch (err) {
     logger.error('[notificationQueue.job] Failed to process notification queue', err);
+  }
+  try {
+    await require('../modules/notification/adminAlerts.service').process();
+  } catch (error) {
+    logger.error('[notificationQueue.job] Failed to process internal alerts', error);
   } finally {
     running = false;
   }
