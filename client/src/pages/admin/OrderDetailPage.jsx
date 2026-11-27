@@ -1162,6 +1162,7 @@ const OrderDetailPage = () => {
     try {
       const res = await getOrderById(id);
       setOrder(res.data.data);
+      setError('');
       setGuestContactEmail(res.data.data.shippingAddressSnapshot?.email || '');
       setNewStatus(res.data.data.status);
     } catch (fetchError) {
@@ -1413,6 +1414,7 @@ const OrderDetailPage = () => {
   };
 
   const openReturnRefundDialog = (returnRequest) => {
+    if (getOpenRefunds(order).length) return;
     const returnRequestAmount = getReturnRequestAmount(returnRequest);
     const refundedForReturn = getRefundedAmountForReturnRequest(order, returnRequest.id);
     const remainingReturnAmount = Math.max(returnRequestAmount - refundedForReturn, 0);
@@ -1436,7 +1438,7 @@ const OrderDetailPage = () => {
   };
 
   const handleReturnRefund = async () => {
-    if (!refundDialogRequest) return;
+    if (!refundDialogRequest || updating || getOpenRefunds(order).length) return;
 
     const returnRequestAmount = getReturnRequestAmount(refundDialogRequest);
     const refundedForReturn = getRefundedAmountForReturnRequest(order, refundDialogRequest.id);
@@ -1462,12 +1464,16 @@ const OrderDetailPage = () => {
       closeReturnRefundDialog();
       await fetchOrder();
       notify(refund?.status === 'refund_processing'
-        ? `Provider accepted refund ${refund.providerRefundId || refund.id}; it is still processing.`
+        ? `Refund ${refund.providerRefundId || refund.id} is still processing. Check its status before submitting another refund.`
         : refund?.metadata?.refundMethod === 'offline'
           ? `Offline refund recorded with reference ${refund.metadata.manualReference}.`
           : 'Provider confirmed the refund.', refund?.status === 'refund_processing' ? 'warning' : 'success');
     } catch (err) {
-      notify(getApiErrorMessage(err, 'Failed to process return refund.'), 'error');
+      // A gateway timeout can leave a pending refund even when submission returns an error.
+      closeReturnRefundDialog();
+      await fetchOrder();
+      const message = getApiErrorMessage(err, 'Failed to process return refund.');
+      notify(`${message} Check the order’s refund status before trying again.`, 'error');
     } finally {
       setUpdating(false);
     }
@@ -1884,7 +1890,7 @@ const OrderDetailPage = () => {
                 {getOpenRefunds(order).map((refund) => (
                   <Box key={refund.id}>
                     <Typography variant="caption" color="warning.main">Refund processing</Typography>
-                    <Typography variant="body2">{formatPrice(refund.amount)}{refund.providerRefundId ? ` · ${refund.providerRefundId}` : ''}</Typography>
+                    <Typography variant="body2">{formatPrice(refund.amount)}{` · ${refund.providerRefundId || refund.id}`}</Typography>
                   </Box>
                 ))}
               </Stack>
@@ -2093,7 +2099,7 @@ const OrderDetailPage = () => {
                               </Select>
                             </FormControl>
                             {canRefundReturn && (
-                              <Button size="small" variant="outlined" color="error" onClick={() => openReturnRefundDialog(request)} disabled={updating || hasPendingRefundForReturnRequest(order, request.id)}>
+                              <Button size="small" variant="outlined" color="error" onClick={() => openReturnRefundDialog(request)} disabled={updating || getOpenRefunds(order).length > 0}>
                                 {hasPendingRefundForReturnRequest(order, request.id) ? 'Refund processing' : 'Issue refund'}
                               </Button>
                             )}
@@ -2365,7 +2371,7 @@ const OrderDetailPage = () => {
           <Button onClick={closeReturnRefundDialog} disabled={updating}>
             Cancel
           </Button>
-          <Button variant="contained" color="error" onClick={handleReturnRefund} disabled={updating || (order?.paymentMethod === 'cod' && (!offlineRefundConfirmed || !offlineRefundReference.trim()))}>
+          <Button variant="contained" color="error" onClick={handleReturnRefund} disabled={updating || getOpenRefunds(order).length > 0 || (order?.paymentMethod === 'cod' && (!offlineRefundConfirmed || !offlineRefundReference.trim()))}>
             {updating ? 'Processing refund…' : order?.paymentMethod === 'cod' ? 'Record sent refund' : 'Issue refund'}
           </Button>
         </DialogActions>

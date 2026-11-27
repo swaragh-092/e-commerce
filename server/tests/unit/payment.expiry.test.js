@@ -9,6 +9,37 @@ const AuditService = require('../../src/modules/audit/audit.service');
 afterEach(() => vi.restoreAllMocks());
 
 describe('Payment attempt expiry', () => {
+    it.each(['refunded', 'partially_refunded'])('preserves %s when a capture is reported again', async (status) => {
+        const order = { id: 'order-1', status: 'closed', update: vi.fn() };
+        const payment = { id: 'payment-1', status, transactionId: 'pi_captured', update: vi.fn() };
+        vi.spyOn(Order, 'findByPk').mockResolvedValue(order);
+        vi.spyOn(Payment, 'findOne').mockResolvedValue(payment);
+        vi.spyOn(OrderStatusHistory, 'create').mockResolvedValue({});
+        vi.spyOn(AuditService, 'log').mockResolvedValue(undefined);
+        vi.spyOn(sequelize, 'transaction').mockImplementation(async (callback) => callback({ LOCK: { UPDATE: 'UPDATE' } }));
+
+        await PaymentService.markOrderPaid({ orderId: order.id, provider: 'stripe', transactionId: payment.transactionId });
+
+        expect(payment.update).not.toHaveBeenCalled();
+        expect(order.update).not.toHaveBeenCalled();
+    });
+    it('logs a different Cashfree capture on the same provider order without overwriting the recorded capture', async () => {
+        const logger = require('../../src/utils/logger');
+        const order = { id: 'order-1', status: 'processing', update: vi.fn() };
+        const payment = { id: 'payment-1', status: 'partially_refunded', transactionId: 'cf-order', metadata: { cfPaymentId: 'capture-1' }, update: vi.fn() };
+        vi.spyOn(Order, 'findByPk').mockResolvedValue(order);
+        vi.spyOn(Payment, 'findOne').mockResolvedValue(payment);
+        vi.spyOn(sequelize, 'transaction').mockImplementation(async (callback) => callback({ LOCK: { UPDATE: 'UPDATE' } }));
+        const log = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+        await PaymentService.markOrderPaid({ orderId: order.id, provider: 'cashfree', transactionId: payment.transactionId, metadata: { cfPaymentId: 'capture-2' } });
+
+        expect(log).toHaveBeenCalledWith(expect.stringContaining('Different capture'), expect.objectContaining({
+            recordedCaptureId: 'capture-1', incomingCaptureId: 'capture-2',
+        }));
+        expect(order.update).not.toHaveBeenCalled();
+        expect(payment.update).not.toHaveBeenCalled();
+    });
     it('rejects a new gateway session after its persisted payment deadline', async () => {
         const order = {
             id: 'order-1',
