@@ -47,6 +47,7 @@ module.exports = (sequelize, DataTypes) => {
             defaultValue: {},
         },
         processedAt: DataTypes.DATE,
+        nextReconcileAt: DataTypes.DATE,
     }, {
         tableName: 'order_refunds',
         timestamps: true,

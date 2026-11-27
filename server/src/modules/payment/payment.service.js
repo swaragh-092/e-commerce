@@ -148,17 +148,26 @@ const cashfreeRequest = async (path, { method = 'GET', body, headers: extraHeade
     return data;
 };
 
+const refundNotSent = (message) => Object.assign(new AppError('PAYMENT_ERROR', 409, message), { refundNotSent: true });
+
+const normalizeRefundStatus = (status) => {
+    const value = String(status || '').toLowerCase();
+    if (['succeeded', 'success', 'processed', 'refunded'].includes(value)) return 'succeeded';
+    if (['failed', 'failure', 'rejected', 'cancelled', 'canceled'].includes(value)) return 'failed';
+    return 'pending';
+};
+
 const initiateProviderRefund = async ({ payment, order, refundId, amount, reason }) => {
     const provider = String(payment.provider || '').toLowerCase();
     if (provider === 'razorpay') {
         const paymentId = payment.transactionId;
-        if (!paymentId || !paymentId.startsWith('pay_')) throw new AppError('PAYMENT_ERROR', 409, 'The captured Razorpay payment ID is unavailable; refund was not sent.');
+        if (!paymentId || !paymentId.startsWith('pay_')) throw refundNotSent('The captured Razorpay payment ID is unavailable; refund was not sent.');
         const razorpay = await getRazorpayClient();
         const result = await razorpay.payments.refund(paymentId, {
             amount: Math.round(Number(amount) * 100),
             notes: { refund_id: refundId, reason: String(reason || '').slice(0, 200) },
         });
-        return { providerRefundId: result.id, status: ['processed', 'succeeded'].includes(String(result.status).toLowerCase()) ? 'succeeded' : 'pending' };
+        return { providerRefundId: result.id, status: normalizeRefundStatus(result.status) };
     }
     if (provider === 'stripe') {
         const { secret } = await ensureStripeConfig();
@@ -168,30 +177,30 @@ const initiateProviderRefund = async ({ payment, order, refundId, amount, reason
             const session = await stripe.checkout.sessions.retrieve(paymentIntent, { expand: ['payment_intent'] });
             paymentIntent = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
         }
-        if (!paymentIntent?.startsWith('pi_')) throw new AppError('PAYMENT_ERROR', 409, 'The captured Stripe payment intent is unavailable; refund was not sent.');
+        if (!paymentIntent?.startsWith('pi_')) throw refundNotSent('The captured Stripe payment intent is unavailable; refund was not sent.');
         const result = await stripe.refunds.create({
             payment_intent: paymentIntent,
             amount: Math.round(Number(amount) * 100),
             metadata: { order_id: String(order.id), refund_id: String(refundId) },
         }, { idempotencyKey: `order-refund-${refundId}` });
-        return { providerRefundId: result.id, status: result.status === 'succeeded' ? 'succeeded' : 'pending' };
+        return { providerRefundId: result.id, status: normalizeRefundStatus(result.status) };
     }
     if (provider === 'cashfree') {
         const cashfreeOrderId = payment.metadata?.cashfreeOrderId || payment.transactionId;
-        if (!cashfreeOrderId) throw new AppError('PAYMENT_ERROR', 409, 'The Cashfree order ID is unavailable; refund was not sent.');
+        if (!cashfreeOrderId) throw refundNotSent('The Cashfree order ID is unavailable; refund was not sent.');
         const result = await cashfreeRequest(`/orders/${encodeURIComponent(cashfreeOrderId)}/refunds`, {
             method: 'POST',
             headers: { 'x-idempotency-key': String(refundId) },
             body: { refund_id: String(refundId), refund_amount: Number(amount), refund_note: String(reason || '').slice(0, 200) },
         });
-        return { providerRefundId: result.cf_refund_id || result.refund_id || String(refundId), status: String(result.refund_status || '').toUpperCase() === 'SUCCESS' ? 'succeeded' : 'pending' };
+        return { providerRefundId: result.cf_refund_id || result.refund_id || String(refundId), status: normalizeRefundStatus(result.refund_status) };
     }
     if (provider === 'payu') {
         const key = await getCredential('payu.key', 'PAYU_MERCHANT_KEY');
         const salt = await getCredential('payu.salt', 'PAYU_MERCHANT_SALT');
         const mode = await getCredential('payu.mode', null) || 'test';
         const payuId = payment.metadata?.payuId;
-        if (!key || !salt || !payuId) throw new AppError('PAYMENT_ERROR', 409, 'PayU refund credentials or captured PayU transaction ID are unavailable; refund was not sent.');
+        if (!key || !salt || !payuId) throw refundNotSent('PayU refund credentials or captured PayU transaction ID are unavailable; refund was not sent.');
         const command = 'cancel_refund_transaction';
         const token = String(refundId).replace(/-/g, '').slice(0, 20);
         const hash = crypto.createHash('sha512').update(`${key}|${command}|${payuId}|${salt}`).digest('hex');
@@ -202,23 +211,17 @@ const initiateProviderRefund = async ({ payment, order, refundId, amount, reason
         if (!response.ok || Number(result.status) !== 1) throw new AppError('PAYMENT_ERROR', response.status || 502, result.msg || 'PayU did not accept the refund request');
         return { providerRefundId: result.request_id || token, status: 'pending' };
     }
-    throw new AppError('PAYMENT_ERROR', 409, `Refunds are not supported for payment provider "${provider}". Use the provider dashboard and record the refund reference.`);
+    throw refundNotSent(`Refunds are not supported for payment provider "${provider}". Use the provider dashboard and record the refund reference.`);
 };
 
 const fetchProviderRefundStatus = async ({ payment, refund }) => {
     const provider = String(payment.provider || '').toLowerCase();
-    const normalize = (status) => {
-        const value = String(status || '').toLowerCase();
-        if (['succeeded', 'success', 'processed', 'refunded'].includes(value)) return 'succeeded';
-        if (['failed', 'failure', 'rejected', 'cancelled', 'canceled'].includes(value)) return 'failed';
-        return 'pending';
-    };
     if (provider === 'stripe') {
         const { secret } = await ensureStripeConfig();
         const stripe = require('stripe')(secret);
         if (refund.providerRefundId) {
             const result = await stripe.refunds.retrieve(refund.providerRefundId);
-            return { status: normalize(result.status), providerRefundId: result.id };
+            return { status: normalizeRefundStatus(result.status), providerRefundId: result.id };
         }
         let intent = payment.transactionId;
         if (intent?.startsWith('cs_')) {
@@ -228,7 +231,7 @@ const fetchProviderRefundStatus = async ({ payment, refund }) => {
         if (!intent?.startsWith('pi_')) return { status: 'pending' };
         const results = await stripe.refunds.list({ payment_intent: intent, limit: 100 });
         const match = results.data.find((item) => item.metadata?.refund_id === refund.id);
-        return match ? { status: normalize(match.status), providerRefundId: match.id } : { status: 'pending' };
+        return match ? { status: normalizeRefundStatus(match.status), providerRefundId: match.id } : { status: 'pending' };
     }
     if (provider === 'razorpay') {
         const keyId = await getCredential('razorpay.keyId', 'RAZORPAY_KEY_ID');
@@ -241,14 +244,20 @@ const fetchProviderRefundStatus = async ({ payment, refund }) => {
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new AppError('PAYMENT_ERROR', response.status, result.error?.description || 'Razorpay refund status could not be fetched');
         const refunds = result.items || [result];
-        const match = refunds.find((item) => item.id === refund.providerRefundId || item.notes?.refund_id === refund.id);
-        return match ? { status: normalize(match.status), providerRefundId: match.id } : { status: 'pending' };
+        const match = refunds.find((item) => (refund.providerRefundId && item.id === refund.providerRefundId) || item.notes?.refund_id === refund.id);
+        return match ? { status: normalizeRefundStatus(match.status), providerRefundId: match.id } : { status: 'pending' };
     }
     if (provider === 'cashfree') {
         const orderId = payment.metadata?.cashfreeOrderId || payment.transactionId;
-        const refundId = refund.providerRefundId || refund.id;
+        if (!orderId) return { status: 'pending' };
+        // The GET route uses the merchant refund ID sent at creation, not
+        // Cashfree's separate cf_refund_id stored as the provider reference.
+        const refundId = String(refund.id);
         const result = await cashfreeRequest(`/orders/${encodeURIComponent(orderId)}/refunds/${encodeURIComponent(refundId)}`);
-        return { status: normalize(result.refund_status), providerRefundId: result.cf_refund_id || result.refund_id || refundId };
+        if (result.order_id !== orderId || result.refund_id !== refundId) {
+            throw new AppError('PAYMENT_ERROR', 502, 'Cashfree refund lookup returned a different order or refund');
+        }
+        return { status: normalizeRefundStatus(result.refund_status), providerRefundId: result.cf_refund_id || result.refund_id };
     }
     if (provider === 'payu') {
         const key = await getCredential('payu.key', 'PAYU_MERCHANT_KEY');
@@ -272,8 +281,9 @@ const fetchProviderRefundStatus = async ({ payment, refund }) => {
         };
         visit(result);
         const payuToken = String(refund.id).replace(/-/g, '').slice(0, 20);
-        const match = flattened.find((item) => String(item.request_id || '') === String(refund.providerRefundId || '') || String(item.RefundToken || item.refund_token || '') === payuToken);
-        return match ? { status: normalize(match.Status || match.status), providerRefundId: match.request_id || refund.providerRefundId } : { status: 'pending' };
+        const match = flattened.find((item) => (refund.providerRefundId && String(item.request_id) === String(refund.providerRefundId))
+            || String(item.RefundToken || item.refund_token || '') === payuToken);
+        return match ? { status: normalizeRefundStatus(match.Status || match.status), providerRefundId: match.request_id || refund.providerRefundId } : { status: 'pending' };
     }
     return { status: 'unsupported' };
 };
@@ -900,13 +910,6 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {}, 
 
         const previousOrderStatus = lockedOrder.status;
         const shouldFinalizePendingOrder = lockedOrder.status === 'pending_payment';
-        if (['pending_payment', 'confirmed', 'on_hold'].includes(lockedOrder.status)) {
-            if (lockedOrder.giftCardAmountPaise) {
-                await require('../giftCard/giftCard.service').settle(lockedOrder.id, 'captured', t);
-            }
-            await lockedOrder.update({ status: 'processing' }, { transaction: t });
-        }
-
         const payment = await Payment.findOne({
             where: { orderId: lockedOrder.id, provider },
             transaction: t,
@@ -914,9 +917,31 @@ const markOrderPaid = async ({ orderId, provider, transactionId, metadata = {}, 
         });
         const paymentAttemptExpired = Boolean(payment?.expiresAt && new Date(payment.expiresAt).getTime() <= Date.now());
         const paymentWasAlreadyPaid = payment?.status === 'paid_online';
-        if (lockedOrder.giftCardAmountPaise && ['refunded', 'partially_refunded'].includes(payment?.status)) {
+        const refundedPayment = ['refunded', 'partially_refunded'].includes(payment?.status);
+        const previousCaptureId = payment?.metadata?.cfPaymentId;
+        const incomingCaptureId = metadata.cfPaymentId;
+        const distinctCapture = Boolean((transactionId && payment?.transactionId && transactionId !== payment.transactionId)
+            || (provider === 'cashfree' && previousCaptureId && incomingCaptureId && String(previousCaptureId) !== String(incomingCaptureId)));
+        if (refundedPayment || (paymentWasAlreadyPaid && distinctCapture)) {
             lateSettlement = Boolean(payment.metadata?.lateSettlement);
+            if (distinctCapture) {
+                logger.error('Different capture reported for settled payment; reconcile with provider', {
+                    orderId, provider, transactionId, recordedTransactionId: payment.transactionId,
+                    incomingCaptureId, recordedCaptureId: previousCaptureId,
+                });
+            }
             return;
+        }
+        // A browser verification can settle Cashfree before its webhook arrives.
+        // Record the first known capture identifier without reopening the order.
+        if (paymentWasAlreadyPaid && provider === 'cashfree' && incomingCaptureId && !previousCaptureId) {
+            await payment.update({ metadata: { ...payment.metadata, cfPaymentId: incomingCaptureId } }, { transaction: t });
+        }
+        if (['pending_payment', 'confirmed', 'on_hold'].includes(lockedOrder.status)) {
+            if (lockedOrder.giftCardAmountPaise) {
+                await require('../giftCard/giftCard.service').settle(lockedOrder.id, 'captured', t);
+            }
+            await lockedOrder.update({ status: 'processing' }, { transaction: t });
         }
         lateSettlement = !paymentWasAlreadyPaid && ['cancelled', 'closed'].includes(previousOrderStatus);
 
@@ -1219,12 +1244,25 @@ const handleCashfreeWebhook = async (rawBody, headers = {}) => {
             if (!payment) {
                 throw new AppError('PAYMENT_ERROR', 503, 'Cashfree payment does not match a local order yet');
             }
+            const providerOrder = await cashfreeRequest(`/orders/${encodeURIComponent(cashfreeOrderId)}`);
+            if (providerOrder.order_id !== cashfreeOrderId || providerOrder.order_status !== 'PAID') {
+                throw new AppError('PAYMENT_ERROR', 503, 'Cashfree order settlement is not confirmed');
+            }
+            const order = await Order.findByPk(payment.orderId, { transaction, lock: transaction.LOCK.UPDATE });
+            if (!order) throw new AppError('NOT_FOUND', 404, 'Order not found');
+            if (providerOrder.order_amount == null || !Number.isFinite(Number(providerOrder.order_amount))
+                || Math.round(Number(providerOrder.order_amount) * 100) !== Math.round(Number(order.total) * 100)
+                || !providerOrder.order_currency || !payment.currency
+                || String(providerOrder.order_currency).toUpperCase() !== String(payment.currency).toUpperCase()) {
+                throw new AppError('PAYMENT_ERROR', 400, 'Cashfree order amount or currency does not match');
+            }
             await markOrderPaid({
                 orderId: payment.orderId,
                 provider: 'cashfree',
                 transactionId: cashfreeOrderId,
                 metadata: {
                     ...(payment.metadata || {}),
+                    cashfreeOrderId,
                     cfPaymentId: cashfreePaymentId,
                     orderStatus,
                     paymentStatus,
@@ -1240,7 +1278,7 @@ const handleCashfreeWebhook = async (rawBody, headers = {}) => {
                 where: { provider: 'cashfree', transactionId: cashfreeOrderId },
                 transaction,
             });
-            if (failed && !['paid_online', 'refunded'].includes(failed.status)) {
+            if (failed && !['paid_online', 'refunded', 'partially_refunded'].includes(failed.status)) {
                 const failedOrder = await Order.findByPk(failed.orderId, { transaction });
                 if (failedOrder?.status === 'pending_payment') {
                     await markPaymentFailed({
