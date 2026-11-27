@@ -47,7 +47,7 @@ const EMAIL_WRAPPER = (content, footer = '') => `<!DOCTYPE html>
   <div class="footer">
     ${footer}
     <p>{{copyright}}</p>
-    <p>You're receiving this email because you have an account at <a href="{{website_url}}">{{store_name}}</a>.</p>
+    <p>This message was sent by <a href="{{website_url}}">{{store_name}}</a>.</p>
   </div>
 </div>
 </body>
@@ -114,7 +114,7 @@ const DEFAULTS = {
     <hr class="divider">
     <p style="font-size:13px;color:#888">Questions? <a href="mailto:{{support_email}}">{{support_email}}</a></p>
 `, ''),
-    bodyText: 'Hi {{customer_name}},\n\nYour order #{{order_number}} has shipped!\n\n{{#if tracking_number}}Tracking: {{tracking_number}}\n{{/if}}View order: {{website_url}}/account/orders/{{order_id}}\n\n{{store_name}}',
+    bodyText: 'Hi {{customer_name}},\n\nYour order #{{order_number}} has shipped!\n\n{{#if tracking_number}}Tracking: {{tracking_number}}\n{{/if}}{{#if tracking_url}}Track your package: {{tracking_url}}\n{{/if}}View order: {{website_url}}/account/orders/{{order_id}}\n\n{{store_name}}',
   },
 
   order_delivered: {
@@ -148,25 +148,24 @@ const DEFAULTS = {
     <h2>Your order has been cancelled</h2>
     <p>Hi {{customer_name}}, we're letting you know that order <strong>#{{order_number}}</strong> has been cancelled.</p>
     {{#if cancel_reason}}<div class="info-box"><p><strong>Reason:</strong> {{cancel_reason}}</p></div>{{/if}}
-    {{#if refund_amount}}<p>A refund of <strong>{{refund_amount}}</strong> will be processed to your original payment method within 5–7 business days.</p>{{/if}}
     <a href="{{website_url}}/products" class="btn">Continue Shopping</a>
     <hr class="divider">
     <p style="font-size:13px;color:#888">Questions? <a href="mailto:{{support_email}}">{{support_email}}</a></p>
 `, ''),
-    bodyText: 'Hi {{customer_name}},\n\nYour order #{{order_number}} has been cancelled.\n\n{{#if refund_amount}}Refund: {{refund_amount}}{{/if}}\n\n{{store_name}}',
+    bodyText: 'Hi {{customer_name}},\n\nYour order #{{order_number}} has been cancelled.\n{{#if cancel_reason}}Reason: {{cancel_reason}}\n{{/if}}\n{{store_name}}',
   },
 
   order_refunded: {
     subject: 'Refund Processed for Order #{{order_number}}',
     bodyHtml: EMAIL_WRAPPER(`
-    <h2>Refund processed</h2>
-    <p>Hi {{customer_name}}, a refund of <strong>{{refund_amount}}</strong> has been processed for order #{{order_number}}.</p>
-    <p>Please allow 5–7 business days for the amount to appear in your account, depending on your payment provider.</p>
+    <h2>{{#if refund_is_partial}}Partial refund{{else}}Refund{{/if}} processed</h2>
+    <p>Hi {{customer_name}}, a refund of <strong>{{#if refund_amount_display}}{{refund_amount_display}}{{else}}{{refund_amount}}{{/if}}</strong> has been processed for order #{{order_number}}.</p>
+    {{#if refund_reference}}<p><strong>Refund reference:</strong> {{refund_reference}}</p>{{/if}}
     <a href="{{website_url}}/account/orders/{{order_id}}" class="btn">View Order</a>
     <hr class="divider">
     <p style="font-size:13px;color:#888">Questions? <a href="mailto:{{support_email}}">{{support_email}}</a></p>
 `, ''),
-    bodyText: 'Hi {{customer_name}},\n\nRefund of {{refund_amount}} for order #{{order_number}} has been processed.\n\n{{store_name}}',
+    bodyText: 'Hi {{customer_name}},\n\n{{#if refund_is_partial}}Partial refund{{else}}Refund{{/if}} of {{#if refund_amount_display}}{{refund_amount_display}}{{else}}{{refund_amount}}{{/if}} for order #{{order_number}} has been processed.\n{{#if refund_reference}}Refund reference: {{refund_reference}}\n{{/if}}{{#if order_url}}View order: {{order_url}}\n{{/if}}\n{{store_name}}',
   },
 
   payment_failed_customer: {
@@ -175,7 +174,6 @@ const DEFAULTS = {
     <h2>We couldn't process your payment</h2>
     <p>Hi {{customer_name}}, payment for order <strong>#{{order_number}}</strong> could not be completed.</p>
     {{#if failure_reason}}<div class="info-box"><p><strong>Reason:</strong> {{failure_reason}}</p></div>{{/if}}
-    <p>You can return to checkout and try another payment method.</p>
     <a href="{{website_url}}/payment/failure?orderId={{order_id}}" class="btn">Review Payment</a>
     <p style="font-size:13px;color:#888">Need help? <a href="mailto:{{support_email}}">{{support_email}}</a></p>
 `, ''),
@@ -202,9 +200,9 @@ const DEFAULTS = {
     <p>Hi {{name}}, thanks for signing up. Click the button below to verify your email address and activate your account.</p>
     <a href="{{verify_url}}" class="btn">Verify Email</a>
     <hr class="divider">
-    <p style="font-size:13px;color:#888">This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.</p>
+    <p style="font-size:13px;color:#888">This link is valid for {{email_verification_duration}} from the time it was requested. If you didn't create an account, you can safely ignore this email.</p>
 `, ''),
-    bodyText: 'Hi {{name}},\n\nVerify your email: {{verify_url}}\n\nLink expires in 24 hours.\n\n{{store_name}}',
+    bodyText: 'Hi {{name}},\n\nVerify your email: {{verify_url}}\n\nThis link is valid for {{email_verification_duration}} from the time it was requested.\n\n{{store_name}}',
   },
 
   password_reset: {
@@ -214,9 +212,9 @@ const DEFAULTS = {
     <p>Hi {{name}}, we received a request to reset your password. Click the button below to set a new one.</p>
     <a href="{{reset_url}}" class="btn">Reset Password</a>
     <hr class="divider">
-    <p style="font-size:13px;color:#888">This link expires in 1 hour. If you didn't request a password reset, ignore this email — your account is safe.</p>
+    <p style="font-size:13px;color:#888">This link is valid for {{password_reset_duration}} from the time it was requested. If you didn't request a password reset, you can ignore this email.</p>
 `, ''),
-    bodyText: 'Hi {{name}},\n\nReset your password: {{reset_url}}\n\nLink expires in 1 hour.\n\n{{store_name}}',
+    bodyText: 'Hi {{name}},\n\nReset your password: {{reset_url}}\n\nThis link is valid for {{password_reset_duration}} from the time it was requested.\n\n{{store_name}}',
   },
 
   low_stock_alert: {
@@ -440,13 +438,13 @@ const DEFAULTS = {
     <p>Hi {{name}},</p>
     <p>Please click the button below to confirm this as your new email address for <strong>{{store_name}}</strong>.</p>
     <div class="info-box">
-      <p>This verification link expires in 24 hours.</p>
+      <p>This link is valid for {{email_change_verification_duration}} from the time it was requested.</p>
     </div>
     <a href="{{verify_url}}" class="btn">Confirm Email Address</a>
     <hr class="divider">
     <p style="font-size:13px;color:#888">If you did not request this change, you can safely ignore this email.</p>
 `, ''),
-    bodyText: 'Hi {{name}},\n\nConfirm your new email: {{verify_url}}\n\nThis link expires in 24 hours.\n\n{{store_name}}',
+    bodyText: 'Hi {{name}},\n\nConfirm your new email: {{verify_url}}\n\nThis link is valid for {{email_change_verification_duration}} from the time it was requested.\n\n{{store_name}}',
   },
 };
 
@@ -501,6 +499,9 @@ const SAMPLE_VARIABLES = {
   discount_total: null,
   payment_method: 'Credit Card',
   refund_amount: '₹1,249.00',
+  refund_amount_display: '₹250.00',
+  refund_is_partial: true,
+  refund_reference: 'sample-refund-reference',
   cancel_reason: 'Customer requested cancellation',
   failure_reason: 'Insufficient funds',
   tracking_number: 'TRK123456789',
@@ -552,4 +553,31 @@ for (const [outcome, message] of [
   };
   TEMPLATE_VARIABLES[name] = ['customerName', 'productName', 'message', 'status_label', 'enquiry_id', 'store_name', 'website_url', 'support_email'];
 }
+const customerOrderTemplates = ['order_placed', 'order_shipped', 'order_delivered', 'order_out_for_delivery', 'order_cancelled', 'order_refunded', 'payment_failed_customer'];
+for (const name of customerOrderTemplates) {
+  const template = DEFAULTS[name];
+  template.bodyHtml = template.bodyHtml
+    .replace(/<a href="\{\{website_url\}\}\/account\/orders\/\{\{order_id\}\}"[^>]*>View Order<\/a>/g,
+      '{{#if order_url}}<a href="{{order_url}}" class="btn">View Order</a>{{/if}}')
+    .replace(/<p[^>]*>[^<]*<a href="mailto:\{\{support_email\}\}">[^<]*<\/a><\/p>/g,
+      '{{#if support_email}}$&{{/if}}')
+    .replace('{{website_url}}/payment/failure?orderId={{order_id}}', '{{payment_recovery_url}}');
+  template.bodyText = template.bodyText
+    .replace(/View (?:your )?order: \{\{website_url\}\}\/account\/orders\/\{\{order_id\}\}/g,
+      '{{#if order_url}}View order: {{order_url}}{{/if}}')
+    .replace('{{website_url}}/payment/failure?orderId={{order_id}}', '{{payment_recovery_url}}');
+  if (name !== 'order_cancelled' && name !== 'payment_failed_customer') TEMPLATE_VARIABLES[name].push('order_url');
+}
+for (const name of ['admin_new_order', 'admin_order_cancelled', 'admin_order_failed']) {
+  for (const field of ['bodyHtml', 'bodyText']) {
+    DEFAULTS[name][field] = DEFAULTS[name][field].replace('{{website_url}}/admin/orders/{{order_id}}', '{{admin_order_url}}');
+  }
+  TEMPLATE_VARIABLES[name].push('admin_order_url');
+}
+TEMPLATE_VARIABLES.payment_failed_customer.push('payment_recovery_url');
+TEMPLATE_VARIABLES.order_refunded.push('refund_amount_display', 'refund_reference', 'refund_is_partial');
+TEMPLATE_VARIABLES.password_reset.push('password_reset_duration');
+TEMPLATE_VARIABLES.email_verification.push('email_verification_duration');
+TEMPLATE_VARIABLES.email_change_verification.push('email_change_verification_duration');
+
 module.exports = { DEFAULTS, TEMPLATE_VARIABLES, SAMPLE_VARIABLES };

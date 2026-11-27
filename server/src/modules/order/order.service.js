@@ -4046,6 +4046,10 @@ const reportRefundCompletion = async (refund, orderId, actingUserId, auditContex
             order_number: refundedOrder?.orderNumber,
             order_id: orderId,
             refund_amount: refund.amount,
+            refund_amount_display: new Intl.NumberFormat('en', { style: 'currency', currency: refund.currency || 'INR' }).format(Number(refund.amount)),
+            refund_reference: refund.providerRefundId || refund.id,
+            refund_is_partial: Number(refund.amount) < Number(refundedOrder?.total || refund.metadata?.capturedAmount || refund.amount),
+            guest_order: Boolean(refundedOrder && !refundedOrder.userId),
             refund_id: refund.id,
         };
         const routed = await NotificationService.sendEvent('order_refunded', { orderId, variables });
