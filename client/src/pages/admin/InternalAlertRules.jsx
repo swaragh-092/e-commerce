@@ -190,11 +190,11 @@ export default function InternalAlertRules({ assigned = false }) {
     } catch (error) { setError(getApiErrorMessage(error, 'Could not update the notification inbox.')); }
     finally { setCreating(false); }
   };
-  const toggleEmail = async () => {
+  const toggleEmail = async enabled => {
     setCreating(true);
     setError('');
-    try { await api.pauseEmail(!data.emailPaused); await reload(); }
-    catch (error) { setError(getApiErrorMessage(error, 'Could not update email delivery.')); }
+    try { await api.setEmailEnabled(enabled); await reload(); }
+    catch (error) { setError(getApiErrorMessage(error, 'Could not update internal email delivery.')); }
     finally { setCreating(false); }
   };
   const create = async () => {
@@ -233,11 +233,12 @@ export default function InternalAlertRules({ assigned = false }) {
           <Box sx={{ flex: '1 1 180px' }}>
             <Typography variant="subtitle2">Internal email</Typography>
             <Typography variant="body2" color="text.secondary">
-              {!data.emailEnabled ? 'Internal email is off.' : data.emailPaused ? 'Internal email is paused.' : 'Sends matching alerts to verified staff addresses.'}
+              {data.emailEnabled && !data.emailPaused ? 'Sends matching alerts to verified staff addresses.' : 'Internal email is off.'}
             </Typography>
           </Box>
-          <Chip size="small" variant="outlined" label={!data.emailEnabled ? 'Off' : data.emailPaused ? 'Paused' : 'On'} />
-          {data.emailEnabled && data.inboxAvailable && <Button size="small" onClick={toggleEmail} disabled={creating}>{data.emailPaused ? 'Resume email' : 'Pause email'}</Button>}
+          <Switch checked={Boolean(data.emailEnabled && !data.emailPaused)} disabled={creating}
+            inputProps={{ role: 'switch', 'aria-label': 'Enable internal email' }}
+            onChange={(_, enabled) => toggleEmail(enabled)} />
         </Stack>
       </Stack>
     </Paper>}

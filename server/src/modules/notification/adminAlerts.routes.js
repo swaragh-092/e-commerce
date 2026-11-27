@@ -122,14 +122,14 @@ router.get('/preferences', wrap(async (_, user) => {
   await a.seed();
   const rules = await a.sql('SELECT event, config FROM admin_alert_rules');
   const preferences = await a.preference(user.id);
-  const paused = await a.emailPaused();
+  const sendEmail = await a.emailActive();
   const events = Object.entries(a.events).map(([key, event]) => {
     const configs = rules.filter(row => row.event === key && row.config.enabled).map(row => row.config);
     return { key, label: event.label, required: configs.some(config => config.required),
       in_app: configs.some(config => a.allowed(key, config, preferences, 'in_app', user)),
-      email: !paused && (!a.isAssignment(key) || a.assignmentCutover()) && configs.some(config => a.allowed(key, config, preferences, 'email', user)) };
+      email: sendEmail && (!a.isAssignment(key) || a.assignmentCutover()) && configs.some(config => a.allowed(key, config, preferences, 'email', user)) };
   });
-  return { preferences, events, canEmail: Boolean(user.emailVerified), emailPaused: paused || !a.emailEnabled() };
+  return { preferences, events, canEmail: Boolean(user.emailVerified), emailPaused: !sendEmail };
 }));
 router.put('/preferences', wrap(async (req, user) => {
   const preferences = a.valid(preferenceSchema, req.body);
@@ -146,8 +146,7 @@ router.get('/internal-rules', wrap(async (_, user) => {
   const manage = a.manager(user);
   const inboxEnabled = await a.enabled();
   const inboxAvailable = await a.available(user.id);
-  const emailEnabled = a.emailEnabled();
-  const emailPaused = await a.emailPaused();
+  const { enabled: emailEnabled, paused: emailPaused } = await a.emailPolicy();
   if (manage && !inboxAvailable) return { manage, inboxEnabled, inboxAvailable, emailEnabled, emailPaused, rules: [] };
   if (manage) await a.seed();
   const rules = manage
@@ -177,9 +176,18 @@ router.put('/internal-rules/inbox-policy', wrap(async (req, user) => {
 router.put('/internal-rules/email-policy', wrap(async (req, user) => {
   adminOnly(user);
   const paused = a.valid(Joi.boolean().required(), req.body.paused);
-  await a.sql('UPDATE admin_alert_policy SET email_paused = :paused RETURNING singleton', { paused });
-  return { paused };
-}));
+  const enabled = !paused;
+  await db().sequelize.transaction(async transaction => {
+    await a.one('SELECT singleton FROM admin_alert_policy FOR UPDATE', {}, transaction);
+    const previous = await a.emailActive(transaction);
+    await a.sql('UPDATE admin_alert_policy SET email_enabled = :enabled, email_paused = false RETURNING singleton', { enabled }, transaction);
+    await db().AuditLog.create({
+      userId: user.id, action: 'UPDATE', entity: 'Settings', entityId: 'admin_alert_email',
+      changes: { enabled: { old: previous, new: enabled } },
+    }, { transaction });
+  });
+  return { enabled, paused };
+}, true));
 router.post('/internal-rules', wrap(async (req, user) => {
   adminOnly(user);
   const { event, config: input } = req.body;
@@ -254,7 +262,7 @@ for (const action of ['preview', 'test']) {
     const message = a.render(rule.event, config, sample);
     if (action === 'preview') return message;
     const channel = a.valid(Joi.string().valid('in_app', 'email').required(), req.body.channel);
-    if (channel === 'email' && (!a.emailEnabled() || await a.emailPaused(transaction) || !user.emailVerified)) a.fail('A verified email and internal email delivery are required');
+    if (channel === 'email' && (!await a.emailActive(transaction) || !user.emailVerified)) a.fail('A verified email and internal email delivery are required');
     const id = randomUUID();
     const data = { test: true, userId: user.id, testConfig: { ...config, channels: [channel] } };
     await a.sql(`INSERT INTO admin_alert_events (id,event,data,rule_versions) VALUES (:id,:event,CAST(:data AS jsonb),'[]') RETURNING id`,

@@ -24,7 +24,6 @@ for (const item of require('./notification.events').EVENTS) {
 
 const pilot = () => (process.env.ADMIN_ALERTS_PILOT_USERS || '').split(',').map(id => id.trim()).filter(Boolean);
 const pilotEligible = id => !pilot().length || pilot().includes(id);
-const emailEnabled = () => process.env.ADMIN_ALERTS_EMAIL_ENABLED === 'true';
 const assignmentCutover = () => !pilot().length && process.env.ADMIN_ALERTS_ASSIGNMENT_EMAIL === 'true';
 const db = () => require('../index');
 const sql = (statement, replacements = {}, transaction) =>
@@ -35,7 +34,17 @@ const enabled = async transaction => {
   return policy?.inbox_enabled ?? (process.env.ADMIN_ALERTS_ENABLED === 'true');
 };
 const available = async id => pilotEligible(id) && await enabled();
-const emailPaused = async transaction => (await one('SELECT email_paused FROM admin_alert_policy', {}, transaction)).email_paused;
+const emailPolicy = async transaction => {
+  const policy = await one('SELECT email_enabled, email_paused FROM admin_alert_policy', {}, transaction);
+  return {
+    enabled: policy?.email_enabled ?? (process.env.ADMIN_ALERTS_EMAIL_ENABLED === 'true'),
+    paused: Boolean(policy?.email_paused),
+  };
+};
+const emailActive = async transaction => {
+  const { enabled, paused } = await emailPolicy(transaction);
+  return enabled && !paused;
+};
 const json = JSON.stringify;
 const fail = (message, status = 400) => { throw new AppError(status === 409 ? 'CONFLICT' : status === 403 ? 'FORBIDDEN' : status === 404 ? 'NOT_FOUND' : 'VALIDATION_ERROR', status, message); };
 const uuid = Joi.string().uuid();
@@ -192,7 +201,7 @@ const preference = async (id, transaction) =>
 function allowed(event, config, prefs, channel, user) {
   if (!config.channels.includes(channel)) return false;
   if (channel === 'in_app' && config.required) return true;
-  if (channel === 'email' && (!emailEnabled() || !user.emailVerified || !user.email)) return false;
+  if (channel === 'email' && (!user.emailVerified || !user.email)) return false;
   const choice = prefs.events[event]?.[channel];
   return choice ?? (channel === 'email' ? config.emailDefault : config.inAppDefault);
 }
@@ -236,7 +245,7 @@ async function expandEvent() {
     const rules = await sql('SELECT * FROM admin_alert_rules WHERE event = :event ORDER BY id', { event: event.event }, transaction);
     const record = await source(event, transaction);
     const users = await staff(null, transaction);
-    const paused = await emailPaused(transaction);
+    const sendEmail = await emailActive(transaction);
     for (const rule of rules) {
       const config = rule.config;
       if (!config.enabled || Object.entries(config.conditions).some(([key, value]) => event.data[key] !== value)) continue;
@@ -248,7 +257,7 @@ async function expandEvent() {
           ? { ...message, link: '/admin/profile' } : message;
         if (allowed(event.event, config, prefs, 'in_app', user)) await queueDelivery('admin_alert_inbox', event, rule, user, personalized, transaction);
         if (isAssignment(event.event) && (!event.data.configurableEmail || !assignmentCutover())) continue;
-        if (!paused && allowed(event.event, config, prefs, 'email', user)) await queueDelivery('admin_alert_email', event, rule, user, message, transaction);
+        if (sendEmail && allowed(event.event, config, prefs, 'email', user)) await queueDelivery('admin_alert_email', event, rule, user, message, transaction);
       }
     }
     await sql('UPDATE admin_alert_events SET rule_versions = CAST(:versions AS jsonb) WHERE id = :id RETURNING id',
@@ -282,7 +291,7 @@ async function deliver() {
       await finish('skipped', 'Recipient or email channel is no longer eligible');
       return true;
     }
-    const delay = await emailPaused() ? 60000 : config.urgent || event.data.test ? 0 : quietDelay(prefs.quiet);
+    const delay = !(await emailActive()) ? 60000 : config.urgent || event.data.test ? 0 : quietDelay(prefs.quiet);
     if (delay) {
       await finish('queued', null, delay);
       return true;
@@ -323,5 +332,5 @@ async function processAlerts() {
 module.exports = {
   events, enabled, available, assignmentCutover, capture, process: processAlerts, seed, sql, one, json, fail, valid, uuid,
   staff, manager, editable, selectors, validateConfig, definition, preference, render, queueDelivery,
-  allowed, emailEnabled, emailPaused, quietDelay, isAssignment,
+  allowed, emailPolicy, emailActive, quietDelay, isAssignment,
 };
