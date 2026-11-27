@@ -984,9 +984,9 @@ const ProductEditPage = () => {
             xl: '176px minmax(0, 1fr) minmax(260px, 320px)',
           },
           gridTemplateAreas: {
-            xs: '"storefront" "content"',
-            lg: '"nav storefront" "nav content"',
-            xl: '"nav content storefront"',
+            xs: '"storefront" "intro" "details"',
+            lg: '"nav storefront" "nav intro" "nav details"',
+            xl: '"nav intro storefront" "nav details details"',
           },
           gap: 3,
           alignItems: 'start',
@@ -1081,7 +1081,7 @@ const ProductEditPage = () => {
             {formData.type === 'simple' && variantCount > 0 && <Alert severity="info">This Simple product uses its own stock quantity. Older variant records are retained for existing orders and do not control current stock or alerts.</Alert>}
 
           </Paper>
-          <Box sx={{ display: 'grid', gap: { xs: 2, sm: 3 }, minWidth: 0, gridArea: 'content' }}>
+          <Box sx={{ display: 'grid', gap: { xs: 2, sm: 3 }, minWidth: 0, gridArea: 'intro' }}>
             {productAssistantEnabled && (
               <ProductAssistantPanel
                 initialInput={formData.name}
@@ -1164,6 +1164,8 @@ const ProductEditPage = () => {
               </Box>
             </Paper>
 
+          </Box>
+          <Box sx={{ display: 'grid', gap: { xs: 2, sm: 3 }, minWidth: 0, gridArea: 'details' }}>
             {pricingCapability && (
               <Paper {...editorSection('pricing-tax', pricingLabel)} variant="outlined" sx={editorPanelSx}>
                 <Typography variant="h6" component="h2" sx={{ mb: 0.5 }}>
