@@ -32,6 +32,12 @@ const { idParamSchema, stringIdParamSchema } = require('../../utils/common.valid
 // ─── Sale Label routes (must come BEFORE the /:group wildcard) ───────────────
 // Public — used to populate dropdowns in the storefront & admin product forms
 router.get('/sale-labels', saleLabelController.list);
+router.get('/sale-labels/:id/usage',
+  authenticate,
+  authorizePermissions(PERMISSIONS.SETTINGS_MANAGE),
+  validate(stringIdParamSchema, 'params'),
+  saleLabelController.usage
+);
 
 // Admin — CRUD
 router.post('/sale-labels',

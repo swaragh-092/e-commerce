@@ -118,6 +118,7 @@ const setDefaultAddress = (id) => api.put(`/users/me/addresses/${id}/default`);
 
 // Sale Labels
 const getSaleLabels = () => api.get('/settings/sale-labels');
+export const getSaleLabelUsage = (id) => api.get(`/settings/sale-labels/${encodeURIComponent(id)}/usage`);
 const createSaleLabel = (data) => api.post('/settings/sale-labels', data);
 const updateSaleLabel = (id, data) => api.patch(`/settings/sale-labels/${id}`, data);
 const deleteSaleLabel = (id) => api.delete(`/settings/sale-labels/${id}`);
