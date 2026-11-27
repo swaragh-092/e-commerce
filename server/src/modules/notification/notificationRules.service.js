@@ -193,7 +193,8 @@ const customerContext = async ({ event, orderId, variables, transaction, custome
     context.variables = { order_number: order.orderNumber, order_id: order.id, order_date: order.createdAt,
       order_total: order.total, order_subtotal: order.subtotal, shipping_total: order.shippingCost, tax_total: order.tax,
       discount_total: order.discountAmount, payment_method: order.paymentMethod,
-      items: (order.items || []).map(item => ({ name: item.snapshotName, quantity: item.quantity, price: item.snapshotPrice, total: item.total, sku: item.snapshotSku })), ...variables };
+       items: (order.items || []).map(item => ({ name: item.snapshotName, quantity: item.quantity, price: item.snapshotPrice, total: item.total, sku: item.snapshotSku })), ...variables,
+       guest_order: !order.userId };
     context.occurrence = [order.id, variables.notification_event_id || '', variables.tracking_number || '', variables.status_label || '', variables.return_id || '', variables.refund_id || '', variables.request_type || ''];
   } else if (variables.enquiry_id || variables.enquiryId) {
     const enquiry = await Enquiry.findByPk(variables.enquiry_id || variables.enquiryId, optionsFor(transaction));

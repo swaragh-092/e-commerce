@@ -33,6 +33,14 @@ const parseRecipientList = (value) => String(value || '')
     .map((item) => item.trim())
     .filter(Boolean);
 
+const { AUTH_TIME } = require('../../config/constants');
+
+const formatLinkDuration = (ms) => {
+    const minutes = ms / 60_000;
+    const [count, unit] = minutes % 60 === 0 ? [minutes / 60, 'hour'] : [minutes, 'minute'];
+    return `${count} ${unit}${count === 1 ? '' : 's'}`;
+};
+
 const normalizeVariables = (variables = {}) => {
     const normalized = { ...variables };
 
@@ -66,20 +74,31 @@ const getGlobalVariables = async () => {
     return {
         store_name:    storeName,
         website_url:   (process.env.CLIENT_URL || 'http://localhost:3000').split(',')[0].trim().replace(/\/+$/, ''),
-        support_email: footer.email || general.contactEmail || 'support@example.com',
+        support_email: footer.email || general.contactEmail || '',
         store_logo:    storeLogo || null,
         copyright:     (footer.copyright || '© {{year}} {{store_name}}. All rights reserved.')
                         .replace('{{year}}', new Date().getFullYear())
                         .replace('{{store_name}}', () => storeName),
         current_year:  new Date().getFullYear(),
+        password_reset_duration: formatLinkDuration(AUTH_TIME.PASSWORD_RESET_TTL_MS),
+        email_verification_duration: formatLinkDuration(AUTH_TIME.EMAIL_VERIFICATION_TTL_MS),
+        email_change_verification_duration: formatLinkDuration(AUTH_TIME.EMAIL_CHANGE_VERIFICATION_TTL_MS),
     };
 };
 
 const compileTemplate = async (template, variables = {}) => {
     const mergedVariables = { ...normalizeVariables(variables), ...(await getGlobalVariables()) };
+    if (mergedVariables.order_id) {
+        const id = encodeURIComponent(mergedVariables.order_id);
+        const storefront = mergedVariables.website_url;
+        const admin = (process.env.NOTIFICATION_ADMIN_URL || storefront).trim().replace(/\/+$/, '');
+        mergedVariables.order_url = mergedVariables.guest_order ? '' : `${storefront}/account/orders/${id}`;
+        mergedVariables.admin_order_url = `${admin}/admin/orders/${id}`;
+        mergedVariables.payment_recovery_url = `${storefront}/payment/failure?orderId=${id}`;
+    }
     const subject = handlebars.compile(template.subject || '')(mergedVariables);
     const html = handlebars.compile(template.bodyHtml || '')(mergedVariables);
-    const text = handlebars.compile(template.bodyText || '')(mergedVariables);
+    const text = handlebars.compile(template.bodyText || '', { noEscape: true })(mergedVariables);
     return { subject, html, text };
 };
 

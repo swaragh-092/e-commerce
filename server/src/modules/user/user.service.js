@@ -5,7 +5,7 @@ const { Op } = require('sequelize');
 const AppError = require('../../utils/AppError');
 const AuditService = require('../audit/audit.service');
 const { getPagination } = require('../../utils/pagination');
-const { ACTIONS, ENTITIES } = require('../../config/constants');
+const { ACTIONS, AUTH_TIME, ENTITIES } = require('../../config/constants');
 const { getPermissionsForUser, PERMISSIONS } = require('../../config/permissions');
 const logger = require('../../utils/logger');
 const NotificationService = require('../notification/notification.service');
@@ -886,7 +886,7 @@ const requestEmailChange = async (userId, newEmail, password) => {
     // token can never confirm a new pending email (single-token invariant).
     await EmailVerificationToken.destroy({ where: { userId }, transaction: t });
     await EmailVerificationToken.create(
-      { userId, token: hashed, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) },
+      { userId, token: hashed, expiresAt: new Date(Date.now() + AUTH_TIME.EMAIL_CHANGE_VERIFICATION_TTL_MS) },
       { transaction: t }
     );
 
