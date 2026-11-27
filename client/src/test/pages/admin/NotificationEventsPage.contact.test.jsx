@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import NotificationEventsPage from '../../../pages/admin/NotificationEventsPage';
 import { notificationService } from '../../../services/notificationService';
@@ -62,7 +62,8 @@ describe('Contact form uses the shared event notification interface', () => {
     render(<NotificationEventsPage />);
     await screen.findByRole('textbox', { name: 'Notification name' });
     fireEvent.click(screen.getByRole('tab', { name: 'Account & system templates' }));
-    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Subject Line' })).toHaveValue('Welcome subject'));
+    await act(() => vi.dynamicImportSettled());
+    expect(screen.getByRole('textbox', { name: 'Subject Line' })).toHaveValue('Welcome subject');
     expect(screen.queryByText('contact_form_admin', { exact: true })).not.toBeInTheDocument();
     expect(screen.queryByText('Contact form recipients', { exact: true })).not.toBeInTheDocument();
   });
