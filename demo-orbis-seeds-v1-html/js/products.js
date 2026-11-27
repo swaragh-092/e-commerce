@@ -58,6 +58,7 @@ function loadProductView() {
     }).catch(function (error) {
         if (requestId !== productsState.requestId) return;
         content.innerHTML = '';
+        updateCategoryBanner(null);
         if (error.status === 404 && window.OrbiSEO) window.OrbiSEO.unavailable();
         showProductError(error, loadProductView);
     }).finally(function () {
@@ -247,7 +248,6 @@ function updateCategoryBanner(path) {
     const bannerElem = document.getElementById("bg") || document.querySelector(".inner-page-banner-wrapper");
     if (!bannerElem) return;
 
-    const defaultBanner = "images/inr-bnr.avif";
     let bannerRaw = null;
 
     if (path && path.length > 0) {
@@ -259,20 +259,7 @@ function updateCategoryBanner(path) {
         }
     }
 
-    if (bannerRaw && typeof bannerRaw === "string" && bannerRaw.trim()) {
-        bannerRaw = bannerRaw.trim();
-        let bannerUrl = bannerRaw;
-        if (/^https?:\/\//i.test(bannerRaw)) {
-            bannerUrl = bannerRaw;
-        } else if (bannerRaw.startsWith("/")) {
-            bannerUrl = APP_URL + bannerRaw;
-        } else {
-            bannerUrl = APP_URL + "/" + bannerRaw;
-        }
-        bannerElem.style.background = "url('" + bannerUrl + "') no-repeat center center/cover";
-    } else {
-        bannerElem.style.background = "url('" + defaultBanner + "') no-repeat center center/cover";
-    }
+    OrbiCatalog.setCategoryBanner(bannerElem, bannerRaw);
 }
 
 function findCategoryPath(categories, slug, currentPath) {
@@ -321,7 +308,7 @@ function renderBreadcrumbWithHierarchy(path, defaultName, preserveHeading) {
 }
 
 function updateCategoryBreadcrumbs(categorySlug, fallbackName) {
-    function apply(categories) {
+    function apply(categories, fromCache) {
         if (productBrowser) {
             var values = [{ value: '', label: 'All categories' }];
             function collect(items, depth) {
@@ -338,14 +325,14 @@ function updateCategoryBreadcrumbs(categorySlug, fallbackName) {
         if (activeCategory !== (categorySlug || '')) return;
         var path = findCategoryPath(categories, categorySlug);
         renderBreadcrumbWithHierarchy(path, fallbackName, params.has('slug'));
-        updateCategoryBanner(path);
+        if (!fromCache) updateCategoryBanner(path);
         updateBackButtonPath(path);
         var currentCat = path && path[path.length - 1];
         if (window.OrbiSEO && currentCat && !params.get('slug')) window.OrbiSEO.refresh(currentCat);
     }
     try {
         var cached = JSON.parse(sessionStorage.getItem('orbis_categories_populated_v1') || 'null');
-        if (Array.isArray(cached)) apply(cached);
+        if (Array.isArray(cached)) apply(cached, true);
     } catch (error) { /* Storage is optional. */ }
     if (!productCategoriesRequest) {
         productCategoriesRequest = fetch(API_URL + 'categories?hideEmpty=true').then(OrbiCatalog.readResponse).then(function (result) {

@@ -53,7 +53,7 @@
 
 <body>
     <!-- orbi-seo-preview -->
-    <div class="wrapper">
+    <div class="wrapper gallery-page-wrapper">
         <div class="inner-page-banner-wrapper" id="bg"
             style="background: url('images/inr-bnr.avif') no-repeat center center/cover;">
             <header>
@@ -189,15 +189,15 @@
         </div>
         <!-- inner-banner -->
 
-        <div class="gallery-wrapper">
+        <main class="gallery-wrapper gallery-album-page" aria-labelledby="gallery-title">
             <div class="fluid-container">
-                <h1 id="gallery-title" style="text-align: center; margin-bottom: 30px;"><span class="first-letter">Gallery</span></h1>
-                <p id="gallery-description" class="gallery-description" hidden></p>
-                <p id="gallery-message" role="status" aria-live="polite" style="text-align:center;">Loading gallery...</p>
+                <h1 id="gallery-title" class="gallery-section-heading">Gallery</h1>
+                <p id="gallery-message" role="status" aria-live="polite">Loading gallery...</p>
                 <div class="gallery-retry-wrapper"><button id="gallery-retry" type="button" hidden>Try again</button></div>
                 <div id="gallery-content" class="gallery-detail-content" data-gallery-view="detail" aria-busy="true"></div>
+                <p id="gallery-description" class="gallery-description" hidden></p>
             </div>
-        </div>
+        </main>
 
 
 

@@ -1,5 +1,5 @@
 (function () {
-    var baseApiUrl = (typeof API_URL !== 'undefined' ? API_URL : "https://eshopadmin.swaragh.org.in/api/");
+    var baseApiUrl = (typeof API_URL !== 'undefined' ? API_URL : "https://ad.orbiseeds.com/api/");
     var BLOGS_API_URL = baseApiUrl.replace(/\/$/, "") + "/blogs/posts";
 
     function getSlug() {

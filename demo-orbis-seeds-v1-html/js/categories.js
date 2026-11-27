@@ -49,6 +49,7 @@ function fetchCategories() {
         })
         .catch(function (error) {
             console.error("Error fetching categories:", error);
+            updateCategoryBanner(null, null);
             container.innerHTML = '<div class="error">Error loading categories.</div>';
             var retry = document.createElement('button');
             retry.type = 'button'; retry.className = 'view-product-btn'; retry.textContent = 'Try again';
@@ -127,7 +128,6 @@ function updateCategoryBanner(category, path) {
     const bannerElem = document.getElementById("bg") || document.querySelector(".inner-page-banner-wrapper");
     if (!bannerElem) return;
 
-    const defaultBanner = "images/inr-bnr.avif";
     let bannerRaw = null;
 
     if (category && (category.bannerImage || category.banner)) {
@@ -141,20 +141,7 @@ function updateCategoryBanner(category, path) {
         }
     }
 
-    if (bannerRaw && typeof bannerRaw === "string" && bannerRaw.trim()) {
-        bannerRaw = bannerRaw.trim();
-        let bannerUrl = bannerRaw;
-        if (/^https?:\/\//i.test(bannerRaw)) {
-            bannerUrl = bannerRaw;
-        } else if (bannerRaw.startsWith("/")) {
-            bannerUrl = APP_URL + bannerRaw;
-        } else {
-            bannerUrl = APP_URL + "/" + bannerRaw;
-        }
-        bannerElem.style.background = "url('" + bannerUrl + "') no-repeat center center/cover";
-    } else {
-        bannerElem.style.background = "url('" + defaultBanner + "') no-repeat center center/cover";
-    }
+    OrbiCatalog.setCategoryBanner(bannerElem, bannerRaw);
 }
 
 function displayCategories(list, parentName, targetCategory, path) {

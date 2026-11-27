@@ -26,6 +26,30 @@
         if (url.charAt(0) === '/') return String(window.APP_URL || window.location.origin).replace(/\/+$/, '') + url;
         return url.startsWith('uploads/') ? String(window.APP_URL || window.location.origin).replace(/\/+$/, '') + '/' + url : url;
     };
+    var bannerRequests = new WeakMap();
+    C.setCategoryBanner = function (element, source) {
+        var url = C.imageUrl(source);
+        if (bannerRequests.get(element)?.url === url) return;
+        var request = { url: url };
+        bannerRequests.set(element, request);
+        element.style.backgroundImage = '';
+        element.classList.remove('banner-fallback');
+        if (url === 'images/orbi-seeds-logo.png') {
+            element.classList.add('banner-fallback');
+            return;
+        }
+
+        var image = new window.Image();
+        image.onload = function () {
+            if (bannerRequests.get(element) === request) {
+                element.style.backgroundImage = 'url(' + JSON.stringify(url) + ')';
+            }
+        };
+        image.onerror = function () {
+            if (bannerRequests.get(element) === request) element.classList.add('banner-fallback');
+        };
+        image.src = url;
+    };
     C.valueLabel = function (value, attribute) {
         value = value || {};
         var label = String(value.displayLabel || value.value || '');
