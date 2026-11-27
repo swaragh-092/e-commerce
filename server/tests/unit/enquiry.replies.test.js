@@ -8,6 +8,7 @@ const notifications = require('../../src/modules/notification/notification.servi
 let transaction, enquiry;
 let currentEnquiry;
 beforeEach(() => {
+  vi.spyOn(require('../../src/modules/notification/adminAlerts.service'), 'capture').mockResolvedValue(false);
   transaction = { LOCK: { UPDATE: 'UPDATE' }, commit: vi.fn(), rollback: vi.fn() };
   enquiry = { id: 'eq', name: 'Customer', email: 'customer@example.test', status: 'pending', message: 'Question', save: vi.fn() };
   currentEnquiry = { status: 'pending', replies: [{ id: 'old', message: 'Previous reply' }], save: vi.fn() };

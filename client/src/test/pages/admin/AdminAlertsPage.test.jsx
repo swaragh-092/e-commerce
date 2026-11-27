@@ -1,12 +1,13 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, expect, it, vi } from 'vitest';
+import InternalAlertRules from '../../../pages/admin/InternalAlertRules';
 import AdminAlertsPage from '../../../pages/admin/AdminAlertsPage';
 import AdminAlertBell from '../../../components/admin/AdminAlertBell';
 import { adminAlerts } from '../../../services/adminAlerts';
 
 vi.mock('../../../services/adminAlerts', () => ({
-  adminAlerts: { inbox: vi.fn(), mark: vi.fn(), markAll: vi.fn(), preferences: vi.fn(), savePreferences: vi.fn() },
+  adminAlerts: { inbox: vi.fn(), mark: vi.fn(), markAll: vi.fn(), preferences: vi.fn(), savePreferences: vi.fn(), rules: vi.fn(), setInboxEnabled: vi.fn() },
   refreshAdminAlerts: () => window.dispatchEvent(new Event('admin-alerts-changed')),
 }));
 
@@ -43,4 +44,22 @@ it('shows required inbox alerts as locked and saves personal email quiet hours',
   await waitFor(() => expect(adminAlerts.savePreferences).toHaveBeenCalledWith({
     events: {}, quiet: { start: '22:00', end: '07:00', zone: 'Asia/Kolkata' },
   }));
+});
+
+it('lets notification managers enable a disabled inbox and refreshes the bell', async () => {
+  const initial = { manage: true, inboxEnabled: false, inboxAvailable: false, rules: [] };
+  adminAlerts.rules.mockResolvedValueOnce(initial).mockResolvedValueOnce({
+    ...initial, inboxEnabled: true, inboxAvailable: true, events: {}, emailEnabled: false,
+  });
+  adminAlerts.setInboxEnabled.mockResolvedValue({ enabled: true });
+  const refresh = vi.fn();
+  window.addEventListener('admin-alerts-changed', refresh, { once: true });
+  render(<InternalAlertRules />);
+  const toggle = await screen.findByRole('switch', { name: 'Enable admin notification inbox' });
+  expect(toggle).not.toBeChecked();
+  fireEvent.click(toggle);
+  await waitFor(() => expect(adminAlerts.setInboxEnabled).toHaveBeenCalledWith(true));
+  await waitFor(() => expect(toggle).toBeChecked());
+  expect(refresh).toHaveBeenCalledOnce();
+  expect(screen.getByRole('button', { name: 'Internal email is off' })).toBeDisabled();
 });

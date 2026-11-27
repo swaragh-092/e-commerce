@@ -68,6 +68,16 @@ async function run() {
         ON CONFLICT (name,channel) DO UPDATE SET subject = EXCLUDED.subject, body_text = EXCLUDED.body_text, is_active = true RETURNING id`,
       { id: randomUUID() });
     }
+    await call('PUT', '/internal-rules/inbox-policy', admin, { enabled: false });
+    assert.equal((await call('GET', '/inbox', staff)).enabled, false);
+    assert.equal((await call('GET', '/internal-rules', admin)).inboxEnabled, false);
+    await call('PUT', '/internal-rules/inbox-policy', staff, { enabled: true }, 404);
+    process.env.ADMIN_ALERTS_ENABLED = 'false';
+    process.env.ADMIN_ALERTS_EMAIL_ENABLED = 'false';
+    await call('PUT', '/internal-rules/inbox-policy', admin, { enabled: true });
+    assert.equal((await call('GET', '/inbox', staff)).enabled, true);
+    assert.equal((await call('GET', '/internal-rules', admin)).emailEnabled, false);
+    process.env.ADMIN_ALERTS_EMAIL_ENABLED = 'true';
     const { rules } = await call('GET', '/internal-rules', admin);
     if (isFresh) assert.equal(rules.find(item => item.event === 'order_assigned').config.subject, 'Packing order {{reference}}');
     const rule = rules.find(item => item.event === 'order_status');

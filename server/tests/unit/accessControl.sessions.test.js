@@ -9,6 +9,7 @@ const root = { id: 'root', role: 'super_admin', permissions: ['roles.manage'] };
 let transaction;
 afterEach(() => vi.restoreAllMocks());
 beforeEach(() => {
+  vi.spyOn(require('../../src/modules/notification/adminAlerts.service'), 'capture').mockResolvedValue(false);
   transaction = {};
   vi.spyOn(db.sequelize, 'transaction').mockImplementation(async callback => callback(transaction));
   vi.spyOn(audit, 'log').mockResolvedValue({});

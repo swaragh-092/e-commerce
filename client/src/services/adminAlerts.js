@@ -13,6 +13,7 @@ export const adminAlerts = {
   preferences: () => request('get', '/preferences'),
   savePreferences: value => request('put', '/preferences', value),
   rules: () => request('get', '/internal-rules'),
+  setInboxEnabled: enabled => request('put', '/internal-rules/inbox-policy', { enabled }),
   pauseEmail: paused => request('put', '/internal-rules/email-policy', { paused }),
   create: (event, config) => request('post', '/internal-rules', { event, config }),
   publish: ({ id, version }, config) => request('put', '/internal-rules/' + id, { version, config }),
