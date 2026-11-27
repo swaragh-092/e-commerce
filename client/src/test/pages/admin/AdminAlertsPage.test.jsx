@@ -7,7 +7,7 @@ import AdminAlertBell from '../../../components/admin/AdminAlertBell';
 import { adminAlerts } from '../../../services/adminAlerts';
 
 vi.mock('../../../services/adminAlerts', () => ({
-  adminAlerts: { inbox: vi.fn(), mark: vi.fn(), markAll: vi.fn(), preferences: vi.fn(), savePreferences: vi.fn(), rules: vi.fn(), setInboxEnabled: vi.fn() },
+  adminAlerts: { inbox: vi.fn(), mark: vi.fn(), markAll: vi.fn(), preferences: vi.fn(), savePreferences: vi.fn(), rules: vi.fn(), setInboxEnabled: vi.fn(), setEmailEnabled: vi.fn() },
   refreshAdminAlerts: () => window.dispatchEvent(new Event('admin-alerts-changed')),
 }));
 
@@ -62,7 +62,7 @@ it('lets notification managers enable a disabled inbox and refreshes the bell', 
   await waitFor(() => expect(toggle).toBeChecked());
   expect(refresh).toHaveBeenCalledOnce();
   expect(screen.getByText('Internal email is off.')).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Resume email' })).not.toBeInTheDocument();
+  expect(screen.getByRole('switch', { name: 'Enable internal email' })).not.toBeChecked();
 });
 
 it('keeps a draft when switching between routing and message', async () => {
@@ -85,4 +85,17 @@ it('keeps a draft when switching between routing and message', async () => {
   fireEvent.click(screen.getByRole('tab', { name: 'Routing' }));
   expect(screen.getByRole('textbox', { name: 'Rule name' })).toHaveValue('Shipping updates');
   expect(screen.getByRole('button', { name: 'Publish rule' })).toBeEnabled();
+});
+
+it('turns on internal email independently of the inbox', async () => {
+  const inactive = { manage: true, inboxEnabled: false, inboxAvailable: false, emailEnabled: false, rules: [] };
+  adminAlerts.rules.mockResolvedValueOnce(inactive).mockResolvedValueOnce({ ...inactive, emailEnabled: true });
+  adminAlerts.setEmailEnabled.mockResolvedValue({ enabled: true });
+  render(<MemoryRouter><InternalAlertRules /></MemoryRouter>);
+  const toggle = await screen.findByRole('switch', { name: 'Enable internal email' });
+  expect(toggle).not.toBeChecked();
+  fireEvent.click(toggle);
+  await waitFor(() => expect(toggle).toBeChecked());
+  expect(adminAlerts.setEmailEnabled).toHaveBeenCalledWith(true);
+  expect(adminAlerts.setInboxEnabled).not.toHaveBeenCalled();
 });

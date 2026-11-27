@@ -77,7 +77,8 @@ async function run() {
     await call('PUT', '/internal-rules/inbox-policy', admin, { enabled: true });
     assert.equal((await call('GET', '/inbox', staff)).enabled, true);
     assert.equal((await call('GET', '/internal-rules', admin)).emailEnabled, false);
-    process.env.ADMIN_ALERTS_EMAIL_ENABLED = 'true';
+    await call('PUT', '/internal-rules/email-policy', admin, { paused: false });
+    assert.equal((await call('GET', '/internal-rules', admin)).emailEnabled, true);
     const { rules } = await call('GET', '/internal-rules', admin);
     if (isFresh) assert.equal(rules.find(item => item.event === 'order_assigned').config.subject, 'Packing order {{reference}}');
     const rule = rules.find(item => item.event === 'order_status');
