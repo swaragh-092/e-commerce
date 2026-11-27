@@ -79,6 +79,35 @@ describe('product editor section navigation', () => {
     expect(screen.getByLabelText('Short Description')).toHaveValue('Updated description');
   });
 
+  it('jumps to Storefront and saves the selected state and featured setting', async () => {
+    mount();
+    await loaded();
+
+    const storefront = screen.getByRole('region', { name: 'Storefront' });
+    storefront.scrollIntoView = vi.fn();
+    fireEvent.change(screen.getByLabelText('Jump to section'), { target: { value: 'storefront' } });
+    expect(storefront).toHaveFocus();
+    expect(storefront.scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+
+    const state = within(storefront).getByRole('combobox', { name: 'Storefront state' });
+    const featured = within(storefront).getByRole('checkbox', { name: 'Featured product' });
+    expect(state).toHaveTextContent('Draft');
+    expect(featured).not.toBeChecked();
+    expect(within(storefront).getByRole('combobox', { name: 'Product Type' })).toHaveTextContent('Simple Product');
+
+    fireEvent.mouseDown(state);
+    expect(screen.getAllByRole('option', { hidden: false }).map((option) => option.textContent))
+      .toEqual(['Draft', 'Published', 'Paused', 'Archived']);
+    fireEvent.click(screen.getByRole('option', { name: 'Paused' }));
+    expect(screen.getByText('PAUSED')).toBeInTheDocument();
+    fireEvent.click(featured);
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }));
+
+    await waitFor(() => expect(updateProduct).toHaveBeenCalledWith('product', expect.objectContaining({
+      status: 'published', isEnabled: false, isFeatured: true,
+    })));
+  });
+
   it('lists only available sections for a new catalog product', () => {
     disabledFeatures.add('pricing');
     disabledFeatures.add('shipping');

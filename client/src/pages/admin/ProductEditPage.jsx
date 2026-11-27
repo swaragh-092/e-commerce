@@ -782,6 +782,7 @@ const ProductEditPage = () => {
   }));
   const previewPrice = getProductBasePrice(formData, new Date());
   const previewPriceLabel = previewPrice < Number(formData.price) ? 'Active sale price' : 'MRP';
+  const storefrontState = getProductStorefrontState(formData);
   const productTypeLabel = formData.type === 'variable' ? 'Variable' : formData.type === 'combo' ? 'Combo' : 'Simple';
 
   const pricingLabel = pricingEnabled ? 'Pricing & Tax' : 'Selling Price';
@@ -826,8 +827,7 @@ const ProductEditPage = () => {
     <Box
       ref={editorRef}
       sx={(theme) => ({
-        mx: 'auto',
-        maxWidth: 1280,
+        width: '100%',
         minWidth: 0,
         '--editor-appbar-height': '56px',
         '@media (orientation: landscape)': { '--editor-appbar-height': '48px' },
@@ -896,8 +896,8 @@ const ProductEditPage = () => {
                 </Typography>
                 <Chip
                   size="small"
-                  label={(formData.status || 'draft').toUpperCase()}
-                  color={formData.status === 'published' ? 'success' : 'default'}
+                  label={PRODUCT_STOREFRONT_STATE_LABELS[storefrontState].toUpperCase()}
+                  color={{ published: 'success', paused: 'warning', draft: 'default', archived: 'default' }[storefrontState]}
                   sx={{ height: 20, fontSize: '0.7rem', fontWeight: 600 }}
                 />
                 <Chip
@@ -988,7 +988,7 @@ const ProductEditPage = () => {
               </Button>
             ))}
           </Box>
-          <Box sx={{ display: 'grid', gap: { xs: 2, sm: 3 }, minWidth: 0, maxWidth: 900 }}>
+          <Box sx={{ display: 'grid', gap: { xs: 2, sm: 3 }, minWidth: 0 }}>
             {productAssistantEnabled && (
               <ProductAssistantPanel
                 initialInput={formData.name}
@@ -1496,7 +1496,7 @@ const ProductEditPage = () => {
                 <FormControl fullWidth margin="normal">
                   <InputLabel id="product-storefront-state-label">Storefront state</InputLabel>
                   <Select
-                    value={getProductStorefrontState(formData)}
+                    value={storefrontState}
                     labelId="product-storefront-state-label"
                     label="Storefront state"
                     onChange={(event) => {
@@ -1510,7 +1510,7 @@ const ProductEditPage = () => {
                       </MenuItem>
                     ))}
                   </Select>
-                  <FormHelperText>{getProductStorefrontStateHelp(getProductStorefrontState(formData))}</FormHelperText>
+                  <FormHelperText>{getProductStorefrontStateHelp(storefrontState)}</FormHelperText>
                 </FormControl>
                 <FormControlLabel
                   control={<Switch checked={formData.isFeatured} onChange={(event) => setField('isFeatured', event.target.checked)} />}
