@@ -17,14 +17,19 @@
 
     const banner = document.querySelector('.cms-page-banner');
     function hideBrokenBanner(image) {
-        image.addEventListener('error', () => { image.hidden = true; });
-        if (image.complete && !image.naturalWidth) image.hidden = true;
+        function showFallback() {
+            image.hidden = true;
+            banner.classList.add('banner-fallback');
+        }
+        image.addEventListener('error', showFallback);
+        if (image.complete && !image.naturalWidth) showFallback();
     }
 
     const body = document.getElementById('cms-page-content');
     if (body.querySelector('[data-orbi-cms-rendered]')) {
         const image = banner.querySelector('.cms-banner-image');
         if (image) hideBrokenBanner(image);
+        else banner.classList.add('banner-fallback');
         return;
     }
 
@@ -93,11 +98,14 @@
             image.src = source;
             hideBrokenBanner(image);
             banner.prepend(image);
+        } else {
+            banner.classList.add('banner-fallback');
         }
         window.OrbiSEO?.refresh(page);
     }
 
     function showUnavailable() {
+        banner.classList.add('banner-fallback');
         title.textContent = breadcrumb.textContent = 'Page unavailable';
         status.textContent = 'This page could not be found.';
         window.OrbiSEO?.unavailable();
@@ -112,7 +120,11 @@
         .then(OrbiCatalog.readResponse)
         .then((result) => renderPage(result.data))
         .catch((error) => {
-            if (error.status === 404 || error.status === 403) showUnavailable();
-            else status.textContent = 'Unable to load this page. Please refresh and try again.';
+            if (error.status === 404 || error.status === 403) {
+                showUnavailable();
+            } else {
+                banner.classList.add('banner-fallback');
+                status.textContent = 'Unable to load this page. Please refresh and try again.';
+            }
         });
 })();

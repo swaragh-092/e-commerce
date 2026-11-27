@@ -11,7 +11,7 @@ $(document).ready(function () {
        NEWSLETTER / FUTURE PRODUCTS API CONFIGURATION
        Endpoint: POST /api/newsletter/subscribe
        ======================================================== */
-    var NEWSLETTER_API_URL = (typeof API_URL !== 'undefined' ? API_URL : "https://eshopadmin.swaragh.org.in/api/").replace(/\/+$/, '') + "/newsletter/subscribe";
+    var NEWSLETTER_API_URL = (typeof API_URL !== 'undefined' ? API_URL : "https://ad.orbiseeds.com/api/").replace(/\/+$/, '') + "/newsletter/subscribe";
 
     function subscribeNewsletter(subscriberData) {
         var email = typeof subscriberData === 'string' ? subscriberData.trim() : (subscriberData && subscriberData.email ? subscriberData.email.trim() : '');

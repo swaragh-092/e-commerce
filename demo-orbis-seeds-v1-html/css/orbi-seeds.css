@@ -746,6 +746,8 @@ li.dropdown-wrapper-li:hover > .dropdown-wrapper, li.dropdown-wrapper-li:focus-w
 .controls-line {background-color: color-mix(in srgb, var(--color-primary) 45.88%, transparent);padding: 2px;margin-bottom: 20px;position: relative;bottom: 3px;}
 
 .inner-page-banner-wrapper{width: 100%;min-height: 390px;display: flex;flex-direction: column;position: relative;margin: 0 0;color: var(--color-white);}
+:is(.catalog-banner, .cms-page-banner){background-color: #465b60;background-position: center;background-size: cover;background-repeat: no-repeat;}
+.banner-fallback{background-image: url("../images/inr-bnr.avif");}
 .inner-page-banner-wrapper::before{content:"";position:absolute;inset:0;background:linear-gradient(to bottom, color-mix(in srgb, var(--color-black) 34.12%, transparent) 40%, color-mix(in srgb, var(--color-black) 21.96%, transparent) 60%);pointer-events:none;}
 .inner-page-banner-wrapper > header{position:relative;z-index:5;flex: 0 0 auto;}
 
