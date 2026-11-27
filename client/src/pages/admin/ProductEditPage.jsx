@@ -49,7 +49,6 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ImageIcon from '@mui/icons-material/Image';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SaveIcon from '@mui/icons-material/Save';
-import CloseIcon from '@mui/icons-material/Close';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import { getMediaUrl } from '../../utils/media';
 import useSKUGenerator from '../../hooks/useSKUGenerator';
@@ -216,6 +215,16 @@ const validate = (formData) => {
   return errs;
 };
 
+const editorPanelSx = { p: { xs: 2, sm: 3 }, borderRadius: 2, minWidth: 0 };
+
+const editorSection = (id, label) => ({
+  component: 'section',
+  id: `product-edit-${id}`,
+  'aria-label': label,
+  'data-product-edit-section': id,
+  tabIndex: -1,
+});
+
 const toIsoOrNull = (value) => (value ? new Date(value).toISOString() : null);
 
 const getAttributeRowName = (row) => (
@@ -318,6 +327,48 @@ const ProductEditPage = () => {
   const [variantStockTotal, setVariantStockTotal] = useState(0);
   const [globalPrimaryVersion, setGlobalPrimaryVersion] = useState(0);
   const initialFormRef = useRef(null);
+  const editorRef = useRef(null);
+  const actionBarRef = useRef(null);
+  const [activeSection, setActiveSection] = useState('basic-info');
+  const editorReady = isNew || (!productLoading && !productLoadError && loadedProductId === id);
+
+  useEffect(() => {
+    if (!editorReady) return undefined;
+    const editor = editorRef.current;
+    const bar = actionBarRef.current;
+    let frame = 0;
+
+    const updateSection = () => {
+      frame = 0;
+      const sections = Array.from(editor.querySelectorAll('[data-product-edit-section]'));
+      const top = bar.getBoundingClientRect().bottom + 28;
+      const height = document.documentElement.scrollHeight;
+      const atBottom = height > window.innerHeight && window.scrollY + window.innerHeight >= height - 2;
+      const current = atBottom
+        ? sections.at(-1)
+        : sections.reverse().find((section) => section.getBoundingClientRect().top <= top);
+      setActiveSection(current?.dataset.productEditSection || 'basic-info');
+    };
+    const scheduleUpdate = () => {
+      if (!frame) frame = window.requestAnimationFrame(updateSection);
+    };
+    const measureBar = () => {
+      editor.style.setProperty('--editor-action-height', `${bar.offsetHeight}px`);
+      scheduleUpdate();
+    };
+
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measureBar) : null;
+    observer?.observe(bar);
+    measureBar();
+    window.addEventListener('scroll', scheduleUpdate, { passive: true });
+    window.addEventListener('resize', measureBar);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('scroll', scheduleUpdate);
+      window.removeEventListener('resize', measureBar);
+      window.cancelAnimationFrame(frame);
+    };
+  }, [editorReady, id]);
 
   useEffect(() => {
     let active = true;
@@ -640,7 +691,7 @@ const ProductEditPage = () => {
           return;
         }
 
-        notify(payload.type === 'variable' ? 'Product saved. Add attributes and create variants below.' : 'Product created successfully.', 'success');
+        notify(payload.type === 'variable' ? 'Product saved. Add attributes and create variants in Inventory.' : 'Product created successfully.', 'success');
         initialFormRef.current = JSON.stringify(formData);
         navigate(`/admin/products/${newId}/edit`, { replace: true, state: { returnTo } });
       } else {
@@ -733,6 +784,29 @@ const ProductEditPage = () => {
   const previewPriceLabel = previewPrice < Number(formData.price) ? 'Active sale price' : 'MRP';
   const productTypeLabel = formData.type === 'variable' ? 'Variable' : formData.type === 'combo' ? 'Combo' : 'Simple';
 
+  const pricingLabel = pricingEnabled ? 'Pricing & Tax' : 'Selling Price';
+  const hasInventorySection = formData.type !== 'combo' || !isNew;
+  const sections = [
+    ['basic-info', 'Basic Info', true],
+    ['pricing-tax', pricingLabel, pricingCapability],
+    ['media', 'Media', true],
+    ['inventory', 'Inventory', hasInventorySection],
+    ['storefront', 'Storefront', true],
+    ['shipping', 'Shipping & Dimensions', shippingCapability],
+    ['custom-tabs', 'Custom Tabs', !isNew],
+    ['related-products', 'Related Products', !isNew],
+    ['search-social', 'Search & Social', seoEnabled],
+  ].filter(([, , visible]) => visible);
+  const currentSection = sections.some(([key]) => key === activeSection) ? activeSection : 'basic-info';
+
+  const jumpToSection = (key) => {
+    const section = document.getElementById(`product-edit-${key}`);
+    if (!section) return;
+    setActiveSection(key);
+    section.focus({ preventScroll: true });
+    section.scrollIntoView({ block: 'start' });
+  };
+
   if (!isNew && productLoadError) {
     return <Box sx={{ p: 3 }}>
       <Alert severity="error" action={<Button color="inherit" onClick={() => setLoadVersion((value) => value + 1)}>Retry</Button>}>
@@ -749,40 +823,40 @@ const ProductEditPage = () => {
   }
 
   return (
-    <Box sx={{ p: { xs: 1.5, sm: 3 }, mx: 'auto' }}>
+    <Box
+      ref={editorRef}
+      sx={(theme) => ({
+        mx: 'auto',
+        maxWidth: 1280,
+        minWidth: 0,
+        '--editor-appbar-height': '56px',
+        '@media (orientation: landscape)': { '--editor-appbar-height': '48px' },
+        [theme.breakpoints.up('sm')]: { '--editor-appbar-height': '64px' },
+        '--editor-sticky-offset': 'calc(var(--editor-appbar-height) + var(--editor-action-height, 88px) + 16px)',
+        '& [data-product-edit-section]': { scrollMarginTop: 'var(--editor-sticky-offset)' },
+      })}
+    >
       <form onSubmit={handleSave} noValidate>
         {/* Sticky Action Bar */}
         <Paper
-          elevation={0}
+          ref={actionBarRef}
+          variant="outlined"
           sx={{
             position: 'sticky',
-            top: { xs: 56, sm: 64 },
+            top: 'var(--editor-appbar-height)',
             zIndex: 10,
-            mt: { xs: -1, sm: -1.5 },
-            mb: 3,
+            mb: { xs: 2, md: 3 },
             p: { xs: 1.5, sm: 2 },
             borderRadius: 2,
-            display: 'flex',
+            display: 'grid',
+            gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 1fr) auto' },
             alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: 2,
-            bgcolor: (theme) =>
-              theme.palette.mode === 'light'
-                ? 'rgba(255, 255, 255, 0.94)'
-                : 'rgba(30, 30, 30, 0.94)',
-            backdropFilter: 'blur(8px)',
-            border: '1px solid',
-            borderColor: 'divider',
-            boxShadow: (theme) =>
-              theme.palette.mode === 'light'
-                ? '0 4px 20px rgba(0, 0, 0, 0.05)'
-                : '0 4px 20px rgba(0, 0, 0, 0.4)',
-            transition: 'box-shadow 0.2s ease',
+            gap: { xs: 1.25, sm: 2 },
+            bgcolor: 'background.paper',
           }}
         >
           {/* Left: Back button + Breadcrumbs + Title + Badges */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0, gap: 1.5 }}>
             <Tooltip title="Back to Products">
               <IconButton
                 onClick={handleBack}
@@ -800,7 +874,7 @@ const ProductEditPage = () => {
               </IconButton>
             </Tooltip>
 
-            <Box>
+            <Box sx={{ minWidth: 0 }}>
               <Breadcrumbs
                 separator={<NavigateNextIcon sx={{ fontSize: 14 }} />}
                 sx={{ fontSize: '0.75rem', mb: 0.25 }}
@@ -817,7 +891,7 @@ const ProductEditPage = () => {
               </Breadcrumbs>
 
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                <Typography variant="h6" component="h1" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+                <Typography variant="h5" component="h1" fontWeight={700} sx={{ fontSize: { xs: '1.125rem', sm: '1.375rem' }, lineHeight: 1.25, overflowWrap: 'anywhere' }}>
                   {isNew ? 'Create Product' : (formData.name || 'Untitled Product')}
                 </Typography>
                 <Chip
@@ -832,37 +906,89 @@ const ProductEditPage = () => {
                   label={productTypeLabel}
                   sx={{ height: 20, fontSize: '0.7rem' }}
                 />
+                {isDirty() && (
+                  <Chip size="small" variant="outlined" color="warning" label="Unsaved changes" />
+                )}
               </Box>
             </Box>
           </Box>
 
-          {/* Right: Cancel & Save Action Buttons */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{ display: 'flex', justifyContent: { xs: 'space-between', md: 'flex-end' }, alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
             <Button
               variant="outlined"
-              color="error"
+              color="inherit"
               onClick={handleCancel}
               disabled={saving}
-              startIcon={<CloseIcon />}
-              sx={{ textTransform: 'none', fontWeight: 600, px: 2 }}
+              sx={{ minHeight: 44 }}
             >
               Cancel
             </Button>
             <Button
               variant="contained"
-              color="primary"
               type="submit"
-              size="medium"
               disabled={saving || !canSaveProduct}
               startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
-              sx={{ px: 2.5, textTransform: 'none', fontWeight: 600 }}
+              sx={{ minHeight: 44 }}
             >
               {saving ? 'Saving…' : 'Save Product'}
             </Button>
           </Box>
+          <TextField
+            select
+            id="product-edit-section-picker"
+            label="Jump to section"
+            value={currentSection}
+            onChange={(event) => jumpToSection(event.target.value)}
+            SelectProps={{ native: true }}
+            InputLabelProps={{ shrink: true }}
+            size="small"
+            sx={{ display: { xs: 'block', lg: 'none' }, gridColumn: '1 / -1', '& .MuiInputBase-root': { minHeight: 44 } }}
+            fullWidth
+          >
+            {sections.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+          </TextField>
         </Paper>
-        <Grid container spacing={4}>
-          <Grid item xs={12}>
+
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: '176px minmax(0, 1fr)' }, gap: 3, alignItems: 'start' }}>
+          <Box
+            component="nav"
+            aria-label="Product sections"
+            sx={{
+              display: { xs: 'none', lg: 'grid' },
+              gap: 0.5,
+              position: 'sticky',
+              top: 'var(--editor-sticky-offset)',
+              maxHeight: 'calc(100dvh - var(--editor-sticky-offset) - 16px)',
+              overflowY: 'auto',
+              p: 0.5,
+            }}
+          >
+            <Typography variant="subtitle2" color="text.secondary" sx={{ px: 1.5, mb: 0.5 }}>
+              On this page
+            </Typography>
+            {sections.map(([key, label]) => (
+              <Button
+                key={key}
+                href={`#product-edit-${key}`}
+                aria-current={currentSection === key ? 'location' : undefined}
+                onClick={(event) => {
+                  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                  event.preventDefault();
+                  jumpToSection(key);
+                }}
+                sx={{
+                  justifyContent: 'flex-start',
+                  textAlign: 'left',
+                  minHeight: 44,
+                  color: currentSection === key ? 'primary.main' : 'text.secondary',
+                  bgcolor: currentSection === key ? 'action.selected' : undefined,
+                }}
+              >
+                {label}
+              </Button>
+            ))}
+          </Box>
+          <Box sx={{ display: 'grid', gap: { xs: 2, sm: 3 }, minWidth: 0, maxWidth: 900 }}>
             {productAssistantEnabled && (
               <ProductAssistantPanel
                 initialInput={formData.name}
@@ -871,82 +997,84 @@ const ProductEditPage = () => {
               />
             )}
 
-            <Paper sx={{ p: 3, mb: 3 }}>
-              <Typography variant="h6" gutterBottom>
+            <Paper {...editorSection('basic-info', 'Basic Info')} variant="outlined" sx={editorPanelSx}>
+              <Typography variant="h6" component="h2" sx={{ mb: 2 }}>
                 Basic Info
               </Typography>
-              <TextField
-                fullWidth
-                label="Product Name *"
-                margin="normal"
-                size='small'
-                value={formData.name}
-                onChange={(e) => {
-                  setField('name', e.target.value);
-                  if (isNew && (!formData.slug || formData.slug === generateSlug(formData.name))) {
-                    setField('slug', generateSlug(e.target.value));
-                  }
-                }}
-                error={Boolean(errors.name)}
-                helperText={errors.name}
-              />
-              <TextField
-                fullWidth
-                label="Slug"
-                margin="normal"
-                size='small'
-                value={formData.slug}
-                onChange={(e) => setField('slug', e.target.value)}
-                error={Boolean(errors.slug)}
-                helperText={errors.slug || 'Leave blank to auto-generate from name'}
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <Tooltip title="Auto-generate slug from name">
-                        <span>
-                          <IconButton
-                            size="small"
-                            onClick={() => setField('slug', generateSlug(formData.name))}
-                            disabled={!formData.name?.trim()}
-                          >
-                            <ElectricBoltIcon fontSize="small" color="warning" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    </InputAdornment>
-                  ),
-                }}
-              />
-              <TextField
-                fullWidth
-                label="Short Description"
-                margin="normal"
-                size='small'
-                value={formData.shortDescription}
-                onChange={(e) => setField('shortDescription', e.target.value)}
-                error={Boolean(errors.shortDescription)}
-                helperText={errors.shortDescription || 'Max 500 characters'}
-                inputProps={{ maxLength: 500 }}
-              />
-              <TextField
-                fullWidth
-                label="Full Description"
-                margin="normal"
-                size='small'
-                multiline
-                rows={6}
-                value={formData.description}
-                onChange={(e) => setField('description', e.target.value)}
-              />
-              <Typography variant="caption" color="text.secondary">
-                Supports HTML formatting
-              </Typography>
+              <Box sx={{ display: 'grid', gap: 2 }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 3fr) minmax(0, 2fr)' }, gap: 2 }}>
+                  <TextField
+                    fullWidth
+                    label="Product Name *"
+                    size="small"
+                    value={formData.name}
+                    onChange={(e) => {
+                      setField('name', e.target.value);
+                      if (isNew && (!formData.slug || formData.slug === generateSlug(formData.name))) {
+                        setField('slug', generateSlug(e.target.value));
+                      }
+                    }}
+                    error={Boolean(errors.name)}
+                    helperText={errors.name}
+                  />
+                  <TextField
+                    fullWidth
+                    label="Slug"
+                    size="small"
+                    value={formData.slug}
+                    onChange={(e) => setField('slug', e.target.value)}
+                    error={Boolean(errors.slug)}
+                    helperText={errors.slug || 'Leave blank to auto-generate from name'}
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <Tooltip title="Auto-generate slug from name">
+                            <span>
+                              <IconButton
+                                size="small"
+                                aria-label="Auto-generate slug from name"
+                                onClick={() => setField('slug', generateSlug(formData.name))}
+                                disabled={!formData.name?.trim()}
+                              >
+                                <ElectricBoltIcon fontSize="small" color="warning" />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Box>
+                <TextField
+                  fullWidth
+                  label="Short Description"
+                  multiline
+                  minRows={2}
+                  maxRows={4}
+                  size="small"
+                  value={formData.shortDescription}
+                  onChange={(e) => setField('shortDescription', e.target.value)}
+                  error={Boolean(errors.shortDescription)}
+                  helperText={errors.shortDescription || `${formData.shortDescription.length} / 500 characters`}
+                  inputProps={{ maxLength: 500 }}
+                />
+                <TextField
+                  fullWidth
+                  label="Full Description"
+                  size="small"
+                  multiline
+                  rows={4}
+                  value={formData.description}
+                  onChange={(e) => setField('description', e.target.value)}
+                  helperText="Supports HTML formatting"
+                />
+              </Box>
             </Paper>
 
             {pricingCapability && (
-              <Paper sx={{ p: 3, mb: 3 }}>
-                <Typography variant="h6" sx={{ mb: 0.5 }}>
-                  {pricingEnabled ? 'Pricing & Tax' : 'Selling Price'}
+              <Paper {...editorSection('pricing-tax', pricingLabel)} variant="outlined" sx={editorPanelSx}>
+                <Typography variant="h6" component="h2" sx={{ mb: 0.5 }}>
+                  {pricingLabel}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                   {pricingEnabled
@@ -1114,8 +1242,8 @@ const ProductEditPage = () => {
               </Paper>
             )}
 
-            <Paper sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>
+            <Paper {...editorSection('media', 'Media')} variant="outlined" sx={editorPanelSx}>
+              <Typography variant="h6" component="h2" gutterBottom>
                 Media / Images
               </Typography>
               {canUploadMedia ? (
@@ -1250,250 +1378,279 @@ const ProductEditPage = () => {
               )}
             </Paper>
 
-          </Grid>
+            {hasInventorySection && (
+              <Box {...editorSection('inventory', 'Inventory')} sx={{ display: 'grid', gap: { xs: 2, sm: 3 }, minWidth: 0 }}>
+                {formData.type !== 'combo' && (
+                  <Paper variant="outlined" sx={editorPanelSx}>
+                    <Typography variant="h6" component="h2" gutterBottom>
+                      Inventory
+                    </Typography>
+                    <TextField
+                      fullWidth
+                      label="SKU"
+                      margin="normal"
+                      value={formData.sku}
+                      onChange={(e) => setField('sku', e.target.value)}
+                      error={Boolean(errors.sku)}
+                      helperText={errors.sku}
+                      InputProps={{
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <Tooltip title="Auto-generate SKU from product name (uses SKU settings)">
+                              <span>
+                              <IconButton
+                                size="small"
+                                onClick={() => setField('sku', generateProductSKU(formData.name))}
+                                disabled={!formData.name?.trim()}
+                              >
+                                <ElectricBoltIcon fontSize="small" color="warning" />
+                              </IconButton>
+                              </span>
+                            </Tooltip>
+                          </InputAdornment>
+                        ),
+                      }}
+                    />
+                    <UnitSelector
+                      value={formData.unit}
+                      onChange={(val) => setField('unit', val)}
+                      error={Boolean(errors.unit)}
+                      helperText={errors.unit || 'Used in storefront pricing and quantity display'}
+                    />
 
-          <Grid item xs={12} sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'repeat(2, minmax(0, 1fr))' }, gap: 3, alignItems: 'start', '& > .MuiPaper-root': { mb: 0 } }}>
-            <Paper sx={{ p: 3, mb: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Storefront
-              </Typography>
-              <FormControl fullWidth margin="normal">
-                <InputLabel id="product-storefront-state-label">Storefront state</InputLabel>
-                <Select
-                  value={getProductStorefrontState(formData)}
-                  labelId="product-storefront-state-label"
-                  label="Storefront state"
-                  onChange={(event) => {
-                    const storefrontFields = getProductStorefrontFields(event.target.value);
-                    setFormData((current) => ({ ...current, ...storefrontFields }));
-                  }}
-                >
-                  {Object.values(PRODUCT_STOREFRONT_STATES).map((state) => (
-                    <MenuItem key={state} value={state} disabled={isNew && state === PRODUCT_STOREFRONT_STATES.ARCHIVED}>
-                      {PRODUCT_STOREFRONT_STATE_LABELS[state]}
-                    </MenuItem>
-                  ))}
-                </Select>
-                <FormHelperText>{getProductStorefrontStateHelp(getProductStorefrontState(formData))}</FormHelperText>
-              </FormControl>
-              <FormControlLabel
-                control={<Switch checked={formData.isFeatured} onChange={(event) => setField('isFeatured', event.target.checked)} />}
-                disabled={!canSaveProduct}
-                label="Featured product"
-              />
+                    <TextField
+                      fullWidth
+                      label={formData.type === 'variable' ? 'Total variant stock' : 'Stock Quantity *'}
+                      type="number"
+                      margin="normal"
+                      inputProps={{ min: 0 }}
+                      value={formData.type === 'variable' ? variantStockTotal : formData.quantity}
+                      InputProps={{ readOnly: formData.type === 'variable' }}
+                      onChange={(e) => setField('quantity', e.target.value)}
+                      error={Boolean(errors.quantity)}
+                      helperText={errors.quantity || (formData.type === 'variable' ? 'Calculated from active variants. Set each combination’s stock below; no variants means 0 stock.' : 'Stock for this single product.')}
+                    />
+                    <InventoryStockSummary
+                      quantity={formData.quantity}
+                      reservedQty={dbProduct?.reservedQty}
+                      variants={formData.type === 'variable' ? inventoryVariants : []}
+                      selectedVariantId={inventoryVariantId}
+                      tracksVariants={formData.type === 'variable'}
+                      enabled={formData.isEnabled !== false}
+                      published={formData.status === 'published'}
+                    />
+                  </Paper>
+                )}
 
-              <FormControl fullWidth margin="normal" error={Boolean(errors.type)}>
-                <InputLabel id="product-type-label">Product Type</InputLabel>
-                <Select
-                  labelId="product-type-label"
-                  disabled={saving || !canSaveProduct}
-                  value={formData.type}
-                  label="Product Type"
-                  onChange={(e) => {
-                    const newType = e.target.value;
-                    if (newType !== 'variable' && variantCount > 0 && !(newType === 'simple' && dbProduct?.type === 'simple')) { notify('Remove all variants, including inactive ones, before changing to Simple or Combo.', 'warning'); return; }
-                    if (newType !== 'combo' && dbProduct?.comboItems?.length > 0) { notify('Clear the bundle items before changing this product type.', 'warning'); return; }
-                    setField('type', newType);
-                  }}
-                >
-                  <MenuItem value="simple">Simple Product</MenuItem>
-                  <MenuItem value="variable">Variable Product</MenuItem>
-                  <MenuItem value="combo">Combo / Bundle</MenuItem>
-                </Select>
-                {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
-                <FormHelperText>{formData.type === 'variable' ? 'Customers choose a variant. Manage prices and stock per combination below.' : formData.type === 'combo' ? 'Bundle existing products. Stock depends on the included products.' : 'One version with its own price and stock quantity.'}</FormHelperText>
-              </FormControl>
-              {formData.type === 'simple' && variantCount > 0 && <Alert severity="info">This Simple product uses its own stock quantity. Older variant records are retained for existing orders and do not control current stock or alerts.</Alert>}
+                {/* Combo Builder — only after the product type is saved as combo */}
+                {!isNew && formData.type === 'combo' && dbProduct?.type !== 'combo' && (
+                  <Alert severity="info">
+                    Save the product as a combo before adding bundle items.
+                  </Alert>
+                )}
 
-            </Paper>
+                {!isNew && formData.type === 'combo' && dbProduct?.type === 'combo' && (
+                  <Paper variant="outlined" sx={editorPanelSx}>
+                    <ProductComboBuilder
+                      productId={id}
+                      canEdit={canUpdateProducts}
+                      onSuggestedPrice={(price) => setField('price', price)}
+                    />
+                  </Paper>
+                )}
+                {(isNew || dbProduct?.type !== 'variable') && formData.type === 'variable' && (
+                  <Paper variant="outlined" sx={editorPanelSx}>
+                    <Typography variant="h6" component="h3" fontWeight={700}>Attributes and variants</Typography>
+                    <Typography variant="body2" color="text.secondary">Save the product first. You can then choose or create attributes, add their values, and generate variants.</Typography>
+                  </Paper>
+                )}
 
-            <Paper sx={{ p: 3, mb: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Categories &amp; Brand
-              </Typography>
-              <Autocomplete
-                multiple
-                options={flatCatFiles}
-                getOptionLabel={(o) => o.path || o.name}
-                isOptionEqualToValue={(o, v) => o.id === v.id}
-                value={flatCatFiles.filter((c) => formData.categoryIds.includes(c.id))}
-                onChange={(_, newValue) =>
-                  setField('categoryIds', newValue.map((c) => c.id))
-                }
-                renderOption={(props, option) => (
-                  <Box
-                    component="li"
-                    {...props}
-                    key={option.id}
-                    sx={{ pl: `${(option.depth * 16) + 8}px !important`, py: '6px !important' }}
-                  >
-                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                      <Typography variant="body2" fontWeight={option.depth === 0 ? 700 : 400}>
-                        {option.name}
-                      </Typography>
-                      {option.depth > 0 && (
-                        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
-                          {option.path}
-                        </Typography>
-                      )}
-                    </Box>
+                {/* Variant operations require the Variable type to be saved first. */}
+                {!isNew && formData.type === 'variable' && dbProduct?.type === 'variable' && (
+                  <Box onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); e.stopPropagation(); } }}>
+                    <VariantsPanel
+                      pricingEnabled={pricingEnabled}
+                      productId={id}
+                      productName={formData.name}
+                      productSku={formData.sku}
+                      categoryIds={formData.categoryIds}
+                      flatCatFiles={flatCatFiles}
+                      canManageVariants={canUpdateProducts}
+                      onStockTotalChange={handleVariantStockChange}
+                      globalPrimaryVersion={globalPrimaryVersion}
+                      onVariantPrimarySelected={() => setFormData((prev) => ({
+                        ...prev,
+                        images: prev.images.map((img) => ({ ...img, isPrimary: false })),
+                      }))}
+                    />
                   </Box>
                 )}
-                renderTags={(value, getTagProps) =>
-                  value.map((option, index) => {
-                    const { key, ...tagProps } = getTagProps({ index });
-                    return (
-                      <Chip
-                        key={key || option.id}
-                        label={option.depth > 0 ? option.path : option.name}
-                        size="small"
-                        title={option.path}
-                        {...tagProps}
-                      />
-                    );
-                  })
-                }
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Categories"
-                    placeholder={formData.categoryIds.length === 0 ? 'Search or select…' : ''}
-                    margin="normal"
-                  />
-                )}
-                groupBy={(o) => {
-                  // Group by root category name for visual separation
-                  const root = flatCatFiles.find(
-                    (c) => c.depth === 0 && (c.id === o.id || o.path.startsWith(c.name))
-                  );
-                  return root?.name || o.name;
-                }}
-                noOptionsText="No categories found"
-                disableCloseOnSelect
-                sx={{ mt: 1 }}
-              />
+              </Box>
+            )}
 
-              <FormControl fullWidth margin="normal">
-                <InputLabel id="storefront-layout-label">Storefront layout</InputLabel>
-                <Select
-                  labelId="storefront-layout-label"
-                  label="Storefront layout"
-                  value={formData.storefrontLayout || ''}
-                  onChange={(event) => setField('storefrontLayout', event.target.value || null)}
-                >
-                  <MenuItem value="">Use store default</MenuItem>
-                  {getDesignPageControlSchema('product').groups[0].fields[0].options.map(({ value, label }) => (
-                    <MenuItem key={value} value={value}>{label}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-
-              {tagsEnabled && canReadTags && <ProductTagsInput value={formData.tags} onChange={(tags) => setField('tags', tags)} disabled={!canSaveProduct || !canManageTags} error={errors.tags} />}
-
-              {brandsEnabled && (
-              <FormControl fullWidth margin="normal">
-                <InputLabel id="brand-select-label">Brand</InputLabel>
-                <Select
-                  labelId="brand-select-label"
-                  value={formData.brandId}
-                  label="Brand"
-                  onChange={(e) => setField('brandId', e.target.value)}
-                >
-                  <MenuItem value=""><em>None</em></MenuItem>
-                  {brands.map((b) => (
-                    <MenuItem key={b.id} value={b.id}>
-                      {b.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-                {/* <FormHelperText>Select a product brand</FormHelperText> */}
-              </FormControl>
-              )}
-            </Paper>
-
-
-            {formData.type !== 'combo' && (
-              <Paper sx={{ p: 3, mb: 3 }}>
-                <Typography variant="h6" gutterBottom>
-                  Inventory
+            <Box {...editorSection('storefront', 'Storefront')} sx={{ display: 'grid', gap: { xs: 2, sm: 3 }, minWidth: 0 }}>
+              <Paper variant="outlined" sx={editorPanelSx}>
+                <Typography variant="h6" component="h2" gutterBottom>
+                  Storefront
                 </Typography>
-                <TextField
-                  fullWidth
-                  label="SKU"
-                  margin="normal"
-                  value={formData.sku}
-                  onChange={(e) => setField('sku', e.target.value)}
-                  error={Boolean(errors.sku)}
-                  helperText={errors.sku}
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <Tooltip title="Auto-generate SKU from product name (uses SKU settings)">
-                          <span>
-                          <IconButton
-                            size="small"
-                            onClick={() => setField('sku', generateProductSKU(formData.name))}
-                            disabled={!formData.name?.trim()}
-                          >
-                            <ElectricBoltIcon fontSize="small" color="warning" />
-                          </IconButton>
-                          </span>
-                        </Tooltip>
-                      </InputAdornment>
-                    ),
+                <FormControl fullWidth margin="normal">
+                  <InputLabel id="product-storefront-state-label">Storefront state</InputLabel>
+                  <Select
+                    value={getProductStorefrontState(formData)}
+                    labelId="product-storefront-state-label"
+                    label="Storefront state"
+                    onChange={(event) => {
+                      const storefrontFields = getProductStorefrontFields(event.target.value);
+                      setFormData((current) => ({ ...current, ...storefrontFields }));
+                    }}
+                  >
+                    {Object.values(PRODUCT_STOREFRONT_STATES).map((state) => (
+                      <MenuItem key={state} value={state} disabled={isNew && state === PRODUCT_STOREFRONT_STATES.ARCHIVED}>
+                        {PRODUCT_STOREFRONT_STATE_LABELS[state]}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  <FormHelperText>{getProductStorefrontStateHelp(getProductStorefrontState(formData))}</FormHelperText>
+                </FormControl>
+                <FormControlLabel
+                  control={<Switch checked={formData.isFeatured} onChange={(event) => setField('isFeatured', event.target.checked)} />}
+                  disabled={!canSaveProduct}
+                  label="Featured product"
+                />
+
+                <FormControl fullWidth margin="normal" error={Boolean(errors.type)}>
+                  <InputLabel id="product-type-label">Product Type</InputLabel>
+                  <Select
+                    labelId="product-type-label"
+                    disabled={saving || !canSaveProduct}
+                    value={formData.type}
+                    label="Product Type"
+                    onChange={(e) => {
+                      const newType = e.target.value;
+                      if (newType !== 'variable' && variantCount > 0 && !(newType === 'simple' && dbProduct?.type === 'simple')) { notify('Remove all variants, including inactive ones, before changing to Simple or Combo.', 'warning'); return; }
+                      if (newType !== 'combo' && dbProduct?.comboItems?.length > 0) { notify('Clear the bundle items before changing this product type.', 'warning'); return; }
+                      setField('type', newType);
+                    }}
+                  >
+                    <MenuItem value="simple">Simple Product</MenuItem>
+                    <MenuItem value="variable">Variable Product</MenuItem>
+                    <MenuItem value="combo">Combo / Bundle</MenuItem>
+                  </Select>
+                  {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
+                  <FormHelperText>{formData.type === 'variable' ? 'Customers choose a variant. Manage each combination in Inventory.' : formData.type === 'combo' ? 'Bundle existing products. Stock depends on the included products.' : 'One version with its own price and stock quantity.'}</FormHelperText>
+                </FormControl>
+                {formData.type === 'simple' && variantCount > 0 && <Alert severity="info">This Simple product uses its own stock quantity. Older variant records are retained for existing orders and do not control current stock or alerts.</Alert>}
+
+              </Paper>
+
+              <Paper variant="outlined" sx={editorPanelSx}>
+                <Typography variant="h6" component="h2" gutterBottom>
+                  Categories &amp; Brand
+                </Typography>
+                <Autocomplete
+                  multiple
+                  options={flatCatFiles}
+                  getOptionLabel={(o) => o.path || o.name}
+                  isOptionEqualToValue={(o, v) => o.id === v.id}
+                  value={flatCatFiles.filter((c) => formData.categoryIds.includes(c.id))}
+                  onChange={(_, newValue) =>
+                    setField('categoryIds', newValue.map((c) => c.id))
+                  }
+                  renderOption={(props, option) => (
+                    <Box
+                      component="li"
+                      {...props}
+                      key={option.id}
+                      sx={{ pl: `${(option.depth * 16) + 8}px !important`, py: '6px !important' }}
+                    >
+                      <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                        <Typography variant="body2" fontWeight={option.depth === 0 ? 700 : 400}>
+                          {option.name}
+                        </Typography>
+                        {option.depth > 0 && (
+                          <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
+                            {option.path}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
+                  )}
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => {
+                      const { key, ...tagProps } = getTagProps({ index });
+                      return (
+                        <Chip
+                          key={key || option.id}
+                          label={option.depth > 0 ? option.path : option.name}
+                          size="small"
+                          title={option.path}
+                          {...tagProps}
+                        />
+                      );
+                    })
+                  }
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Categories"
+                      placeholder={formData.categoryIds.length === 0 ? 'Search or select…' : ''}
+                      margin="normal"
+                    />
+                  )}
+                  groupBy={(o) => {
+                    // Group by root category name for visual separation
+                    const root = flatCatFiles.find(
+                      (c) => c.depth === 0 && (c.id === o.id || o.path.startsWith(c.name))
+                    );
+                    return root?.name || o.name;
                   }}
-                />
-                <UnitSelector
-                  value={formData.unit}
-                  onChange={(val) => setField('unit', val)}
-                  error={Boolean(errors.unit)}
-                  helperText={errors.unit || 'Used in storefront pricing and quantity display'}
+                  noOptionsText="No categories found"
+                  disableCloseOnSelect
+                  sx={{ mt: 1 }}
                 />
 
-                <TextField
-                  fullWidth
-                  label={formData.type === 'variable' ? 'Total variant stock' : 'Stock Quantity *'}
-                  type="number"
-                  margin="normal"
-                  inputProps={{ min: 0 }}
-                  value={formData.type === 'variable' ? variantStockTotal : formData.quantity}
-                  InputProps={{ readOnly: formData.type === 'variable' }}
-                  onChange={(e) => setField('quantity', e.target.value)}
-                  error={Boolean(errors.quantity)}
-                  helperText={errors.quantity || (formData.type === 'variable' ? 'Calculated from active variants. Set each combination’s stock below; no variants means 0 stock.' : 'Stock for this single product.')}
-                />
-                <InventoryStockSummary
-                  quantity={formData.quantity}
-                  reservedQty={dbProduct?.reservedQty}
-                  variants={formData.type === 'variable' ? inventoryVariants : []}
-                  selectedVariantId={inventoryVariantId}
-                  tracksVariants={formData.type === 'variable'}
-                  enabled={formData.isEnabled !== false}
-                  published={formData.status === 'published'}
-                />
+                <FormControl fullWidth margin="normal">
+                  <InputLabel id="storefront-layout-label">Storefront layout</InputLabel>
+                  <Select
+                    labelId="storefront-layout-label"
+                    label="Storefront layout"
+                    value={formData.storefrontLayout || ''}
+                    onChange={(event) => setField('storefrontLayout', event.target.value || null)}
+                  >
+                    <MenuItem value="">Use store default</MenuItem>
+                    {getDesignPageControlSchema('product').groups[0].fields[0].options.map(({ value, label }) => (
+                      <MenuItem key={value} value={value}>{label}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                {tagsEnabled && canReadTags && <ProductTagsInput value={formData.tags} onChange={(tags) => setField('tags', tags)} disabled={!canSaveProduct || !canManageTags} error={errors.tags} />}
+
+                {brandsEnabled && (
+                <FormControl fullWidth margin="normal">
+                  <InputLabel id="brand-select-label">Brand</InputLabel>
+                  <Select
+                    labelId="brand-select-label"
+                    value={formData.brandId}
+                    label="Brand"
+                    onChange={(e) => setField('brandId', e.target.value)}
+                  >
+                    <MenuItem value=""><em>None</em></MenuItem>
+                    {brands.map((b) => (
+                      <MenuItem key={b.id} value={b.id}>
+                        {b.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  {/* <FormHelperText>Select a product brand</FormHelperText> */}
+                </FormControl>
+                )}
               </Paper>
-            )}
-
-            {/* Combo Builder — only after the product type is saved as combo */}
-            {!isNew && formData.type === 'combo' && dbProduct?.type !== 'combo' && (
-              <Alert severity="info" sx={{ mb: 3 }}>
-                Save the product as a combo before adding bundle items.
-              </Alert>
-            )}
-
-            {!isNew && formData.type === 'combo' && dbProduct?.type === 'combo' && (
-              <Paper sx={{ p: 3, mb: 3 }}>
-                <ProductComboBuilder
-                  productId={id}
-                  canEdit={canUpdateProducts}
-                  onSuggestedPrice={(price) => setField('price', price)}
-                />
-              </Paper>
-            )}
+            </Box>
 
             {shippingCapability && (
-              <Paper sx={{ p: 3, mb: 3 }}>
-                <Typography variant="h6" gutterBottom>
+              <Paper {...editorSection('shipping', 'Shipping & Dimensions')} variant="outlined" sx={editorPanelSx}>
+                <Typography variant="h6" component="h2" gutterBottom>
                   Shipping &amp; Dimensions
                 </Typography>
                 <FormControlLabel
@@ -1602,186 +1759,158 @@ const ProductEditPage = () => {
                 )}
               </Paper>
             )}
-          </Grid>
-        </Grid>
 
-        {(isNew || dbProduct?.type !== 'variable') && formData.type === 'variable' && (
-          <Paper variant="outlined" sx={{ p: 3, mt: 3 }}>
-            <Typography variant="h6" fontWeight={700}>Attributes and variants</Typography>
-            <Typography variant="body2" color="text.secondary">Save the product first. You can then choose or create attributes, add their values, and generate variants.</Typography>
-          </Paper>
-        )}
-
-        {/* Variant operations require the Variable type to be saved first. */}
-        {!isNew && formData.type === 'variable' && dbProduct?.type === 'variable' && (
-          <Box onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); e.stopPropagation(); } }}>
-            <VariantsPanel 
-              pricingEnabled={pricingEnabled}
-              productId={id}
-              productName={formData.name}
-              productSku={formData.sku}
-              categoryIds={formData.categoryIds}
-              flatCatFiles={flatCatFiles}
-              canManageVariants={canUpdateProducts}
-              onStockTotalChange={handleVariantStockChange}
-              globalPrimaryVersion={globalPrimaryVersion}
-              onVariantPrimarySelected={() => setFormData((prev) => ({
-                ...prev,
-                images: prev.images.map((img) => ({ ...img, isPrimary: false })),
-              }))}
-            />
-          </Box>
-        )}
-
-        {/* Custom Tabs panel — only after product is saved */}
-        {!isNew && (
-          <Box onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); e.stopPropagation(); } }}>
-            <ProductCustomTabs
-              productId={id}
-              canEdit={canUpdateProducts}
-            />
-          </Box>
-        )}
-
-        {!isNew && (
-          <Paper sx={{ p: 3, mt: 3 }} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}>
-            <ProductRelatedPicker key={id} productId={id} canEdit={canUpdateProducts} />
-          </Paper>
-        )}
-
-        {/* SEO Configuration — always last, even after Attributes and Variants */}
-        {seoEnabled && (
-          <Paper sx={{ p: 3, mt: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-              <Typography variant="h6">
-                SEO Configuration
-              </Typography>
-              <Chip label="SEO v2" size="small" color="primary" variant="outlined" />
-            </Box>
-            <Alert severity="info" sx={{ mb: 3 }}>
-              Fine-tune how this product appears in search engines and social media.
-              If left blank, the system will auto-generate metadata.
-            </Alert>
-
-            <SchemaOverrideField
-              key={id}
-              kind="product"
-              value={formData.schemaOverride}
-              onChange={(value) => setField('schemaOverride', value)}
-              error={errors.schemaOverride}
-              path={dbProduct?.status === 'published' && dbProduct.isEnabled !== false && dbProduct.slug ? `/products/${encodeURIComponent(dbProduct.slug)}` : null}
-              name={formData.name}
-              description={formData.metaDescription || formData.shortDescription}
-              variants={formData.type === 'variable' ? dbProduct?.variants : undefined}
-            />
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 5fr) minmax(0, 3fr) minmax(0, 4fr)' }, gap: 3, alignItems: 'start' }}>
-              <Box>
-                <TextField
-                  fullWidth
-                  label="Meta Title"
-                  margin="normal"
-                  size="small"
-                  value={formData.metaTitle}
-                  onChange={(e) => setField('metaTitle', e.target.value)}
-                  placeholder={formData.name}
-                  helperText="Appears as the clickable headline in search results."
+            {/* Custom Tabs panel — only after product is saved */}
+            {!isNew && (
+              <Box {...editorSection('custom-tabs', 'Custom Tabs')} sx={{ minWidth: 0 }} onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); e.stopPropagation(); } }}>
+                <ProductCustomTabs
+                  productId={id}
+                  canEdit={canUpdateProducts}
                 />
-                <TextField
-                  fullWidth
-                  label="Meta Description"
-                  margin="normal"
-                  size="small"
-                  multiline
-                  rows={3}
-                  value={formData.metaDescription}
-                  onChange={(e) => setField('metaDescription', e.target.value)}
-                  placeholder={formData.shortDescription}
-                  helperText="A brief summary (150-160 chars) to entice clicks."
-                />
-                <TextField
-                  fullWidth
-                  label="Internal Keywords"
-                  margin="normal"
-                  size="small"
-                  value={formData.metaKeywords}
-                  onChange={(e) => setField('metaKeywords', e.target.value)}
-                  helperText="Used for internal search optimization. Separate with commas."
-                />
-
               </Box>
-              <Box sx={{ mt: { xs: 0, md: 2 } }}>
-                <Typography variant="subtitle2" gutterBottom>Social Sharing Image (OG Image)</Typography>
-                {canUploadMedia && (
-                  <>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      onClick={() => setOgPickerOpen(true)}
-                      startIcon={<ImageIcon />}
-                    >
-                      Select from Media Library
-                    </Button>
-                    <MediaPicker
-                      open={ogPickerOpen}
-                      onClose={() => setOgPickerOpen(false)}
-                      onSelect={(selected) => {
-                        const media = Array.isArray(selected) ? selected[0] : selected;
-                        if (media?.url) setField('ogImage', media.url);
-                        setOgPickerOpen(false);
-                      }}
-                      multiple={false}
-                      title="Select OG Image"
-                    />
-                  </>
-                )}
-                {shareImage && (
-                  <Box sx={{ mt: 2, position: 'relative', width: 'fit-content' }}>
-                    <img
-                      src={getMediaUrl(shareImage)}
-                      alt="Social share image preview"
-                      style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, border: '1px solid #ddd' }}
-                    />
-                    {canSaveProduct && formData.ogImage && (
-                      <IconButton
-                        size="small"
-                        color="error"
-                        aria-label="Use primary product image"
-                        sx={{ position: 'absolute', top: -10, right: -10, bgcolor: 'background.paper', boxShadow: 1 }}
-                        onClick={() => setField('ogImage', '')}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    )}
-                  </Box>
-                )}
-                {!formData.ogImage && (
-                  <FormHelperText>The primary product image is used automatically when available.</FormHelperText>
-                )}
-                {!canUploadMedia && !formData.ogImage && (
-                  <Typography variant="caption" color="text.secondary">
-                    You do not have permission to upload media.
+            )}
+
+            {!isNew && (
+              <Paper {...editorSection('related-products', 'Related Products')} variant="outlined" sx={editorPanelSx} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}>
+                <ProductRelatedPicker key={id} productId={id} canEdit={canUpdateProducts} />
+              </Paper>
+            )}
+
+            {/* SEO Configuration — always last, even after Attributes and Variants */}
+            {seoEnabled && (
+              <Paper {...editorSection('search-social', 'Search & Social')} variant="outlined" sx={editorPanelSx}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                  <Typography variant="h6" component="h2">
+                    SEO Configuration
                   </Typography>
-                )}
-                <FormHelperText>Recommended size: 1200x630px</FormHelperText>
-              </Box>
+                  <Chip label="SEO v2" size="small" color="primary" variant="outlined" />
+                </Box>
+                <Alert severity="info" sx={{ mb: 3 }}>
+                  Fine-tune how this product appears in search engines and social media.
+                  If left blank, the system will auto-generate metadata.
+                </Alert>
 
-              <Box sx={{ mt: { xs: 0, md: 2 }, p: 2, bgcolor: '#f8f9fa', borderRadius: 2, border: '1px solid #e0e0e0', overflowWrap: 'anywhere' }}>
-                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, mb: 1, display: 'block' }}>
-                  GOOGLE SEARCH PREVIEW
-                </Typography>
-                <Typography variant="body1" sx={{ color: '#1a0dab', fontSize: '18px', '&:hover': { textDecoration: 'underline' }, cursor: 'pointer', mb: 0.5 }}>
-                  {formatSeoTitle(formData.metaTitle || formData.name || 'Product Name', settings)}
-                </Typography>
-                <Typography variant="body2" sx={{ color: '#006621', fontSize: '14px', mb: 0.5 }}>
-                  {window.location.origin}/product/{formData.slug || 'slug'}
-                </Typography>
-                <Typography variant="body2" sx={{ color: '#545454', fontSize: '13px', lineHeight: 1.4 }}>
-                  {formData.metaDescription || formData.shortDescription || 'Your product description will appear here...'}
-                </Typography>
-              </Box>
-            </Box>
-          </Paper>
-        )}
+                <SchemaOverrideField
+                  key={id}
+                  kind="product"
+                  value={formData.schemaOverride}
+                  onChange={(value) => setField('schemaOverride', value)}
+                  error={errors.schemaOverride}
+                  path={dbProduct?.status === 'published' && dbProduct.isEnabled !== false && dbProduct.slug ? `/products/${encodeURIComponent(dbProduct.slug)}` : null}
+                  name={formData.name}
+                  description={formData.metaDescription || formData.shortDescription}
+                  variants={formData.type === 'variable' ? dbProduct?.variants : undefined}
+                />
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 1fr) minmax(0, 1fr)', xl: 'minmax(0, 5fr) minmax(0, 3fr) minmax(0, 4fr)' }, gap: 3, alignItems: 'start' }}>
+                  <Box>
+                    <TextField
+                      fullWidth
+                      label="Meta Title"
+                      margin="normal"
+                      size="small"
+                      value={formData.metaTitle}
+                      onChange={(e) => setField('metaTitle', e.target.value)}
+                      placeholder={formData.name}
+                      helperText="Appears as the clickable headline in search results."
+                    />
+                    <TextField
+                      fullWidth
+                      label="Meta Description"
+                      margin="normal"
+                      size="small"
+                      multiline
+                      rows={3}
+                      value={formData.metaDescription}
+                      onChange={(e) => setField('metaDescription', e.target.value)}
+                      placeholder={formData.shortDescription}
+                      helperText="A brief summary (150-160 chars) to entice clicks."
+                    />
+                    <TextField
+                      fullWidth
+                      label="Internal Keywords"
+                      margin="normal"
+                      size="small"
+                      value={formData.metaKeywords}
+                      onChange={(e) => setField('metaKeywords', e.target.value)}
+                      helperText="Used for internal search optimization. Separate with commas."
+                    />
+
+                  </Box>
+                  <Box sx={{ mt: { xs: 0, md: 2 } }}>
+                    <Typography variant="subtitle2" gutterBottom>Social Sharing Image (OG Image)</Typography>
+                    {canUploadMedia && (
+                      <>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          onClick={() => setOgPickerOpen(true)}
+                          startIcon={<ImageIcon />}
+                        >
+                          Select from Media Library
+                        </Button>
+                        <MediaPicker
+                          open={ogPickerOpen}
+                          onClose={() => setOgPickerOpen(false)}
+                          onSelect={(selected) => {
+                            const media = Array.isArray(selected) ? selected[0] : selected;
+                            if (media?.url) setField('ogImage', media.url);
+                            setOgPickerOpen(false);
+                          }}
+                          multiple={false}
+                          title="Select OG Image"
+                        />
+                      </>
+                    )}
+                    {shareImage && (
+                      <Box sx={{ mt: 2, position: 'relative', width: 'fit-content' }}>
+                        <img
+                          src={getMediaUrl(shareImage)}
+                          alt="Social share image preview"
+                          style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, border: '1px solid #ddd' }}
+                        />
+                        {canSaveProduct && formData.ogImage && (
+                          <IconButton
+                            size="small"
+                            color="error"
+                            aria-label="Use primary product image"
+                            sx={{ position: 'absolute', top: -10, right: -10, bgcolor: 'background.paper', boxShadow: 1 }}
+                            onClick={() => setField('ogImage', '')}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        )}
+                      </Box>
+                    )}
+                    {!formData.ogImage && (
+                      <FormHelperText>The primary product image is used automatically when available.</FormHelperText>
+                    )}
+                    {!canUploadMedia && !formData.ogImage && (
+                      <Typography variant="caption" color="text.secondary">
+                        You do not have permission to upload media.
+                      </Typography>
+                    )}
+                    <FormHelperText>Recommended size: 1200x630px</FormHelperText>
+                  </Box>
+
+                  <Box sx={{ mt: { xs: 0, md: 2 }, p: 2, bgcolor: 'background.default', borderRadius: 2, border: '1px solid', borderColor: 'divider', overflowWrap: 'anywhere' }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, mb: 1, display: 'block' }}>
+                      GOOGLE SEARCH PREVIEW
+                    </Typography>
+                    <Typography variant="body1" sx={{ color: 'primary.main', fontSize: '18px', '&:hover': { textDecoration: 'underline' }, cursor: 'pointer', mb: 0.5 }}>
+                      {formatSeoTitle(formData.metaTitle || formData.name || 'Product Name', settings)}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: 'success.dark', fontSize: '14px', mb: 0.5 }}>
+                      {window.location.origin}/product/{formData.slug || 'slug'}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '13px', lineHeight: 1.4 }}>
+                      {formData.metaDescription || formData.shortDescription || 'Your product description will appear here...'}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Paper>
+            )}
+          </Box>
+        </Box>
       </form>
     </Box>
   );

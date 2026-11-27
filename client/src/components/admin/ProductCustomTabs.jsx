@@ -209,7 +209,7 @@ const TabCard = ({
                     placeholder="Tab Title *"
                     value={tab.title}
                     onChange={(e) => onChange({ title: e.target.value })}
-                    sx={{ flex: 1 }}
+                    sx={{ flex: { xs: '1 1 calc(100% - 32px)', sm: 1 }, minWidth: 0 }}
                     inputProps={{ maxLength: 255 }}
                     variant="standard"
                     InputProps={{ disableUnderline: !tab.title }}
@@ -584,18 +584,18 @@ const ProductCustomTabs = ({ productId, canEdit = true }) => {
     }
 
     return (
-        <Paper sx={{ p: 3, mt: 3 }}>
+        <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderRadius: 2 }}>
             {/* Section header */}
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                <Box>
-                    <Typography variant="h6" fontWeight={700}>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, mb: 2 }}>
+                <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="h6" component="h2" fontWeight={700}>
                         Custom Tabs
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
                         Add custom informational sections displayed as an accordion on the product page.
                     </Typography>
                 </Box>
-                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', '& .MuiButton-root': { minHeight: { xs: 44, sm: 32 } } }}>
                     {dirty && (
                         <Chip
                             label="Unsaved changes"

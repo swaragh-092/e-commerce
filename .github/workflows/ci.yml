@@ -73,8 +73,12 @@ jobs:
           echo "::error::Server did not pass its PostgreSQL-backed readiness check"
           exit 1
 
-  frontend:
-    name: Frontend
+  frontend_shards:
+    name: Frontend shard ${{ matrix.shard }}/2
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -91,7 +95,21 @@ jobs:
           cache-dependency-path: client/package-lock.json
       - run: npm ci
       - run: npm run lint --if-present
-      - run: npm test
+        if: matrix.shard == 1
+      - run: npm test -- --shard=${{ matrix.shard }}/2
       - run: npm run build
+        if: matrix.shard == 1
         env:
           VITE_API_URL: /api
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: frontend_shards
+    if: always()
+    steps:
+      - name: Require both frontend shards to pass
+        env:
+          SHARD_RESULT: ${{ needs.frontend_shards.result }}
+        run: test "$SHARD_RESULT" = success
