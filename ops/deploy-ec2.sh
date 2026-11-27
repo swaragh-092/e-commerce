@@ -230,10 +230,17 @@ frontend_bytes=$(du -sb "$incoming/dist" | cut -f1)
 sudo -n install -d -m 755 "$release_base" "$release"
 [[ "$(stat -c %d "$(dirname "$web")")" == "$(stat -c %d "$release_base")" ]] ||
   fail "The frontend and releases must be on the same filesystem."
-sudo -n rsync -rlt --chmod=D755,F644 "$incoming/dist/" "$release/"
+sudo -n rsync -rltp --chmod=D755,F644 "$incoming/dist/" "$release/"
 if command -v selinuxenabled >/dev/null && selinuxenabled; then
   sudo -n chcon --reference="$old_frontend" "$release_base"
   sudo -n chcon -R --reference="$old_frontend" "$release"
+fi
+
+asset=$(grep -om1 -E 'src="/assets/[^"]+\.js"' "$release/index.html" | cut -d '"' -f 2) ||
+  fail "No built JavaScript was referenced by index.html."
+if ! sudo -n -u nginx test -r "$release/index.html" ||
+   ! sudo -n -u nginx test -r "$release$asset"; then
+  fail "Nginx cannot read the prepared frontend entry point or JavaScript asset."
 fi
 
 phase=stop-backend
@@ -284,8 +291,6 @@ check_proxied_api || fail "The updated API did not respond through Nginx."
 served="$incoming/served.html"
 "${nginx_curl[@]}" "https://$domain/admin/login" -o "$served"
 cmp -s "$served" "$release/index.html" || fail "Nginx did not serve the new admin entry point."
-asset=$(grep -om1 -E 'src="/assets/[^"]+\.js"' "$release/index.html" | cut -d '"' -f 2)
-[[ -n "$asset" ]] || fail "No built JavaScript was referenced by index.html."
 "${nginx_curl[@]}" "https://$domain$asset" -o "$incoming/served.js"
 cmp -s "$incoming/served.js" "$release$asset" || fail "Nginx did not serve the new JavaScript asset."
 pm2 save
