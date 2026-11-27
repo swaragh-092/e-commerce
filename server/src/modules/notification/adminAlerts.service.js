@@ -22,15 +22,19 @@ for (const item of require('./notification.events').EVENTS) {
   };
 }
 
-const enabled = () => process.env.ADMIN_ALERTS_ENABLED === 'true';
 const pilot = () => (process.env.ADMIN_ALERTS_PILOT_USERS || '').split(',').map(id => id.trim()).filter(Boolean);
-const available = id => enabled() && (!pilot().length || pilot().includes(id));
+const pilotEligible = id => !pilot().length || pilot().includes(id);
 const emailEnabled = () => process.env.ADMIN_ALERTS_EMAIL_ENABLED === 'true';
-const assignmentCutover = () => enabled() && !pilot().length && process.env.ADMIN_ALERTS_ASSIGNMENT_EMAIL === 'true';
+const assignmentCutover = () => !pilot().length && process.env.ADMIN_ALERTS_ASSIGNMENT_EMAIL === 'true';
 const db = () => require('../index');
 const sql = (statement, replacements = {}, transaction) =>
   db().sequelize.query(statement, { replacements, transaction, type: QueryTypes.SELECT });
 const one = async (...args) => (await sql(...args))[0];
+const enabled = async transaction => {
+  const policy = await one('SELECT inbox_enabled FROM admin_alert_policy', {}, transaction);
+  return policy?.inbox_enabled ?? (process.env.ADMIN_ALERTS_ENABLED === 'true');
+};
+const available = async id => pilotEligible(id) && await enabled();
 const emailPaused = async transaction => (await one('SELECT email_paused FROM admin_alert_policy', {}, transaction)).email_paused;
 const json = JSON.stringify;
 const fail = (message, status = 400) => { throw new AppError(status === 409 ? 'CONFLICT' : status === 403 ? 'FORBIDDEN' : status === 404 ? 'NOT_FOUND' : 'VALIDATION_ERROR', status, message); };
@@ -133,12 +137,13 @@ async function seed(transaction) {
 }
 
 async function capture(event, data, transaction, occurrence = null) {
-  if (!enabled()) return;
+  if (!await enabled(transaction)) return false;
   definition(event);
   if (!transaction && !occurrence) throw new Error('Admin alert events require a source transaction or occurrence key');
   await sql(`INSERT INTO admin_alert_events (id,event,data,occurrence)
     VALUES (:id,:event,CAST(:data AS jsonb),:occurrence) ON CONFLICT (occurrence) DO NOTHING RETURNING id`,
     { id: randomUUID(), event, data: json(data), occurrence }, transaction);
+  return true;
 }
 
 const permission = (user, key) => getPermissionsForUser(user).includes(key);
@@ -165,7 +170,7 @@ async function source(event, transaction) {
 }
 
 function canRead(event, record, user) {
-  if (!user || !available(user.id)) return false;
+  if (!user || !pilotEligible(user.id)) return false;
   if (event.data.test) return event.data.userId === user.id;
   if (event.event === 'staff_access') return event.data.userId === user.id || permission(user, P.USERS_ASSIGN_ROLES);
   if (!record) return false;
@@ -224,6 +229,7 @@ async function queueDelivery(table, event, rule, user, message, transaction) {
 
 async function expandEvent() {
   return db().sequelize.transaction(async transaction => {
+    if (!await enabled(transaction)) return false;
     const event = await one(`SELECT * FROM admin_alert_events WHERE rule_versions IS NULL
       ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED`, {}, transaction);
     if (!event) return false;
@@ -252,6 +258,7 @@ async function expandEvent() {
 }
 
 async function deliver() {
+  if (!await enabled()) return false;
   const row = await one(`WITH next AS (
       SELECT id FROM admin_alert_email WHERE status = 'queued' AND due_at <= now()
       ORDER BY due_at LIMIT 1 FOR UPDATE SKIP LOCKED
@@ -301,7 +308,7 @@ async function deliver() {
 }
 
 async function processAlerts() {
-  if (!enabled()) return;
+  if (!await enabled()) return;
   await seed();
   await sql(`UPDATE admin_alert_email SET status = 'ambiguous', error = 'Worker stopped before recording the SMTP outcome'
     WHERE status = 'sending' AND due_at <= now() RETURNING id`);

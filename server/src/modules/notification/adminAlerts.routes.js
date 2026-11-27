@@ -9,14 +9,15 @@ const { PERMISSIONS, getPermissionsForUser } = require('../../config/permissions
 const a = require('./adminAlerts.service');
 const db = () => require('../index');
 
-const wrap = callback => async (req, res, next) => {
+const wrap = (callback, management = false) => async (req, res, next) => {
   try {
-    if (!a.available(req.user.id)) {
+    const [user] = await a.staff(req.user.id);
+    if (!user) a.fail('Active staff access is required', 403);
+    const mayConfigure = management && a.manager(user);
+    if (!mayConfigure && !await a.available(req.user.id)) {
       if (req.method === 'GET' && req.path === '/inbox') return response.success(res, { enabled: false, items: [], unread: 0 });
       a.fail('Internal alerts are unavailable', 404);
     }
-    const [user] = await a.staff(req.user.id);
-    if (!user) a.fail('Active staff access is required', 403);
     return response.success(res, await callback(req, user));
   } catch (error) {
     return next(error);
@@ -143,6 +144,9 @@ router.put('/preferences', wrap(async (req, user) => {
 
 router.get('/internal-rules', wrap(async (_, user) => {
   const manage = a.manager(user);
+  const inboxEnabled = await a.enabled();
+  const inboxAvailable = await a.available(user.id);
+  if (manage && !inboxAvailable) return { manage, inboxEnabled, inboxAvailable, rules: [] };
   if (manage) await a.seed();
   const rules = manage
     ? await a.sql('SELECT * FROM admin_alert_rules ORDER BY event,id')
@@ -151,10 +155,23 @@ router.get('/internal-rules', wrap(async (_, user) => {
   const grantedUsers = new Set(rules.flatMap(rule => (rule.allowed_audience || [])
     .filter(selector => selector.startsWith('user:')).map(selector => selector.slice(5))));
   const people = manage ? await a.staff() : (await Promise.all([...grantedUsers].map(id => a.staff(id)))).flat();
-  return { manage, rules, events: a.events, fields: a.editable, emailEnabled: a.emailEnabled(), emailPaused: await a.emailPaused(),
+  return { manage, inboxEnabled, inboxAvailable, rules, events: a.events, fields: a.editable, emailEnabled: a.emailEnabled(), emailPaused: await a.emailPaused(),
     staff: people.map(person => ({ id: person.id, label: [person.firstName, person.lastName].filter(Boolean).join(' ') || person.email })),
     roles: [...new Set(people.flatMap(person => (person.roles || []).map(role => role.slug)))].sort() };
-}));
+}, true));
+router.put('/internal-rules/inbox-policy', wrap(async (req, user) => {
+  adminOnly(user);
+  const enabled = a.valid(Joi.boolean().required(), req.body.enabled);
+  await db().sequelize.transaction(async transaction => {
+    const previous = await a.one('SELECT inbox_enabled FROM admin_alert_policy FOR UPDATE', {}, transaction);
+    await a.sql('UPDATE admin_alert_policy SET inbox_enabled = :enabled RETURNING singleton', { enabled }, transaction);
+    await db().AuditLog.create({
+      userId: user.id, action: 'UPDATE', entity: 'Settings', entityId: 'admin_alert_inbox',
+      changes: { enabled: { old: previous.inbox_enabled, new: enabled } },
+    }, { transaction });
+  });
+  return { enabled };
+}, true));
 router.put('/internal-rules/email-policy', wrap(async (req, user) => {
   adminOnly(user);
   const paused = a.valid(Joi.boolean().required(), req.body.paused);

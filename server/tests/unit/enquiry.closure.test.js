@@ -8,6 +8,7 @@ const { findEvent } = require('../../src/modules/notification/notification.event
 const { DEFAULTS, TEMPLATE_VARIABLES } = require('../../src/modules/notification/notification.defaults');
 let enquiry, transaction;
 beforeEach(() => {
+  vi.spyOn(require('../../src/modules/notification/adminAlerts.service'), 'capture').mockResolvedValue(false);
   transaction = { LOCK: { UPDATE: 'UPDATE' } };
   enquiry = { id: 'eq', name: 'Customer', email: 'customer@example.test', message: 'Question', status: 'pending', save: vi.fn() };
   vi.spyOn(sequelize, 'transaction').mockImplementation(callback => callback(transaction));

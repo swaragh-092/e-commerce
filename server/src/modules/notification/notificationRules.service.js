@@ -246,7 +246,7 @@ const route = async ({ sourceTemplate, variables = {}, orderId = null, transacti
   if (!event) return null;
   const alerts = require('./adminAlerts.service');
   const sourceId = orderId || variables.order_id || variables.orderId || variables.enquiry_id || variables.enquiryId;
-  if (alerts.enabled() && typeof sourceId === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(sourceId)
+  if (typeof sourceId === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(sourceId)
     && (event.key !== 'order_placed' || sourceTemplate === 'admin_new_order')) {
     const occurrence = hash([event.key, sourceId, variables.notification_event_id || '',
       variables.tracking_number || '', variables.status_label || '', variables.return_id || '', variables.refund_id || '']);

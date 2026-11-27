@@ -21,6 +21,7 @@ describe('customer order cancellation row locking', () => {
             update: vi.fn().mockResolvedValue(undefined),
         };
         const transaction = {};
+        vi.spyOn(require('../../src/modules/notification/adminAlerts.service'), 'capture').mockResolvedValue(false);
         const guestSessionId = '123e4567-e89b-42d3-a456-426614174000';
 
         vi.spyOn(db.sequelize, 'transaction').mockImplementation(async (callback) => callback(transaction));

@@ -10,6 +10,7 @@ describe('AdminService.updateStaffStatus', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(require('../../src/modules/notification/adminAlerts.service'), 'capture').mockResolvedValue(false);
     db.sequelize.transaction = vi.fn(async (callback) => callback({}));
   });
 

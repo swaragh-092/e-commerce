@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Alert, Box, Button, Checkbox, Chip, CircularProgress, FormControl, FormControlLabel,
-  InputLabel, MenuItem, Paper, Select, Stack, TextField, Typography,
+  InputLabel, MenuItem, Paper, Select, Stack, Switch, TextField, Typography,
 } from '@mui/material';
 import { adminAlerts as api, refreshAdminAlerts } from '../../services/adminAlerts';
 import { getApiErrorMessage } from '../../utils/apiErrors';
@@ -152,6 +152,16 @@ export default function InternalAlertRules({ assigned = false }) {
   if (!data) return error ? <Alert severity="info">{error}</Alert> : <CircularProgress aria-label="Loading internal rules" />;
   const shown = data.rules.filter(item => !filter || item.event === filter);
   const rule = shown.find(item => item.id === selected) || shown[0];
+  const toggleInbox = async enabled => {
+    setCreating(true);
+    setError('');
+    try {
+      await api.setInboxEnabled(enabled);
+      refreshAdminAlerts();
+      await reload();
+    } catch (error) { setError(getApiErrorMessage(error, 'Could not update the notification inbox.')); }
+    finally { setCreating(false); }
+  };
   const toggleEmail = async () => {
     setCreating(true);
     setError('');
@@ -175,19 +185,26 @@ export default function InternalAlertRules({ assigned = false }) {
   };
   return <Stack spacing={2}>
     {error && <Alert severity="error">{error}</Alert>}
-    {data.manage && !assigned && <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+    {data.manage && !assigned && <FormControlLabel
+      label="Enable admin notification inbox"
+      control={<Switch inputProps={{ role: 'switch' }} checked={data.inboxEnabled} disabled={creating} onChange={(_, enabled) => toggleInbox(enabled)} />}
+    />}
+    {data.inboxAvailable === false && <Alert severity="info">
+      {data.inboxEnabled ? 'Your account is outside the inbox pilot.' : 'Turn on the inbox to show the notification bell and configure internal alerts.'}
+    </Alert>}
+    {data.inboxAvailable !== false && data.manage && !assigned && <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
       <TextField select size="small" label="Event" value={filter} onChange={e => setFilter(e.target.value)} sx={{ minWidth: 245 }}>
         <MenuItem value="">All events</MenuItem>
         {Object.entries(data.events).map(([key, event]) => <MenuItem key={key} value={key}>{event.label}</MenuItem>)}
       </TextField>
       <Button onClick={create} disabled={!filter || creating}>Add rule</Button>
-      <Button onClick={toggleEmail} disabled={creating || !data.emailEnabled}>{data.emailPaused ? 'Resume internal email' : 'Pause internal email'}</Button>
+      <Button onClick={toggleEmail} disabled={creating || !data.emailEnabled}>{!data.emailEnabled ? 'Internal email is off' : data.emailPaused ? 'Resume internal email' : 'Pause internal email'}</Button>
     </Stack>}
-    {rule ? <>
+    {data.inboxAvailable !== false && (rule ? <>
       <TextField select size="small" label="Rule" value={rule.id} onChange={e => select(e.target.value)}>
         {shown.map(item => <MenuItem key={item.id} value={item.id}>{item.config.name} · {item.config.enabled ? 'Enabled' : 'Paused'}</MenuItem>)}
       </TextField>
       <RuleDetails key={rule.id + ':' + rule.version} rule={rule} data={data} reload={reload} />
-    </> : <Typography color="text.secondary">No notification rules available.</Typography>}
+    </> : <Typography color="text.secondary">No notification rules available.</Typography>)}
   </Stack>;
 }
