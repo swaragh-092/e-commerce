@@ -54,12 +54,35 @@ it('lets notification managers enable a disabled inbox and refreshes the bell', 
   adminAlerts.setInboxEnabled.mockResolvedValue({ enabled: true });
   const refresh = vi.fn();
   window.addEventListener('admin-alerts-changed', refresh, { once: true });
-  render(<InternalAlertRules />);
+  render(<MemoryRouter><InternalAlertRules /></MemoryRouter>);
   const toggle = await screen.findByRole('switch', { name: 'Enable admin notification inbox' });
   expect(toggle).not.toBeChecked();
   fireEvent.click(toggle);
   await waitFor(() => expect(adminAlerts.setInboxEnabled).toHaveBeenCalledWith(true));
   await waitFor(() => expect(toggle).toBeChecked());
   expect(refresh).toHaveBeenCalledOnce();
-  expect(screen.getByRole('button', { name: 'Internal email is off' })).toBeDisabled();
+  expect(screen.getByText('Internal email is off.')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Resume email' })).not.toBeInTheDocument();
+});
+
+it('keeps a draft when switching between routing and message', async () => {
+  adminAlerts.rules.mockResolvedValue({
+    manage: true, inboxEnabled: true, inboxAvailable: true, emailEnabled: false,
+    events: { order_status: { label: 'Order status changed', audience: ['participant'], fields: ['status'] } },
+    staff: [], roles: [],
+    rules: [{ id: 'rule-1', version: 1, event: 'order_status', config: {
+      name: 'Order updates', enabled: true, conditions: {}, audience: ['participant'], channels: ['in_app'],
+      inAppDefault: true, emailDefault: false, urgent: false, required: false, title: 'Order updated',
+      body: 'The order changed.', subject: 'Order updated', summary: 'The order changed.', linkLabel: 'Open order',
+    } }],
+  });
+  render(<MemoryRouter><InternalAlertRules /></MemoryRouter>);
+  const ruleName = await screen.findByRole('textbox', { name: 'Rule name' });
+  expect(screen.getByRole('button', { name: 'Publish rule' })).toBeDisabled();
+  fireEvent.change(ruleName, { target: { value: 'Shipping updates' } });
+  fireEvent.click(screen.getByRole('tab', { name: 'Message' }));
+  expect(await screen.findByRole('textbox', { name: 'Inbox title' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: 'Routing' }));
+  expect(screen.getByRole('textbox', { name: 'Rule name' })).toHaveValue('Shipping updates');
+  expect(screen.getByRole('button', { name: 'Publish rule' })).toBeEnabled();
 });

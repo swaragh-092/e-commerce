@@ -146,7 +146,9 @@ router.get('/internal-rules', wrap(async (_, user) => {
   const manage = a.manager(user);
   const inboxEnabled = await a.enabled();
   const inboxAvailable = await a.available(user.id);
-  if (manage && !inboxAvailable) return { manage, inboxEnabled, inboxAvailable, rules: [] };
+  const emailEnabled = a.emailEnabled();
+  const emailPaused = await a.emailPaused();
+  if (manage && !inboxAvailable) return { manage, inboxEnabled, inboxAvailable, emailEnabled, emailPaused, rules: [] };
   if (manage) await a.seed();
   const rules = manage
     ? await a.sql('SELECT * FROM admin_alert_rules ORDER BY event,id')
@@ -155,7 +157,7 @@ router.get('/internal-rules', wrap(async (_, user) => {
   const grantedUsers = new Set(rules.flatMap(rule => (rule.allowed_audience || [])
     .filter(selector => selector.startsWith('user:')).map(selector => selector.slice(5))));
   const people = manage ? await a.staff() : (await Promise.all([...grantedUsers].map(id => a.staff(id)))).flat();
-  return { manage, inboxEnabled, inboxAvailable, rules, events: a.events, fields: a.editable, emailEnabled: a.emailEnabled(), emailPaused: await a.emailPaused(),
+  return { manage, inboxEnabled, inboxAvailable, rules, events: a.events, fields: a.editable, emailEnabled, emailPaused,
     staff: people.map(person => ({ id: person.id, label: [person.firstName, person.lastName].filter(Boolean).join(' ') || person.email })),
     roles: [...new Set(people.flatMap(person => (person.roles || []).map(role => role.slug)))].sort() };
 }, true));
