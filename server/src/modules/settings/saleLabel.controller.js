@@ -70,4 +70,14 @@ const remove = async (req, res, next) => {
   }
 };
 
-module.exports = { list, create, replaceAll, update, remove };
+const usage = async (req, res, next) => {
+  try {
+    const { Product } = require('../index');
+    const productCount = await Product.count({ where: { saleLabel: req.params.id } });
+    return success(res, { productCount });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { list, create, replaceAll, update, remove, usage };
