@@ -106,7 +106,7 @@ const ContentGridSection = ({ section = {}, fallbackTitle = 'Content', kind = 'c
           )}
           {quoteWall && <Typography aria-hidden="true" component="span" sx={{ display: 'block', fontSize: '2.5rem', lineHeight: 1, color: 'primary.main', fontFamily: 'Georgia, serif' }}>“</Typography>}
           <CanvasEditableText section={section} field={`items.${index}.title`} {...editProps} variant={preview ? 'body2' : 'subtitle2'} sx={{ fontWeight: preview ? 800 : 900 }}>{item.title}</CanvasEditableText>
-          {(item.text || preview) && (quoteWall
+          {(item.text || preview) && (quoteWall && !preview
             ? <Typography component="blockquote" variant="body1" sx={{ m: 0, mt: 1, color: 'text.secondary', lineHeight: 1.7 }}>{item.text || 'Add testimonial text'}</Typography>
             : <CanvasEditableText section={section} field={`items.${index}.text`} {...editProps} variant={preview ? 'caption' : 'body2'} color="text.secondary" sx={{ mt: 1, display: 'block' }}>{item.text || 'Add item text'}</CanvasEditableText>)}
           {(item.author || preview) && <CanvasEditableText section={section} field={`items.${index}.author`} {...editProps} variant="caption" sx={{ display: 'block', mt: 1.5, fontWeight: 800 }}>{preview ? `- ${item.author || 'Author'}` : quoteWall ? `— ${item.author}` : item.author}</CanvasEditableText>}
@@ -127,10 +127,10 @@ const ContentGridSection = ({ section = {}, fallbackTitle = 'Content', kind = 'c
           <Box ref={carouselRef} role="region" aria-label="Customer testimonials" tabIndex={0} sx={{ display: 'flex', gap: 2, overflowX: 'auto', scrollSnapType: 'x mandatory', scrollBehavior: 'smooth', pb: 1, scrollbarWidth: 'thin' }}>
             {items.slice(0, limit).map((item, index) => <Box key={item.title || index} sx={{ flex: '0 0 88%', maxWidth: { sm: 'calc(50% - 8px)', md: 'calc(33.333% - 11px)' }, scrollSnapAlign: 'start' }}>{renderItem(item, index)}</Box>)}
           </Box>
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 1 }}>
+          {Math.min(items.length, limit) > 1 && <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 1 }}>
             <IconButton aria-label="Previous testimonials" size="small" onClick={() => scrollCarousel(-1)}><ArrowBackIosNewIcon fontSize="inherit" /></IconButton>
             <IconButton aria-label="Next testimonials" size="small" onClick={() => scrollCarousel(1)}><ArrowForwardIosIcon fontSize="inherit" /></IconButton>
-          </Box>
+          </Box>}
         </Box>
       ) : isTestimonial && variant === 'quote-wall' ? (
         <Box role="region" aria-label="Customer quotes" sx={{ columnCount: { xs: 1, sm: 2, md: 3 }, columnGap: 2 }}>{items.slice(0, limit).map(renderItem)}</Box>

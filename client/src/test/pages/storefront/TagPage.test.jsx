@@ -25,7 +25,7 @@ describe('storefront tag landing pages', () => {
   it('shows the optional tag image beside the collection heading', async () => {
     getPublicTag.mockResolvedValue({ data: { ...tag, image: { url: '/uploads/summer.jpg', alt: 'Summer garden' } } });
     mount();
-    expect(await screen.findByRole('img', { name: 'Summer garden' })).toHaveAttribute('src', '/uploads/summer.jpg');
+    expect(await screen.findByRole('img', { name: 'Summer garden' })).toHaveAttribute('src', '/uploads/summer.jpg?mediaVersion=editable1');
     expect(screen.getByRole('heading', { level: 1, name: 'Summer Planting' })).toBeInTheDocument();
   });
 

@@ -38,7 +38,7 @@ vi.mock('../../../components/admin/sections/AddSectionDialog', () => ({ default:
 vi.mock('../../../components/admin/settings/LiveStorefrontPreview', () => ({ default: ({ path, device, settings, onSelectSection, onSelectBlock, selectedBlockId, inspectorActions }) => {
   const nestedSection = settings?.homepage?.sections?.find((section) => section.heroBlocks?.[0]?.children);
   const productInfo = onSelectBlock && settings?.productPage?.sections?.find((section) => section.type === 'product-info');
-  return <div data-testid="live-preview" data-device={device}>Real storefront {path}
+  return <div data-testid="live-preview" data-device={device} data-interactive={Boolean(onSelectSection)}>Real storefront {path}
     {onSelectSection && settings?.homepage?.sections?.map((section) => (
       <button key={section.id} onClick={() => onSelectSection(section.id)}>Preview {section.title}</button>
     ))}
@@ -312,9 +312,9 @@ describe('Store Designer section editing', () => {
     expect(screen.getByRole('button', { name: 'Interactive editor preview' })).toBeEnabled();
     expect(screen.queryByRole('button', { name: 'Preview Product recommendations' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Interactive editor preview' }));
-    expect(await screen.findByText(/with sample content/)).toBeInTheDocument();
-    expect(await screen.findByRole('button', { name: 'Preview Product recommendations' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Read-only live storefront preview' }));
+    expect(screen.getByTestId('live-preview')).toHaveTextContent('Real storefront /products/sample-product');
+    expect(screen.getByTestId('live-preview')).toHaveAttribute('data-interactive', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Interactive preview of the current design' }));
     expect(await screen.findByText('Real storefront /products/sample-product')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Save draft/i })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: /^Product/ }));

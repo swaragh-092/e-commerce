@@ -1,3 +1,5 @@
+import productRow from '../../../shared/product-row.json';
+
 /**
  * Canonical metadata for the visual design editor.
  *
@@ -360,7 +362,10 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
         key: 'features',
         label: 'Cart Features',
         fields: [
-          { key: 'showTrustBadges', label: 'Show trust badges and secure checkout messaging', type: 'boolean', defaultValue: true },
+          { key: 'showTrustBadges', label: 'Show trust badges', type: 'boolean', defaultValue: true },
+          { key: 'showPaymentMethods', label: 'Show payment methods', type: 'boolean', defaultValue: true },
+          { key: 'showSecureCheckout', label: 'Show secure checkout messaging', type: 'boolean', defaultValue: true },
+          { key: 'showClearCart', label: 'Show clear cart action', type: 'boolean', defaultValue: true },
         ],
       },
       {
@@ -390,7 +395,7 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
         label: 'Labels',
         fields: [
           { key: 'placeOrderLabel', label: 'Cash on Delivery Button Label', type: 'text', defaultValue: 'Place Order' },
-          { key: 'paymentHeading', label: 'Payment Section Heading', type: 'text', defaultValue: 'Payment' },
+          { key: 'paymentHeading', label: 'Payment Section Heading', type: 'text', defaultValue: 'Payment Method' },
         ],
       },
     ],
@@ -401,6 +406,7 @@ Object.assign(PAGE_CONTROL_SCHEMAS, {
         key: 'layout',
         label: 'Search Results Layout',
         fields: [
+          { key: 'resultsPerPage', label: 'Results per page', type: 'number', min: 1, max: 50 },
           {
             key: 'gridColumns',
             label: 'Grid Columns',
@@ -1110,7 +1116,17 @@ Object.assign(COMPONENT_CONTROL_SCHEMAS, {
 
 export const DESIGN_COMPONENT_REGISTRY = Object.freeze(COMPONENT_DEFINITIONS.map((item) => Object.freeze(item)));
 export const DESIGN_COMPONENT_GROUPS = Object.freeze(COMPONENT_GROUP_DEFINITIONS.map((item) => Object.freeze(item)));
-export const DESIGN_PAGE_REGISTRY = Object.freeze(PAGE_DEFINITIONS.map((item) => Object.freeze(item)));
+export const DESIGN_PAGE_REGISTRY = Object.freeze(PAGE_DEFINITIONS.map((item) => {
+  const schema = PAGE_CONTROL_SCHEMAS[item.key];
+  const settingsGroup = item.settingsGroup || productRow.pageGroups[item.key];
+  if (!settingsGroup) return Object.freeze(item);
+  return Object.freeze({
+    ...item,
+    settingsGroup,
+    ownedKeys: schema?.groups.flatMap(({ fields }) => fields.map(({ key }) => key)) || item.ownedKeys,
+    customOwnedKeys: productRow.pageGroups[item.key] ? ['productRows'] : [],
+  });
+}));
 
 export const DESIGN_PAGE_CONTROL_SCHEMAS = Object.freeze(
   Object.fromEntries(
@@ -1164,8 +1180,8 @@ export const DESIGNER_OWNED_GROUPS = Object.freeze([
 export const DESIGNER_OWNED_KEYS = Object.freeze(
   Object.fromEntries(
     DESIGN_PAGE_REGISTRY
-      .filter((page) => page.settingsGroup && page.ownedKeys?.length)
-      .map((page) => [page.settingsGroup, Object.freeze([...page.ownedKeys, ...(page.customOwnedKeys || [])])])
+      .filter((page) => page.settingsGroup && (page.ownedKeys?.length || page.customOwnedKeys?.length))
+      .map((page) => [page.settingsGroup, Object.freeze([...(page.ownedKeys || []), ...(page.customOwnedKeys || [])])])
   )
 );
 

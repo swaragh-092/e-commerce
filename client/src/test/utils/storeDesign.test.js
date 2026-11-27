@@ -143,7 +143,7 @@ describe('store design ownership', () => {
   });
 
   it('covers every page settings group with one control schema', () => {
-    const pagesWithSettings = DESIGN_PAGE_REGISTRY.filter((page) => page.settingsGroup && page.key !== 'home');
+    const pagesWithSettings = DESIGN_PAGE_REGISTRY.filter((page) => page.settingsGroup && page.ownedKeys?.length);
 
     pagesWithSettings.forEach((page) => {
       const schema = DESIGN_PAGE_CONTROL_SCHEMAS[page.key];
@@ -170,7 +170,7 @@ describe('store design ownership', () => {
 
     expect(getDesignComponentControlSchema('productCard').groups.flatMap((group) => group.fields.map((field) => field.key))).toEqual([
       'variant', 'imageRatio', 'imageFit', 'density', 'contentAlign', 'imagePadding', 'titleLines', 'priceStyle',
-      'hoverEffect', 'shadow', 'radius', 'badgePosition', 'wishlistPosition', 'actionPlacement',
+      'cardBorderColor', 'cardBorderWidth', 'hoverEffect', 'shadow', 'radius', 'badgePosition', 'wishlistPosition', 'actionPlacement',
       'showBrand', 'showCategory', 'showRating', 'showWishlist', 'showShare', 'showSaleCountdown',
     ]);
     expect(getDesignComponentControlSchema('categoryCard').groups.flatMap((group) => group.fields.map((field) => field.key))).toEqual([

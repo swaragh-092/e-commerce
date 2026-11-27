@@ -1,33 +1,21 @@
 name: CI — Lint, Test & Build
 
-# ─────────────────────────────────────────────
-#  Triggers
-# ─────────────────────────────────────────────
 on:
   pull_request:
     branches: [main, develop]
-  push:
-    branches: [develop]          # also run CI on direct pushes to develop
+  workflow_call:
 
 permissions:
   contents: read
 
-# Cancel redundant runs on the same branch
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  # ─────────────────────────────────────────────
-  #  Backend — Node / Express / Sequelize
-  # ─────────────────────────────────────────────
   backend:
-    name: Backend (Node 18)
+    name: Backend
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: server
-
     services:
       postgres:
         image: postgres:15-alpine
@@ -41,77 +29,69 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 5
-
     env:
       NODE_ENV: test
       PORT: 5000
-      DB_HOST: localhost
+      DB_HOST: 127.0.0.1
       DB_PORT: 5432
-      DB_NAME: ecommerce_test
+      DB_NAME: ecommerce
       DB_USER: postgres
       DB_PASSWORD: testpass
-      JWT_ACCESS_SECRET: ci-access-secret
-      JWT_REFRESH_SECRET: ci-refresh-secret
+      JWT_ACCESS_SECRET: ci-test-only-access-secret-00000000000000
+      JWT_REFRESH_SECRET: ci-test-only-refresh-secret-0000000000000
       JWT_ACCESS_EXPIRES: 15m
       JWT_REFRESH_EXPIRES: 7d
       CLIENT_URL: http://localhost:5173
       APP_MODE: ecommerce
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node 18
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
         with:
-          node-version: 18
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
           cache: npm
           cache-dependency-path: server/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Lint
-        run: npm run lint || echo "⚠️  No lint script — skipping"
-
-      - name: Run tests
-        run: npm test || echo "⚠️  No tests yet — skipping"
-
-      - name: Verify build starts cleanly
+      - run: npm ci
+      - run: npm run lint --if-present
+      - run: npm test -- --run
+      - run: npm run migrate
+      - name: Verify server readiness
+        shell: bash
         run: |
-          timeout 10 node index.js &
-          sleep 5
-          kill %1 2>/dev/null || true
-          echo "✅ Server boot check passed"
+          node index.js > "$RUNNER_TEMP/server.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for _ in {1..20}; do
+            if curl -fsS --max-time 2 http://127.0.0.1:5000/health >/dev/null 2>&1; then
+              exit 0
+            fi
+            kill -0 "$server_pid" 2>/dev/null || break
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/server.log"
+          echo "::error::Server did not pass its PostgreSQL-backed readiness check"
+          exit 1
 
-  # ─────────────────────────────────────────────
-  #  Frontend — Vite / React
-  # ─────────────────────────────────────────────
   frontend:
-    name: Frontend (Node 18)
+    name: Frontend
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: client
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node 18
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
         with:
-          node-version: 18
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
           cache: npm
           cache-dependency-path: client/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Lint
-        run: npm run lint || echo "⚠️  No lint script — skipping"
-
-      - name: Build
-        run: npm run build
+      - run: npm ci
+      - run: npm run lint --if-present
+      - run: npm test
+      - run: npm run build
         env:
-          VITE_API_URL: http://placeholder-for-ci
+          VITE_API_URL: /api
