@@ -54,6 +54,42 @@ beforeEach(() => {
   createProduct.mockImplementation(async (data) => ({ data: { ...product, ...data, id: 'product' } }));
 });
 
+describe('product editor section navigation', () => {
+  it('exposes every edit section and moves focus without resetting the product form', async () => {
+    disabledFeatures.delete('seo');
+    mount();
+    await loaded();
+
+    const picker = screen.getByLabelText('Jump to section');
+    const names = ['Basic Info', 'Pricing & Tax', 'Media', 'Inventory', 'Storefront',
+      'Shipping & Dimensions', 'Custom Tabs', 'Related Products', 'Search & Social'];
+    expect(within(picker).getAllByRole('option').map((option) => option.textContent)).toEqual(names);
+    expect(screen.getAllByRole('region').filter((region) => region.dataset.productEditSection)
+      .map((region) => region.getAttribute('aria-label'))).toEqual(names);
+
+    fireEvent.change(screen.getByLabelText('Short Description'), { target: { value: 'Updated description' } });
+    expect(screen.getByText('19 / 500 characters')).toBeInTheDocument();
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+
+    const pricing = screen.getByRole('region', { name: 'Pricing & Tax' });
+    pricing.scrollIntoView = vi.fn();
+    fireEvent.change(picker, { target: { value: 'pricing-tax' } });
+    expect(pricing).toHaveFocus();
+    expect(pricing.scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+    expect(screen.getByLabelText('Short Description')).toHaveValue('Updated description');
+  });
+
+  it('lists only available sections for a new catalog product', () => {
+    disabledFeatures.add('pricing');
+    disabledFeatures.add('shipping');
+    mount('new');
+
+    const picker = screen.getByLabelText('Jump to section');
+    expect(within(picker).getAllByRole('option').map((option) => option.textContent))
+      .toEqual(['Basic Info', 'Media', 'Inventory', 'Storefront']);
+  });
+});
+
 describe('product type and inventory editor', () => {
   it('previews a saved share override and falls back to the primary product image when cleared', async () => {
     disabledFeatures.delete('seo');
