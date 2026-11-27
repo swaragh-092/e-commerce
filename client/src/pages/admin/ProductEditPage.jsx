@@ -344,9 +344,12 @@ const ProductEditPage = () => {
       const top = bar.getBoundingClientRect().bottom + 28;
       const height = document.documentElement.scrollHeight;
       const atBottom = height > window.innerHeight && window.scrollY + window.innerHeight >= height - 2;
+      const focusedSection = document.activeElement?.closest('[data-product-edit-section="storefront"]');
+      const storefrontBounds = focusedSection?.getBoundingClientRect();
+      const storefrontFocused = storefrontBounds && storefrontBounds.top <= top && storefrontBounds.bottom > top;
       const current = atBottom
         ? sections.at(-1)
-        : sections.reverse().find((section) => section.getBoundingClientRect().top <= top);
+        : storefrontFocused ? focusedSection : sections.reverse().find((section) => section.getBoundingClientRect().top <= top);
       setActiveSection(current?.dataset.productEditSection || 'basic-info');
     };
     const scheduleUpdate = () => {
@@ -359,6 +362,7 @@ const ProductEditPage = () => {
 
     const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measureBar) : null;
     observer?.observe(bar);
+    editor.querySelectorAll('[data-product-edit-section]').forEach((section) => observer?.observe(section));
     measureBar();
     window.addEventListener('scroll', scheduleUpdate, { passive: true });
     window.addEventListener('resize', measureBar);
@@ -368,7 +372,7 @@ const ProductEditPage = () => {
       window.removeEventListener('resize', measureBar);
       window.cancelAnimationFrame(frame);
     };
-  }, [editorReady, id]);
+  }, [editorReady, id, formData.type, pricingCapability, shippingCapability, seoEnabled]);
 
   useEffect(() => {
     let active = true;
@@ -787,12 +791,14 @@ const ProductEditPage = () => {
 
   const pricingLabel = pricingEnabled ? 'Pricing & Tax' : 'Selling Price';
   const hasInventorySection = formData.type !== 'combo' || !isNew;
+  const inventoryLabel = formData.type === 'variable' ? 'Inventory & Variants' : 'Inventory';
   const sections = [
+    ['storefront', 'Storefront', true],
     ['basic-info', 'Basic Info', true],
     ['pricing-tax', pricingLabel, pricingCapability],
     ['media', 'Media', true],
-    ['inventory', 'Inventory', hasInventorySection],
-    ['storefront', 'Storefront', true],
+    ['inventory', inventoryLabel, hasInventorySection],
+    ['categories', 'Categories & Brand', true],
     ['shipping', 'Shipping & Dimensions', shippingCapability],
     ['custom-tabs', 'Custom Tabs', !isNew],
     ['related-products', 'Related Products', !isNew],
@@ -914,6 +920,27 @@ const ProductEditPage = () => {
           </Box>
 
           <Box sx={{ display: 'flex', justifyContent: { xs: 'space-between', md: 'flex-end' }, alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+            <FormControl size="small" sx={{ minWidth: 144 }}>
+              <InputLabel id="product-storefront-state-label">Storefront state</InputLabel>
+              <Select
+                value={storefrontState}
+                disabled={saving || !canSaveProduct}
+                inputProps={{ "aria-describedby": "product-storefront-state-help" }}
+                sx={{ minHeight: 44 }}
+                labelId="product-storefront-state-label"
+                label="Storefront state"
+                onChange={(event) => {
+                  const storefrontFields = getProductStorefrontFields(event.target.value);
+                  setFormData((current) => ({ ...current, ...storefrontFields }));
+                }}
+              >
+                {Object.values(PRODUCT_STOREFRONT_STATES).map((state) => (
+                  <MenuItem key={state} value={state} disabled={isNew && state === PRODUCT_STOREFRONT_STATES.ARCHIVED}>
+                    {PRODUCT_STOREFRONT_STATE_LABELS[state]}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             <Button
               variant="outlined"
               color="inherit"
@@ -949,12 +976,27 @@ const ProductEditPage = () => {
           </TextField>
         </Paper>
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: '176px minmax(0, 1fr)' }, gap: 3, alignItems: 'start' }}>
+        <Box sx={{
+          display: 'grid',
+          gridTemplateColumns: {
+            xs: 'minmax(0, 1fr)',
+            lg: '176px minmax(0, 1fr)',
+            xl: '176px minmax(0, 1fr) minmax(260px, 320px)',
+          },
+          gridTemplateAreas: {
+            xs: '"storefront" "content"',
+            lg: '"nav storefront" "nav content"',
+            xl: '"nav content storefront"',
+          },
+          gap: 3,
+          alignItems: 'start',
+        }}>
           <Box
             component="nav"
             aria-label="Product sections"
             sx={{
               display: { xs: 'none', lg: 'grid' },
+              gridArea: 'nav',
               gap: 0.5,
               position: 'sticky',
               top: 'var(--editor-sticky-offset)',
@@ -988,7 +1030,58 @@ const ProductEditPage = () => {
               </Button>
             ))}
           </Box>
-          <Box sx={{ display: 'grid', gap: { xs: 2, sm: 3 }, minWidth: 0 }}>
+          <Paper {...editorSection('storefront', 'Storefront')} variant="outlined" sx={{ ...editorPanelSx, gridArea: 'storefront' }}>
+            <Typography variant="h6" component="h2" gutterBottom>
+              Storefront
+            </Typography>
+            <Typography id="product-storefront-state-help" variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              {getProductStorefrontStateHelp(storefrontState)}
+            </Typography>
+            <FormControlLabel
+              control={<Switch checked={formData.isFeatured} onChange={(event) => setField('isFeatured', event.target.checked)} />}
+              disabled={!canSaveProduct}
+              label="Featured product"
+            />
+
+            <FormControl fullWidth margin="normal" error={Boolean(errors.type)}>
+              <InputLabel id="product-type-label">Product Type</InputLabel>
+              <Select
+                labelId="product-type-label"
+                disabled={saving || !canSaveProduct}
+                value={formData.type}
+                label="Product Type"
+                onChange={(e) => {
+                  const newType = e.target.value;
+                  if (newType !== 'variable' && variantCount > 0 && !(newType === 'simple' && dbProduct?.type === 'simple')) { notify('Remove all variants, including inactive ones, before changing to Simple or Combo.', 'warning'); return; }
+                  if (newType !== 'combo' && dbProduct?.comboItems?.length > 0) { notify('Clear the bundle items before changing this product type.', 'warning'); return; }
+                  setField('type', newType);
+                }}
+              >
+                <MenuItem value="simple">Simple Product</MenuItem>
+                <MenuItem value="variable">Variable Product</MenuItem>
+                <MenuItem value="combo">Combo / Bundle</MenuItem>
+              </Select>
+              {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
+              <FormHelperText>{formData.type === 'variable' ? 'Customers choose a variant. Manage each combination in Inventory & Variants.' : formData.type === 'combo' ? 'Bundle existing products. Stock depends on the included products.' : 'One version with its own price and stock quantity.'}</FormHelperText>
+            </FormControl>
+            <FormControl fullWidth margin="normal">
+              <InputLabel id="storefront-layout-label">Storefront layout</InputLabel>
+              <Select
+                labelId="storefront-layout-label"
+                label="Storefront layout"
+                value={formData.storefrontLayout || ''}
+                onChange={(event) => setField('storefrontLayout', event.target.value || null)}
+              >
+                <MenuItem value="">Use store default</MenuItem>
+                {getDesignPageControlSchema('product').groups[0].fields[0].options.map(({ value, label }) => (
+                  <MenuItem key={value} value={value}>{label}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {formData.type === 'simple' && variantCount > 0 && <Alert severity="info">This Simple product uses its own stock quantity. Older variant records are retained for existing orders and do not control current stock or alerts.</Alert>}
+
+          </Paper>
+          <Box sx={{ display: 'grid', gap: { xs: 2, sm: 3 }, minWidth: 0, gridArea: 'content' }}>
             {productAssistantEnabled && (
               <ProductAssistantPanel
                 initialInput={formData.name}
@@ -1379,11 +1472,11 @@ const ProductEditPage = () => {
             </Paper>
 
             {hasInventorySection && (
-              <Box {...editorSection('inventory', 'Inventory')} sx={{ display: 'grid', gap: { xs: 2, sm: 3 }, minWidth: 0 }}>
+              <Box {...editorSection('inventory', inventoryLabel)} sx={{ display: 'grid', gap: { xs: 2, sm: 3 }, minWidth: 0 }}>
                 {formData.type !== 'combo' && (
                   <Paper variant="outlined" sx={editorPanelSx}>
                     <Typography variant="h6" component="h2" gutterBottom>
-                      Inventory
+                      {inventoryLabel}
                     </Typography>
                     <TextField
                       fullWidth
@@ -1488,61 +1581,7 @@ const ProductEditPage = () => {
               </Box>
             )}
 
-            <Box {...editorSection('storefront', 'Storefront')} sx={{ display: 'grid', gap: { xs: 2, sm: 3 }, minWidth: 0 }}>
-              <Paper variant="outlined" sx={editorPanelSx}>
-                <Typography variant="h6" component="h2" gutterBottom>
-                  Storefront
-                </Typography>
-                <FormControl fullWidth margin="normal">
-                  <InputLabel id="product-storefront-state-label">Storefront state</InputLabel>
-                  <Select
-                    value={storefrontState}
-                    labelId="product-storefront-state-label"
-                    label="Storefront state"
-                    onChange={(event) => {
-                      const storefrontFields = getProductStorefrontFields(event.target.value);
-                      setFormData((current) => ({ ...current, ...storefrontFields }));
-                    }}
-                  >
-                    {Object.values(PRODUCT_STOREFRONT_STATES).map((state) => (
-                      <MenuItem key={state} value={state} disabled={isNew && state === PRODUCT_STOREFRONT_STATES.ARCHIVED}>
-                        {PRODUCT_STOREFRONT_STATE_LABELS[state]}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                  <FormHelperText>{getProductStorefrontStateHelp(storefrontState)}</FormHelperText>
-                </FormControl>
-                <FormControlLabel
-                  control={<Switch checked={formData.isFeatured} onChange={(event) => setField('isFeatured', event.target.checked)} />}
-                  disabled={!canSaveProduct}
-                  label="Featured product"
-                />
-
-                <FormControl fullWidth margin="normal" error={Boolean(errors.type)}>
-                  <InputLabel id="product-type-label">Product Type</InputLabel>
-                  <Select
-                    labelId="product-type-label"
-                    disabled={saving || !canSaveProduct}
-                    value={formData.type}
-                    label="Product Type"
-                    onChange={(e) => {
-                      const newType = e.target.value;
-                      if (newType !== 'variable' && variantCount > 0 && !(newType === 'simple' && dbProduct?.type === 'simple')) { notify('Remove all variants, including inactive ones, before changing to Simple or Combo.', 'warning'); return; }
-                      if (newType !== 'combo' && dbProduct?.comboItems?.length > 0) { notify('Clear the bundle items before changing this product type.', 'warning'); return; }
-                      setField('type', newType);
-                    }}
-                  >
-                    <MenuItem value="simple">Simple Product</MenuItem>
-                    <MenuItem value="variable">Variable Product</MenuItem>
-                    <MenuItem value="combo">Combo / Bundle</MenuItem>
-                  </Select>
-                  {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
-                  <FormHelperText>{formData.type === 'variable' ? 'Customers choose a variant. Manage each combination in Inventory.' : formData.type === 'combo' ? 'Bundle existing products. Stock depends on the included products.' : 'One version with its own price and stock quantity.'}</FormHelperText>
-                </FormControl>
-                {formData.type === 'simple' && variantCount > 0 && <Alert severity="info">This Simple product uses its own stock quantity. Older variant records are retained for existing orders and do not control current stock or alerts.</Alert>}
-
-              </Paper>
-
+            <Box {...editorSection('categories', 'Categories & Brand')} sx={{ minWidth: 0 }}>
               <Paper variant="outlined" sx={editorPanelSx}>
                 <Typography variant="h6" component="h2" gutterBottom>
                   Categories &amp; Brand
@@ -1609,20 +1648,6 @@ const ProductEditPage = () => {
                   sx={{ mt: 1 }}
                 />
 
-                <FormControl fullWidth margin="normal">
-                  <InputLabel id="storefront-layout-label">Storefront layout</InputLabel>
-                  <Select
-                    labelId="storefront-layout-label"
-                    label="Storefront layout"
-                    value={formData.storefrontLayout || ''}
-                    onChange={(event) => setField('storefrontLayout', event.target.value || null)}
-                  >
-                    <MenuItem value="">Use store default</MenuItem>
-                    {getDesignPageControlSchema('product').groups[0].fields[0].options.map(({ value, label }) => (
-                      <MenuItem key={value} value={value}>{label}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
 
                 {tagsEnabled && canReadTags && <ProductTagsInput value={formData.tags} onChange={(tags) => setField('tags', tags)} disabled={!canSaveProduct || !canManageTags} error={errors.tags} />}
 
