@@ -17,16 +17,21 @@ import {
   Autocomplete,
   Chip,
   Tooltip,
+  Alert,
+  getContrastRatio,
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import LabelIcon from '@mui/icons-material/Label';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 import {
   getSaleLabels,
+  getSaleLabelUsage,
   createSaleLabel,
   updateSaleLabel,
   deleteSaleLabel,
@@ -38,12 +43,29 @@ import { useAuth } from '../../hooks/useAuth';
 import { PERMISSIONS } from '../../utils/permissions';
 import { formatOpenEndedDateRange, toDateTimeLocal } from '../../utils/dates';
 
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+const getLabelStatus = (label, now) => {
+  if (label.isActive === false) return { text: 'Disabled', color: 'default' };
+  if (label.startDate && new Date(label.startDate).getTime() > now) return { text: 'Scheduled', color: 'info' };
+  if (label.endDate && new Date(label.endDate).getTime() < now) return { text: 'Expired', color: 'warning' };
+  return { text: 'Active', color: 'success' };
+};
+
+const SaleBadge = ({ name, color }) => (
+  <Chip size="small" label={name || 'Sale Label'} sx={{ maxWidth: '100%', bgcolor: HEX_COLOR.test(color) ? color : 'error.main', color: '#fff' }} />
+);
+
 const SaleLabelsPage = () => {
   const [labels, setLabels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [reordering, setReordering] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  const [now, setNow] = useState(Date.now);
 
   const [form, setForm] = useState({
     id: '',
@@ -57,7 +79,7 @@ const SaleLabelsPage = () => {
   const { notify, confirm } = useNotification();
   const { hasPermission } = useAuth();
   const canManage = hasPermission(PERMISSIONS.SETTINGS_MANAGE);
-  const canBulkSale = hasPermission(PERMISSIONS.PRODUCTS_BULK_SALE);
+  const canBulkSale = hasPermission(PERMISSIONS.PRODUCTS_UPDATE) && hasPermission(PERMISSIONS.PRODUCTS_READ);
 
   // Bulk assign state
   const [assignDialog, setAssignDialog] = useState({ open: false, labelId: '', labelName: '' });
@@ -65,17 +87,40 @@ const SaleLabelsPage = () => {
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [assignSaving, setAssignSaving] = useState(false);
   const [productsLoading, setProductsLoading] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
+  const [productPage, setProductPage] = useState(1);
+  const [productPages, setProductPages] = useState(1);
+  const [productError, setProductError] = useState(false);
+  const [searchAttempt, setSearchAttempt] = useState(0);
+  const replacements = selectedProducts.filter(p => p.saleLabel && p.saleLabel !== assignDialog.labelId);
+
+  useEffect(() => {
+    if (!assignDialog.open) return;
+    let current = true;
+    setProductsLoading(true);
+    setProductOptions([]);
+    setProductError(false);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await getProducts({ page: productPage, limit: 25, search: productSearch.trim() });
+        if (!current) return;
+        setProductOptions(res.data || []);
+        setProductPages(res.meta?.totalPages || 1);
+      } catch {
+        if (current) setProductError(true);
+      } finally {
+        if (current) setProductsLoading(false);
+      }
+    }, productSearch.trim() ? 250 : 0);
+    return () => { current = false; clearTimeout(timer); };
+  }, [assignDialog.open, productSearch, productPage, searchAttempt]);
 
   const openAssignDialog = (label) => {
     setAssignDialog({ open: true, labelId: label.id, labelName: label.name });
     setSelectedProducts([]);
-    if (productOptions.length === 0) {
-      setProductsLoading(true);
-      getProducts({ page: 1, limit: 200 })
-        .then((res) => setProductOptions((res?.data || []).map((p) => ({ id: p.id, name: p.name, sku: p.sku }))))
-        .catch(() => {})
-        .finally(() => setProductsLoading(false));
-    }
+    setProductSearch('');
+    setProductPage(1);
+    setProductPages(1);
   };
 
   const handleBulkAssign = async () => {
@@ -97,6 +142,8 @@ const SaleLabelsPage = () => {
 
   useEffect(() => {
     fetchLabels();
+    const timer = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(timer);
   }, []);
 
   const fetchLabels = async () => {
@@ -152,14 +199,18 @@ const SaleLabelsPage = () => {
     }));
   };
 
-  const handleSave = async () => {
-    if (!form.id || !form.name || !form.color) {
+  const invalidRange = Boolean(form.startDate && form.endDate && new Date(form.endDate) <= new Date(form.startDate));
+
+  const handleSave = async (event) => {
+    event.preventDefault();
+    if (saving || invalidRange) return;
+    if (!form.id || !form.name.trim() || !form.color) {
       notify('Please fill out all required fields.', 'warning');
       return;
     }
 
     // Hex color validation
-    if (!/^#[0-9A-F]{6}$/i.test(form.color)) {
+    if (!HEX_COLOR.test(form.color)) {
       notify('Color must be a valid 6-character hex code (e.g., #FF0000).', 'warning');
       return;
     }
@@ -174,7 +225,7 @@ const SaleLabelsPage = () => {
       setSaving(true);
       if (editingId) {
         await updateSaleLabel(editingId, {
-          name: form.name,
+          name: form.name.trim(),
           color: form.color,
           isActive: form.isActive,
           startDate: form.startDate || null,
@@ -184,7 +235,7 @@ const SaleLabelsPage = () => {
       } else {
         await createSaleLabel({
           id: form.id,
-          name: form.name,
+          name: form.name.trim(),
           color: form.color,
           isActive: form.isActive,
           startDate: form.startDate || null,
@@ -201,32 +252,37 @@ const SaleLabelsPage = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!(await confirm({ title: 'Delete sale label?', message: 'Are you sure you want to delete this sale label? Products using this label will fall back to displaying the raw ID text.', confirmText: 'Delete label', severity: 'error' }))) {
-      return;
-    }
-
+  const handleDelete = async ({ id, name }) => {
+    if (deletingId) return;
+    setDeletingId(id);
     try {
+      const response = await getSaleLabelUsage(id);
+      const count = response.data?.data?.productCount;
+      if (!Number.isSafeInteger(count) || count < 0) throw new Error('Product count unavailable');
+      const impact = count === 0 ? 'No products use this label.' : `${count.toLocaleString()} ${count === 1 ? 'product uses' : 'products use'} this label and may display its ID after deletion. To keep assignments, cancel and turn off Enabled in the label editor.`;
+      if (!(await confirm({ title: `Delete ${name}?`, message: impact, confirmText: 'Delete label', severity: 'error' }))) return;
       await deleteSaleLabel(id);
       notify('Sale label deleted successfully.', 'success');
       fetchLabels();
     } catch (err) {
-      notify(err.response?.data?.message || 'Failed to delete sale label.', 'error');
+      notify(err.response?.data?.message || 'Couldn’t check label usage or complete deletion. Try again.', 'error');
+    } finally {
+      setDeletingId(null);
     }
   };
 
   const handleDragEnd = async (result) => {
-    if (!result.destination) return;
-    
-    const sourceIndex = result.source.index;
-    const destIndex = result.destination.index;
-    if (sourceIndex === destIndex) return;
+    if (result.destination) await moveLabel(result.source.index, result.destination.index);
+  };
+
+  const moveLabel = async (sourceIndex, destIndex) => {
+    if (!canManage || reordering || sourceIndex === destIndex || destIndex < 0 || destIndex >= labels.length) return;
 
     const items = Array.from(labels);
     const [reorderedItem] = items.splice(sourceIndex, 1);
     items.splice(destIndex, 0, reorderedItem);
 
-    // Update UI immediately for snappiness
+    setReordering(true);
     setLabels(items);
 
     // Prepare payload
@@ -235,16 +291,19 @@ const SaleLabelsPage = () => {
       name: item.name,
       color: item.color,
       isActive: item.isActive,
+      startDate: item.startDate ?? null,
+      endDate: item.endDate ?? null,
       priority: index,
     }));
 
     try {
       await reorderSaleLabels(payload);
-      // Let it remain, or optionally refetch:
-      // fetchLabels();
+      notify('Label order saved.', 'success');
     } catch (err) {
       notify('Failed to save label ordering.', 'error');
-      fetchLabels(); // revert on failure
+      setLabels(labels);
+    } finally {
+      setReordering(false);
     }
   };
 
@@ -257,12 +316,12 @@ const SaleLabelsPage = () => {
   }
 
   return (
-    <Box sx={{ p: 3, maxWidth: 900, mx: 'auto' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 900, mx: 'auto' }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
           <Typography variant="h5" component="h1" fontWeight={700}>Sale Labels</Typography>
           <Typography variant="body2" color="text.secondary">
-            Manage the central catalog of sale labels available for products. Drag to reorder.
+            Manage storefront badges and their default sale schedules.{canManage ? ' Drag labels or use the arrow buttons to reorder.' : ''}
           </Typography>
         </Box>
         {canManage && (
@@ -281,14 +340,19 @@ const SaleLabelsPage = () => {
                 ref={provided.innerRef}
                 sx={{ display: 'flex', flexDirection: 'column' }}
               >
-                {labels.map((label, index) => (
-                  <Draggable key={label.id} draggableId={label.id} index={index} isDragDisabled={!canManage}>
+                {labels.map((label, index) => {
+                  const status = getLabelStatus(label, now);
+                  const schedule = formatOpenEndedDateRange(label.startDate, label.endDate);
+                  return (
+                  <Draggable key={label.id} draggableId={label.id} index={index} isDragDisabled={!canManage || reordering}>
                     {(provided, snapshot) => (
                       <Box
                         ref={provided.innerRef}
                         {...provided.draggableProps}
                         sx={{
                           display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: 1.5,
                           alignItems: 'center',
                           p: 2,
                           borderBottom: index < labels.length - 1 ? '1px solid' : 'none',
@@ -297,23 +361,21 @@ const SaleLabelsPage = () => {
                           ...(snapshot.isDragging ? { boxShadow: 3 } : {}),
                         }}
                       >
-                        <Box
+                        {canManage && <Box
                           {...provided.dragHandleProps}
                           sx={{ mr: 2, display: 'flex', alignItems: 'center', color: 'text.secondary', cursor: canManage ? 'grab' : 'default' }}
                         >
                           <DragIndicatorIcon />
-                        </Box>
+                        </Box>}
 
-                        <Box sx={{ flex: 1 }}>
-                          <Typography variant="subtitle2" fontWeight={600}>
-                            {label.name}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                        <Box sx={{ flex: '1 1 160px', minWidth: 0 }}>
+                          <SaleBadge name={label.name} color={label.color} />
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflowWrap: 'anywhere' }}>
                             ID: {label.id}
                           </Typography>
-                          {formatOpenEndedDateRange(label.startDate, label.endDate) && (
+                          {schedule && (
                             <Typography variant="caption" color="primary.main" sx={{ display: 'block', fontWeight: 600 }}>
-                              Schedule: {formatOpenEndedDateRange(label.startDate, label.endDate)}
+                              Schedule: {schedule} ({timezone})
                             </Typography>
                           )}
                         </Box>
@@ -335,27 +397,27 @@ const SaleLabelsPage = () => {
                           </Typography>
                         </Box>
 
-                        <Box sx={{ width: 100, textAlign: 'center' }}>
-                          <Typography variant="body2" color={label.isActive ? 'success.main' : 'text.disabled'} fontWeight={label.isActive ? 600 : 400}>
-                            {label.isActive ? 'Active' : 'Inactive'}
-                          </Typography>
-                        </Box>
+                        <Chip size="small" variant="outlined" color={status.color} label={status.text} />
 
-                        <Box sx={{ display: 'flex', gap: 1, width: 120, justifyContent: 'flex-end' }}>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, justifyContent: 'flex-end' }}>
+                          {canManage && labels.length > 1 && <>
+                            <IconButton size="small" aria-label={`Move ${label.name} up`} disabled={reordering || index === 0} onClick={() => moveLabel(index, index - 1)}><ArrowUpwardIcon fontSize="small" /></IconButton>
+                            <IconButton size="small" aria-label={`Move ${label.name} down`} disabled={reordering || index === labels.length - 1} onClick={() => moveLabel(index, index + 1)}><ArrowDownwardIcon fontSize="small" /></IconButton>
+                          </>}
                           {canBulkSale && (
                             <Tooltip title="Assign to products">
-                              <IconButton size="small" color="primary" onClick={() => openAssignDialog(label)}>
+                              <IconButton aria-label={`Assign ${label.name} to products`} size="small" color="primary" onClick={() => openAssignDialog(label)}>
                                 <LabelIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
                           )}
                           {canManage && (
                             <>
-                              <IconButton size="small" onClick={() => handleOpen(label)}>
+                              <IconButton aria-label={`Edit ${label.name}`} size="small" disabled={reordering} onClick={() => handleOpen(label)}>
                                 <EditIcon fontSize="small" />
                               </IconButton>
-                              <IconButton size="small" color="error" onClick={() => handleDelete(label.id)}>
-                                <DeleteIcon fontSize="small" />
+                              <IconButton aria-label={`Delete ${label.name}`} size="small" color="error" disabled={reordering || Boolean(deletingId)} onClick={() => handleDelete(label)}>
+                                {deletingId === label.id ? <CircularProgress size={16} /> : <DeleteIcon fontSize="small" />}
                               </IconButton>
                             </>
                           )}
@@ -363,7 +425,8 @@ const SaleLabelsPage = () => {
                       </Box>
                     )}
                   </Draggable>
-                ))}
+                  );
+                })}
                 {provided.placeholder}
                 {labels.length === 0 && (
                   <Box sx={{ p: 4, textAlign: 'center', color: 'text.secondary' }}>
@@ -376,10 +439,22 @@ const SaleLabelsPage = () => {
         </DragDropContext>
       </Paper>
 
-      <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-        <DialogTitle>{editingId ? 'Edit Sale Label' : 'New Sale Label'}</DialogTitle>
-        <DialogContent dividers>
+      <Dialog open={open} onClose={() => !saving && handleClose()} maxWidth="sm" fullWidth PaperProps={{ component: 'form', onSubmit: handleSave, noValidate: true }} aria-labelledby="sale-label-dialog-title">
+        <DialogTitle id="sale-label-dialog-title">{editingId ? 'Edit Sale Label' : 'New Sale Label'}</DialogTitle>
+        <DialogContent dividers sx={{ overscrollBehavior: 'contain' }}>
           <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Display Name"
+                name="name"
+                value={form.name}
+                onChange={handleChange}
+                helperText="What customers see (e.g. ‘Flash Sale’)"
+                size="small"
+                required
+              />
+            </Grid>
             <Grid item xs={12}>
               <TextField
                 fullWidth
@@ -393,19 +468,7 @@ const SaleLabelsPage = () => {
                 required
               />
             </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Display Name"
-                name="name"
-                value={form.name}
-                onChange={handleChange}
-                helperText="What customers see (e.g. 'Flash Sale')"
-                size="small"
-                required
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={6} sx={{ order: 2 }}>
               <TextField
                 fullWidth
                 label="Hex Color"
@@ -420,7 +483,8 @@ const SaleLabelsPage = () => {
                     <input
                       type="color"
                       name="color"
-                      value={form.color}
+                      aria-label="Choose badge color"
+                      value={HEX_COLOR.test(form.color) ? form.color : '#000000'}
                       onChange={handleChange}
                       style={{
                         width: 24,
@@ -436,15 +500,25 @@ const SaleLabelsPage = () => {
                 }}
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={6} sx={{ order: 2 }}>
               <Box sx={{ height: '100%', display: 'flex', alignItems: 'center' }}>
                 <FormControlLabel
                   control={<Switch checked={form.isActive} onChange={handleChange} name="isActive" />}
-                  label="Active"
+                  label="Enabled"
                 />
               </Box>
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sx={{ order: 2 }}>
+              <Typography variant="caption" color="text.secondary" display="block" mb={0.75}>Storefront Badge Preview</Typography>
+              <SaleBadge name={form.name} color={form.color} />
+              {HEX_COLOR.test(form.color) && getContrastRatio(form.color, '#fff') < 4.5 && (
+                <Typography variant="caption" display="block" mt={0.75}>Choose a darker background to make the white badge text easier to read.</Typography>
+              )}
+            </Grid>
+            <Grid item xs={12} sx={{ order: 2 }}>
+              <Typography variant="body2" color="text.secondary">Default schedule ({timezone}). Product-specific dates can override these dates.</Typography>
+            </Grid>
+            <Grid item xs={12} sm={6} sx={{ order: 2 }}>
               <TextField
                 fullWidth
                 label="Global Start Date"
@@ -454,10 +528,10 @@ const SaleLabelsPage = () => {
                 onChange={handleChange}
                 InputLabelProps={{ shrink: true }}
                 size="small"
-                helperText="Optional: Label applies automatically from this date."
+                helperText="Leave blank for no start restriction."
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={6} sx={{ order: 2 }}>
               <TextField
                 fullWidth
                 label="Global End Date"
@@ -467,40 +541,64 @@ const SaleLabelsPage = () => {
                 onChange={handleChange}
                 InputLabelProps={{ shrink: true }}
                 size="small"
-                error={Boolean(form.startDate && form.endDate && new Date(form.endDate) <= new Date(form.startDate))}
-                helperText="Optional: Label expires automatically after this date."
+                error={invalidRange}
+                helperText={invalidRange ? 'End time must be after the start time.' : 'Leave blank for no expiry.'}
               />
             </Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button color="error" onClick={handleClose}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained" disabled={saving}>
-            {saving ? 'Saving...' : 'Save Label'}
+          <Button onClick={handleClose} disabled={saving}>Cancel</Button>
+          <Button type="submit" variant="contained" disabled={saving || invalidRange}>
+            {saving ? 'Saving…' : 'Save Label'}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Bulk Assign Dialog */}
-      <Dialog open={assignDialog.open} onClose={() => !assignSaving && setAssignDialog({ open: false, labelId: '', labelName: '' })} maxWidth="sm" fullWidth>
-        <DialogTitle>Assign "{assignDialog.labelName}" to Products</DialogTitle>
-        <DialogContent>
+      <Dialog open={assignDialog.open} aria-labelledby="assign-sale-label-title" onClose={() => !assignSaving && setAssignDialog({ open: false, labelId: '', labelName: '' })} maxWidth="sm" fullWidth>
+        <DialogTitle id="assign-sale-label-title">Assign “{assignDialog.labelName}” to Products</DialogTitle>
+        <DialogContent dividers sx={{ overscrollBehavior: 'contain' }}>
+          <Typography variant="body2" color="text.secondary" mb={2}>Search by name or SKU. Your selection stays as you browse.</Typography>
           <Autocomplete
             multiple
-            options={productOptions}
+            disableCloseOnSelect
+            disabled={assignSaving}
+            options={[...productOptions, ...selectedProducts.filter(p => !productOptions.some(option => option.id === p.id))]}
+            filterSelectedOptions
             loading={productsLoading}
+            loadingText="Searching products…"
+            noOptionsText={productError ? 'Search unavailable' : 'No matching products'}
+            filterOptions={(options) => options}
+            inputValue={productSearch}
+            onInputChange={(_, value, reason) => {
+              if (reason === 'input' || reason === 'clear') {
+                setProductSearch(value);
+                setProductPage(1);
+              }
+            }}
             getOptionLabel={(o) => `${o.name}${o.sku ? ` (${o.sku})` : ''}`}
             value={selectedProducts}
             onChange={(_, v) => setSelectedProducts(v)}
             isOptionEqualToValue={(o, v) => o.id === v.id}
             renderTags={(value, getTagProps) => value.map((o, i) => <Chip {...getTagProps({ i })} key={o.id} label={o.name} size="small" />)}
-            renderInput={(params) => <TextField {...params} label="Select products" size="small" sx={{ mt: 1 }} />}
+            renderInput={(params) => <TextField {...params} label="Search Products" size="small" />}
           />
+          {productError && <Alert severity="error" sx={{ mt: 2 }} action={<Button onClick={() => setSearchAttempt(n => n + 1)}>Retry</Button>}>Couldn’t load products.</Alert>}
+          {productPages > 1 && <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 1 }}>
+            <Button disabled={assignSaving || productsLoading || productPage <= 1} onClick={() => setProductPage(p => p - 1)}>Previous</Button>
+            <Typography variant="caption" aria-live="polite">Page {productPage} of {productPages}</Typography>
+            <Button disabled={assignSaving || productsLoading || productPage >= productPages} onClick={() => setProductPage(p => p + 1)}>Next</Button>
+          </Box>}
+          {replacements.length > 0 && <Alert severity="warning" sx={{ mt: 2 }}>
+            This replaces the current label on {replacements.length} {replacements.length === 1 ? 'product' : 'products'}: {replacements.map(p => `${p.name} (${labels.find(l => l.id === p.saleLabel)?.name || p.saleLabel})`).join(', ')}.
+          </Alert>}
+          <Typography variant="caption" component="p" sx={{ mt: 2 }} aria-live="polite">{selectedProducts.length} selected. Prices and product-specific dates stay the same.</Typography>
         </DialogContent>
         <DialogActions>
-          <Button color="error" onClick={() => setAssignDialog({ open: false, labelId: '', labelName: '' })}>Cancel</Button>
+          <Button disabled={assignSaving} onClick={() => setAssignDialog({ open: false, labelId: '', labelName: '' })}>Cancel</Button>
           <Button variant="contained" onClick={handleBulkAssign} disabled={assignSaving || selectedProducts.length === 0}>
-            {assignSaving ? 'Assigning...' : `Assign to ${selectedProducts.length} products`}
+            {assignSaving ? 'Assigning…' : `Assign to ${selectedProducts.length} ${selectedProducts.length === 1 ? 'product' : 'products'}`}
           </Button>
         </DialogActions>
       </Dialog>
