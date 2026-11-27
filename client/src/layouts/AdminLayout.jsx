@@ -1,3 +1,4 @@
+import AdminAlertBell from '../components/admin/AdminAlertBell';
 import React, { useState } from 'react';
 import {
   Box,
@@ -752,6 +753,7 @@ const AdminLayout = () => {
               Admin Dashboard
             </Typography>
           </Box>
+          <AdminAlertBell />
           <Tooltip title="View Store">
             <IconButton color="inherit" component={RouterLink} to="/" sx={{ mr: 1 }}>
               <StoreIcon />

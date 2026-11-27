@@ -93,3 +93,24 @@ Tests and documentation:
 - `server/tests/unit/shipping.webhook.test.js`
 - `docs/adr/0008-notification-audiences-and-message-variants.md`
 - `docs/NOTIFICATION-ROUTING.md`
+
+## Internal admin alerts
+
+The admin toolbar bell opens the inbox. **My notifications** controls inherited or personal channel choices and email quiet hours. **Assigned rules** lists rules a notification manager has delegated. In **Settings → Notifications → Internal alerts**, notification managers can select an event, add or edit rules, set channel defaults, preview and test messages, restore previous versions, delegate specific fields and recipients, and pause internal email.
+
+Staff changes, order and enquiry assignments, and order and enquiry status changes start with inbox delivery enabled. The existing catalog of order, shipping, payment failure, refund, return and enquiry events is also available for internal rules. Enable the events your team wants to receive. Customer messaging and account or security templates continue to use their existing controls.
+
+### Rollout
+
+1. Run `npm --prefix server run migrate` and deploy the API and notification worker together. Leave `ADMIN_ALERTS_ENABLED=false` until the migration is in place.
+2. Enable `ADMIN_ALERTS_ENABLED=true`. Set `ADMIN_ALERTS_PILOT_USERS` to comma-separated staff UUIDs, including a notification manager. Leave `ADMIN_ALERTS_EMAIL_ENABLED=false` during the inbox pilot.
+3. Configure the existing Messaging email sender and set `ADMIN_ALERTS_PUBLIC_URL` or `CLIENT_URL` to the shop's public application origin. Enable `ADMIN_ALERTS_EMAIL_ENABLED=true` and send a test to the manager's verified address from an internal rule. Check the rule's delivery history.
+4. Clear the pilot list to roll out to all staff. To move assignment email to internal rules, review both assignment rules. They retain the assignee and carry over compatible subject and summary text from stored assignment templates. Rich HTML, external links, and unsupported legacy variables use the seeded plain-text summary and sign-in link. Set `ADMIN_ALERTS_ASSIGNMENT_EMAIL=true` on API and worker processes in the same release. The switch applies to assignments made after cutover.
+5. Use **Pause internal email** to suspend email while leaving the inbox available. The delivery history shows failed and uncertain sends and the age of the oldest unprocessed event. Investigate uncertain SMTP outcomes before sending a replacement message.
+
+Run the PostgreSQL integration check against a fresh, migrated disposable database named `ecommerce_alert_verify` or `ecommerce_alert_verify_<suffix>`. It exercises real assignment and status updates with a stubbed SMTP sender.
+
+```sh
+node server/tests/integration/adminAlerts.postgres.check.js
+npm --prefix client test -- src/test/pages/admin/AdminAlertsPage.test.jsx src/test/pages/admin/NotificationEventsPage.test.jsx
+```

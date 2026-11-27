@@ -244,6 +244,20 @@ const delegatedRecipients = (rule, selections) => (rule.separateRuleIds || []).f
 const route = async ({ sourceTemplate, variables = {}, orderId = null, transaction = null, customer = null }) => {
   const event = eventForTemplate(sourceTemplate);
   if (!event) return null;
+  const alerts = require('./adminAlerts.service');
+  const sourceId = orderId || variables.order_id || variables.orderId || variables.enquiry_id || variables.enquiryId;
+  if (alerts.enabled() && typeof sourceId === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(sourceId)
+    && (event.key !== 'order_placed' || sourceTemplate === 'admin_new_order')) {
+    const occurrence = hash([event.key, sourceId, variables.notification_event_id || '',
+      variables.tracking_number || '', variables.status_label || '', variables.return_id || '', variables.refund_id || '']);
+    const detail = {};
+    for (const key of alerts.definition(event.key).fields) {
+      if (typeof variables[key] === 'string') detail[key] = variables[key].slice(0, 100);
+    }
+    await alerts.capture(event.key, {
+      ...detail, sourceId, reference: String(variables.order_number || sourceId).slice(0, 100),
+    }, transaction, occurrence);
+  }
   const config = await configFor(event.key, transaction);
   if (!config) return null;
   const rules = config.rules.filter(rule => rule.isActive);

@@ -18,6 +18,7 @@ exports.createEnquiry = async (req, res, next) => {
 exports.getEnquiries = async (req, res, next) => {
   try {
     const filters = {
+      id: req.query.id,
       status: req.query.status,
       search: req.query.search,
       sortBy: req.query.sortBy,

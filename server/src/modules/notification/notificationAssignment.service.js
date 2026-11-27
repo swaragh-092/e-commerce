@@ -45,7 +45,13 @@ const assign = async (kind, id, assignedUserId, actor) => {
     if ((record.assignedUserId || null) === assignedUserId) return { assignedUserId };
     const previousUserId = record.assignedUserId || null;
     await record.update({ assignedUserId }, { transaction });
+    const alerts = require('./adminAlerts.service');
     if (user) {
+      await alerts.capture(kind === 'orders' ? 'order_assigned' : 'enquiry_assigned', {
+        sourceId: id, userId: user.id, reference: String(record.orderNumber || id), configurableEmail: alerts.assignmentCutover(),
+      }, transaction);
+    }
+    if (user && !alerts.assignmentCutover()) {
       await require('./notification.service').send(target.template, user.email, {
         name: user.firstName || user.email, order_id: kind === 'orders' ? id : null,
         order_number: record.orderNumber, enquiry_id: kind === 'enquiries' ? id : null,

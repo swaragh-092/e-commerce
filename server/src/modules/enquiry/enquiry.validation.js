@@ -74,6 +74,7 @@ const replyEnquirySchema = Joi.object({
 });
 
 const queryEnquiriesSchema = Joi.object({
+  id: Joi.string().uuid(),
   status: Joi.string().valid('pending', 'responded', 'closed', 'closed_converted', 'closed_lost').allow(''),
   search: Joi.string().trim().allow(''),
   sortBy: Joi.string().valid('createdAt', 'name', 'email', 'status', 'subject').default('createdAt'),

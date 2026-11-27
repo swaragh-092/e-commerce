@@ -149,16 +149,17 @@ const logOrderHistory = async ({
     changedBy = null,
     metadata = {},
     transaction,
-}) => OrderStatusHistory.create({
-    orderId,
-    entityType,
-    entityId,
-    statusGroup,
-    fromStatus,
-    toStatus,
-    changedBy,
-    metadata,
-}, { transaction });
+}) => {
+    const history = await OrderStatusHistory.create({
+        orderId, entityType, entityId, statusGroup, fromStatus, toStatus, changedBy, metadata,
+    }, { transaction });
+    if (transaction && statusGroup === 'order' && fromStatus && fromStatus !== toStatus) {
+        await require('../notification/adminAlerts.service').capture('order_status', {
+            sourceId: orderId, reference: String(orderId), before: fromStatus, after: toStatus,
+        }, transaction);
+    }
+    return history;
+};
 
 const addOrderHistoryEvent = async ({
     orderId,

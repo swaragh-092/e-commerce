@@ -28,7 +28,7 @@ import ResponsiveDataGrid from '../../components/admin/ResponsiveDataGrid';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import ReplyIcon from '@mui/icons-material/Reply';
 import SearchIcon from '@mui/icons-material/Search';
 import api from '../../services/api';
@@ -47,6 +47,9 @@ const EnquiriesPage = () => {
   const narrow = useMediaQuery('(max-width: 760px)');
   const phone = useMediaQuery('(max-width: 600px)');
   const { notify } = useNotification();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const linkedEnquiry = new URLSearchParams(location.search).get('enquiry');
   const [rows, setRows] = useState([]);
   const [rowCount, setRowCount] = useState(-1);
   const [loading, setLoading] = useState(true);
@@ -64,6 +67,21 @@ const EnquiriesPage = () => {
   const sortBy = params.get('sortBy') || 'createdAt';
   const sortDir = params.get('sortDir') === 'asc' ? 'asc' : 'desc';
   const sortModel = useMemo(() => [{ field: sortBy, sort: sortDir }], [sortBy, sortDir]);
+
+  useEffect(() => {
+    if (!linkedEnquiry) return;
+    const controller = new AbortController();
+    api.get(`/${ADMIN_PREFIX}/enquiries`, { params: { id: linkedEnquiry }, signal: controller.signal }).then(({ data }) => {
+      if (controller.signal.aborted) return;
+      if (data.data?.length) {
+        setSelectedEnquiry(data.data[0]);
+        setReplyFeedback(null);
+      } else notify('This enquiry is no longer available.', 'warning');
+    }).catch(error => {
+      if (!controller.signal.aborted) notify(getApiErrorMessage(error, 'Failed to open enquiry'), 'error');
+    });
+    return () => controller.abort();
+  }, [linkedEnquiry, notify]);
 
   const fetchEnquiries = useCallback(async () => {
     setLoading(true);
@@ -133,6 +151,7 @@ const EnquiriesPage = () => {
   };
 
   const closeDialog = () => {
+    if (linkedEnquiry) navigate(location.pathname, { replace: true });
     setSelectedEnquiry(null);
     setReplyMode(false);
     setReplyMessage('');

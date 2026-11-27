@@ -14,6 +14,7 @@ import { PERMISSIONS } from '../../utils/permissions';
 import { getApiErrorMessage } from '../../utils/apiErrors';
 import { isNotificationTemplateVisible } from '../../utils/notificationTemplateVisibility';
 
+const InternalAlertRules = lazy(() => import('./InternalAlertRules'));
 const SystemTemplates = lazy(() => import('./EmailTemplatesPage'));
 const EMPTY_OPTIONS = { users: [], roles: [] };
 const emptyMessage = () => ({ subject: '', bodyHtml: '', bodyText: '' });
@@ -173,7 +174,9 @@ export default function NotificationEventsPage() {
       <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 2 }}>Choose an event, then decide who hears about it and what they receive.</Typography>
       <Tabs value={tab} onChange={(_, value) => { setTab(value); if (value === 'system') setSystemVisited(true); }} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
         <Tab value="events" label="Event notifications" /><Tab value="system" label="Account & system templates" disabled={loadingNotifications || Boolean(loadError)} />
+        {canEdit && <Tab value="internal" label="Internal alerts" />}
       </Tabs>
+      {tab === 'internal' && <Suspense fallback={<CircularProgress size={24} />}><InternalAlertRules /></Suspense>}
       {systemVisited && <Box sx={{ display: tab === 'system' ? 'block' : 'none' }}><Suspense fallback={<CircularProgress size={24} />}><SystemTemplates excludeTemplates={excludedTemplates} embedded onDirtyChange={setSystemDirty} /></Suspense></Box>}
       {loadingNotifications ? <CircularProgress aria-label="Loading notifications" /> : loadError ? <Alert severity="error" action={<Button onClick={() => setRetry(value => value + 1)}>Retry</Button>}>{loadError}</Alert> : !availableEvents.length ? <Box sx={{ display: tab === 'events' ? 'block' : 'none' }}><Alert severity="info">No event notifications are available for the enabled store features.</Alert></Box> : <Grid container spacing={3} sx={{ display: tab === 'events' ? 'flex' : 'none' }}>
         <Grid item xs={12} md={3}>

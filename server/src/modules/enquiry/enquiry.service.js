@@ -229,6 +229,7 @@ class EnquiryService {
    */
   async getEnquiries(filters = {}, pagination = { page: 1, limit: 20 }) {
     const where = {};
+    if (filters.id) where.id = filters.id;
     if (filters.status) where.status = filters.status;
 
     const limit = parseInt(pagination.limit) || 20;
@@ -304,8 +305,12 @@ class EnquiryService {
       const enquiry = await Enquiry.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
       if (!enquiry) throw new AppError('NOT_FOUND', 404, 'Enquiry not found');
       if (enquiry.status === status) return enquiry;
+      const before = enquiry.status;
       enquiry.status = status;
       await enquiry.save({ transaction });
+      await require('../notification/adminAlerts.service').capture('enquiry_status', {
+        sourceId: enquiry.id, reference: String(enquiry.id), before, after: status,
+      }, transaction);
       if (['closed_converted', 'closed_lost'].includes(status)) {
         const product = enquiry.productId ? await Product.findByPk(enquiry.productId, { transaction }) : null;
         const variables = {
@@ -364,7 +369,8 @@ class EnquiryService {
       const sender = adminUserId ? await User.findByPk(adminUserId, {
         attributes: ['id', 'firstName', 'lastName', 'email'], transaction,
       }) : null;
-      current.status = current.status === 'pending' ? 'responded' : current.status;
+      const before = current.status;
+      current.status = before === 'pending' ? 'responded' : before;
       current.replies = [...(current.replies || []), {
         id: templateVars.notification_event_id,
         message: replyMessage.trim(),
@@ -372,6 +378,11 @@ class EnquiryService {
         senderName: sender ? [sender.firstName, sender.lastName].filter(Boolean).join(' ') || sender.email : 'Staff',
         createdAt: new Date().toISOString(),
       }];
+      if (current.status !== before) {
+        await require('../notification/adminAlerts.service').capture('enquiry_status', {
+          sourceId: current.id, reference: String(current.id), before, after: current.status,
+        }, transaction);
+      }
       await current.save({ transaction });
       enquiry.status = current.status;
       enquiry.replies = current.replies;
