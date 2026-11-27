@@ -96,7 +96,7 @@ jobs:
       - run: npm ci
       - run: npm run lint --if-present
         if: matrix.shard == 1
-      - run: npm test -- --shard=${{ matrix.shard }}/2
+      - run: npm test -- --shard=${{ matrix.shard }}/2 --fileParallelism --maxWorkers=2
       - run: npm run build
         if: matrix.shard == 1
         env:
