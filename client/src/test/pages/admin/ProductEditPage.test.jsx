@@ -61,7 +61,7 @@ describe('product editor section navigation', () => {
     await loaded();
 
     const picker = screen.getByLabelText('Jump to section');
-    const names = ['Basic Info', 'Pricing & Tax', 'Media', 'Inventory', 'Storefront',
+    const names = ['Storefront', 'Basic Info', 'Pricing & Tax', 'Media', 'Inventory', 'Categories & Brand',
       'Shipping & Dimensions', 'Custom Tabs', 'Related Products', 'Search & Social'];
     expect(within(picker).getAllByRole('option').map((option) => option.textContent)).toEqual(names);
     expect(screen.getAllByRole('region').filter((region) => region.dataset.productEditSection)
@@ -89,7 +89,8 @@ describe('product editor section navigation', () => {
     expect(storefront).toHaveFocus();
     expect(storefront.scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
 
-    const state = within(storefront).getByRole('combobox', { name: 'Storefront state' });
+    const actions = screen.getByRole('button', { name: 'Save Product' }).parentElement;
+    const state = within(actions).getByRole('combobox', { name: 'Storefront state' });
     const featured = within(storefront).getByRole('checkbox', { name: 'Featured product' });
     expect(state).toHaveTextContent('Draft');
     expect(featured).not.toBeChecked();
@@ -108,6 +109,19 @@ describe('product editor section navigation', () => {
     })));
   });
 
+  it('updates section navigation as soon as the product becomes Variable', async () => {
+    mount();
+    await loaded();
+    await type('Variable Product');
+
+    const picker = screen.getByLabelText('Jump to section');
+    expect(within(picker).getByRole('option', { name: 'Inventory & Variants' })).toBeInTheDocument();
+    const inventory = screen.getByRole('region', { name: 'Inventory & Variants' });
+    inventory.scrollIntoView = vi.fn();
+    fireEvent.change(picker, { target: { value: 'inventory' } });
+    expect(inventory).toHaveFocus();
+  });
+
   it('lists only available sections for a new catalog product', () => {
     disabledFeatures.add('pricing');
     disabledFeatures.add('shipping');
@@ -115,7 +129,7 @@ describe('product editor section navigation', () => {
 
     const picker = screen.getByLabelText('Jump to section');
     expect(within(picker).getAllByRole('option').map((option) => option.textContent))
-      .toEqual(['Basic Info', 'Media', 'Inventory', 'Storefront']);
+      .toEqual(['Storefront', 'Basic Info', 'Media', 'Inventory', 'Categories & Brand']);
   });
 });
 
