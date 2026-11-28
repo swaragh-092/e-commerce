@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { getProducts } from '../../../services/productService';
+import { AuthContext } from '../../../context/AuthContext';
 import { SettingsContext } from '../../../context/ThemeContext';
 import PageProductRows, { RoutedProductRows } from '../../../components/storefront/sections/PageProductRows';
 
@@ -111,9 +112,13 @@ describe('page product rows', () => {
       { id: 'intro', type: 'composed-hero', pagePosition: 'above', heroBlocks: [{ id: 'copy', type: 'heading', text: 'Custom introduction' }] },
       { id: 'help', type: 'faq', pagePosition: 'below', title: 'Page help', items: [{ title: 'How does it work?', text: 'Read the instructions.' }] },
     ];
-    render(<SettingsContext.Provider value={{ settings: { [group]: { productRows } } }}>
-      <MemoryRouter><RoutedProductRows page={page}><h1>Built-in content</h1></RoutedProductRows></MemoryRouter>
-    </SettingsContext.Provider>);
+    render(
+      <AuthContext.Provider value={{ isAuthenticated: false }}>
+        <SettingsContext.Provider value={{ settings: { [group]: { productRows } } }}>
+          <MemoryRouter><RoutedProductRows page={page}><h1>Built-in content</h1></RoutedProductRows></MemoryRouter>
+        </SettingsContext.Provider>
+      </AuthContext.Provider>,
+    );
     const main = screen.getByRole('heading', { name: 'Built-in content' });
     expect(screen.getByText('Custom introduction').compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(main.compareDocumentPosition(screen.getByRole('heading', { name: 'Page help' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
