@@ -135,6 +135,7 @@ class EnquiryService {
       name,
       email,
       submittedByUserId: userId,
+      submittedWhileSignedIn: Boolean(userId),
       phone: data.phone?.trim() || null,
       message,
       quantity: parsedQuantity,
@@ -230,7 +231,9 @@ class EnquiryService {
    */
   async getEnquiries(filters = {}, pagination = { page: 1, limit: 20 }) {
     const where = {};
-    if (filters.id) where.id = filters.id;
+    if (filters.id) where.id = { [Op.eq]: filters.id };
+    if (filters.excludeId) where.id = { ...where.id, [Op.ne]: filters.excludeId };
+    if (filters.submittedByUserId) where.submittedByUserId = filters.submittedByUserId;
     if (filters.status) where.status = filters.status;
 
     const limit = parseInt(pagination.limit) || 20;
@@ -259,6 +262,7 @@ class EnquiryService {
           { model: AttributeValue, as: 'value' },
         ] },
       ] },
+      { model: User, as: 'submitter', attributes: ['email'], required: false },
     ];
 
     if (filters.search) {
@@ -272,7 +276,7 @@ class EnquiryService {
     }
 
     const normalizedSortBy = filters.sortBy === 'subject' ? 'createdAt' : (filters.sortBy || 'createdAt');
-    const order = [sortMap[normalizedSortBy] || sortMap.createdAt];
+    const order = [sortMap[normalizedSortBy] || sortMap.createdAt, ['id', 'DESC']];
 
     const { count, rows } = await Enquiry.findAndCountAll({
       where,

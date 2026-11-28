@@ -22,6 +22,11 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         field: 'submitted_by_user_id',
       },
+      submittedWhileSignedIn: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        field: 'submitted_while_signed_in',
+      },
       phone: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -68,6 +73,9 @@ module.exports = (sequelize, DataTypes) => {
   );
 
   Enquiry.associate = (models) => {
+    if (models.User) {
+      Enquiry.belongsTo(models.User, { foreignKey: 'submittedByUserId', as: 'submitter' });
+    }
     if (models.Product) {
       Enquiry.belongsTo(models.Product, {
         foreignKey: 'product_id',

@@ -23,6 +23,7 @@ import {
   Link,
   Tooltip,
   InputAdornment,
+  TablePagination,
 } from '@mui/material';
 import ResponsiveDataGrid from '../../components/admin/ResponsiveDataGrid';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -41,6 +42,76 @@ import useAdminListSearch from '../../hooks/useAdminListSearch';
 
 const STATUS_LABELS = { pending: 'Pending', responded: 'Responded', closed: 'Closed (legacy)', closed_converted: 'Closed – Converted', closed_lost: 'Closed – Lost' };
 const ADMIN_PREFIX = import.meta.env.VITE_ADMIN_ROUTE_PREFIX || 'admin';
+const ENQUIRIES_URL = `/${ADMIN_PREFIX}/enquiries`;
+const HISTORY_PAGE_SIZE = 5;
+
+const getSubmitterType = (enquiry) => {
+  if (enquiry.submittedByUserId || enquiry.submittedWhileSignedIn === true) return 'Signed-in customer';
+  return enquiry.submittedWhileSignedIn === false ? 'Guest' : 'Unknown';
+};
+
+const getSubject = (enquiry) => enquiry.product?.name || (enquiry.cartItems?.length ? 'Cart enquiry' : 'General enquiry');
+
+const CustomerEnquiryHistory = ({ accountId, currentId, onOpen, disableOpen }) => {
+  const [page, setPage] = useState(0);
+  const [result, setResult] = useState(null);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api.get(ENQUIRIES_URL, {
+      params: { submittedByUserId: accountId, excludeId: currentId, page: page + 1, limit: HISTORY_PAGE_SIZE },
+      signal: controller.signal,
+    }).then(({ data }) => {
+      if (controller.signal.aborted) return;
+      setResult({ rows: data.data || [], total: data.meta?.total || 0 });
+    }).catch((error) => {
+      if (controller.signal.aborted) return;
+      setResult({ error: getApiErrorMessage(error, 'Could not load past enquiries.') });
+    });
+    return () => controller.abort();
+  }, [accountId, currentId, page, attempt]);
+
+  return (
+    <Box component="section" aria-labelledby="customer-enquiry-history-title" sx={{ mb: 2 }}>
+      <Typography id="customer-enquiry-history-title" component="h3" variant="subtitle2" gutterBottom>
+        Past enquiries
+      </Typography>
+      {!result ? <Typography variant="body2" role="status">Loading past enquiries…</Typography> : null}
+      {result?.error ? <Alert severity="error" action={
+        <Button color="inherit" size="small" onClick={() => { setResult(null); setAttempt((value) => value + 1); }}>Retry</Button>
+      }>{result.error}</Alert> : null}
+      {result?.rows?.length === 0 ? <Typography variant="body2" color="text.secondary">No other enquiries for this account.</Typography> : null}
+      {result?.rows?.length ? (
+        <Stack component="ul" spacing={1} sx={{ listStyle: 'none', p: 0, m: 0 }}>
+          {result.rows.map((enquiry) => (
+            <Stack component="li" key={enquiry.id} direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+              <Box>
+                <Typography variant="body2">{getSubject(enquiry)}</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {new Date(enquiry.createdAt || enquiry.created_at).toLocaleDateString()} · {STATUS_LABELS[enquiry.status] || enquiry.status}
+                </Typography>
+              </Box>
+              <Button size="small" disabled={disableOpen} onClick={() => onOpen(enquiry)} aria-label={`View enquiry for ${getSubject(enquiry)}`}>
+                View
+              </Button>
+            </Stack>
+          ))}
+        </Stack>
+      ) : null}
+      {result && !result.error && (result.total > HISTORY_PAGE_SIZE || page > 0) ? (
+        <TablePagination
+          component="div"
+          count={result.total}
+          page={Math.min(page, Math.max(0, Math.ceil(result.total / HISTORY_PAGE_SIZE) - 1))}
+          rowsPerPage={HISTORY_PAGE_SIZE}
+          rowsPerPageOptions={[]}
+          onPageChange={(_, nextPage) => { setResult(null); setPage(nextPage); }}
+        />
+      ) : null}
+    </Box>
+  );
+};
 
 const EnquiriesPage = () => {
   const compact = useMediaQuery('(max-width: 1200px)');
@@ -71,7 +142,7 @@ const EnquiriesPage = () => {
   useEffect(() => {
     if (!linkedEnquiry) return;
     const controller = new AbortController();
-    api.get(`/${ADMIN_PREFIX}/enquiries`, { params: { id: linkedEnquiry }, signal: controller.signal }).then(({ data }) => {
+    api.get(ENQUIRIES_URL, { params: { id: linkedEnquiry }, signal: controller.signal }).then(({ data }) => {
       if (controller.signal.aborted) return;
       if (data.data?.length) {
         setSelectedEnquiry(data.data[0]);
@@ -87,7 +158,7 @@ const EnquiriesPage = () => {
     setLoading(true);
     try {
       const activeSort = sortModel[0] || {};
-      const { data } = await api.get(`/${ADMIN_PREFIX}/enquiries`, {
+      const { data } = await api.get(ENQUIRIES_URL, {
         params: {
           page: paginationModel.page + 1,
           limit: paginationModel.pageSize,
@@ -159,6 +230,14 @@ const EnquiriesPage = () => {
     setCopiedField('');
   };
 
+  const openEnquiry = (enquiry) => {
+    setSelectedEnquiry(enquiry);
+    setReplyMode(false);
+    setReplyMessage('');
+    setReplyFeedback(null);
+    setCopiedField('');
+  };
+
   const handleDialogClose = (event, reason) => {
     if (replyLoading && (reason === 'backdropClick' || reason === 'escapeKeyDown')) {
       return;
@@ -200,8 +279,9 @@ const EnquiriesPage = () => {
       renderCell: ({ row }) => (
         <Box py={0.5}>
           <Typography variant="body2" fontWeight={500}>{row.name}</Typography>
-          <Typography variant="caption" color="text.secondary" display="block">{row.email}</Typography>
-          {row.phone ? <Typography variant="caption" color="text.secondary" display="block">{row.phone}</Typography> : null}
+          <Typography variant="caption" color="text.secondary" display="block" lineHeight={1.25}>{getSubmitterType(row)}</Typography>
+          <Typography variant="caption" color="text.secondary" display="block" lineHeight={1.25} noWrap>Reply email {row.email}</Typography>
+          {row.phone ? <Typography variant="caption" color="text.secondary" display="block" lineHeight={1.25}>{row.phone}</Typography> : null}
         </Box>
       ),
     },
@@ -231,7 +311,7 @@ const EnquiriesPage = () => {
         <IconButton
           size="small"
           color="primary"
-          onClick={() => { setSelectedEnquiry(row); setReplyFeedback(null); setCopiedField(''); }}
+          onClick={() => openEnquiry(row)}
           aria-label={`View enquiry from ${row.email}`}
         >
           <VisibilityIcon fontSize="small" />
@@ -345,9 +425,13 @@ const EnquiriesPage = () => {
             <Box sx={{ mb: 2 }}>
               <Typography variant="subtitle2" color="text.secondary">Customer Info</Typography>
               <Typography variant="body2"><strong>Name:</strong> {selectedEnquiry.name}</Typography>
-              {[['Email', selectedEnquiry.email, 'mailto:'], ['Phone', selectedEnquiry.phone, 'tel:']].map(([label, value, prefix]) => (
+              <Typography variant="body2"><strong>Submission type</strong> {getSubmitterType(selectedEnquiry)}</Typography>
+              <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>
+                <strong>Account email</strong> {selectedEnquiry.submitter?.email || 'Unavailable'}
+              </Typography>
+              {[['Reply email', selectedEnquiry.email, 'mailto:'], ['Phone', selectedEnquiry.phone, 'tel:']].map(([label, value, prefix]) => (
                 <Stack key={label} direction="row" spacing={1} alignItems="center" sx={{ minHeight: 32 }}>
-                  <Typography variant="body2" fontWeight={600}>{label}:</Typography>
+                  <Typography variant="body2" fontWeight={600}>{label}</Typography>
                   {value ? <>
                     <Link href={`${prefix}${prefix === 'tel:' ? value.replace(/[^+0-9]/g, '') : value}`} variant="body2" sx={{ overflowWrap: 'anywhere' }}>{value}</Link>
                     <Tooltip title={`Copy ${label.toLowerCase()}`}><IconButton size="small" aria-label={`Copy ${label.toLowerCase()}`} onClick={async () => {
@@ -359,6 +443,16 @@ const EnquiriesPage = () => {
                 </Stack>
               ))}
             </Box>
+
+            {selectedEnquiry.submittedByUserId ? (
+              <CustomerEnquiryHistory
+                key={`history-${selectedEnquiry.id}`}
+                accountId={selectedEnquiry.submittedByUserId}
+                currentId={selectedEnquiry.id}
+                onOpen={openEnquiry}
+                disableOpen={Boolean(replyMessage.trim()) || replyLoading || statusLoading}
+              />
+            ) : null}
 
             <Box sx={{ mb: 2 }}>
               <Typography variant="subtitle2" color="text.secondary">Subject</Typography>
