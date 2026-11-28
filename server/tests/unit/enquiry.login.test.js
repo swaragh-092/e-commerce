@@ -16,6 +16,7 @@ const userId = '22222222-2222-4222-8222-222222222222';
 const claimedUserId = '33333333-3333-4333-8333-333333333333';
 const replyEmail = 'purchasing@example.com';
 const jwtSecret = 'enquiry-test-secret-used-only-in-this-file';
+const csrfToken = 'a'.repeat(64);
 
 const token = (expiresIn = 60) => jwt.sign({ id: userId, sid: 'test-session' }, jwtSecret, {
   expiresIn,
@@ -23,10 +24,12 @@ const token = (expiresIn = 60) => jwt.sign({ id: userId, sid: 'test-session' }, 
   audience: process.env.JWT_AUDIENCE || 'ecommerce-pro-client',
 });
 
-const submitEnquiry = (accessToken) => new Promise((resolve) => {
+const submitEnquiry = (accessToken, { csrfHeader, authorization, origin } = {}) => new Promise((resolve) => {
+  const headers = { origin, authorization, 'x-csrf-token': csrfHeader };
   const req = {
-    method: 'POST', url: '/', headers: {},
-    cookies: { auth_access_token: accessToken },
+    method: 'POST', url: '/', headers,
+    get: (name) => headers[name.toLowerCase()],
+    cookies: { auth_access_token: accessToken, csrf_token: csrfToken },
     body: { name: 'Test Customer', email: replyEmail, message: 'Please send details.', productId, submittedByUserId: claimedUserId },
   };
   const res = {
@@ -39,6 +42,7 @@ const submitEnquiry = (accessToken) => new Promise((resolve) => {
 describe('Enquiry login policy', () => {
   beforeEach(() => {
     clearFeatureCache();
+    vi.stubEnv('NODE_ENV', 'test');
     vi.stubEnv('JWT_ACCESS_SECRET', jwtSecret);
     vi.spyOn(Setting, 'findAll').mockResolvedValue([]);
     vi.spyOn(Setting, 'findOne').mockResolvedValue({ value: 'catalog' });
@@ -62,7 +66,7 @@ describe('Enquiry login policy', () => {
   });
 
   it('keeps guest submissions working and ignores account IDs in the request body', async () => {
-    expect(await submitEnquiry()).toMatchObject({ status: 201 });
+    expect(await submitEnquiry(token(), { origin: 'https://static.example' })).toMatchObject({ status: 201 });
     expect(Enquiry.create).toHaveBeenCalledWith(expect.objectContaining({ email: replyEmail, submittedByUserId: null }));
   });
 
@@ -75,8 +79,17 @@ describe('Enquiry login policy', () => {
     }
     expect(Enquiry.create).not.toHaveBeenCalled();
 
-    expect(await submitEnquiry(token())).toMatchObject({ status: 201 });
+    expect(await submitEnquiry(token(), { csrfHeader: csrfToken })).toMatchObject({ status: 201 });
     expect(Enquiry.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ email: replyEmail, submittedByUserId: userId }));
+  });
+
+  it('protects cookie-authenticated submissions while keeping non-browser bearer clients working', async () => {
+    Setting.findAll.mockResolvedValue([{ key: 'requireLoginForEnquiry', value: true }]);
+    expect(await submitEnquiry(token())).toMatchObject({ status: 403, body: { error: { code: 'CSRF_TOKEN_INVALID' } } });
+    expect(await submitEnquiry(token(), { csrfHeader: 'b'.repeat(64) })).toMatchObject({ status: 403, body: { error: { code: 'CSRF_TOKEN_INVALID' } } });
+    expect(Enquiry.create).not.toHaveBeenCalled();
+
+    expect(await submitEnquiry(undefined, { authorization: `Bearer ${token()}` })).toMatchObject({ status: 201 });
   });
 
   it('returns the disabled-feature response before applying login requirements', async () => {

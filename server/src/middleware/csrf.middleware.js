@@ -21,6 +21,7 @@ const isToken = (value) => typeof value === 'string' && tokenFormat.test(value);
 const verifyToken = (cookie, header) => isToken(cookie) && isToken(header) &&
     timingSafeEqual(Buffer.from(cookie, 'hex'), Buffer.from(header, 'hex'));
 const cookieName = () => process.env.NODE_ENV === 'production' ? '__Host-csrf_token' : 'csrf_token';
+const hasSessionCookie = (req) => authCookies.some((name) => req.cookies?.[name]);
 
 function csrfToken(req, res) {
     const existingToken = req.cookies?.[cookieName()];
@@ -41,15 +42,18 @@ function verifyCsrf(req, res, next) {
     if (req.method === 'POST' && publicPostPaths.has(path)) return next();
     // The provider posts a signed payment result and ignores session credentials.
     if (req.method === 'POST' && req.path === '/payments/payu/return') return next();
-    const hasSessionCookie = authCookies.some((name) => req.cookies?.[name]);
     const wishlistWrite = (req.method === 'POST' && path === '/wishlist/items') ||
         (req.method === 'DELETE' && /^\/wishlist\/items(?:\/[^/]+)?$/.test(path));
     // The static storefront sends an explicit guest session ID for wishlist writes.
-    if (wishlistWrite && !hasSessionCookie && !req.get('Authorization') && isGuestSessionId(req.get('X-Session-Id'))) {
+    if (wishlistWrite && !hasSessionCookie(req) && !req.get('Authorization') && isGuestSessionId(req.get('X-Session-Id'))) {
         return next();
     }
+    return verifySessionCsrf(req, res, next);
+}
+
+function verifySessionCsrf(req, res, next) {
     const browserRequest = req.get('Origin') || req.get('Sec-Fetch-Site');
-    if (!browserRequest && !hasSessionCookie) return next();
+    if (!browserRequest && !hasSessionCookie(req)) return next();
 
     const header = req.get('X-CSRF-Token');
     const valid = process.env.NODE_ENV === 'production'
@@ -59,4 +63,4 @@ function verifyCsrf(req, res, next) {
     return next(new AppError('CSRF_TOKEN_INVALID', 403, 'Refresh the security token and try again.'));
 }
 
-module.exports = { csrfToken, verifyCsrf };
+module.exports = { csrfToken, verifyCsrf, verifySessionCsrf };
