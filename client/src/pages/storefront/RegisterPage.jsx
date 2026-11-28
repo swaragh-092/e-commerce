@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Box, Typography, TextField, Button, Alert, useTheme, IconButton, InputAdornment, Divider, CircularProgress, Checkbox, FormControlLabel } from '@mui/material';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useLocation, useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { validateEmail, validatePassword, validateRequired, getPasswordChecks } from '../../utils/authValidation';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import { getLoginReturnPath } from '../../utils/loginReturnPath';
 import { EmailOutlined, LockOutlined, PersonOutline, Visibility, VisibilityOff } from '@mui/icons-material';
 import AuthPageShell from '../../components/storefront/AuthPageShell';
 import newsletterService from '../../services/newsletterService';
@@ -13,6 +14,7 @@ import { useNotification } from '../../context/NotificationContext';
 const RegisterPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const { state } = useLocation();
   const { register } = useAuth();
   const { notify } = useNotification();
   const { settings, features } = useSettings();
@@ -136,14 +138,12 @@ const RegisterPage = () => {
       }
       if (result?.requiresVerification) {
         // Server issued no session — verification is mandatory for this account.
-        navigate('/login', { state: { message: `Account created! Please check your email to verify your account, then log in.${newsletterNote}` } });
+        navigate('/login', { state: { from: state?.from, message: `Account created! Please check your email to verify your account, then log in.${newsletterNote}` } });
         return;
       }
-      // register() auto-logs-in, redirect to home. The home page does not read
-      // navigation state, so surface the newsletter outcome as a toast —
-      // otherwise a queue failure would be silently swallowed.
+      // Surface the newsletter outcome across the navigation.
       if (newsletterNote.trim()) notify(newsletterNote.trim(), newsletterFailed ? 'error' : 'info');
-      navigate('/');
+      navigate(getLoginReturnPath(state?.from) || '/');
     } catch (err) {
       const errData = err?.response?.data?.error;
 
@@ -350,7 +350,7 @@ const RegisterPage = () => {
         
         <Typography textAlign="center" variant="body2">
           Already have an account?{' '}
-          <Box component={RouterLink} to="/login" sx={{ color: theme.palette.primary.main, textDecoration: 'none', fontWeight: 600 }}>
+          <Box component={RouterLink} to="/login" state={{ from: state?.from }} sx={{ color: theme.palette.primary.main, textDecoration: 'none', fontWeight: 600 }}>
             Log in
           </Box>
         </Typography>

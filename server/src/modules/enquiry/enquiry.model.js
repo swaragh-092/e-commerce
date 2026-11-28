@@ -17,6 +17,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false,
       },
+      submittedByUserId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'submitted_by_user_id',
+      },
       phone: {
         type: DataTypes.STRING,
         allowNull: true,

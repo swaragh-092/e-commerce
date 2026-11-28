@@ -64,6 +64,12 @@
       }
     },
     {
+      "key": "requireLoginForEnquiry",
+      "label": "Require Login for Enquiries",
+      "description": "Require customers to log in before submitting an enquiry when enquiries are enabled.",
+      "defaults": { "ecommerce": false, "catalog": false }
+    },
+    {
       "key": "coupons",
       "label": "Coupons & Discounts",
       "description": "Enable coupon codes at checkout.",

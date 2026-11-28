@@ -30,9 +30,25 @@ describe('Platform optional feature catalog', () => {
   it('keeps feature changes restricted to Super Admin', async () => {
     actor.superAdmin = false; view();
     await waitFor(() => expect(getAllSettings).toHaveBeenCalled());
-    for (const name of ['Newsletter', 'Gallery', 'Blogs', 'Pages', 'Customers', 'Customer Account Deletion']) expect(screen.getByRole('checkbox', { name, exact: true })).toBeDisabled();
+    for (const name of ['Newsletter', 'Gallery', 'Blogs', 'Pages', 'Customers', 'Customer Account Deletion', 'Require Login for Enquiries']) expect(screen.getByRole('checkbox', { name, exact: true })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Save Platform Features' })).toBeDisabled();
   });
+  it.each([['ecommerce', undefined, true], ['catalog', true, false]])(
+    'can save the enquiry login preference in %s mode',
+    async (mode, currentValue, nextValue) => {
+      getAllSettings.mockResolvedValue({ general: { mode }, features: currentValue === undefined ? {} : { requireLoginForEnquiry: currentValue } });
+      view();
+      await waitFor(() => expect(screen.getByRole('combobox', { name: 'Store mode' })).toHaveTextContent(mode === 'catalog' ? 'CATALOG' : 'E-COMMERCE'));
+      const control = screen.getByRole('checkbox', { name: 'Require Login for Enquiries' });
+      await waitFor(() => expect(control.checked).toBe(Boolean(currentValue)));
+      fireEvent.click(control);
+      fireEvent.click(screen.getByRole('button', { name: 'Save Platform Features' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Yes, Save Features' }));
+      await waitFor(() => expect(updateSettings).toHaveBeenCalledWith(expect.arrayContaining([
+        { group: 'features', key: 'requireLoginForEnquiry', value: nextValue },
+      ])));
+    },
+  );
 });
 
 describe('Mode-locked capability visibility', () => {
