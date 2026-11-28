@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Link as RouterLink, useLocation } from 'react-router-dom';
 import {
   Dialog,
   DialogTitle,
@@ -12,10 +13,17 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { getVariantOptionLabel } from '../../utils/variantOptions';
+import { useAuth } from '../../hooks/useAuth';
+import { useFeature } from '../../hooks/useSettings';
 import api from '../../services/api';
+import { getApiErrorMessage } from '../../utils/apiErrors';
 import { getCampaignAttribution } from '../../utils/campaignAttribution';
 
 const EnquiryModal = ({ open, onClose, product, cartItems }) => {
+  const location = useLocation();
+  const { isAuthenticated } = useAuth();
+  const loginRequired = useFeature('requireLoginForEnquiry');
+  const showLoginPrompt = loginRequired && !isAuthenticated;
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -45,6 +53,7 @@ const EnquiryModal = ({ open, onClose, product, cartItems }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (showLoginPrompt) return;
     setLoading(true);
     setErrorMsg('');
     setSuccessMsg('');
@@ -67,7 +76,7 @@ const EnquiryModal = ({ open, onClose, product, cartItems }) => {
         setFormData({ name: '', email: '', phone: '', message: '', quantity: 1 });
       }, 3000);
     } catch (err) {
-      setErrorMsg(err.response?.data?.message || 'Failed to submit enquiry. Please try again.');
+      setErrorMsg(getApiErrorMessage(err, 'Failed to submit enquiry. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -83,67 +92,77 @@ const EnquiryModal = ({ open, onClose, product, cartItems }) => {
         {successMsg && <Alert severity="success" sx={{ mb: 2 }}>{successMsg}</Alert>}
         {errorMsg && <Alert severity="error" sx={{ mb: 2 }}>{errorMsg}</Alert>}
         
-        <Box component="form" id="enquiry-form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {product && (
+        {showLoginPrompt ? (
+          <Typography>Log in to submit an enquiry.</Typography>
+        ) : (
+          <Box component="form" id="enquiry-form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {product && (
+              <TextField
+                label="Quantity Required"
+                name="quantity"
+                type="number"
+                value={formData.quantity}
+                onChange={handleChange}
+                fullWidth
+                required
+                inputProps={{ min: 1 }}
+                disabled={loading || !!successMsg}
+              />
+            )}
             <TextField
-              label="Quantity Required"
-              name="quantity"
-              type="number"
-              value={formData.quantity}
+              label="Name"
+              name="name"
+              value={formData.name}
               onChange={handleChange}
               fullWidth
               required
-              inputProps={{ min: 1 }}
               disabled={loading || !!successMsg}
             />
-          )}
-          <TextField
-            label="Name"
-            name="name"
-            value={formData.name}
-            onChange={handleChange}
-            fullWidth
-            required
-            disabled={loading || !!successMsg}
-          />
-          <TextField
-            label="Email"
-            name="email"
-            type="email"
-            value={formData.email}
-            onChange={handleChange}
-            fullWidth
-            required
-            disabled={loading || !!successMsg}
-          />
-          <TextField
-            label="Phone"
-            name="phone"
-            value={formData.phone}
-            onChange={handleChange}
-            fullWidth
-            disabled={loading || !!successMsg}
-          />
-          <TextField
-            label="Message"
-            name="message"
-            value={formData.message}
-            onChange={handleChange}
-            multiline
-            rows={4}
-            fullWidth
-            required
-            disabled={loading || !!successMsg}
-          />
-        </Box>
+            <TextField
+              label="Email"
+              name="email"
+              type="email"
+              value={formData.email}
+              onChange={handleChange}
+              fullWidth
+              required
+              disabled={loading || !!successMsg}
+            />
+            <TextField
+              label="Phone"
+              name="phone"
+              value={formData.phone}
+              onChange={handleChange}
+              fullWidth
+              disabled={loading || !!successMsg}
+            />
+            <TextField
+              label="Message"
+              name="message"
+              value={formData.message}
+              onChange={handleChange}
+              multiline
+              rows={4}
+              fullWidth
+              required
+              disabled={loading || !!successMsg}
+            />
+          </Box>
+        )}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={loading} color="inherit">
           Cancel
         </Button>
-        <Button type="submit" form="enquiry-form" variant="contained" disabled={loading || !!successMsg}>
-          {loading ? <CircularProgress size={24} color="inherit" /> : 'Submit'}
-        </Button>
+        {showLoginPrompt ? (
+          <Button component={RouterLink} to="/login" state={{ from: location }} variant="contained">
+            Log in
+          </Button>
+        ) : (
+          <Button type="submit" form="enquiry-form" variant="contained" disabled={loading || !!successMsg}>
+            {loading ? <CircularProgress size={24} color="inherit" /> : 'Submit'}
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   );

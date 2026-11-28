@@ -134,6 +134,7 @@ class EnquiryService {
     const payload = {
       name,
       email,
+      submittedByUserId: userId,
       phone: data.phone?.trim() || null,
       message,
       quantity: parsedQuantity,

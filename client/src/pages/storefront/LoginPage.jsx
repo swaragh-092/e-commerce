@@ -4,6 +4,7 @@ import { useNavigate, Link as RouterLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { validateEmail, validateRequired } from '../../utils/authValidation';
 import { getApiErrorMessage } from '../../utils/apiErrors';
+import { getLoginReturnPath, saveOAuthReturnPath, takeOAuthReturnPath } from '../../utils/loginReturnPath';
 import authService from '../../services/authService';
 import { EmailOutlined, LockOutlined, Visibility, VisibilityOff, PhoneOutlined } from '@mui/icons-material';
 import EmailMfaStep from '../../components/auth/EmailMfaStep';
@@ -20,6 +21,14 @@ const LoginPage = () => {
   const { notify } = useNotification();
   const { settings, features } = useSettings();
   const newsletterEnabled = features?.newsletter === true && settings?.auth?.loginNewsletterEnabled !== false;
+
+  const returnPath = getLoginReturnPath(location.state?.from);
+  const isOAuthContinuation = new URLSearchParams(location.hash.slice(1)).get('requiresTwoFactor') === 'true'
+    || new URLSearchParams(location.search).get('error') === 'oauth_failed';
+  const finishLogin = () => {
+    const oauthReturnPath = isOAuthContinuation ? takeOAuthReturnPath() : null;
+    navigate(returnPath || oauthReturnPath || '/', { replace: true });
+  };
 
   const [formData, setFormData] = useState({ email: localStorage.getItem('rememberedEmail') || '', password: '' });
   const [fieldErrors, setFieldErrors] = useState({});
@@ -157,8 +166,7 @@ const LoginPage = () => {
         return;
       }
       await saveNewsletterChoice(result.user);
-      const redirectTo = location.state?.from?.pathname || '/';
-      navigate(redirectTo, { replace: true });
+      finishLogin();
     } catch (err) {
       const msg = getApiErrorMessage(err, 'Login failed. Please verify credentials.');
       setError(msg);
@@ -198,8 +206,7 @@ const LoginPage = () => {
     try {
       const result = await verifyTwoFactor(tempToken, totpCode, trustDevice);
       await saveNewsletterChoice(result.user);
-      const redirectTo = location.state?.from?.pathname || '/';
-      navigate(redirectTo, { replace: true });
+      finishLogin();
     } catch (err) {
       setError(getApiErrorMessage(err, 'Invalid 2FA code. Please try again.'));
     } finally {
@@ -208,6 +215,8 @@ const LoginPage = () => {
   };
 
   const handleGoogleLogin = async () => {
+    const previousReturnPath = isOAuthContinuation ? takeOAuthReturnPath() : null;
+    saveOAuthReturnPath(returnPath || previousReturnPath);
     await authService.startGoogleOAuth();
   };
 
@@ -245,8 +254,7 @@ const LoginPage = () => {
       }
       const user = await finalizeAuthenticatedSession();
       await saveNewsletterChoice(user);
-      const redirectTo = location.state?.from?.pathname || '/';
-      navigate(redirectTo, { replace: true });
+      finishLogin();
     } catch (err) {
       setError(getApiErrorMessage(err, 'Invalid OTP'));
     } finally {
@@ -281,7 +289,7 @@ const LoginPage = () => {
           <EmailMfaStep challenge={emailChallenge} onBack={() => setEmailStep(false)} onComplete={async () => {
             const signedInUser = await finalizeAuthenticatedSession();
             await saveNewsletterChoice(signedInUser);
-            navigate(location.state?.from?.pathname || '/', { replace: true });
+            finishLogin();
           }} />
         ) : twoFactorStep ? (
         <Box component="form" onSubmit={handleTwoFactorSubmit}>
@@ -517,7 +525,7 @@ const LoginPage = () => {
         
         <Typography textAlign="center" variant="body2">
           Don't have an account?{' '}
-          <Box component={RouterLink} to="/register" sx={{ color: theme.palette.primary.main, textDecoration: 'none', fontWeight: 600 }}>
+          <Box component={RouterLink} to="/register" state={{ from: location.state?.from }} sx={{ color: theme.palette.primary.main, textDecoration: 'none', fontWeight: 600 }}>
             Sign up
           </Box>
         </Typography>
