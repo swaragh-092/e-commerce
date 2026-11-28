@@ -8,22 +8,32 @@ const { createEnquirySchema } = require('./enquiry.validation');
 const { featureGate, getResolvedFeature } = require('../../middleware/featureGate.middleware');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { verifySessionCsrf } = require('../../middleware/csrf.middleware');
+const { getAccessToken } = require('../auth/authCookies');
 
-const requireLoginIfEnabled = async (req, res, next) => {
+const identifySubmitter = async (req, res, next) => {
   try {
-    if (await getResolvedFeature('requireLoginForEnquiry')) {
-      // The global CSRF middleware leaves this endpoint open for guest enquiries.
-      return authenticate(req, res, (error) => {
-        if (error) return next(error);
-        return verifySessionCsrf(req, res, next);
+    const loginRequired = await getResolvedFeature('requireLoginForEnquiry');
+    if (!loginRequired && !getAccessToken(req)) return next();
+
+    return authenticate(req, res, (error) => {
+      if (error) {
+        if (!loginRequired && [401, 403].includes(error.statusCode)) return next();
+        return next(error);
+      }
+      // A verified browser session also needs CSRF protection before it can be linked.
+      return verifySessionCsrf(req, res, (csrfError) => {
+        if (csrfError && !loginRequired && csrfError.code === 'CSRF_TOKEN_INVALID') {
+          delete req.user;
+          return next();
+        }
+        return next(csrfError);
       });
-    }
-    return next();
+    });
   } catch (error) {
     return next(error);
   }
 };
 
-router.post('/', featureGate('enquiry'), requireLoginIfEnabled, validate(createEnquirySchema), enquiryController.createEnquiry);
+router.post('/', featureGate('enquiry'), identifySubmitter, validate(createEnquirySchema), enquiryController.createEnquiry);
 
 module.exports = router;

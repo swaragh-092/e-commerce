@@ -19,6 +19,8 @@ exports.getEnquiries = async (req, res, next) => {
   try {
     const filters = {
       id: req.query.id,
+      excludeId: req.query.excludeId,
+      submittedByUserId: req.query.submittedByUserId,
       status: req.query.status,
       search: req.query.search,
       sortBy: req.query.sortBy,

@@ -3,11 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
 const jwt = require('jsonwebtoken');
+const { Op } = require('sequelize');
 const { Enquiry, Product, ProductVariant, RefreshToken, Setting, User } = require('../../src/modules');
 const { buildFeatures } = require('../../src/config/modes');
 const { clearFeatureCache } = require('../../src/middleware/featureGate.middleware');
 const { errorHandler } = require('../../src/middleware/errorHandler.middleware');
 const router = require('../../src/modules/enquiry/enquiry.routes');
+const enquiryService = require('../../src/modules/enquiry/enquiry.service');
+const { queryEnquiriesSchema } = require('../../src/modules/enquiry/enquiry.validation');
 const settings = require('../../src/modules/settings/settings.service');
 const notifications = require('../../src/modules/notification/notification.service');
 
@@ -30,7 +33,7 @@ const submitEnquiry = (accessToken, { csrfHeader, authorization, origin } = {}) 
     method: 'POST', url: '/', headers,
     get: (name) => headers[name.toLowerCase()],
     cookies: { auth_access_token: accessToken, csrf_token: csrfToken },
-    body: { name: 'Test Customer', email: replyEmail, message: 'Please send details.', productId, submittedByUserId: claimedUserId },
+    body: { name: 'Test Customer', email: replyEmail, message: 'Please send details.', productId, submittedByUserId: claimedUserId, submittedWhileSignedIn: true },
   };
   const res = {
     status(status) { this.statusCode = status; return this; },
@@ -66,8 +69,15 @@ describe('Enquiry login policy', () => {
   });
 
   it('keeps guest submissions working and ignores account IDs in the request body', async () => {
+    expect(await submitEnquiry()).toMatchObject({ status: 201 });
     expect(await submitEnquiry(token(), { origin: 'https://static.example' })).toMatchObject({ status: 201 });
-    expect(Enquiry.create).toHaveBeenCalledWith(expect.objectContaining({ email: replyEmail, submittedByUserId: null }));
+    expect(Enquiry.create).toHaveBeenNthCalledWith(1, expect.objectContaining({ email: replyEmail, submittedByUserId: null, submittedWhileSignedIn: false }));
+    expect(Enquiry.create).toHaveBeenNthCalledWith(2, expect.objectContaining({ email: replyEmail, submittedByUserId: null, submittedWhileSignedIn: false }));
+  });
+
+  it('links signed-in enquiries even when guests are allowed', async () => {
+    expect(await submitEnquiry(token(), { csrfHeader: csrfToken })).toMatchObject({ status: 201 });
+    expect(Enquiry.create).toHaveBeenCalledWith(expect.objectContaining({ email: replyEmail, submittedByUserId: userId, submittedWhileSignedIn: true }));
   });
 
   it('requires a verified session before saving and keeps the editable reply email', async () => {
@@ -80,7 +90,7 @@ describe('Enquiry login policy', () => {
     expect(Enquiry.create).not.toHaveBeenCalled();
 
     expect(await submitEnquiry(token(), { csrfHeader: csrfToken })).toMatchObject({ status: 201 });
-    expect(Enquiry.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ email: replyEmail, submittedByUserId: userId }));
+    expect(Enquiry.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ email: replyEmail, submittedByUserId: userId, submittedWhileSignedIn: true }));
   });
 
   it('protects cookie-authenticated submissions while keeping non-browser bearer clients working', async () => {
@@ -96,5 +106,20 @@ describe('Enquiry login policy', () => {
     Setting.findAll.mockResolvedValue([{ key: 'enquiry', value: false }, { key: 'requireLoginForEnquiry', value: true }]);
     expect(await submitEnquiry()).toMatchObject({ status: 403, body: { error: { code: 'FEATURE_DISABLED' } } });
     expect(Enquiry.create).not.toHaveBeenCalled();
+  });
+
+  it('scopes admin history by account ID and excludes the current enquiry', async () => {
+    vi.spyOn(Enquiry, 'findAndCountAll').mockResolvedValue({ count: 0, rows: [] });
+    const filters = { submittedByUserId: userId, excludeId: claimedUserId };
+    expect(queryEnquiriesSchema.validate(filters).error).toBeUndefined();
+    expect(queryEnquiriesSchema.validate({ submittedByUserId: replyEmail }).error).toBeDefined();
+    await enquiryService.getEnquiries(filters, { page: 2, limit: 5 });
+    expect(Enquiry.findAndCountAll).toHaveBeenCalledWith(expect.objectContaining({
+      where: { submittedByUserId: userId, id: { [Op.ne]: claimedUserId } },
+      include: expect.arrayContaining([expect.objectContaining({ model: User, attributes: ['email'], required: false })]),
+      order: [['created_at', 'DESC'], ['id', 'DESC']],
+      limit: 5,
+      offset: 5,
+    }));
   });
 });
